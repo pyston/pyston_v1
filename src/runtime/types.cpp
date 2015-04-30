@@ -834,6 +834,32 @@ static Box* functionDefaults(Box* self, void*) {
     return BoxedTuple::create(func->ndefaults, &func->defaults->elts[0]);
 }
 
+static void functionSetDefaults(Box* b, Box* v, void*) {
+    RELEASE_ASSERT(v, "can't delete __defaults__");
+
+    assert(b->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(b);
+
+    if (v == None)
+        v = EmptyTuple;
+
+    if (!isSubclass(v->cls, tuple_cls)) {
+        raiseExcHelper(TypeError, "__defaults__ must be set to a tuple object");
+    }
+
+    BoxedTuple* t = static_cast<BoxedTuple*>(v);
+
+    if (t->size() == func->ndefaults) {
+        for (int i = 0; i < func->ndefaults; i++) {
+            func->defaults->elts[i] = t->elts[i];
+        }
+        return;
+    } else {
+        RELEASE_ASSERT(0, "can't change number of defaults on a function for now");
+    }
+    abort();
+}
+
 static Box* functionNonzero(BoxedFunction* self) {
     return True;
 }
@@ -2256,9 +2282,10 @@ void setupRuntime() {
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
-    function_cls->giveAttr("func_defaults",
-                           new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, NULL, NULL));
     function_cls->giveAttr("func_name", function_cls->getattr("__name__"));
+    function_cls->giveAttr("func_defaults",
+                           new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));
+    function_cls->giveAttr("__defaults__", function_cls->getattr("func_defaults"));
     function_cls->freeze();
 
     builtin_function_or_method_cls->giveAttr(
@@ -2283,8 +2310,10 @@ void setupRuntime() {
         "__call__", new BoxedFunction(boxRTFunction((void*)instancemethodCall, UNKNOWN, 1, 0, true, true)));
     instancemethod_cls->giveAttr(
         "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
+    instancemethod_cls->giveAttr("__func__", instancemethod_cls->getattr("im_func"));
     instancemethod_cls->giveAttr(
         "im_self", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, obj)));
+    instancemethod_cls->giveAttr("__self__", instancemethod_cls->getattr("im_self"));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__new__",
@@ -2331,6 +2360,7 @@ void setupRuntime() {
     setupGC();
     setupImport();
     setupPyston();
+    setupAST();
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);

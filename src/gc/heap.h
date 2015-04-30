@@ -136,7 +136,7 @@ public:
         assert(((uint8_t*)cur + size) < end && "arena full");
 
         void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
+        RELEASE_ASSERT((uintptr_t)mrtn != -1, "failed to allocate memory from OS");
         ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
         cur = (uint8_t*)cur + size;
         return mrtn;

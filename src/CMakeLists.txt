@@ -73,6 +73,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		gc/gc_alloc.cpp
 		gc/heap.cpp
 		runtime/bool.cpp
+		runtime/builtin_modules/ast.cpp
 		runtime/builtin_modules/builtins.cpp
 		runtime/builtin_modules/gc.cpp
 		runtime/builtin_modules/pyston.cpp

@@ -151,7 +151,7 @@ public:
 private:
     std::unordered_map<AST*, ScopeInfo*> scopes;
     AST_Module* parent_module;
-    InternedStringPool& interned_strings;
+    InternedStringPool* interned_strings;
 
     std::unordered_map<AST*, AST*> scope_replacements;
 
@@ -170,9 +170,7 @@ public:
     // a scope-node with a different node.
     void registerScopeReplacement(AST* original_node, AST* new_node);
 
-    ScopingAnalysis(AST_Module* m);
-    ScopingAnalysis(AST_Expression* e, bool globals_from_module);
-    ScopingAnalysis(AST_Suite* s, bool globals_from_module);
+    ScopingAnalysis(AST* ast, bool globals_from_module);
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();

@@ -313,7 +313,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         RELEASE_ASSERT(fn, "");
         bm->future_flags = getFutureFlags(m, fn);
 
-        ScopingAnalysis* scoping = new ScopingAnalysis(m);
+        ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body, fn));
         bm->setattr("__doc__", si->getDocString(), NULL);
@@ -353,37 +353,77 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(cf, globals, boxedLocals);
 }
 
-template <typename AST_Type>
-CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, std::string fn) {
+CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::string fn) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     Timer _t("for evalOrExec()");
 
     ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
 
-    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, source, body, std::move(fn)));
+    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, source, std::move(body), std::move(fn)));
     CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
     return cl_f;
 }
 
-static CLFunction* compileExec(llvm::StringRef source, llvm::StringRef fn) {
+// TODO: CPython parses execs as Modules, not as Suites.  This is probably not too hard to change,
+// but is non-trivial since we will later decide some things (ex in scoping_analysis) based off
+// the type of the root ast node.
+static AST_Suite* parseExec(llvm::StringRef source) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
     const char* code = source.data();
     AST_Module* parsedModule = parse_string(code);
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
-    parsedSuite->body = parsedModule->body;
+    parsedSuite->body = std::move(parsedModule->body);
+    return parsedSuite;
+}
 
+static CLFunction* compileExec(AST_Suite* parsedSuite, llvm::StringRef fn) {
     return compileForEvalOrExec(parsedSuite, parsedSuite->body, fn);
+}
+
+static AST_Expression* parseEval(llvm::StringRef source) {
+    const char* code = source.data();
+
+    // TODO error message if parse fails or if it isn't an expr
+    // TODO should have a cleaner interface that can parse the Expression directly
+    // TODO this memory leaks
+
+    // Hack: we need to support things like `eval(" 2")`.
+    // This is over-accepting since it will accept things like `eval("\n 2")`
+    while (*code == ' ' || *code == '\t' || *code == '\n' || *code == '\r')
+        code++;
+
+    AST_Module* parsedModule = parse_string(code);
+    if (parsedModule->body.size() == 0)
+        raiseSyntaxError("unexpected EOF while parsing", 0, 0, "<string>", "");
+
+    RELEASE_ASSERT(parsedModule->body.size() == 1, "");
+    RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
+    AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
+    parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
+    return parsedExpr;
+}
+
+static CLFunction* compileEval(AST_Expression* parsedExpr, llvm::StringRef fn) {
+    // We need body (list of statements) to compile.
+    // Obtain this by simply making a single statement which contains the expression.
+    AST_Return* stmt = new AST_Return();
+    stmt->value = parsedExpr->body;
+    std::vector<AST_stmt*> body = { stmt };
+
+    return compileForEvalOrExec(parsedExpr, std::move(body), fn);
 }
 
 Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     Box* flags = _args[0];
-    Box* dont_inherit = _args[0];
-    RELEASE_ASSERT(flags == boxInt(0), "");
+    Box* dont_inherit = _args[1];
     RELEASE_ASSERT(dont_inherit == boxInt(0), "");
+
+    RELEASE_ASSERT(flags->cls == int_cls, "");
+    int64_t iflags = static_cast<BoxedInt*>(flags)->n;
 
     // source is allowed to be an AST, unicode, or anything that supports the buffer protocol
     if (source->cls == unicode_cls) {
@@ -410,15 +450,47 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s;
     llvm::StringRef type_str = static_cast<BoxedString*>(type)->s;
 
-    RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
-    llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
+    if (iflags & ~(/*PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
+        raiseExcHelper(ValueError, "compile(): unrecognised flags");
+    }
+
+    bool only_ast = (bool)(iflags & PyCF_ONLY_AST);
+    iflags &= ~PyCF_ONLY_AST;
+    RELEASE_ASSERT(iflags == 0, "");
+
+    AST* parsed;
+
+    if (PyAST_Check(source)) {
+        parsed = unboxAst(source);
+    } else {
+        RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
+        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
+
+        if (type_str == "exec") {
+            parsed = parseExec(source_str);
+        } else if (type_str == "eval") {
+            parsed = parseEval(source_str);
+        } else if (type_str == "single") {
+            fatalOrError(NotImplemented, "unimplemented");
+            throwCAPIException();
+        } else {
+            raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+        }
+    }
+
+    if (only_ast)
+        return boxAst(parsed);
 
     CLFunction* cl;
     if (type_str == "exec") {
-        cl = compileExec(source_str, filename_str);
+        // TODO: CPython parses execs as Modules
+        if (parsed->type != AST_TYPE::Suite)
+            raiseExcHelper(TypeError, "expected Suite node, got %s", boxAst(parsed)->cls->tp_name);
+        cl = compileExec(static_cast<AST_Suite*>(parsed), filename_str);
     } else if (type_str == "eval") {
-        fatalOrError(NotImplemented, "unimplemented");
-        throwCAPIException();
+        if (parsed->type != AST_TYPE::Expression)
+            raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
+        cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str);
     } else if (type_str == "single") {
         fatalOrError(NotImplemented, "unimplemented");
         throwCAPIException();
@@ -429,13 +501,29 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     return codeForCLFunction(cl);
 }
 
-Box* eval(Box* boxedCode) {
-    Box* boxedLocals = fastLocalsToBoxedLocals();
-    BoxedModule* module = getCurrentModule();
-    Box* globals = getGlobals();
+Box* eval(Box* boxedCode, Box* globals, Box* locals) {
+    if (globals == None)
+        globals = NULL;
 
+    if (locals == None)
+        locals = NULL;
+
+    if (locals == NULL) {
+        locals = globals;
+    }
+
+    if (locals == NULL) {
+        locals = fastLocalsToBoxedLocals();
+    }
+
+    if (globals == NULL)
+        globals = getGlobals();
+
+    BoxedModule* module = getCurrentModule();
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = module;
+
+    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
     if (boxedCode->cls == unicode_cls) {
         boxedCode = PyUnicode_AsUTF8String(boxedCode);
@@ -444,36 +532,16 @@ Box* eval(Box* boxedCode) {
         // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
     }
 
-    // TODO error message if parse fails or if it isn't an expr
-    // TODO should have a cleaner interface that can parse the Expression directly
-    // TODO this memory leaks
-    RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
-
-    // Hack: we need to support things like `eval(" 2")`.
-    // This is over-accepting since it will accept things like `eval("\n 2")`
-    while (*code == ' ' || *code == '\t' || *code == '\n' || *code == '\r')
-        code++;
-
-    AST_Module* parsedModule = parse_string(code);
-    if (parsedModule->body.size() == 0)
-        raiseSyntaxError("unexpected EOF while parsing", 0, 0, "<string>", "");
-
-    RELEASE_ASSERT(parsedModule->body.size() == 1, "");
-    RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
-    AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
-    parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
-
-    // We need body (list of statements) to compile.
-    // Obtain this by simply making a single statement which contains the expression.
-    AST_Return* stmt = new AST_Return();
-    stmt->value = parsedExpr->body;
-    std::vector<AST_stmt*> body = { stmt };
-
-    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
-
-    CLFunction* cl = compileForEvalOrExec(parsedExpr, body, "<string>");
-    return evalOrExec(cl, globals, boxedLocals);
+    CLFunction* cl;
+    if (boxedCode->cls == str_cls) {
+        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s);
+        cl = compileEval(parsed, "<string>");
+    } else if (boxedCode->cls == code_cls) {
+        cl = clfunctionFromCode(boxedCode);
+    } else {
+        abort();
+    }
+    return evalOrExec(cl, globals, locals);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
@@ -530,7 +598,8 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        cl = compileExec(static_cast<BoxedString*>(boxedCode)->s, "<string>");
+        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s);
+        cl = compileExec(parsed, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
     } else {

@@ -261,7 +261,7 @@ public:
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body, std::string fn);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, std::vector<AST_stmt*> body, std::string fn);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;

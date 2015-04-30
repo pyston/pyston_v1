@@ -428,6 +428,8 @@ parser.add_argument('-e', '--exit-code-only', action='store_true',
                     help="only check exit code; don't run CPython to get expected output to compare against")
 parser.add_argument('--skip-failing', action='store_true',
                     help="skip tests expected to fail")
+parser.add_argument('--order-by-mtime', action='store_true',
+                    help="order test execution by modification time, instead of file size")
 
 parser.add_argument('test_dir')
 parser.add_argument('pattern', nargs='*')
@@ -504,7 +506,10 @@ def main(orig_dir):
         IMAGE = '/usr/local/bin/pypy'
 
     if not patterns:
-        tests.sort(key=fileSize)
+        if opts.order_by_mtime:
+            tests.sort(key=lambda fn:os.stat(fn).st_mtime, reverse=True)
+        else:
+            tests.sort(key=fileSize)
 
     for fn in tests:
         check_stats = fn not in IGNORE_STATS

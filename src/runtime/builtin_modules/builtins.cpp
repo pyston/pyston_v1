@@ -1211,8 +1211,9 @@ void setupBuiltins() {
     PyType_Ready(&PyBuffer_Type);
     builtins_module->giveAttr("buffer", &PyBuffer_Type);
 
-    builtins_module->giveAttr(
-        "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
+    builtins_module->giveAttr("eval",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 3, 2, false, false),
+                                                               "eval", { NULL, NULL }));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
 
