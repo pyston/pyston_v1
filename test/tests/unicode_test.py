@@ -150,3 +150,5 @@ s = " \thello world\t "
 for m in str.strip, str.lstrip, str.rstrip:
     for args in [], [" "], [u" "]:
         print repr(m(s, *args))
+
+print "".join([u"\xB2", u"\xB3"])

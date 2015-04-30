@@ -18,6 +18,7 @@ def test(a, b):
     if not isinstance(a, float) and not isinstance(b, float):
         print a ^ b, a | b, a & b
         print a.__hex__(), b.__hex__(), a.__oct__(), b.__oct__()
+        print a // b, b // a, a.__floordiv__(b), b.__floordiv__(a)
 
 
 print 1L / 5L
