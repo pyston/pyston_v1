@@ -471,10 +471,6 @@ assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
 assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_reg, Location otherThan) {
     assert(dest.type == Location::Register || dest.type == Location::AnyReg);
 
-    // assembler::Register reg = var->rewriter->allocReg(l);
-    // var->rewriter->addLocationToVar(var, reg);
-    // return reg;
-    assert(locations.size());
 #ifndef NDEBUG
     if (!allow_constant_in_reg) {
         for (Location l : locations) {
@@ -482,6 +478,15 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
         }
     }
 #endif
+
+    if (locations.size() == 0 && this->is_constant) {
+        assembler::Register reg = rewriter->allocReg(dest, otherThan);
+        rewriter->const_loader.loadConstIntoReg(this->constant_value, reg);
+        rewriter->addLocationToVar(this, reg);
+        return reg;
+    }
+
+    assert(locations.size());
 
     // Not sure if this is worth it,
     // but first try to see if we're already in this specific register
@@ -1287,7 +1292,8 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
     assert(var);
 
     // There may be no need to spill if the var is held in a different location already.
-    if (var->locations.size() > 1) {
+    // There is no need to spill if it is a constant
+    if (var->locations.size() > 1 || var->is_constant) {
         removeLocationFromVar(var, reg);
         return;
     }
