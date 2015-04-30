@@ -525,17 +525,9 @@ check:
 
 quick_check:
 	$(MAKE) pyston_dbg
-	$(call checksha,./pyston_dbg -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_dbg -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_dbg -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(MAKE) pyston
-	$(call checksha,./pyston -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(MAKE) pyston_prof
-	$(call checksha,./pyston_prof -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(MAKE) check_format
+	$(MAKE) unittests
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
 
 Makefile.local:
 	echo "Creating default Makefile.local"
