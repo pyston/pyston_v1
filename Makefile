@@ -49,6 +49,11 @@ FORCE_TRUNK_BINARIES := 0
 USE_CMAKE := 1
 NINJA := ninja
 
+CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
+CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
+CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
+CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
+
 # Put any overrides in here:
 -include Makefile.local
 
@@ -880,10 +885,6 @@ $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
 $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 
 else
-CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
-CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
-CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
-CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 .PHONY: cmake_check clang_check
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
