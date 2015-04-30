@@ -220,8 +220,6 @@ def get_test_options(fn, check_stats, run_memcheck):
     return opts
 
 def determine_test_result(fn, opts, code, out, stderr, elapsed):
-    last_stderr_line = stderr.strip().split('\n')[-1]
-
     if opts.allow_warnings:
         out_lines = []
         for l in out.split('\n'):
@@ -233,13 +231,26 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         out = "\n".join(out_lines)
 
     stats = None
-    if code >= 0 and opts.collect_stats:
+    if opts.collect_stats:
         stats = {}
-        assert out.count("Stats:") == 1
-        out, stats_str = out.split("Stats:")
-        for l in stats_str.strip().split('\n'):
-            k, v = l.split(':')
-            stats[k.strip()] = int(v)
+        have_stats = (stderr.count("Stats:") == 1 and stderr.count("(End of stats)") == 1)
+
+        if code >= 0:
+            assert have_stats
+
+        if have_stats:
+            assert stderr.count("Stats:") == 1
+            stderr, stats_str = stderr.split("Stats:")
+            stats_str, stderr_tail = stats_str.split("(End of stats)\n")
+            stderr += stderr_tail
+
+            other_stats_str, counter_str = stats_str.split("Counters:")
+            for l in counter_str.strip().split('\n'):
+                assert l.count(':') == 1, l
+                k, v = l.split(':')
+                stats[k.strip()] = int(v)
+
+    last_stderr_line = stderr.strip().split('\n')[-1]
 
     if EXIT_CODE_ONLY:
         # fools the rest of this function into thinking the output is OK & just checking the exit code.

@@ -160,28 +160,31 @@ extern "C" void abort() {
     // In case displaying the traceback recursively calls abort:
     static bool recursive = false;
 
-    // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
-    if (!recursive && traceback_cls) {
+    if (!recursive) {
         recursive = true;
-
+        Stats::dump();
         fprintf(stderr, "Someone called abort!\n");
 
-        // If we call abort(), things may be seriously wrong.  Set an alarm() to
-        // try to handle cases that we would just hang.
-        // (Ex if we abort() from a static constructor, and _printStackTrace uses
-        // that object, _printStackTrace will hang waiting for the first construction
-        // to finish.)
-        alarm(1);
-        try {
-            _printStacktrace();
-        } catch (ExcInfo) {
-            fprintf(stderr, "error printing stack trace during abort()");
-        }
+        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
+        if (traceback_cls) {
 
-        // Cancel the alarm.
-        // This is helpful for when running in a debugger, since otherwise the debugger will catch the
-        // abort and let you investigate, but the alarm will still come back to kill the program.
-        alarm(0);
+            // If we call abort(), things may be seriously wrong.  Set an alarm() to
+            // try to handle cases that we would just hang.
+            // (Ex if we abort() from a static constructor, and _printStackTrace uses
+            // that object, _printStackTrace will hang waiting for the first construction
+            // to finish.)
+            alarm(1);
+            try {
+                _printStacktrace();
+            } catch (ExcInfo) {
+                fprintf(stderr, "error printing stack trace during abort()");
+            }
+
+            // Cancel the alarm.
+            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
+            // abort and let you investigate, but the alarm will still come back to kill the program.
+            alarm(0);
+        }
     }
 
     if (PAUSE_AT_ABORT) {
