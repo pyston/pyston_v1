@@ -620,19 +620,9 @@ RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
         return var;
     } else {
         RewriterVar* result = createNewConstantVar(val);
-        addAction([=]() { this->_loadConst(result, val, dest); }, {}, ActionType::NORMAL);
         const_loader_var = result;
         return result;
     }
-}
-
-void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
-    assembler::Register reg = allocReg(dest);
-    const_loader.loadConstIntoReg(val, reg);
-    result->initializeInReg(reg);
-
-    result->releaseIfNoUses();
-    assertConsistent();
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {

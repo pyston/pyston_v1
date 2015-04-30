@@ -420,7 +420,7 @@ private:
     bool finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
     void _trap();
-    void _loadConst(RewriterVar* result, int64_t val, Location loc);
+    void _loadConst(RewriterVar* result, int64_t val);
     void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
                const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
