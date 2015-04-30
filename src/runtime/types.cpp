@@ -1637,6 +1637,13 @@ static PyObject* reduce_2(PyObject* obj) noexcept {
             PyErr_Clear();
             state = Py_None;
             Py_INCREF(state);
+        } else {
+            // Pyston change: convert attrwrapper to a real dict
+            if (state->cls == attrwrapper_cls) {
+                PyObject* real_dict = PyDict_New();
+                PyDict_Update(real_dict, state);
+                state = real_dict;
+            }
         }
         names = slotnames(cls);
         if (names == NULL)
