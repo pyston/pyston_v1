@@ -511,6 +511,26 @@ static PyObject* instance_index(PyObject* self) noexcept {
     return res;
 }
 
+Box* instanceEq(Box* _inst, Box* other) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* func = _instanceGetattribute(inst, boxStrConstant("__eq__"), false);
+    if (!func)
+        return NotImplemented;
+    return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceNe(Box* _inst, Box* other) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* func = _instanceGetattribute(inst, boxStrConstant("__ne__"), false);
+    if (!func)
+        return NotImplemented;
+    return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
+}
+
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     assert(_inst->cls == instance_cls);
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -560,6 +580,8 @@ void setupClassobj() {
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
     instance_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
+    instance_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instanceEq, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)instanceNe, UNKNOWN, 2)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;

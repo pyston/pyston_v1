@@ -552,7 +552,7 @@ void CompiledFunction::speculationFailed() {
 
     this->times_speculation_failed++;
 
-    if (this->times_speculation_failed >= 4) {
+    if (this->times_speculation_failed == 4) {
         // printf("Killing %p because it failed too many speculations\n", this);
 
         CLFunction* cl = this->clfunc;

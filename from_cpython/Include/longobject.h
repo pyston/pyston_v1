@@ -138,6 +138,15 @@ PyAPI_FUNC(PyObject *) _PyLong_FormatAdvanced(PyObject *obj,
 					      char *format_spec,
 					      Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
+// Pyston change: Pyston specific API
+#define Py_HAVE_LONG_MPZ_API 1
+/* _PyLongMPZ: alias for mpz_src, used to not have to pull in the GMP header. */
+typedef void* _PyLongMPZ;
+/* _PyLong_AsMPZ: Sets the supplied initialized GMP mpz to the value of the supplied long object. */
+PyAPI_FUNC(void) _PyLong_AsMPZ(PyObject *, _PyLongMPZ) PYSTON_NOEXCEPT;
+/* _PyLong_FromMPZ: Creates a python long object from the supplied GMP mpz value. */
+PyAPI_FUNC(PyObject *) _PyLong_FromMPZ(const _PyLongMPZ) PYSTON_NOEXCEPT;
+
 #ifdef __cplusplus
 }
 #endif

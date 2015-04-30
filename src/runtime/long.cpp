@@ -452,6 +452,17 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     return rtn;
 }
 
+extern "C" void _PyLong_AsMPZ(PyObject* obj, _PyLongMPZ num) noexcept {
+    RELEASE_ASSERT(obj->cls == long_cls, "needs a long argument");
+    mpz_set((mpz_ptr)num, ((BoxedLong*)obj)->n);
+}
+
+extern "C" PyObject* _PyLong_FromMPZ(const _PyLongMPZ num) noexcept {
+    BoxedLong* r = new BoxedLong();
+    mpz_init_set(r->n, (mpz_srcptr)num);
+    return r;
+}
+
 extern "C" Box* createLong(const std::string* s) {
     BoxedLong* rtn = new BoxedLong();
     int r = mpz_init_set_str(rtn->n, s->c_str(), 10);
