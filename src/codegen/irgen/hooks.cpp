@@ -516,7 +516,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
         // From CPython (they set it to be f->f_builtins):
         Box* globals_dict = globals;
         if (globals->cls == module_cls)
-            globals_dict = makeAttrWrapper(globals);
+            globals_dict = globals->getAttrWrapper();
         if (PyDict_GetItemString(globals_dict, "__builtins__") == NULL)
             PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
     }

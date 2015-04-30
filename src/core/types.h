@@ -430,6 +430,12 @@ class Box {
 private:
     BoxedDict** getDictPtr();
 
+    // Adds a new attribute to a HCAttrs-backed object.  Must pass in the new hidden class object
+    // which must be the same as the current hidden class but with the new attribute at the end.
+    // Swaps the hidden class, reallocates and copies and updates the attribute array.
+    // The value of the current hidden class should be guarded before calling this.
+    void addNewHCAttr(HiddenClass* new_hcls, Box* val, SetattrRewriteArgs* rewrite_args);
+
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
@@ -458,6 +464,9 @@ public:
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     bool hasattr(const std::string& attr) { return getattr(attr) != NULL; }
     void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
+
+    // Only valid for hc-backed instances:
+    Box* getAttrWrapper();
 
     Box* reprIC();
     BoxedString* reprICAsString();

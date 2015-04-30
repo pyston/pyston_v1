@@ -2706,7 +2706,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->giveAttr("__base__", base);
 
     assert(cls->tp_dict == NULL);
-    cls->tp_dict = makeAttrWrapper(cls);
+    cls->tp_dict = cls->getAttrWrapper();
 
     assert(cls->tp_name);
     // tp_name

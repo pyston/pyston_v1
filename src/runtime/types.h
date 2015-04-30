@@ -283,16 +283,19 @@ public:
 
 private:
     HiddenClass(HCType type) : type(type) {}
-    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets() {
+    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets(), attrwrapper_offset(parent->attrwrapper_offset) {
         assert(parent->type == NORMAL);
         for (auto& p : parent->attr_offsets) {
             this->attr_offsets.insert(&p);
         }
     }
 
-    // Only makes sense for NORMAL hidden classes.  Clients should access through getAttrOffsets():
+    // These fields only make sense for NORMAL hidden classes:
     llvm::StringMap<int> attr_offsets;
     ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
+    // If >= 0, is the offset where we stored an attrwrapper object
+    int attrwrapper_offset = -1;
+    HiddenClass* attrwrapper_child = NULL;
 
 public:
     static HiddenClass* makeRoot() {
@@ -315,18 +318,35 @@ public:
     void gc_visit(GCVisitor* visitor) {
         // Visit children even for the dict-backed case, since children will just be empty
         visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
+        if (attrwrapper_child)
+            visitor->visit(attrwrapper_child);
     }
 
-    // Only makes sense for NORMAL hidden classes:
-    const llvm::StringMap<int>& getAttrOffsets() {
+    // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
+    // attributes.
+    int attributeArraySize() {
+        if (type == DICT_BACKED)
+            return 1;
+
+        ASSERT(type == NORMAL, "%d", type);
+        int r = attr_offsets.size();
+        if (attrwrapper_offset != -1)
+            r += 1;
+        return r;
+    }
+
+    // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
+    // array.
+    // Only valid for NORMAL hidden classes
+    const llvm::StringMap<int>& getStrAttrOffsets() {
         assert(type == NORMAL);
         return attr_offsets;
     }
 
-    // Only makes sense for NORMAL hidden classes:
+    // Only valid for NORMAL hidden classes:
     HiddenClass* getOrMakeChild(const std::string& attr);
 
-    // Only makes sense for NORMAL hidden classes:
+    // Only valid for NORMAL hidden classes:
     int getOffset(const std::string& attr) {
         assert(type == NORMAL);
         auto it = attr_offsets.find(attr);
@@ -335,7 +355,14 @@ public:
         return it->second;
     }
 
-    // Only makes sense for NORMAL hidden classes:
+    int getAttrwrapperOffset() {
+        assert(type == NORMAL);
+        return attrwrapper_offset;
+    }
+
+    HiddenClass* getAttrwrapperChild();
+
+    // Only valid for NORMAL hidden classes:
     HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
@@ -803,7 +830,6 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 Box* objectNewNoArgs(BoxedClass* cls);
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
-Box* makeAttrWrapper(Box* b);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, const std::string& attr);

@@ -18,8 +18,10 @@
 #include "Python.h"
 #include "pythread.h"
 
+#include "capi/typeobject.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -165,13 +167,27 @@ public:
         return tls_obj;
     }
 
-    static int setattr(Box* obj, char* name, Box* val) {
+    static Box* setattrPyston(Box* obj, Box* name, Box* val) noexcept {
+        if (isSubclass(name->cls, str_cls) && static_cast<BoxedString*>(name)->s == "__dict__") {
+            raiseExcHelper(AttributeError, "'%.50s' object attribute '__dict__' is read-only", Py_TYPE(obj)->tp_name);
+        }
+
         Box* tls_obj = getThreadLocalObject(obj);
-        setitem(tls_obj, boxString(name), val);
+        setitem(tls_obj, name, val);
+        return None;
+    }
+
+    static int setattr(Box* obj, char* name, Box* val) noexcept {
+        try {
+            setattrPyston(obj, boxString(name), val);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return -1;
+        }
         return 0;
     }
 
-    static Box* getattr(Box* obj, char* name) {
+    static Box* getattr(Box* obj, char* name) noexcept {
         Box* tls_obj = getThreadLocalObject(obj);
         if (!strcmp(name, "__dict__"))
             return tls_obj;
@@ -179,8 +195,19 @@ public:
         try {
             return getitem(tls_obj, boxString(name));
         } catch (ExcInfo e) {
-            raiseExcHelper(AttributeError, "'%.50s' object has no attribute '%.400s'", obj->cls->tp_name, name);
         }
+
+        try {
+            Box* r = getattrInternalGeneric(obj, name, NULL, false, false, NULL, NULL);
+            if (r)
+                return r;
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", Py_TYPE(obj)->tp_name, name);
+        return NULL;
     }
 
     static Box* hash(Box* obj) { return boxInt(PyThread_get_thread_ident()); }
@@ -227,6 +254,8 @@ void setupThread() {
     thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_local_cls->giveAttr("__hash__",
                                new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::hash, BOXED_INT, 1)));
+    thread_local_cls->giveAttr("__setattr__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::setattrPyston, UNKNOWN, 3)));
     thread_local_cls->freeze();
     thread_module->giveAttr("_local", thread_local_cls);
 
