@@ -72,7 +72,7 @@ Box* setiteratorIter(BoxedSetIterator* self) {
 }
 
 Box* setAdd2(Box* _self, Box* b) {
-    assert(_self->cls == set_cls || _self->cls == frozenset_cls);
+    assert(PyAnySet_Check(_self));
     BoxedSet* self = static_cast<BoxedSet*>(_self);
 
     self->s.insert(b);
@@ -82,7 +82,7 @@ Box* setAdd2(Box* _self, Box* b) {
 Box* setNew(Box* _cls, Box* container) {
     assert(_cls->cls == type_cls);
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    assert(cls == set_cls || cls == frozenset_cls);
+    assert(isSubclass(cls, set_cls) || isSubclass(cls, frozenset_cls));
 
     Box* rtn = new (cls) BoxedSet();
 
@@ -124,8 +124,8 @@ Box* frozensetRepr(BoxedSet* self) {
 }
 
 Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
-    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
+    assert(PyAnySet_Check(lhs));
+    assert(PyAnySet_Check(rhs));
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
@@ -139,8 +139,8 @@ Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
-    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
+    assert(PyAnySet_Check(lhs));
+    assert(PyAnySet_Check(rhs));
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
@@ -152,8 +152,8 @@ Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
-    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
+    assert(PyAnySet_Check(lhs));
+    assert(PyAnySet_Check(rhs));
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
@@ -167,8 +167,8 @@ Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
-    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
+    assert(PyAnySet_Check(lhs));
+    assert(PyAnySet_Check(rhs));
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
@@ -186,17 +186,17 @@ Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setIter(BoxedSet* self) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(PyAnySet_Check(self));
     return new BoxedSetIterator(self);
 }
 
 Box* setLen(BoxedSet* self) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(PyAnySet_Check(self));
     return boxInt(self->s.size());
 }
 
 Box* setAdd(BoxedSet* self, Box* v) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(PyAnySet_Check(self));
     self->s.insert(v);
     return None;
 }
@@ -264,7 +264,7 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
 }
 
 Box* setDifference(BoxedSet* self, BoxedTuple* args) {
-    if (!isSubclass(self->cls, set_cls) && !isSubclass(self->cls, frozenset_cls))
+    if (!PyAnySet_Check(self))
         raiseExcHelper(TypeError, "descriptor 'difference' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
@@ -315,7 +315,7 @@ static Box* setIssuperset(BoxedSet* self, Box* container) {
 }
 
 Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
-    if (!isSubclass(self->cls, set_cls))
+    if (!PyAnySet_Check(self))
         raiseExcHelper(TypeError, "descriptor 'intersection' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
@@ -347,12 +347,12 @@ Box* setPop(BoxedSet* self) {
 }
 
 Box* setContains(BoxedSet* self, Box* v) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(PyAnySet_Check(self));
     return boxBool(self->s.count(v) != 0);
 }
 
 Box* setEq(BoxedSet* self, BoxedSet* rhs) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(PyAnySet_Check(self));
     if (rhs->cls != set_cls && rhs->cls != frozenset_cls)
         return NotImplemented;
 
@@ -413,7 +413,7 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
 }
 
 extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
-    if (!PySet_Check(set) && !PyFrozenSet_Check(set)) {
+    if (!PyAnySet_Check(set)) {
         PyErr_BadInternalCall();
         return -1;
     }

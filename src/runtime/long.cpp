@@ -957,6 +957,13 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
     }
 }
 
+Box* longFloorDiv(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1));
+    return longDiv(v1, _v2);
+}
+
 Box* longMod(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'long' object but received a '%s'", getTypeName(v1));
@@ -1038,7 +1045,8 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
 
 Box* longRdiv(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'", getTypeName(v1));
+        raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1));
 
     if (mpz_cmp_si(v1->n, 0) == 0)
         raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
@@ -1060,6 +1068,14 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
     } else {
         return NotImplemented;
     }
+}
+
+Box* longRfloorDiv(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__rfloordiv__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1));
+
+    return longRdiv(v1, _v2);
 }
 
 Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
@@ -1259,6 +1275,8 @@ void setupLong() {
 
     long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)longRdiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)longFloorDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__rfloordiv__", new BoxedFunction(boxRTFunction((void*)longRfloorDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__truediv__", new BoxedFunction(boxRTFunction((void*)longTrueDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rtruediv__", new BoxedFunction(boxRTFunction((void*)longRTrueDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)longMod, UNKNOWN, 2)));

@@ -36,6 +36,7 @@
 #include "runtime/util.h"
 
 extern "C" PyObject* string_count(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_join(PyStringObject* self, PyObject* orig) noexcept;
 extern "C" PyObject* string_split(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
@@ -1711,76 +1712,9 @@ Box* strIsTitle(BoxedString* self) {
     return boxBool(cased);
 }
 
-Box* strJoin(BoxedString* self, Box* rhs) {
-    assert(isSubclass(self->cls, str_cls));
-
-    int i = 0;
-    if (rhs->cls == str_cls) {
-        BoxedString* srhs = static_cast<BoxedString*>(rhs);
-        if (srhs->size() == 0)
-            return EmptyString;
-
-        size_t rtn_len = self->size() * (srhs->size() - 1) + srhs->size();
-        BoxedString* rtn = new (rtn_len) BoxedString(nullptr, rtn_len);
-        char* p = rtn->data();
-        for (auto c : srhs->s) {
-            if (i > 0) {
-                memmove(p, self->data(), self->size());
-                p += self->size();
-            }
-            *p++ = c;
-            ++i;
-        }
-        return rtn;
-    } else if (rhs->cls == list_cls) {
-        BoxedList* lrhs = static_cast<BoxedList*>(rhs);
-        if (lrhs->size == 0)
-            return EmptyString;
-
-        size_t rtn_len = self->size() * (lrhs->size - 1);
-
-        for (int l = 0; l < lrhs->size; l++) {
-            // if we hit anything but a string (unicode objects can be here), bail out since we're
-            // going to pay the cost of converting the unicode to string objects anyway.
-            if (lrhs->elts->elts[l]->cls != str_cls)
-                goto fallback;
-            rtn_len += static_cast<BoxedString*>(lrhs->elts->elts[l])->size();
-        }
-        BoxedString* rtn = new (rtn_len) BoxedString(nullptr, rtn_len);
-        char* p = rtn->data();
-        for (i = 0; i < lrhs->size; i++) {
-            if (i > 0) {
-                memmove(p, self->data(), self->size());
-                p += self->size();
-            }
-            auto lrhs_el = static_cast<BoxedString*>(lrhs->elts->elts[i]);
-            memmove(p, lrhs_el->data(), lrhs_el->size());
-            p += lrhs_el->size();
-        }
-        return rtn;
-    }
-
-fallback:
-    std::string output_str;
-    llvm::raw_string_ostream os(output_str);
-    for (Box* e : rhs->pyElements()) {
-        if (i > 0)
-            os << self->s;
-        os << str(e)->s;
-        ++i;
-    }
-    os.flush();
-    return boxString(std::move(output_str));
-}
-
 extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
-    try {
-        RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
-        return strJoin((BoxedString*)sep, x);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
+    return string_join((PyStringObject*)sep, x);
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
@@ -2670,6 +2604,7 @@ static PyBufferProcs string_as_buffer = {
 
 static PyMethodDef string_methods[] = {
     { "count", (PyCFunction)string_count, METH_VARARGS, NULL },
+    { "join", (PyCFunction)string_join, METH_O, NULL },
     { "split", (PyCFunction)string_split, METH_VARARGS, NULL },
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
     { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
@@ -2769,8 +2704,6 @@ void setupStr() {
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
 
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
-
-    str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
 
     str_cls->giveAttr("replace",
                       new BoxedFunction(boxRTFunction((void*)strReplace, UNKNOWN, 4, 1, false, false), { boxInt(-1) }));
