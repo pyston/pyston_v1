@@ -14,7 +14,6 @@ devnull = open(os.devnull, "w")
 print "-- Patching pycrypto"
 patches = ["../pycrypto_0001-fastmath-Add-support-for-Pyston.patch"]
 for patch in patches:
-    out = StringIO.StringIO()
     try:
         cmd = ["patch", "-p1", "--forward", "-i", patch]
         subprocess.check_output(cmd, stderr=subprocess.STDOUT)
@@ -56,3 +55,14 @@ assert enc_data != test_string
 assert key.decrypt(enc_data) == test_string
 
 print "-- Tests finished"
+
+print "-- Unpatching pycrypto"
+for patch in reversed(patches):
+    cmd = ["patch", "-p1", "--forward", "-i", patch]
+    cmd += ["-R"]
+    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+
+for d in ("build", "install"):
+    if os.path.exists(d):
+         print "Removing the created", d, "directory"
+         shutil.rmtree(d)
