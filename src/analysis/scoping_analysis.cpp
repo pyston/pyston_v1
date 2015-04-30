@@ -845,7 +845,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 }
 
 InternedStringPool& ScopingAnalysis::getInternedStrings() {
-    return interned_strings;
+    return *interned_strings;
 }
 
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
@@ -889,19 +889,25 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     return analyzeSubtree(node);
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Module* m)
-    : parent_module(m), interned_strings(*m->interned_strings.get()), globals_from_module(true) {
-    scopes[m] = new ModuleScopeInfo();
-}
-
-ScopingAnalysis::ScopingAnalysis(AST_Expression* e, bool globals_from_module)
-    : interned_strings(*e->interned_strings.get()), globals_from_module(globals_from_module) {
-    // It's an expression, so it can't have a `global` statement
-    scopes[e] = new EvalExprScopeInfo(globals_from_module);
-}
-
-ScopingAnalysis::ScopingAnalysis(AST_Suite* s, bool globals_from_module)
-    : interned_strings(*s->interned_strings.get()), globals_from_module(globals_from_module) {
-    scopes[s] = new EvalExprScopeInfo(s, globals_from_module);
+ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
+    : parent_module(NULL), globals_from_module(globals_from_module) {
+    switch (ast->type) {
+        case AST_TYPE::Module:
+            assert(globals_from_module);
+            scopes[ast] = new ModuleScopeInfo();
+            interned_strings = static_cast<AST_Module*>(ast)->interned_strings.get();
+            parent_module = static_cast<AST_Module*>(ast);
+            break;
+        case AST_TYPE::Expression:
+            scopes[ast] = new EvalExprScopeInfo(globals_from_module);
+            interned_strings = static_cast<AST_Expression*>(ast)->interned_strings.get();
+            break;
+        case AST_TYPE::Suite:
+            scopes[ast] = new EvalExprScopeInfo(ast, globals_from_module);
+            interned_strings = static_cast<AST_Suite*>(ast)->interned_strings.get();
+            break;
+        default:
+            RELEASE_ASSERT(0, "%d", ast->type);
+    }
 }
 }

@@ -132,6 +132,9 @@ PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str
 
+// This is in Python-ast.h in CPython, which we don't yet have:
+int PyAST_Check(PyObject* obj) PYSTON_NOEXCEPT;
+
 #ifdef __cplusplus
 #define PyMODINIT_FUNC extern "C" void
 #else

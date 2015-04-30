@@ -75,6 +75,7 @@ void setupBuiltins();
 void setupPyston();
 void setupThread();
 void setupImport();
+void setupAST();
 void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
@@ -833,6 +834,9 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, const std::string& attr);
+
+Box* boxAst(AST* ast);
+AST* unboxAst(Box* b);
 
 #define SystemError ((BoxedClass*)PyExc_SystemError)
 #define StopIteration ((BoxedClass*)PyExc_StopIteration)

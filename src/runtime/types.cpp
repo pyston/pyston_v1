@@ -2323,6 +2323,7 @@ void setupRuntime() {
     setupGC();
     setupImport();
     setupPyston();
+    setupAST();
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
