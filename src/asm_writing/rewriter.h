@@ -429,9 +429,9 @@ private:
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // The public versions of these are in RewriterVar
-    void _addGuard(RewriterVar* var, uint64_t val);
-    void _addGuardNotEq(RewriterVar* var, uint64_t val);
-    void _addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate = false);
+    void _addGuard(RewriterVar* var, RewriterVar* val_constant);
+    void _addGuardNotEq(RewriterVar* var, RewriterVar* val_constant);
+    void _addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate = false);
     void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
                   assembler::MovType type = assembler::MovType::Q);
     void _getAttrFloat(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
