@@ -131,3 +131,21 @@ g = {}
 l = {}
 exec ("a=1; print a", g, l)
 print g.keys(), l.keys()
+
+s = """
+global a
+a = 1
+b = 2
+def inner():
+    print sorted(globals().keys()), sorted(locals().keys())
+    print a
+    print b
+print sorted(globals().keys()), sorted(locals().keys())
+inner()
+"""
+exec s in {}
+try:
+    exec s in {}, {}
+    raise Exception()
+except NameError as e:
+    print e

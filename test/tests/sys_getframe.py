@@ -87,3 +87,15 @@ def f6(n):
     else:
         get_main_module()
 f6(10)
+
+def custom_globals():
+    s = """
+def inner():
+    import sys
+    return sys._getframe(1).f_globals
+print sorted(inner().keys())
+    """.strip()
+    exec s
+    exec s in {'a':1}
+    exec s in {'b':2}, {'c':3}
+custom_globals()

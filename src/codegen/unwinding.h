@@ -53,6 +53,7 @@ public:
     bool exists() { return impl.get() != NULL; }
     std::unique_ptr<ExecutionPoint> getExecutionPoint();
     Box* fastLocalsToBoxedLocals();
+    Box* getGlobalsDict();
 
     // Gets the "current version" of this frame: if the frame has executed since
     // the iterator was obtained, the methods may return old values. This returns

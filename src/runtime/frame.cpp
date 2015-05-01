@@ -130,9 +130,9 @@ public:
         FrameInfo* fi = it.getFrameInfo();
         if (fi->frame_obj == NULL) {
             auto cf = it.getCF();
+            Box* globals = it.getGlobalsDict();
             BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
-            assert(cf->clfunc->source->scoping->areGlobalsFromModule());
-            f->_globals = cf->clfunc->source->parent_module->getAttrWrapper();
+            f->_globals = globals;
             f->_code = codeForCLFunction(cf->clfunc);
         }
 

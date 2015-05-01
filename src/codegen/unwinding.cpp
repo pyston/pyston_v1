@@ -346,6 +346,16 @@ public:
         abort();
     }
 
+    Box* getGlobalsDict() {
+        Box* globals = getGlobals();
+        if (!globals)
+            return NULL;
+
+        if (isSubclass(globals->cls, module_cls))
+            return globals->getAttrWrapper();
+        return globals;
+    }
+
     FrameInfo* getFrameInfo() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
@@ -591,13 +601,7 @@ Box* getGlobals() {
 }
 
 Box* getGlobalsDict() {
-    Box* globals = getGlobals();
-    if (!globals)
-        return NULL;
-
-    if (isSubclass(globals->cls, module_cls))
-        return globals->getAttrWrapper();
-    return globals;
+    return getTopPythonFrame()->getGlobalsDict();
 }
 
 BoxedModule* getCurrentModule() {
@@ -888,6 +892,10 @@ std::unique_ptr<ExecutionPoint> PythonFrameIterator::getExecutionPoint() {
 
 CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
+}
+
+Box* PythonFrameIterator::getGlobalsDict() {
+    return impl->getGlobalsDict();
 }
 
 FrameInfo* PythonFrameIterator::getFrameInfo() {
