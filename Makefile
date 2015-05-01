@@ -356,6 +356,7 @@ STDMODULE_SRCS := \
 	_sqlite/row.c \
 	_sqlite/statement.c \
 	_sqlite/util.c \
+	stropmodule.c \
 	$(EXTRA_STDMODULE_SRCS)
 
 STDOBJECT_SRCS := \
@@ -383,6 +384,7 @@ STDPYTHON_SRCS := \
 	formatter_unicode.c \
 	structmember.c \
 	marshal.c \
+	mystrtoul.c \
 	$(EXTRA_STDPYTHON_SRCS)
 
 STDPARSER_SRCS := \

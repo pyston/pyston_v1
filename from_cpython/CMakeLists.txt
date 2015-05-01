@@ -62,6 +62,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     socketmodule.c
     statement.c
     stringio.c
+    stropmodule.c
     textio.c
     timemodule.c
     unicodedata.c
@@ -94,6 +95,7 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     formatter_unicode.c
     getargs.c
     marshal.c
+    mystrtoul.c
     pyctype.c
     pystrtod.c
     structmember.c
