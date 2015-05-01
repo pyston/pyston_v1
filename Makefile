@@ -4,6 +4,9 @@
 USE_TEST_LLVM := 0
 DEPS_DIR := $(HOME)/pyston_deps
 
+SRC_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+BUILD_DIR := $(SRC_DIR)/build
+
 LLVM_REVISION_FILE := llvm_revision.txt
 LLVM_REVISION := $(shell cat $(LLVM_REVISION_FILE))
 
@@ -49,8 +52,8 @@ FORCE_TRUNK_BINARIES := 0
 USE_CMAKE := 1
 NINJA := ninja
 
-CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
-CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
+CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
+CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
@@ -451,8 +454,8 @@ $1_unittest: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS)
 else
 .PHONY: $1_unittest
 $1_unittest:
-	$(NINJA) -C $(HOME)/pyston-build-dbg $1_unittest $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-dbg/$1_unittest .
+	$(NINJA) -C $(BUILD_DIR)/Debug $1_unittest $(NINJAFLAGS)
+	ln -sf $(BUILD_DIR)/Debug/$1_unittest .
 endif
 dbg_$1_unittests: $1_unittest
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
@@ -476,20 +479,6 @@ $(call add_unittest,analysis)
 define checksha
 	test "$$($1 | sha1sum)" = "$2  -"
 endef
-
-.PHONY: format check_format
-ifneq ($(USE_CMAKE),1)
-format:
-	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
-check_format:
-	$(ECHO) checking formatting...
-	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
-else
-format: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release format
-check_format: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release check-format
-endif
 
 .PHONY: analyze
 analyze:
@@ -904,31 +893,45 @@ $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
-	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
+	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
+	$(NINJA) -C $(BUILD_DIR)/Debug pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	ln -sf $(BUILD_DIR)/Debug/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
+	$(NINJA) -C $(BUILD_DIR)/Release pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	ln -sf $(BUILD_DIR)/Release/pyston pyston_release
 endif
-CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
+CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_GCC)
-	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
+	$(NINJA) -C $(BUILD_DIR)/Debug-gcc pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	ln -sf $(BUILD_DIR)/Debug-gcc/pyston pyston_gcc
+
+.PHONY: format check_format
+ifneq ($(USE_CMAKE),1)
+format:
+	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
+check_format:
+	$(ECHO) checking formatting...
+	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
+else
+format: $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(BUILD_DIR)/Release format
+check_format: $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(BUILD_DIR)/Release check-format
+endif
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
