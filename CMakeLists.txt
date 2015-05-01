@@ -3,7 +3,7 @@ project(pyston C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
-include(CheckTypeSize)
+include(CheckTypeSizeof)
 include(ExternalProject)
 
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
@@ -113,11 +113,11 @@ ExternalProject_Add(libunwind
                     LOG_INSTALL ON)
 
 # libpypa
-add_subdirectory(libpypa)
+add_subdirectory(libpypa EXCLUDE_FROM_ALL)
 add_dependencies(pypa gitsubmodules)
 
 # lz4
-add_subdirectory(lz4/cmake_unofficial)
+add_subdirectory(lz4/cmake_unofficial EXCLUDE_FROM_ALL)
 add_dependencies(lz4 gitsubmodules)
 
 # valgrind
@@ -174,7 +174,7 @@ set(CMAKE_REQUIRED_INCLUDES ${DEPS_DIR}/llvm-trunk/include
                             ${CMAKE_BINARY_DIR}/llvm/include
                             ${CMAKE_SOURCE_DIR}/from_cpython/Include
                             ${CMAKE_SOURCE_DIR}/src)
-check_type_size("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
+check_type_sizeof("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
 configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
 add_subdirectory(lib_pyston)
