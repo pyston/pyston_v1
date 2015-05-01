@@ -58,9 +58,13 @@ public:
     // the iterator was obtained, the methods may return old values. This returns
     // an updated copy that returns the updated values.
     // The "current version" will live at the same stack location, but any other
-    // similarities need to be verified by the caller.
+    // similarities need to be verified by the caller, ie it is up to the caller
+    // to determine that we didn't leave and reenter the stack frame.
     // This function can only be called from the thread that created this object.
     PythonFrameIterator getCurrentVersion();
+
+    // Assuming this is a valid frame iterator, return the next frame back (ie older).
+    PythonFrameIterator back();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
     void operator=(PythonFrameIterator&& rhs);

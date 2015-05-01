@@ -907,6 +907,29 @@ PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
     return PythonFrameIterator(std::move(rtn));
 }
 
+PythonFrameIterator PythonFrameIterator::back() {
+    // TODO this is ineffecient: the iterator is no longer valid for libunwind iteration, so
+    // we have to do a full stack crawl again.
+    // Hopefully examination of f_back is uncommon.
+
+    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
+    auto& impl = this->impl;
+    bool found = false;
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+        if (found) {
+            rtn = std::move(frame_iter);
+            return true;
+        }
+
+        if (frame_iter->pointsToTheSameAs(*impl.get()))
+            found = true;
+        return false;
+    });
+
+    RELEASE_ASSERT(found, "this wasn't a valid frame?");
+    return PythonFrameIterator(std::move(rtn));
+}
+
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();
 }
