@@ -135,4 +135,6 @@
 // Added this for some Pyston modifications:
 #define MAX_PYSTRING_SIZE (PY_SSIZE_T_MAX/2 - (1<<20))
 
+#define SIZEOF_UNORDEREDMAP @SIZEOF_UNORDEREDMAP@
+
 #endif /*Py_PYCONFIG_H*/

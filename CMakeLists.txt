@@ -159,23 +159,17 @@ add_definitions(${LLVM_DEFINITIONS})
 add_definitions(-DDEFAULT_PYTHON_MAJOR_VERSION=2 -DDEFAULT_PYTHON_MINOR_VERSION=7 -DDEFAULT_PYTHON_MICRO_VERSION=6) # Python 2.7.6
 add_definitions(-DLLVMREV=${LLVMREV})
 
+include_directories(${CMAKE_BINARY_DIR}/from_cpython/Include)
 include_directories(${LLVM_INCLUDE_DIRS})
-include_directories(from_cpython/Include)
+
+# generate pyconfig.h
+set(CMAKE_EXTRA_INCLUDE_FILES unordered_map)
+check_type_sizeof("std::unordered_map<void*, void*>" SIZEOF_UNORDEREDMAP LANGUAGE CXX)
+configure_file(from_cpython/Include/pyconfig.h.in from_cpython/Include/pyconfig.h)
 
 find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
-
-
-# generate config.h - must be after LLVM is configured
-set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/src/runtime/types.h)
-set(CMAKE_REQUIRED_DEFINITIONS "-DNVALGRIND -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS")
-set(CMAKE_REQUIRED_INCLUDES ${DEPS_DIR}/llvm-trunk/include
-                            ${CMAKE_BINARY_DIR}/llvm/include
-                            ${CMAKE_SOURCE_DIR}/from_cpython/Include
-                            ${CMAKE_SOURCE_DIR}/src)
-check_type_sizeof("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
-configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)

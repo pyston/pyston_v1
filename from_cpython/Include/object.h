@@ -454,7 +454,7 @@ struct _typeobject {
 
     void* _hcls;
     void* _hcattrs;
-    char _dep_getattrs[56]; // FIXME: this is hardcoding the size of this particular implementation of std::unordered_map
+    char _dep_getattrs[SIZEOF_UNORDEREDMAP + sizeof(void *)];
     char _ics[32];
     void* _gcvisit_func;
     void* _dtor;
