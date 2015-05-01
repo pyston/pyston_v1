@@ -893,12 +893,12 @@ $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Debug
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
-	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release
+	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Release
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
