@@ -2113,6 +2113,10 @@ extern "C" BoxedInt* hash(Box* obj) {
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }
 
+    if (hash == None) {
+        raiseExcHelper(TypeError, "unhashable type: '%s'", obj->cls->tp_name);
+    }
+
     Box* rtn = runtimeCall0(hash, ArgPassSpec(0));
     if (rtn->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");

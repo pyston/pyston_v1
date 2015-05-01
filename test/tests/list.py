@@ -195,3 +195,5 @@ l.sort(cmp=mycmp, key=str)
 print types_seen
 print l
 """
+
+print repr(list.__hash__)

@@ -23,8 +23,13 @@ print e.strerror
 print e.filename
 print OSError(1, 2).filename
 
-# This part needs sys.exc_info() and the three-arg raise statement
-# try:
-    # os.execvp("aoeuaoeu", ['aoeuaoeu'])
-# except OSError, e:
-    # print e
+try:
+    os.execvp("aoeuaoeu", ['aoeuaoeu'])
+except OSError, e:
+    print e
+
+# Changes to os.environ should show up in subprocesses:
+import subprocess
+env = os.environ
+env["PYTHONPATH"] = "."
+subprocess.check_call("echo PYTHONPATH is $PYTHONPATH", shell=1)
