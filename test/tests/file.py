@@ -3,6 +3,7 @@ import tempfile
 
 f = open("/dev/null")
 print repr(f.read())
+print repr(f.name)
 
 f2 = file("/dev/null")
 print repr(f2.read())

@@ -333,6 +333,34 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
     return None;
 }
 
+Box* instanceDelattr(Box* _inst, Box* _attr) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    // These are special cases in CPython as well:
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            raiseExcHelper(TypeError, "__dict__ must be set to a dictionary");
+
+        if (attr->s == "__class__")
+            raiseExcHelper(TypeError, "__class__ must be set to a class");
+    }
+
+    static const std::string delattr_str("__delattr__");
+    Box* delattr = classLookup(inst->inst_cls, delattr_str);
+
+    if (delattr) {
+        delattr = processDescriptor(delattr, inst, inst->inst_cls);
+        return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
+    }
+
+    _inst->delattr(attr->s, NULL);
+    return None;
+}
+
 static int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
     try {
         if (value) {
@@ -488,6 +516,45 @@ static Box* instanceHash(BoxedInstance* inst) {
     }
 }
 
+static Box* instanceIter(BoxedInstance* self) {
+    assert(self->cls == instance_cls);
+
+    PyObject* func;
+
+    if ((func = _instanceGetattribute(self, boxStrConstant("__iter__"), false)) != NULL) {
+        PyObject* res = PyEval_CallObject(func, (PyObject*)NULL);
+        if (!res)
+            throwCAPIException();
+
+        if (!PyIter_Check(res))
+            raiseExcHelper(TypeError, "__iter__ returned non-iterator of type '%.100s'", res->cls->tp_name);
+        return res;
+    }
+
+    if ((func = _instanceGetattribute(self, boxStrConstant("__getitem__"), false)) == NULL) {
+        raiseExcHelper(TypeError, "iteration over non-sequence");
+    }
+
+    Box* r = PySeqIter_New((PyObject*)self);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+static Box* instanceNext(BoxedInstance* inst) {
+    assert(inst->cls == instance_cls);
+
+    Box* next_func = _instanceGetattribute(inst, boxStrConstant("next"), false);
+
+    if (!next_func) {
+        // not 100% sure why this is a different error:
+        raiseExcHelper(TypeError, "instance has no next() method");
+    }
+
+    Box* r = runtimeCall(next_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    return r;
+}
+
 static PyObject* instance_index(PyObject* self) noexcept {
     PyObject* func, *res;
     /*
@@ -569,6 +636,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
     instance_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)instanceSetattr, UNKNOWN, 3)));
+    instance_cls->giveAttr("__delattr__", new BoxedFunction(boxRTFunction((void*)instanceDelattr, UNKNOWN, 2)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
     instance_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instanceRepr, UNKNOWN, 1)));
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
@@ -578,6 +646,8 @@ void setupClassobj() {
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
+    instance_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)instanceIter, UNKNOWN, 1)));
+    instance_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)instanceNext, UNKNOWN, 1)));
     instance_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
     instance_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instanceEq, UNKNOWN, 2)));
