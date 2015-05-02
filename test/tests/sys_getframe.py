@@ -72,3 +72,30 @@ assert sys._getframe(0).f_globals is globals()
 def f5():
     assert sys._getframe(0).f_globals is globals()
 f5()
+
+# A number of libraries have functions like this:
+def get_main_module():
+    f = sys._getframe(1)
+    while f.f_locals is not globals():
+        print f.f_code.co_filename, f.f_lineno, sorted(f.f_locals.items())
+        f = f.f_back
+    print "Main module currently at:", f.f_code.co_filename, f.f_lineno
+    print "f_back:", f.f_back
+def f6(n):
+    if n:
+        f6(n - 1)
+    else:
+        get_main_module()
+f6(10)
+
+def custom_globals():
+    s = """
+def inner():
+    import sys
+    return sys._getframe(1).f_globals
+print sorted(inner().keys())
+    """.strip()
+    exec s
+    exec s in {'a':1}
+    exec s in {'b':2}, {'c':3}
+custom_globals()

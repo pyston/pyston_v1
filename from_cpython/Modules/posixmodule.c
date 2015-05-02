@@ -9451,7 +9451,7 @@ INITFUNC(void)
 
 #ifdef HAVE_PUTENV
     if (posix_putenv_garbage == NULL)
-        posix_putenv_garbage = PyDict_New();
+        posix_putenv_garbage = PyGC_AddRoot(PyDict_New());
 #endif
 
     if (!initialized) {

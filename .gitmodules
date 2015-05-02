@@ -16,3 +16,6 @@
 [submodule "test/integration/pycrypto"]
 	path = test/integration/pycrypto
 	url = https://github.com/dlitz/pycrypto.git
+[submodule "test/integration/gflags"]
+	path = test/integration/gflags
+	url = https://github.com/google/python-gflags

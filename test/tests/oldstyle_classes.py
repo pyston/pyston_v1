@@ -147,9 +147,13 @@ class SetattrTest:
     def __setattr__(self, attr, value):
         print "setattr", attr, value
 
+    def __delattr__(self, attr):
+        print "delattr", attr
+
 s = SetattrTest()
 s.b = 2
-print g.__dict__.items()
+print s.__dict__.items()
+del s.b
 
 class MappingTest:
     def __getitem__(self, key):
@@ -245,3 +249,29 @@ class E(C, object):
 print issubclass(D, C), isinstance(D(), C)
 print issubclass(E, C), isinstance(E(), C)
 print isinstance(E, object), isinstance(E(), object)
+
+class SeqTest:
+    class Iterator:
+        def __init__(self):
+            self.n = 5
+        def next(self):
+            print "next"
+            if self.n <= 0:
+                raise StopIteration()
+            r = self.n
+            self.n -= 1
+            return r
+    def __iter__(self):
+        print "iter"
+        return SeqTest.Iterator()
+m = SeqTest()
+print list(m)
+
+class OldSeqTest:
+    def __getitem__(self, n):
+        print "getitem", n
+        if n > 5:
+            raise IndexError()
+        return n ** 2
+m = OldSeqTest()
+print list(m)

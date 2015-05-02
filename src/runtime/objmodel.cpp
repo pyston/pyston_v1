@@ -320,13 +320,10 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     tp_basicsize = instance_size;
     tp_weaklistoffset = weaklist_offset;
 
+    tp_flags |= Py_TPFLAGS_DEFAULT_EXTERNAL;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
-    tp_flags |= Py_TPFLAGS_HAVE_CLASS;
     tp_flags |= Py_TPFLAGS_HAVE_GC;
-    tp_flags |= Py_TPFLAGS_HAVE_WEAKREFS;
-    tp_flags |= Py_TPFLAGS_HAVE_RICHCOMPARE;
-    tp_flags |= Py_TPFLAGS_HAVE_INDEX;
 
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
         tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
@@ -2111,6 +2108,10 @@ extern "C" BoxedInt* hash(Box* obj) {
                "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
+    }
+
+    if (hash == None) {
+        raiseExcHelper(TypeError, "unhashable type: '%s'", obj->cls->tp_name);
     }
 
     Box* rtn = runtimeCall0(hash, ArgPassSpec(0));

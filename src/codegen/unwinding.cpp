@@ -346,6 +346,16 @@ public:
         abort();
     }
 
+    Box* getGlobalsDict() {
+        Box* globals = getGlobals();
+        if (!globals)
+            return NULL;
+
+        if (isSubclass(globals->cls, module_cls))
+            return globals->getAttrWrapper();
+        return globals;
+    }
+
     FrameInfo* getFrameInfo() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
@@ -591,13 +601,7 @@ Box* getGlobals() {
 }
 
 Box* getGlobalsDict() {
-    Box* globals = getGlobals();
-    if (!globals)
-        return NULL;
-
-    if (isSubclass(globals->cls, module_cls))
-        return globals->getAttrWrapper();
-    return globals;
+    return getTopPythonFrame()->getGlobalsDict();
 }
 
 BoxedModule* getCurrentModule() {
@@ -890,6 +894,10 @@ CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
 }
 
+Box* PythonFrameIterator::getGlobalsDict() {
+    return impl->getGlobalsDict();
+}
+
 FrameInfo* PythonFrameIterator::getFrameInfo() {
     return impl->getFrameInfo();
 }
@@ -904,6 +912,29 @@ PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
         }
         return false;
     });
+    return PythonFrameIterator(std::move(rtn));
+}
+
+PythonFrameIterator PythonFrameIterator::back() {
+    // TODO this is ineffecient: the iterator is no longer valid for libunwind iteration, so
+    // we have to do a full stack crawl again.
+    // Hopefully examination of f_back is uncommon.
+
+    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
+    auto& impl = this->impl;
+    bool found = false;
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+        if (found) {
+            rtn = std::move(frame_iter);
+            return true;
+        }
+
+        if (frame_iter->pointsToTheSameAs(*impl.get()))
+            found = true;
+        return false;
+    });
+
+    RELEASE_ASSERT(found, "this wasn't a valid frame?");
     return PythonFrameIterator(std::move(rtn));
 }
 

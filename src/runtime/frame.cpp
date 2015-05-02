@@ -27,10 +27,12 @@ BoxedClass* frame_cls;
 // - breaks c++ exceptions
 // - we never free the trampolines
 class BoxedFrame : public Box {
-public:
-    BoxedFrame(PythonFrameIterator&& it) __attribute__((visibility("default")))
+private:
+    // Call boxFrame to get a BoxedFrame object.
+    BoxedFrame(PythonFrameIterator it) __attribute__((visibility("default")))
     : it(std::move(it)), thread_id(PyThread_get_thread_ident()) {}
 
+public:
     PythonFrameIterator it;
     long thread_id;
 
@@ -105,6 +107,16 @@ public:
         return f->_globals;
     }
 
+    static Box* back(Box* obj, void*) {
+        auto f = static_cast<BoxedFrame*>(obj);
+        f->update();
+
+        PythonFrameIterator it = f->it.back();
+        if (!it.exists())
+            return None;
+        return BoxedFrame::boxFrame(std::move(it));
+    }
+
     static Box* lineno(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
         f->update();
@@ -113,6 +125,19 @@ public:
     }
 
     DEFAULT_CLASS(frame_cls);
+
+    static Box* boxFrame(PythonFrameIterator it) {
+        FrameInfo* fi = it.getFrameInfo();
+        if (fi->frame_obj == NULL) {
+            auto cf = it.getCF();
+            Box* globals = it.getGlobalsDict();
+            BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
+            f->_globals = globals;
+            f->_code = codeForCLFunction(cf->clfunc);
+        }
+
+        return fi->frame_obj;
+    }
 };
 
 Box* getFrame(int depth) {
@@ -120,18 +145,8 @@ Box* getFrame(int depth) {
     if (!it.exists())
         return NULL;
 
-    FrameInfo* fi = it.getFrameInfo();
-    if (fi->frame_obj == NULL) {
-        auto cf = it.getCF();
-        BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
-        assert(cf->clfunc->source->scoping->areGlobalsFromModule());
-        f->_globals = cf->clfunc->source->parent_module->getAttrWrapper();
-        f->_code = codeForCLFunction(cf->clfunc);
-    }
-
-    return fi->frame_obj;
+    return BoxedFrame::boxFrame(std::move(it));
 }
-
 
 void setupFrame() {
     frame_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false,
@@ -143,6 +158,7 @@ void setupFrame() {
     frame_cls->giveAttr("f_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::lineno, NULL, NULL));
 
     frame_cls->giveAttr("f_globals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::globals, NULL, NULL));
+    frame_cls->giveAttr("f_back", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::back, NULL, NULL));
 
     frame_cls->freeze();
 }
