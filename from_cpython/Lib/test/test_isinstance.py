@@ -1,4 +1,3 @@
-# expected: fail
 # Tests some corner cases with isinstance() and issubclass().  While these
 # tests use new style classes and properties, they actually do whitebox
 # testing of error conditions uncovered when using extension types.

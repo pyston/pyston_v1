@@ -1,4 +1,3 @@
-# expected: fail
 """Regresssion tests for urllib"""
 
 import urllib

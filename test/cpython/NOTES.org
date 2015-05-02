@@ -60,7 +60,6 @@ test_collections        compile()
 test_compare            segfault
 test_complex            serialize_ast assert
 test_complex_args       we apparently don't always unpack args correctly
-test_contains           TypeError not raised
 test_contextlib         file.closed, lock.locked attributes
 test_datetime           kwargs bug in BoxedMethodDescriptor
 test_decimal            float.__getformat__
@@ -81,7 +80,6 @@ test_file               segfaults
 test_file2k             "Someone called abort!"
 test_file_eintr         TypeError
 test_filecmp            float.__hash__
-test_fileinput          UnboundLocalError (try/finally bug?)
 test_float              capifunc.__name__ in fractions
 test_format             can't float(long)
 test_funcattrs          segfault
@@ -95,7 +93,6 @@ test_hash               float.__hash__
 test_index              parseSlice assert
 test_int                float.__getformat__
 test_io                 parseSlice assert
-test_isinstance         sys.getrecursionlimit
 test_json               doctest (compile())
 test_list               assert in sliceIndex to do with a[1L:2L]
 test_long               float.__getformat__
@@ -132,7 +129,6 @@ test_unicode            sys.maxunicode
 test_unicode_file       exit code 139, no error message
 test_unittest           serialize_ast assert
 test_unpack             doctest (compile())
-test_urllib             str.join(unicode)
 test_urllib2            doctest (compile())
 test_userdict           segfault
 test_userlist           sliceIndex assert

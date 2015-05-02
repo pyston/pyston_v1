@@ -1,4 +1,3 @@
-# expected: fail
 from test.test_support import have_unicode, run_unittest
 import unittest
 
