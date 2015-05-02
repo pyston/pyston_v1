@@ -3936,7 +3936,7 @@ datetime_strptime(PyObject *cls, PyObject *args)
         return NULL;
 
     if (module == NULL &&
-        (module = PyImport_ImportModuleNoBlock("_strptime")) == NULL)
+        (module = PyGC_AddRoot(PyImport_ImportModuleNoBlock("_strptime"))) == NULL)
         return NULL;
 
     /* _strptime._strptime returns a two-element tuple.  The first

@@ -911,7 +911,7 @@ initthread(void)
 
     /* Add a symbolic constant */
     d = PyModule_GetDict(m);
-    ThreadError = PyErr_NewException("thread.error", NULL, NULL);
+    ThreadError = PyGC_AddRoot(PyErr_NewException("thread.error", NULL, NULL));
     PyDict_SetItemString(d, "error", ThreadError);
     Locktype.tp_doc = lock_doc;
     if (PyType_Ready(&Locktype) < 0)
@@ -925,7 +925,7 @@ initthread(void)
 
     nb_threads = 0;
 
-    str_dict = PyString_InternFromString("__dict__");
+    str_dict = PyGC_AddRoot(PyString_InternFromString("__dict__"));
     if (str_dict == NULL)
         return;
 

@@ -4588,27 +4588,27 @@ init_socket(void)
     if (m == NULL)
         return;
 
-    socket_error = PyErr_NewException("socket.error",
-                                      PyExc_IOError, NULL);
+    socket_error = PyGC_AddRoot(PyErr_NewException("socket.error",
+                                      PyExc_IOError, NULL));
     if (socket_error == NULL)
         return;
     PySocketModuleAPI.error = socket_error;
     Py_INCREF(socket_error);
     PyModule_AddObject(m, "error", socket_error);
-    socket_herror = PyErr_NewException("socket.herror",
-                                       socket_error, NULL);
+    socket_herror = PyGC_AddRoot(PyErr_NewException("socket.herror",
+                                       socket_error, NULL));
     if (socket_herror == NULL)
         return;
     Py_INCREF(socket_herror);
     PyModule_AddObject(m, "herror", socket_herror);
-    socket_gaierror = PyErr_NewException("socket.gaierror", socket_error,
-        NULL);
+    socket_gaierror = PyGC_AddRoot(PyErr_NewException("socket.gaierror", socket_error,
+        NULL));
     if (socket_gaierror == NULL)
         return;
     Py_INCREF(socket_gaierror);
     PyModule_AddObject(m, "gaierror", socket_gaierror);
-    socket_timeout = PyErr_NewException("socket.timeout",
-                                        socket_error, NULL);
+    socket_timeout = PyGC_AddRoot(PyErr_NewException("socket.timeout",
+                                        socket_error, NULL));
     if (socket_timeout == NULL)
         return;
     Py_INCREF(socket_timeout);

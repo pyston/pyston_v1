@@ -1777,9 +1777,9 @@ init_ssl(void)
     OpenSSL_add_all_algorithms();
 
     /* Add symbols to module dict */
-    PySSLErrorObject = PyErr_NewException("ssl.SSLError",
+    PySSLErrorObject = PyGC_AddRoot(PyErr_NewException("ssl.SSLError",
                                           PySocketModule.error,
-                                          NULL);
+                                          NULL));
     if (PySSLErrorObject == NULL)
         return;
     if (PyDict_SetItemString(d, "SSLError", PySSLErrorObject) != 0)

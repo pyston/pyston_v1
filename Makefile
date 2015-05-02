@@ -529,6 +529,7 @@ quick_check:
 	$(MAKE) pyston_dbg
 	$(MAKE) check_format
 	$(MAKE) unittests
+	$(MAKE) ext_pyston ext_python
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
 

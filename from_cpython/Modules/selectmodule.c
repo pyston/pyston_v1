@@ -1807,7 +1807,7 @@ initselect(void)
     if (m == NULL)
         return;
 
-    SelectError = PyErr_NewException("select.error", NULL, NULL);
+    SelectError = PyGC_AddRoot(PyErr_NewException("select.error", NULL, NULL));
     Py_INCREF(SelectError);
     PyModule_AddObject(m, "error", SelectError);
 
