@@ -1246,8 +1246,8 @@ initzipimport(void)
     if (mod == NULL)
         return;
 
-    ZipImportError = PyErr_NewException("zipimport.ZipImportError",
-                                        PyExc_ImportError, NULL);
+    ZipImportError = PyGC_AddRoot(PyErr_NewException("zipimport.ZipImportError",
+                                        PyExc_ImportError, NULL));
     if (ZipImportError == NULL)
         return;
 
@@ -1261,7 +1261,7 @@ initzipimport(void)
                            (PyObject *)&ZipImporter_Type) < 0)
         return;
 
-    zip_directory_cache = PyDict_New();
+    zip_directory_cache = PyGC_AddRoot(PyDict_New());
     if (zip_directory_cache == NULL)
         return;
     Py_INCREF(zip_directory_cache);

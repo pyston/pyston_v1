@@ -1066,7 +1066,7 @@ PyInit_zlib(void)
     if (m == NULL)
         return;
 
-    ZlibError = PyErr_NewException("zlib.error", NULL, NULL);
+    ZlibError = PyGC_AddRoot(PyErr_NewException("zlib.error", NULL, NULL));
     if (ZlibError != NULL) {
         Py_INCREF(ZlibError);
         PyModule_AddObject(m, "error", ZlibError);

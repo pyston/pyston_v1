@@ -730,7 +730,7 @@ _PyIO_trap_eintr(void)
     PyEnvironmentErrorObject *env_err;
 
     if (eintr_int == NULL) {
-        eintr_int = PyLong_FromLong(EINTR);
+        eintr_int = PyGC_AddRoot(PyLong_FromLong(EINTR));
         assert(eintr_int != NULL);
     }
     if (!PyErr_ExceptionMatches(PyExc_EnvironmentError))

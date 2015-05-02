@@ -1511,8 +1511,8 @@ initbinascii(void)
     PyDict_SetItemString(d, "__doc__", x);
     Py_XDECREF(x);
 
-    Error = PyErr_NewException("binascii.Error", NULL, NULL);
+    Error = PyGC_AddRoot(PyErr_NewException("binascii.Error", NULL, NULL));
     PyDict_SetItemString(d, "Error", Error);
-    Incomplete = PyErr_NewException("binascii.Incomplete", NULL, NULL);
+    Incomplete = PyGC_AddRoot(PyErr_NewException("binascii.Incomplete", NULL, NULL));
     PyDict_SetItemString(d, "Incomplete", Incomplete);
 }

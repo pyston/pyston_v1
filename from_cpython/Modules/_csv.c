@@ -1603,7 +1603,7 @@ init_csv(void)
         return;
 
     /* Add _dialects dictionary */
-    dialects = PyDict_New();
+    dialects = PyGC_AddRoot(PyDict_New());
     if (dialects == NULL)
         return;
     if (PyModule_AddObject(module, "_dialects", dialects))
@@ -1622,7 +1622,7 @@ init_csv(void)
         return;
 
     /* Add the CSV exception object to the module. */
-    error_obj = PyErr_NewException("_csv.Error", NULL, NULL);
+    error_obj = PyGC_AddRoot(PyErr_NewException("_csv.Error", NULL, NULL));
     if (error_obj == NULL)
         return;
     PyModule_AddObject(module, "Error", error_obj);

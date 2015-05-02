@@ -4935,7 +4935,7 @@ _PyPopen(char *cmdstring, int mode, int n, int bufsize)
      */
     if (!_PyPopenProcs)
     {
-        _PyPopenProcs = PyDict_New();
+        _PyPopenProcs = PyGC_AddRoot(PyDict_New());
     }
 
     if (_PyPopenProcs)
@@ -5682,7 +5682,7 @@ _PyPopen(char *cmdstring, int mode, int n)
       * and variable number of files involved.
       */
      if (!_PyPopenProcs) {
-         _PyPopenProcs = PyDict_New();
+         _PyPopenProcs = PyGC_AddRoot(PyDict_New());
      }
 
      if (_PyPopenProcs) {
@@ -6105,7 +6105,7 @@ wait_helper(pid_t pid, int status, struct rusage *ru)
         PyObject *m = PyImport_ImportModuleNoBlock("resource");
         if (m == NULL)
             return NULL;
-        struct_rusage = PyObject_GetAttrString(m, "struct_rusage");
+        struct_rusage = PyGC_AddRoot(PyObject_GetAttrString(m, "struct_rusage"));
         Py_DECREF(m);
         if (struct_rusage == NULL)
             return NULL;

@@ -254,8 +254,8 @@ initresource(void)
 
     /* Add some symbolic constants to the module */
     if (ResourceError == NULL) {
-        ResourceError = PyErr_NewException("resource.error",
-                                           NULL, NULL);
+        ResourceError = PyGC_AddRoot(PyErr_NewException("resource.error",
+                                           NULL, NULL));
     }
     Py_INCREF(ResourceError);
     PyModule_AddObject(m, "error", ResourceError);

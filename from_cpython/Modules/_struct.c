@@ -2077,7 +2077,7 @@ init_struct(void)
 
     /* Add some symbolic constants to the module */
     if (StructError == NULL) {
-        StructError = PyErr_NewException("struct.error", NULL, NULL);
+        StructError = PyGC_AddRoot(PyErr_NewException("struct.error", NULL, NULL));
         if (StructError == NULL)
             return;
     }
