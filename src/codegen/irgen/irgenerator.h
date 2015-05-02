@@ -56,7 +56,8 @@ class IRGenState {
 private:
     CompiledFunction* cf;
     SourceInfo* source_info;
-    PhiAnalysis* phis;
+    std::unique_ptr<LivenessAnalysis> liveness;
+    std::unique_ptr<PhiAnalysis> phis;
     ParamNames* param_names;
     GCBuilder* gc;
     llvm::MDNode* func_dbg_info;
@@ -69,13 +70,9 @@ private:
 
 
 public:
-    IRGenState(CompiledFunction* cf, SourceInfo* source_info, PhiAnalysis* phis, ParamNames* param_names, GCBuilder* gc,
-               llvm::MDNode* func_dbg_info)
-        : cf(cf), source_info(source_info), phis(phis), param_names(param_names), gc(gc), func_dbg_info(func_dbg_info),
-          scratch_space(NULL), frame_info(NULL), frame_info_arg(NULL), scratch_size(0) {
-        assert(cf->func);
-        assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
-    }
+    IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<LivenessAnalysis> liveness,
+               std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
+    ~IRGenState();
 
     CompiledFunction* getCurFunction() { return cf; }
 
@@ -93,7 +90,8 @@ public:
 
     SourceInfo* getSourceInfo() { return source_info; }
 
-    PhiAnalysis* getPhis() { return phis; }
+    LivenessAnalysis* getLiveness() { return liveness.get(); }
+    PhiAnalysis* getPhis() { return phis.get(); }
 
     ScopeInfo* getScopeInfo();
     ScopeInfo* getScopeInfoForNode(AST* node);

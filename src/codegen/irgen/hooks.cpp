@@ -228,19 +228,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         source->cfg = computeCFG(source, source->body);
     }
 
-    if (effort != EffortLevel::INTERPRETED) {
-        if (source->liveness == NULL)
-            source->liveness = computeLivenessInfo(source->cfg);
-
-        PhiAnalysis*& phis = source->phis[entry_descriptor];
-        if (!phis) {
-            if (entry_descriptor)
-                phis = computeRequiredPhis(entry_descriptor, source->liveness, source->getScopeInfo());
-            else
-                phis = computeRequiredPhis(f->param_names, source->cfg, source->liveness, source->getScopeInfo());
-        }
-    }
-
 
 
     CompiledFunction* cf = 0;

@@ -243,8 +243,6 @@ public:
     ScopingAnalysis* scoping;
     AST* ast;
     CFG* cfg;
-    LivenessAnalysis* liveness;
-    std::unordered_map<const OSREntryDescriptor*, PhiAnalysis*> phis;
     bool is_generator;
     std::string fn; // equivalent of code.co_filename
 
