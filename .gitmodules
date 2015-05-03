@@ -19,3 +19,4 @@
 [submodule "test/integration/gflags"]
 	path = test/integration/gflags
 	url = https://github.com/google/python-gflags
+	ignore = untracked
