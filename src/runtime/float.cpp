@@ -728,6 +728,19 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     float_cls->giveAttr(name, new BoxedFunction(cl, { None }));
 }
 
+static Box* floatFloat(Box* b, void*) {
+    if (b->cls == float_cls) {
+        return b;
+    } else {
+        assert(PyFloat_Check(b));
+        return boxFloat(static_cast<BoxedFloat*>(b)->d);
+    }
+}
+
+static Box* float0(Box*, void*) {
+    return boxFloat(0.0);
+}
+
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
@@ -767,6 +780,10 @@ void setupFloat() {
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
+
+    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
+    float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
+    float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatFloat, BOXED_FLOAT, 1)));
 
     float_cls->freeze();
 }

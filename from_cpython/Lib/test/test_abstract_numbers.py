@@ -1,4 +1,3 @@
-# expected: fail
 """Unit tests for numbers.py."""
 
 import math
