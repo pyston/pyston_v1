@@ -14,6 +14,8 @@
 
 // This file is mostly copied from CPython
 
+#include <cfloat>
+
 #include "Python.h"
 
 #include "core/types.h"
@@ -25,8 +27,45 @@ extern "C" {
 
 typedef enum { unknown_format, ieee_big_endian_format, ieee_little_endian_format } float_format_type;
 
+static float_format_type _detect_double_format() {
+    float_format_type format;
+#if SIZEOF_DOUBLE == 8
+    {
+        double x = 9006104071832581.0;
+        if (memcmp(&x, "\x43\x3f\xff\x01\x02\x03\x04\x05", 8) == 0)
+            format = ieee_big_endian_format;
+        else if (memcmp(&x, "\x05\x04\x03\x02\x01\xff\x3f\x43", 8) == 0)
+            format = ieee_little_endian_format;
+        else
+            format = unknown_format;
+    }
+#else
+    format = unknown_format;
+#endif
+    return format;
+}
+
+static float_format_type _detect_float_format() {
+    float_format_type format;
+#if SIZEOF_FLOAT == 4
+    {
+        float y = 16711938.0;
+        if (memcmp(&y, "\x4b\x7f\x01\x02", 4) == 0)
+            format = ieee_big_endian_format;
+        else if (memcmp(&y, "\x02\x01\x7f\x4b", 4) == 0)
+            format = ieee_little_endian_format;
+        else
+            format = unknown_format;
+    }
+#else
+    format = unknown_format;
+#endif
+    return format;
+}
+
 static float_format_type double_format, float_format;
-static float_format_type detected_double_format, detected_float_format;
+static float_format_type detected_double_format = _detect_double_format(),
+                         detected_float_format = _detect_float_format();
 
 static PyObject* float_getformat(PyTypeObject* v, PyObject* arg) noexcept {
     float_format_type r;
@@ -491,6 +530,144 @@ double _PyFloat_Unpack8(const unsigned char* p, int le) noexcept {
 
         return x;
     }
+}
+
+#if DBL_MANT_DIG == 53
+#define FIVE_POW_LIMIT 22
+#else
+#error "C doubles do not appear to be IEEE 754 binary64 format"
+#endif
+
+PyObject* _Py_double_round(double x, int ndigits) noexcept {
+
+    double rounded, m;
+    Py_ssize_t buflen, mybuflen = 100;
+    char* buf, *buf_end, shortbuf[100], * mybuf = shortbuf;
+    int decpt, sign, val, halfway_case;
+    PyObject* result = NULL;
+    _Py_SET_53BIT_PRECISION_HEADER;
+
+    /* Easy path for the common case ndigits == 0. */
+    if (ndigits == 0) {
+        rounded = round(x);
+        if (fabs(rounded - x) == 0.5)
+            /* halfway between two integers; use round-away-from-zero */
+            rounded = x + (x > 0.0 ? 0.5 : -0.5);
+        return PyFloat_FromDouble(rounded);
+    }
+
+    /* The basic idea is very simple: convert and round the double to a
+       decimal string using _Py_dg_dtoa, then convert that decimal string
+       back to a double with _Py_dg_strtod.  There's one minor difficulty:
+       Python 2.x expects round to do round-half-away-from-zero, while
+       _Py_dg_dtoa does round-half-to-even.  So we need some way to detect
+       and correct the halfway cases.
+
+       Detection: a halfway value has the form k * 0.5 * 10**-ndigits for
+       some odd integer k.  Or in other words, a rational number x is
+       exactly halfway between two multiples of 10**-ndigits if its
+       2-valuation is exactly -ndigits-1 and its 5-valuation is at least
+       -ndigits.  For ndigits >= 0 the latter condition is automatically
+       satisfied for a binary float x, since any such float has
+       nonnegative 5-valuation.  For 0 > ndigits >= -22, x needs to be an
+       integral multiple of 5**-ndigits; we can check this using fmod.
+       For -22 > ndigits, there are no halfway cases: 5**23 takes 54 bits
+       to represent exactly, so any odd multiple of 0.5 * 10**n for n >=
+       23 takes at least 54 bits of precision to represent exactly.
+
+       Correction: a simple strategy for dealing with halfway cases is to
+       (for the halfway cases only) call _Py_dg_dtoa with an argument of
+       ndigits+1 instead of ndigits (thus doing an exact conversion to
+       decimal), round the resulting string manually, and then convert
+       back using _Py_dg_strtod.
+    */
+
+    /* nans, infinities and zeros should have already been dealt
+       with by the caller (in this case, builtin_round) */
+    assert(std::isfinite(x) && x != 0.0);
+
+    /* find 2-valuation val of x */
+    m = frexp(x, &val);
+    while (m != floor(m)) {
+        m *= 2.0;
+        val--;
+    }
+
+    /* determine whether this is a halfway case */
+    if (val == -ndigits - 1) {
+        if (ndigits >= 0)
+            halfway_case = 1;
+        else if (ndigits >= -FIVE_POW_LIMIT) {
+            double five_pow = 1.0;
+            int i;
+            for (i = 0; i < -ndigits; i++)
+                five_pow *= 5.0;
+            halfway_case = fmod(x, five_pow) == 0.0;
+        } else
+            halfway_case = 0;
+    } else
+        halfway_case = 0;
+
+    /* round to a decimal string; use an extra place for halfway case */
+    _Py_SET_53BIT_PRECISION_START;
+    buf = _Py_dg_dtoa(x, 3, ndigits + halfway_case, &decpt, &sign, &buf_end);
+    _Py_SET_53BIT_PRECISION_END;
+    if (buf == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+    buflen = buf_end - buf;
+
+    /* in halfway case, do the round-half-away-from-zero manually */
+    if (halfway_case) {
+        int i, carry;
+        /* sanity check: _Py_dg_dtoa should not have stripped
+           any zeros from the result: there should be exactly
+           ndigits+1 places following the decimal point, and
+           the last digit in the buffer should be a '5'.*/
+        assert(buflen - decpt == ndigits + 1);
+        assert(buf[buflen - 1] == '5');
+
+        /* increment and shift right at the same time. */
+        decpt += 1;
+        carry = 1;
+        for (i = buflen - 1; i-- > 0;) {
+            carry += buf[i] - '0';
+            buf[i + 1] = carry % 10 + '0';
+            carry /= 10;
+        }
+        buf[0] = carry + '0';
+    }
+
+    /* Get new buffer if shortbuf is too small.  Space needed <= buf_end -
+       buf + 8: (1 extra for '0', 1 for sign, 5 for exp, 1 for '\0'). */
+    if (buflen + 8 > mybuflen) {
+        mybuflen = buflen + 8;
+        mybuf = (char*)PyMem_Malloc(mybuflen);
+        if (mybuf == NULL) {
+            PyErr_NoMemory();
+            goto exit;
+        }
+    }
+    /* copy buf to mybuf, adding exponent, sign and leading 0 */
+    PyOS_snprintf(mybuf, mybuflen, "%s0%se%d", (sign ? "-" : ""), buf, decpt - (int)buflen);
+
+    /* and convert the resulting string back to a double */
+    errno = 0;
+    _Py_SET_53BIT_PRECISION_START;
+    rounded = _Py_dg_strtod(mybuf, NULL);
+    _Py_SET_53BIT_PRECISION_END;
+    if (errno == ERANGE && fabs(rounded) >= 1.)
+        PyErr_SetString(PyExc_OverflowError, "rounded value too large to represent");
+    else
+        result = PyFloat_FromDouble(rounded);
+
+    /* done computing value;  now clean up */
+    if (mybuf != shortbuf)
+        PyMem_Free(mybuf);
+exit:
+    _Py_dg_freedtoa(buf);
+    return result;
 }
 }
 }

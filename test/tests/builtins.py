@@ -105,8 +105,8 @@ print callable(lambda: 1)
 
 print range(5L, 7L)
 
-print round(-1.1), round(-1.9)
-print round(0.5), round(-0.5)
+for n in [0, 1, 2, 3, 4, 5]:
+    print round(-1.1, n), round(-1.9, n), round(0.5, n), round(-0.5, n), round(-0.123456789, n)
 
 print list(iter(xrange(100).__iter__().next, 20))
 
