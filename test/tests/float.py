@@ -50,3 +50,11 @@ except ValueError as e:
     pass
     # We don't print the right thing yet:
     # print e
+
+print '__getformat__ test'
+print float.__getformat__('double')
+print float.__getformat__('float')
+try:
+    float.__getformat__('oooga booga boooga')
+except Exception as e:
+    print e.message
