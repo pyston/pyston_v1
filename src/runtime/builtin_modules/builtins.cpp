@@ -477,8 +477,8 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
-    std::vector<BoxIterator> args_it;
-    std::vector<BoxIterator> args_end;
+    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_it;
+    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_end;
 
     for (auto e : *args) {
         auto range = e->pyElements();
@@ -561,12 +561,12 @@ Box* zip(BoxedTuple* containers) {
     if (containers->size() == 0)
         return rtn;
 
-    std::vector<llvm::iterator_range<BoxIterator>> ranges;
+    std::vector<llvm::iterator_range<BoxIterator>, StlCompatAllocator<llvm::iterator_range<BoxIterator>>> ranges;
     for (auto container : *containers) {
         ranges.push_back(container->pyElements());
     }
 
-    std::vector<BoxIterator> iterators;
+    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> iterators;
     for (auto range : ranges) {
         iterators.push_back(range.begin());
     }
