@@ -961,7 +961,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 }
 
 Box* listLt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -971,7 +971,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
 }
 
 Box* listLe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -981,7 +981,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
 }
 
 Box* listGt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -991,7 +991,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
 }
 
 Box* listGe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
