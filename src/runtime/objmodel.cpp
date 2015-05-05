@@ -980,7 +980,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
     }
 
     // Special case: member descriptor
-    if (descr->cls == member_cls) {
+    if (descr->cls == member_descriptor_cls) {
         if (rewrite_args)
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
@@ -1026,7 +1026,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                                         Box* descr, RewriterVar* r_descr, bool for_call, Box** bind_obj_out,
                                         RewriterVar** r_bind_obj_out) {
     // Special case: data descriptor: member descriptor
-    if (descr->cls == member_cls) {
+    if (descr->cls == member_descriptor_cls) {
         static StatCounter slowpath("slowpath_member_descriptor_get");
         slowpath.log();
 
@@ -1722,7 +1722,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
         getset_descr->set(obj, val, getset_descr->closure);
 
         return true;
-    } else if (descr->cls == member_cls) {
+    } else if (descr->cls == member_descriptor_cls) {
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(descr);
         PyMemberDef member_def;
         memset(&member_def, 0, sizeof(member_def));
