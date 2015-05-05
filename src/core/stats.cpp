@@ -17,6 +17,7 @@
 #include <algorithm>
 
 #include "core/thread_utils.h"
+#include "gc/heap.h"
 
 namespace pyston {
 
@@ -55,7 +56,11 @@ void Stats::dump(bool includeZeros) {
     if (!Stats::enabled)
         return;
 
-    printf("Stats:\n");
+    fprintf(stderr, "Stats:\n");
+
+    gc::dumpHeapStatistics(0);
+
+    fprintf(stderr, "Counters:\n");
 
     std::vector<std::pair<std::string, int>> pairs;
     for (const auto& p : *names) {
@@ -66,8 +71,10 @@ void Stats::dump(bool includeZeros) {
 
     for (int i = 0; i < pairs.size(); i++) {
         if (includeZeros || (*counts)[pairs[i].second] > 0)
-            printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
+            fprintf(stderr, "%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
     }
+
+    fprintf(stderr, "(End of stats)\n");
 }
 
 void Stats::endOfInit() {

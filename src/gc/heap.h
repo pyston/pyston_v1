@@ -22,6 +22,7 @@
 
 #include "core/common.h"
 #include "core/threading.h"
+#include "core/types.h"
 
 namespace pyston {
 
@@ -535,13 +536,13 @@ public:
         huge_arena.freeUnmarked(weakly_referenced);
     }
 
-    void dumpHeapStatistics();
+    void dumpHeapStatistics(int level);
 
     friend void markPhase();
 };
 
 extern Heap global_heap;
-void dumpHeapStatistics();
+void dumpHeapStatistics(int level);
 
 } // namespace gc
 } // namespace pyston
