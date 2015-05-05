@@ -1,4 +1,3 @@
-
 s = """
 def f():
     a = 1
@@ -11,7 +10,8 @@ f()
 try:
     exec s
 except Exception as e:
-    print repr(e)
+    # avoid microrevision changes to Python error messages
+    print repr(e).replace("because ", "")
 
 s = """
 def f():
@@ -27,4 +27,5 @@ f()
 try:
     exec s
 except Exception as e:
-    print repr(e)
+    # avoid microrevision changes to Python error messages
+    print repr(e).replace("because ", "")

@@ -125,6 +125,8 @@ def canonicalize_stderr(stderr):
             ("AttributeError: '(\w+)' object attribute '(\w+)' is read-only", "AttributeError: \\2"),
             (r"TypeError: object.__new__\(\) takes no parameters", "TypeError: object() takes no parameters"),
             ("IndexError: list assignment index out of range", "IndexError: list index out of range"),
+            (r"unqualified exec is not allowed in function '(\w+)' it (.*)",
+             r"unqualified exec is not allowed in function '\1' because it \2"),
             ]
 
     for pattern, subst_with in substitutions:
@@ -206,9 +208,6 @@ def get_test_options(fn, check_stats, run_memcheck):
         elif os.path.basename(fn).split('.')[0] in TESTS_TO_SKIP:
             opts.skip = 'command line option'
 
-    if opts.collect_stats:
-        opts.jit_args = ['-s'] + opts.jit_args
-
     assert opts.expected in ("success", "fail", "statfail"), opts.expected
 
     if TEST_PYPY:
@@ -216,6 +215,9 @@ def get_test_options(fn, check_stats, run_memcheck):
         opts.collect_stats = False
         opts.check_stats = False
         opts.expected = "success"
+
+    if opts.collect_stats:
+        opts.jit_args = ['-s'] + opts.jit_args
 
     return opts
 
