@@ -35,7 +35,9 @@ new_weakref(PyObject *ob, PyObject *callback)
 {
     PyWeakReference *result;
 
-    result = PyObject_GC_New(PyWeakReference, &_PyWeakref_RefType);
+    // Pyston change: We can't use PyObject_GC_New because it will conservatively scan the memory.
+    // result = PyObject_GC_New(PyWeakReference, &_PyWeakref_RefType);
+    result = (PyWeakReference*)_PyWeakref_RefType.tp_alloc(&_PyWeakref_RefType, 0);
     if (result) {
         init_weakref(result, ob, callback);
         PyObject_GC_Track(result);
@@ -706,9 +708,8 @@ _PyWeakref_ProxyType = {
     0,                                  /* tp_hash */
     0,                                  /* tp_call */
     proxy_str,                          /* tp_str */
-    // Pyston change:
-    0, //proxy_getattr,                      /* tp_getattro */
-    0, //(setattrofunc)proxy_setattr,        /* tp_setattro */
+    proxy_getattr,                      /* tp_getattro */
+    (setattrofunc)proxy_setattr,        /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
     | Py_TPFLAGS_CHECKTYPES,            /* tp_flags */
@@ -744,9 +745,8 @@ _PyWeakref_CallableProxyType = {
     0,                                  /* tp_hash */
     proxy_call,                         /* tp_call */
     proxy_str,                          /* tp_str */
-    // Pyston change:
-    0, //proxy_getattr,                      /* tp_getattro */
-    0, //(setattrofunc)proxy_setattr,        /* tp_setattro */
+    proxy_getattr,                      /* tp_getattro */
+    (setattrofunc)proxy_setattr,        /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
     | Py_TPFLAGS_CHECKTYPES,            /* tp_flags */
