@@ -286,7 +286,10 @@ static int main(int argc, char** argv) {
 
             llvm::sys::path::append(path, fn);
             llvm::sys::path::remove_filename(path);
-            prependToSysPath(path.str());
+            char* real_path
+                = realpath(path.str().str().c_str(), NULL); // inefficient way of null-terminating the string
+            prependToSysPath(real_path);
+            free(real_path);
 
             main_module = createModule("__main__", fn);
             try {

@@ -342,12 +342,7 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
 void ASTInterpreter::doStore(InternedString name, Value value) {
     ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-        if (globals->cls == module_cls) {
-            setattr(static_cast<BoxedModule*>(globals), name.c_str(), value.o);
-        } else {
-            assert(globals->cls == dict_cls);
-            static_cast<BoxedDict*>(globals)->d[boxString(name.str())] = value.o;
-        }
+        setGlobal(globals, name, value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
@@ -879,7 +874,6 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
 
                 ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-                    // Can't use delattr since the errors are different:
                     delGlobal(globals, &target->id.str());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
