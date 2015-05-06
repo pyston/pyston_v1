@@ -50,6 +50,9 @@ PYTHONIOENCODING = 'utf-8'
 # Pyston compile-time checks the system CPython version to try to give compatible error messages.
 TEST_PYPY = 0
 
+print "RLIMIT_CORE:", resource.getrlimit(resource.RLIMIT_CORE)
+print "core_pattern:", open("/proc/sys/kernel/core_pattern").read()
+
 def set_ulimits():
     # Guard the process from running too long with a hard rlimit.
     # But first try to kill it after a second with a SIGALRM, though that's catchable/clearable by the program:
@@ -58,6 +61,7 @@ def set_ulimits():
 
     MAX_MEM_MB = 100
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_CORE, (-1, -1))
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
 EXTMODULE_DIR_PYSTON = None
@@ -261,6 +265,15 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
     else:
         # run CPython to get the expected output
         expected_code, expected_out, expected_err = get_expected_output(fn)
+
+    if code == -11 and code != expected_code:
+        # Hopefully there aren't too many tests that segfault at the same time, since they will overwrite
+        # each others core files I think for weird results.
+        if os.path.exists("core"):
+            core_bt = subprocess.check_output(["gdb", "-c", "core", os.path.abspath(IMAGE), "-ex", "set pagination 0", "-ex", "thread apply all bt", "-batch"], stderr=subprocess.STDOUT)
+            stderr += core_bt
+        else:
+            stderr += "[no core file found]"
 
     if code != expected_code:
         color = 31 # red

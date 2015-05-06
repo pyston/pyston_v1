@@ -278,7 +278,7 @@ static int main(int argc, char** argv) {
         llvm::sys::path::remove_filename(path);
         prependToSysPath(path.str());
 
-        main_module = createModule("__main__", fn);
+        main_module = NULL;//createModule("__main__", fn);
         try {
             AST_Module* ast = caching_parse_file(fn);
             compileAndRunModule(ast, main_module);
