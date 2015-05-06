@@ -182,6 +182,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry_descriptor) {
+    STAT_TIMER(t0, "us_timer_compileFunction");
     Timer _t("for compileFunction()", 1000);
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
@@ -315,10 +316,13 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         assert(cf->clfunc->versions.size());
     }
 
-    if (cf->is_interpreted)
+    if (cf->is_interpreted) {
+        STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
         astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-    else
+    } else {
+        STAT_TIMER(t1, "us_timer_jitted_module_toplevel");
         ((void (*)())cf->code)();
+    }
 }
 
 Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {

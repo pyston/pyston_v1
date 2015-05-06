@@ -494,6 +494,7 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
+    STAT_TIMER(t0, "us_timer_getTopPythonFrame");
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> iter) {
         rtn = std::move(iter);
@@ -512,8 +513,8 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
-static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
+    STAT_TIMER(t0, "us_timer_gettraceback");
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
         if (!printed_warning) {
@@ -532,8 +533,6 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
-    Timer _t("getTraceback", 1000);
-
     std::vector<const LineInfo*> entries;
     unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
@@ -543,9 +542,6 @@ BoxedTraceback* getTraceback() {
     });
 
     std::reverse(entries.begin(), entries.end());
-
-    long us = _t.end();
-    us_gettraceback.log(us);
 
     return new BoxedTraceback(std::move(entries));
 }

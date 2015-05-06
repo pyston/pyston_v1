@@ -542,6 +542,8 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
+    STAT_TIMER(t0, "us_timer_listMul");
+
     if (rhs->cls != int_cls) {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
