@@ -269,6 +269,8 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         if os.path.exists("core"):
             core_bt = subprocess.check_output(["gdb", "-c", "core", os.path.abspath(IMAGE), "-ex", "set pagination 0", "-ex", "thread apply all bt", "-batch"], stderr=subprocess.STDOUT)
             stderr += core_bt
+        else:
+            stderr += "[no core file found]"
 
     if code != expected_code:
         color = 31 # red
