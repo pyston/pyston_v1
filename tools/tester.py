@@ -50,6 +50,9 @@ PYTHONIOENCODING = 'utf-8'
 # Pyston compile-time checks the system CPython version to try to give compatible error messages.
 TEST_PYPY = 0
 
+print "RLIMIT_CORE:", resource.getrlimit(resource.RLIMIT_CORE)
+print "core_pattern:", open("/proc/sys/kernel/core_pattern").read()
+
 def set_ulimits():
     # Guard the process from running too long with a hard rlimit.
     # But first try to kill it after a second with a SIGALRM, though that's catchable/clearable by the program:
