@@ -18,9 +18,9 @@ sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-de
 ```
 
 
-**Ubuntu 14.04/14.10**
+**Ubuntu 14.04/14.10/15.04**
 ```
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libssl-dev libsqlite3-dev pkg-config
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang libssl-dev libsqlite3-dev pkg-config
 ```
 
 ### Building and testing
