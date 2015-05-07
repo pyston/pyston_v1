@@ -23,6 +23,11 @@ sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-de
 sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang libssl-dev libsqlite3-dev pkg-config
 ```
 
+**Fedora 21**
+```
+sudo yum install cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake libtool gmp-devel readline-devel openssl-devel sqlite-devel python-devel zlib-devel
+```
+
 ### Building and testing
 ```
 git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
