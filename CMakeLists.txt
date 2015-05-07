@@ -3,6 +3,7 @@ project(pyston C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
+include(CheckIncludeFiles)
 include(CheckTypeSizeof)
 include(ExternalProject)
 
@@ -165,6 +166,7 @@ include_directories(${LLVM_INCLUDE_DIRS})
 # generate pyconfig.h
 set(CMAKE_EXTRA_INCLUDE_FILES unordered_map)
 check_type_sizeof("std::unordered_map<void*, void*>" SIZEOF_UNORDEREDMAP LANGUAGE CXX)
+check_include_files(stropts.h HAVE_STROPTS_H)
 configure_file(from_cpython/Include/pyconfig.h.in from_cpython/Include/pyconfig.h)
 
 find_package(LibLZMA REQUIRED)
