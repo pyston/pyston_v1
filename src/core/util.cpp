@@ -29,9 +29,16 @@
 
 namespace pyston {
 
+static inline uint64_t rdtsc() {
+    unsigned long lo, hi;
+    asm("rdtsc" : "=a"(lo), "=d"(hi));
+    return (lo | (hi << 32));
+}
+
 uint64_t getCPUTicks() {
-    unsigned int _unused;
-    return __rdtscp(&_unused);
+    // unsigned int _unused;
+    // return __rdtscp(&_unused);
+    return rdtsc();
 }
 
 int Timer::level = 0;
