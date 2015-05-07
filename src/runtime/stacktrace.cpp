@@ -198,6 +198,7 @@ extern "C" void abort() {
     __builtin_unreachable();
 }
 
+#if 0
 extern "C" void exit(int code) {
     static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
 
@@ -219,6 +220,7 @@ extern "C" void exit(int code) {
     libc_exit(code);
     __builtin_unreachable();
 }
+#endif
 
 extern "C" void raise0() {
     ExcInfo* exc_info = getFrameExcInfo();

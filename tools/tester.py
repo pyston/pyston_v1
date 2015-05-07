@@ -157,6 +157,9 @@ def run_test(fn, check_stats, run_memcheck):
     code = p.wait()
     elapsed = time.time() - start
 
+    if code >= 128:
+        code -= 256
+
     return determine_test_result(fn, opts, code, out, stderr, elapsed)
 
 def get_test_options(fn, check_stats, run_memcheck):
