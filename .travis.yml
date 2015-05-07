@@ -50,9 +50,8 @@ install:
 
 script:
   - ccache -z
-  - ninja -j4 pyston
+  - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
   - ccache -s
-  - PYSTON_RUN_ARGS=G ninja check-pyston
 
 os:
   - linux
