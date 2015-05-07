@@ -38,7 +38,6 @@ extern "C" const char* getStatTimerName() {
 __thread StatTimer* StatTimer::stack;
 StatTimer::StatTimer(int statid, bool push) {
     uint64_t at_time = getCPUTicks();
-    _duration = 0;
     _start_time = 0;
     _statid = statid;
 
@@ -56,7 +55,6 @@ StatTimer::StatTimer(int statid, bool push) {
 }
 
 StatTimer::StatTimer(int statid, uint64_t at_time) {
-    _duration = 0;
     _start_time = 0;
     _statid = statid;
     _prev = stack;
@@ -88,13 +86,10 @@ StatTimer::~StatTimer() {
 void StatTimer::pause(uint64_t at_time) {
     assert(!isPaused());
     assert(at_time > _start_time);
-    auto cur_duration = _duration;
-    _duration = at_time - _start_time;
-    assert(_duration > cur_duration);
 
+    uint64_t _duration = at_time - _start_time;
     Stats::log(_statid, _duration);
 
-    _duration = 0;
     _start_time = 0;
     _last_pause_time = at_time;
     // fprintf (stderr, "paused  %d at %lu\n", _statid, at_time);
