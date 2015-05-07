@@ -111,7 +111,7 @@ void generatorEntry(BoxedGenerator* g) {
         g->entryExited = true;
         threading::popGenerator();
 
-#if !DISABLE_STATS
+#if STAT_TIMERS
         g->timer_time = getCPUTicks(); // store off the timer that our caller (in g->returnContext) will resume at
         STAT_TIMER_NAME(t0).pause(g->timer_time);
 #endif
@@ -139,7 +139,7 @@ Box* generatorSend(Box* s, Box* v) {
     self->returnValue = v;
     self->running = true;
 
-#if !DISABLE_STATS
+#if STAT_TIMERS
     // store off the time that the generator will use to initialize its toplevel timer
     self->timer_time = getCPUTicks();
     StatTimer* current_timers = StatTimer::swapStack(self->statTimers, self->timer_time);
@@ -147,7 +147,7 @@ Box* generatorSend(Box* s, Box* v) {
 
     swapContext(&self->returnContext, self->context, (intptr_t)self);
 
-#if !DISABLE_STATS
+#if STAT_TIMERS
     // if the generator exited we use the time that generatorEntry stored in self->timer_time (the same time it paused
     // its timer at).
     self->statTimers = StatTimer::swapStack(current_timers, self->entryExited ? self->timer_time : getCPUTicks());

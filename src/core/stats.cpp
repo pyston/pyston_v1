@@ -22,6 +22,7 @@
 namespace pyston {
 
 #if !DISABLE_STATS
+#if STAT_TIMERS
 extern "C" const char* getStatTimerNameById(int id) {
     return Stats::getStatName(id).c_str();
 }
@@ -116,6 +117,7 @@ StatTimer* StatTimer::swapStack(StatTimer* s, uint64_t at_time) {
     }
     return prev_stack;
 }
+#endif
 
 std::vector<uint64_t>* Stats::counts;
 std::unordered_map<int, std::string>* Stats::names;

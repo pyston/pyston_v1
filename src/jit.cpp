@@ -369,7 +369,7 @@ static int main(int argc, char** argv) {
         uint64_t main_time_duration = main_time.end(&main_time_ended_at);
         static StatCounter mt("ticks_in_main");
         mt.log(main_time_duration);
-        _stt0.pause(main_time_ended_at);
+        STAT_TIMER_NAME(t0).pause(main_time_ended_at);
     }
     Stats::dump(true);
 

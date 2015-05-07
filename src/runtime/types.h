@@ -873,7 +873,7 @@ public:
     struct Context* context, *returnContext;
     void* stack_begin;
 
-#if !DISABLE_STATS
+#if STAT_TIMERS
     StatTimer* statTimers;
     uint64_t timer_time;
 #endif

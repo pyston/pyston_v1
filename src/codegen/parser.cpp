@@ -983,6 +983,7 @@ AST_Module* parse_string(const char* code) {
 
 AST_Module* parse_file(const char* fn) {
     STAT_TIMER(t0, "us_timer_cpyton_parsing");
+    Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {
         AST_Module* rtn = pypa_parse(fn);
@@ -1002,6 +1003,10 @@ AST_Module* parse_file(const char* fn) {
     assert(code == 0);
 
     assert(rtn->type == AST_TYPE::Module);
+
+    long us = _t.end();
+    static StatCounter us_parsing("us_parsing");
+    us_parsing.log(us);
 
     return ast_cast<AST_Module>(rtn);
 }
@@ -1068,6 +1073,9 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn, AST_Mod
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse_file(const char* fn) {
     STAT_TIMER(t0, "us_timer_caching_parse_file");
+    static StatCounter us_parsing("us_parsing");
+    Timer _t("parsing");
+    _t.setExitCallback([](uint64_t t) { us_parsing.log(t); });
 
     int code;
     std::string cache_fn = std::string(fn) + "c";
