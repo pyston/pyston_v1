@@ -342,7 +342,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     CompiledFunction* cf = irstate->getCurFunction();
     ConcreteCompilerType* rtn_type = irstate->getReturnType();
     // llvm::MDNode* func_info = irstate->getFuncDbgInfo();
-    PhiAnalysis* phi_analysis = source->phis[entry_descriptor];
+    PhiAnalysis* phi_analysis = irstate->getPhis();
     assert(phi_analysis);
 
     if (entry_descriptor != NULL)
@@ -1055,7 +1055,15 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         computeBlockSetClosure(blocks);
     }
 
-    IRGenState irstate(cf, source, source->phis[entry_descriptor], param_names, getGCBuilder(), dbg_funcinfo);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(source->cfg);
+    std::unique_ptr<PhiAnalysis> phis;
+
+    if (entry_descriptor)
+        phis = computeRequiredPhis(entry_descriptor, liveness.get(), source->getScopeInfo());
+    else
+        phis = computeRequiredPhis(*param_names, source->cfg, liveness.get(), source->getScopeInfo());
+
+    IRGenState irstate(cf, source, std::move(liveness), std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 

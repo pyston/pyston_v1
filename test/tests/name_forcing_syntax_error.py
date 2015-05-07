@@ -208,6 +208,6 @@ for case in cases:
     try:
         exec case
     except SyntaxError as se:
-        print se.message
+        print se.message.replace("because ", "")
         # TODO uncomment this
         # traceback.print_exc()

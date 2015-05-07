@@ -112,12 +112,25 @@ ifeq ($(NEED_OLD_JIT),1)
 	LLVM_LINK_LIBS += jit
 endif
 
+LLVM_CONFIG_DBG := $(LLVM_BUILD)/Release+Asserts/bin/llvm-config
+ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
 LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
+else
+LLVM_CXXFLAGS := DBG_NOT_BUILT
+LLVM_LDFLAGS := DBG_NOT_BUILT
+LLVM_LIB_DEPS := DBG_NOT_BUILT
+endif
 
+LLVM_CONFIG_DEBUG := $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config
+ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
 LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_DEBUG_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Debug+Asserts/lib/*)
+else
+LLVM_DEBUG_LDFLAGS := DEBUG_NOT_BUILT
+LLVM_DEBUG_LIB_DEPS := DEBUG_NOT_BUILT
+endif
 
 LLVM_CONFIG_RELEASE := $(LLVM_BUILD)/Release/bin/llvm-config
 ifneq ($(wildcard $(LLVM_CONFIG_RELEASE)),)
@@ -779,11 +792,16 @@ endef
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
+ifneq ($(USE_CMAKE),1)
 $(call make_compile_config,,$(CXXFLAGS_DBG))
 $(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
 $(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
 $(call make_compile_config,.grwl_dbg,$(CXXFLAGS_DBG) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl_dbg -UBINARY_STRIPPED_SUFFIX -DBINARY_STRIPPED_SUFFIX=)
 $(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
+else
+%.o: %.cpp $(CMAKE_SETUP_DBG)
+	$(NINJA) -C $(HOME)/pyston-build-dbg src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.o,%.cpp.o,$@) $(NINJAFLAGS)
+endif
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
 

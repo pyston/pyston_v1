@@ -39,7 +39,7 @@ TEST_F(AnalysisTest, augassign) {
     SourceInfo* si = new SourceInfo(createModule("augassign", fn), scoping, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
-    LivenessAnalysis* liveness = computeLivenessInfo(cfg);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     //cfg->print();
 
@@ -49,7 +49,7 @@ TEST_F(AnalysisTest, augassign) {
             ASSERT_TRUE(liveness->isLiveAtEnd(module->interned_strings->get("a"), block));
     }
 
-    PhiAnalysis* phis = computeRequiredPhis(ParamNames(func), cfg, liveness, scope_info);
+    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func), cfg, liveness.get(), scope_info);
 }
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
@@ -67,7 +67,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
             scoping, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
-    LivenessAnalysis* liveness = computeLivenessInfo(cfg);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
 
@@ -83,7 +83,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     AST_Jump* backedge = ast_cast<AST_Jump>(loop_backedge->body[0]);
     ASSERT_LE(backedge->target->idx, loop_backedge->idx);
 
-    PhiAnalysis* phis;
+    std::unique_ptr<PhiAnalysis> phis;
 
     if (is_osr) {
         OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(NULL, backedge);
@@ -91,9 +91,9 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
         if (i_maybe_undefined)
             entry_descriptor->args[idi_str] = NULL;
         entry_descriptor->args[iter_str] = NULL;
-        phis = computeRequiredPhis(entry_descriptor, liveness, scope_info);
+        phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
     } else {
-        phis = computeRequiredPhis(ParamNames(func), cfg, liveness, scope_info);
+        phis = computeRequiredPhis(ParamNames(func), cfg, liveness.get(), scope_info);
     }
 
     // First, verify that we require phi nodes for the block we enter into.

@@ -83,7 +83,6 @@ private:
     Value doBinOp(Box* left, Box* right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
     void doStore(InternedString name, Value value);
-    void eraseDeadSymbols();
 
     Value visit_assert(AST_Assert* node);
     Value visit_assign(AST_Assign* node);
@@ -285,6 +284,8 @@ public:
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     threading::allowGLReadPreemption();
 
+    STAT_TIMER(t0, "us_timer_astinterpreter_execute");
+
     void* frame_addr = __builtin_frame_address(0);
     RegisterHelper frame_registerer(&interpreter, frame_addr);
 
@@ -319,31 +320,6 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
         }
     }
     return v;
-}
-
-void ASTInterpreter::eraseDeadSymbols() {
-    if (source_info->liveness == NULL)
-        source_info->liveness = computeLivenessInfo(source_info->cfg);
-
-    if (this->phis == NULL) {
-        PhiAnalysis*& phis = source_info->phis[/* entry_descriptor = */ NULL];
-        if (!phis)
-            phis = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg, source_info->liveness,
-                                       scope_info);
-        this->phis = phis;
-    }
-
-    std::vector<InternedString> dead_symbols;
-    for (auto& it : sym_table) {
-        if (!source_info->liveness->isLiveAtEnd(it.first, current_block)) {
-            dead_symbols.push_back(it.first);
-        } else if (phis->isRequiredAfter(it.first, current_block)) {
-            assert(scope_info->getScopeTypeOfName(it.first) != ScopeInfo::VarScopeType::GLOBAL);
-        } else {
-        }
-    }
-    for (auto&& dead : dead_symbols)
-        sym_table.erase(dead);
 }
 
 Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type) {
@@ -463,7 +439,26 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (ENABLE_OSR && backedge && (globals->cls == module_cls)) {
         bool can_osr = !FORCE_INTERPRETER && (globals->cls == module_cls);
         if (can_osr && edgecount++ == OSR_THRESHOLD_INTERPRETER) {
-            eraseDeadSymbols();
+            static StatCounter ast_osrs("num_ast_osrs");
+            ast_osrs.log();
+
+            // TODO: we will immediately want the liveness info again in the jit, we should pass
+            // it through.
+            std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(source_info->cfg);
+            std::unique_ptr<PhiAnalysis> phis
+                = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg, liveness.get(), scope_info);
+
+            std::vector<InternedString> dead_symbols;
+            for (auto& it : sym_table) {
+                if (!liveness->isLiveAtEnd(it.first, current_block)) {
+                    dead_symbols.push_back(it.first);
+                } else if (phis->isRequiredAfter(it.first, current_block)) {
+                    assert(scope_info->getScopeTypeOfName(it.first) != ScopeInfo::VarScopeType::GLOBAL);
+                } else {
+                }
+            }
+            for (auto&& dead : dead_symbols)
+                sym_table.erase(dead);
 
             const OSREntryDescriptor* found_entry = nullptr;
             for (auto& p : compiled_func->clfunc->osr_versions) {
@@ -479,7 +474,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
                 auto it = sym_table.find(name);
-                if (!source_info->liveness->isLiveAtEnd(name, current_block))
+                if (!liveness->isLiveAtEnd(name, current_block))
                     continue;
 
                 if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
@@ -495,10 +490,14 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 }
             }
 
+            // Manually free these here, since we might not return from this scope for a long time.
+            liveness.reset(nullptr);
+            phis.reset(nullptr);
+
             // LLVM has a limit on the number of operands a machine instruction can have (~255),
             // in order to not hit the limit with the patchpoints cancel OSR when we have a high number of symbols.
             if (sorted_symbol_table.size() > 225) {
-                static StatCounter times_osr_cancel("num_osr_cancel_to_many_syms");
+                static StatCounter times_osr_cancel("num_osr_cancel_too_many_syms");
                 times_osr_cancel.log();
                 next_block = node->target;
                 return Value();
@@ -543,6 +542,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 arg_array.push_back(it.second);
             }
 
+            STAT_TIMER(t0, "us_timer_astinterpreter_jump_osrexit");
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
             auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
             Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
@@ -929,6 +929,8 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     static const std::string write_str("write");
     static const std::string newline_str("\n");
     static const std::string space_str(" ");
+
+    STAT_TIMER(t0, "us_timer_visit_print");
 
     Box* dest = node->dest ? visit_expr(node->dest).o : getSysStdout();
     int nvals = node->values.size();

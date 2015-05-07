@@ -45,6 +45,7 @@ private:
 
 public:
     LivenessAnalysis(CFG* cfg);
+    ~LivenessAnalysis();
 
     // we don't keep track of node->parent_block relationships, so you have to pass both:
     bool isKill(AST_Name* node, CFGBlock* parent_block);
@@ -105,9 +106,9 @@ public:
     bool isPotentiallyUndefinedAt(InternedString name, CFGBlock* block);
 };
 
-LivenessAnalysis* computeLivenessInfo(CFG*);
-PhiAnalysis* computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_info);
-PhiAnalysis* computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*, ScopeInfo* scope_info);
+std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_info);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*, ScopeInfo* scope_info);
 }
 
 #endif

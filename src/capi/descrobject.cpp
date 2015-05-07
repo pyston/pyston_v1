@@ -18,6 +18,7 @@
 namespace pyston {
 
 Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
+    STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__");
     BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
 
     assert(self->cls == method_cls);

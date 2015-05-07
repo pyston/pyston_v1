@@ -655,7 +655,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
+      *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
       *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
       *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
@@ -1270,6 +1270,8 @@ public:
     }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_setitem");
+
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1282,6 +1284,7 @@ public:
     }
 
     static Box* setdefault(Box* _self, Box* _key, Box* value) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_setdefault");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1297,6 +1300,7 @@ public:
     }
 
     static Box* get(Box* _self, Box* _key, Box* def) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_get");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1311,6 +1315,7 @@ public:
     }
 
     static Box* getitem(Box* _self, Box* _key) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_getitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1344,6 +1349,7 @@ public:
     }
 
     static Box* delitem(Box* _self, Box* _key) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_delitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1409,6 +1415,7 @@ public:
     }
 
     static Box* values(Box* _self) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_values");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1423,6 +1430,7 @@ public:
     }
 
     static Box* items(Box* _self) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_items");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1461,6 +1469,7 @@ public:
     }
 
     static Box* update(Box* _self, Box* _container) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_update");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -2101,8 +2110,8 @@ void setupRuntime() {
 
     module_cls = new BoxedHeapClass(object_cls, &moduleGCHandler, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule),
                                     false, static_cast<BoxedString*>(boxStrConstant("module")));
-    member_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
-                                    static_cast<BoxedString*>(boxStrConstant("member")));
+    member_descriptor_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
+                                               static_cast<BoxedString*>(boxStrConstant("member_descriptor")));
     capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false,
                                       static_cast<BoxedString*>(boxStrConstant("capifunc")));
     method_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false,
@@ -2132,7 +2141,7 @@ void setupRuntime() {
     float_cls->tp_mro = BoxedTuple::create({ float_cls, object_cls });
     function_cls->tp_mro = BoxedTuple::create({ function_cls, object_cls });
     builtin_function_or_method_cls->tp_mro = BoxedTuple::create({ builtin_function_or_method_cls, object_cls });
-    member_cls->tp_mro = BoxedTuple::create({ member_cls, object_cls });
+    member_descriptor_cls->tp_mro = BoxedTuple::create({ member_descriptor_cls, object_cls });
     capifunc_cls->tp_mro = BoxedTuple::create({ capifunc_cls, object_cls });
     module_cls->tp_mro = BoxedTuple::create({ module_cls, object_cls });
     method_cls->tp_mro = BoxedTuple::create({ method_cls, object_cls });
@@ -2187,7 +2196,7 @@ void setupRuntime() {
     float_cls->finishInitialization();
     function_cls->finishInitialization();
     builtin_function_or_method_cls->finishInitialization();
-    member_cls->finishInitialization();
+    member_descriptor_cls->finishInitialization();
     module_cls->finishInitialization();
     capifunc_cls->finishInitialization();
     method_cls->finishInitialization();

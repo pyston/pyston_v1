@@ -76,14 +76,21 @@ private:
         }
     }
 
+    Status::Usage getStatusFirst(InternedString name) const {
+        auto it = statuses.find(name);
+        if (it == statuses.end())
+            return Status::NONE;
+        return it->second.first;
+    }
+
 public:
     LivenessBBVisitor(LivenessAnalysis* analysis) : analysis(analysis) {}
 
-    bool firstIsUse(InternedString name) { return statuses[name].first == Status::USED; }
+    bool firstIsUse(InternedString name) const { return getStatusFirst(name) == Status::USED; }
 
-    bool firstIsDef(InternedString name) { return statuses[name].first == Status::DEFINED; }
+    bool firstIsDef(InternedString name) const { return getStatusFirst(name) == Status::DEFINED; }
 
-    bool isKilledAt(AST_Name* node, bool is_live_at_end) {
+    bool isKilledAt(AST_Name* node, bool is_live_at_end) const {
         if (kills.count(node))
             return true;
 
@@ -161,6 +168,9 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
 
     static StatCounter us_liveness("us_compiling_analysis_liveness");
     us_liveness.log(_t.end());
+}
+
+LivenessAnalysis::~LivenessAnalysis() {
 }
 
 bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
@@ -487,11 +497,18 @@ bool PhiAnalysis::isPotentiallyUndefinedAt(InternedString name, CFGBlock* block)
     return definedness.defined_at_beginning[block][name] != DefinednessAnalysis::Defined;
 }
 
-LivenessAnalysis* computeLivenessInfo(CFG* cfg) {
-    return new LivenessAnalysis(cfg);
+std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG* cfg) {
+    static StatCounter counter("num_liveness_analysis");
+    counter.log();
+
+    return std::unique_ptr<LivenessAnalysis>(new LivenessAnalysis(cfg));
 }
 
-PhiAnalysis* computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info) {
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnalysis* liveness,
+                                                 ScopeInfo* scope_info) {
+    static StatCounter counter("num_phi_analysis");
+    counter.log();
+
     llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
 
     for (auto e : args.args)
@@ -501,11 +518,15 @@ PhiAnalysis* computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnaly
     if (args.kwarg.size())
         initial_map[scope_info->internString(args.kwarg)] = DefinednessAnalysis::Defined;
 
-    return new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness, scope_info);
+    return std::unique_ptr<PhiAnalysis>(
+        new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness, scope_info));
 }
 
-PhiAnalysis* computeRequiredPhis(const OSREntryDescriptor* entry_descriptor, LivenessAnalysis* liveness,
-                                 ScopeInfo* scope_info) {
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry_descriptor, LivenessAnalysis* liveness,
+                                                 ScopeInfo* scope_info) {
+    static StatCounter counter("num_phi_analysis");
+    counter.log();
+
     llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
 
     llvm::StringSet<> potentially_undefined;
@@ -524,6 +545,7 @@ PhiAnalysis* computeRequiredPhis(const OSREntryDescriptor* entry_descriptor, Liv
             initial_map[p.first] = DefinednessAnalysis::Defined;
     }
 
-    return new PhiAnalysis(std::move(initial_map), entry_descriptor->backedge->target, true, liveness, scope_info);
+    return std::unique_ptr<PhiAnalysis>(
+        new PhiAnalysis(std::move(initial_map), entry_descriptor->backedge->target, true, liveness, scope_info));
 }
 }

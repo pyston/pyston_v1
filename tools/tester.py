@@ -125,6 +125,8 @@ def canonicalize_stderr(stderr):
             ("AttributeError: '(\w+)' object attribute '(\w+)' is read-only", "AttributeError: \\2"),
             (r"TypeError: object.__new__\(\) takes no parameters", "TypeError: object() takes no parameters"),
             ("IndexError: list assignment index out of range", "IndexError: list index out of range"),
+            (r"unqualified exec is not allowed in function '(\w+)' it (.*)",
+             r"unqualified exec is not allowed in function '\1' because it \2"),
             ]
 
     for pattern, subst_with in substitutions:
@@ -206,9 +208,6 @@ def get_test_options(fn, check_stats, run_memcheck):
         elif os.path.basename(fn).split('.')[0] in TESTS_TO_SKIP:
             opts.skip = 'command line option'
 
-    if opts.collect_stats:
-        opts.jit_args = ['-s'] + opts.jit_args
-
     assert opts.expected in ("success", "fail", "statfail"), opts.expected
 
     if TEST_PYPY:
@@ -217,11 +216,12 @@ def get_test_options(fn, check_stats, run_memcheck):
         opts.check_stats = False
         opts.expected = "success"
 
+    if opts.collect_stats:
+        opts.jit_args = ['-s'] + opts.jit_args
+
     return opts
 
 def determine_test_result(fn, opts, code, out, stderr, elapsed):
-    last_stderr_line = stderr.strip().split('\n')[-1]
-
     if opts.allow_warnings:
         out_lines = []
         for l in out.split('\n'):
@@ -233,13 +233,26 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         out = "\n".join(out_lines)
 
     stats = None
-    if code >= 0 and opts.collect_stats:
+    if opts.collect_stats:
         stats = {}
-        assert out.count("Stats:") == 1
-        out, stats_str = out.split("Stats:")
-        for l in stats_str.strip().split('\n'):
-            k, v = l.split(':')
-            stats[k.strip()] = int(v)
+        have_stats = (stderr.count("Stats:") == 1 and stderr.count("(End of stats)") == 1)
+
+        if code >= 0:
+            assert have_stats
+
+        if have_stats:
+            assert stderr.count("Stats:") == 1
+            stderr, stats_str = stderr.split("Stats:")
+            stats_str, stderr_tail = stats_str.split("(End of stats)\n")
+            stderr += stderr_tail
+
+            other_stats_str, counter_str = stats_str.split("Counters:")
+            for l in counter_str.strip().split('\n'):
+                assert l.count(':') == 1, l
+                k, v = l.split(':')
+                stats[k.strip()] = int(v)
+
+    last_stderr_line = stderr.strip().split('\n')[-1]
 
     if EXIT_CODE_ONLY:
         # fools the rest of this function into thinking the output is OK & just checking the exit code.

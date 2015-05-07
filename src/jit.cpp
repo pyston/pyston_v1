@@ -139,223 +139,240 @@ int handleArg(char code) {
 }
 
 static int main(int argc, char** argv) {
+
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
     // llvm::PrettyStackTraceProgram X(argc, argv);
     llvm::llvm_shutdown_obj Y;
 
-    int code;
-    const char* command = NULL;
+    timespec before_ts, after_ts;
 
-    char* env_args = getenv("PYSTON_RUN_ARGS");
-
-    if (env_args) {
-        while (*env_args) {
-            int r = handleArg(*env_args);
-            if (r)
-                return r;
-            env_args++;
-        }
-    }
-
-    // Suppress getopt errors so we can throw them ourselves
-    opterr = 0;
-    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPT")) != -1) {
-        if (code == 'c') {
-            assert(optarg);
-            command = optarg;
-            // no more option parsing; the rest of our arguments go into sys.argv.
-            break;
-        } else if (code == ':') {
-            fprintf(stderr, "Argument expected for the -%c option\n", optopt);
-            return 2;
-        } else if (code == '?') {
-            fprintf(stderr, "Unknown option: -%c\n", optopt);
-            return 2;
-        } else {
-            int r = handleArg(code);
-            if (r)
-                return r;
-        }
-    }
-
-    const char* fn = NULL;
-
-    threading::registerMainThread();
-    threading::acquireGLRead();
-
-    Py_SetProgramName(argv[0]);
-
-    if (unbuffered) {
-        setvbuf(stdin, (char*)NULL, _IONBF, BUFSIZ);
-        setvbuf(stdout, (char*)NULL, _IONBF, BUFSIZ);
-        setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
-    }
-
+    Timer main_time;
+    int rtncode;
     {
-        Timer _t("for initCodegen");
-        initCodegen();
-    }
+        STAT_TIMER2(t0, "us_timer_main_toplevel", main_time.getStartTime());
 
-    // Arguments left over after option parsing are of the form:
-    //     [ script | - ] [ arguments... ]
-    // unless we've been already parsed a `-c command` option, in which case only:
-    //     [ arguments...]
-    // are parsed.
-    if (command)
-        addToSysArgv("-c");
-    else if (optind != argc) {
-        addToSysArgv(argv[optind]);
-        if (strcmp("-", argv[optind]) != 0)
-            fn = argv[optind];
-        ++optind;
-    } else
-        addToSysArgv("");
+        int code;
+        const char* command = NULL;
 
-    for (int i = optind; i < argc; i++) {
-        addToSysArgv(argv[i]);
-    }
+        char* env_args = getenv("PYSTON_RUN_ARGS");
 
-    llvm::StringRef module_search_path = Py_GetPath();
-    while (true) {
-        std::pair<llvm::StringRef, llvm::StringRef> split_str = module_search_path.split(DELIM);
-        if (split_str.first == module_search_path)
-            break; // could not find the delimiter
-        appendToSysPath(split_str.first);
-        module_search_path = split_str.second;
-    }
-
-    if (!fn) {
-        // if we are in repl or command mode prepend "" to the path
-        prependToSysPath("");
-    }
-
-    if (!Py_NoSiteFlag) {
-        try {
-            std::string module_name = "site";
-            importModuleLevel(module_name, None, None, 0);
-        } catch (ExcInfo e) {
-            e.printExcAndTraceback();
-            return 1;
-        }
-    }
-
-    // Set encoding for standard streams. This needs to be done after
-    // sys.path is properly set up, so that we can import the
-    // encodings module.
-    setEncodingAndErrors();
-
-    // end of argument parsing
-
-    _t.split("to run");
-    BoxedModule* main_module = NULL;
-
-    // if the user invoked `pyston -c command`
-    if (command != NULL) {
-        try {
-            main_module = createModule("__main__", "<string>");
-            AST_Module* m = parse_string(command);
-            compileAndRunModule(m, main_module);
-        } catch (ExcInfo e) {
-            int retcode = 1;
-            (void)handle_toplevel_exn(e, &retcode);
-            Stats::dump();
-            return retcode;
-        }
-    }
-
-    if (fn != NULL) {
-        llvm::SmallString<128> path;
-
-        if (!llvm::sys::path::is_absolute(fn)) {
-            char cwd_buf[1026];
-            char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
-            assert(cwd);
-            path = cwd;
+        if (env_args) {
+            while (*env_args) {
+                int r = handleArg(*env_args);
+                if (r)
+                    return r;
+                env_args++;
+            }
         }
 
-        llvm::sys::path::append(path, fn);
-        llvm::sys::path::remove_filename(path);
-        prependToSysPath(path.str());
+        // Suppress getopt errors so we can throw them ourselves
+        opterr = 0;
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPT")) != -1) {
+            if (code == 'c') {
+                assert(optarg);
+                command = optarg;
+                // no more option parsing; the rest of our arguments go into sys.argv.
+                break;
+            } else if (code == ':') {
+                fprintf(stderr, "Argument expected for the -%c option\n", optopt);
+                return 2;
+            } else if (code == '?') {
+                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                return 2;
+            } else {
+                int r = handleArg(code);
+                if (r)
+                    return r;
+            }
+        }
 
-        main_module = createModule("__main__", fn);
-        try {
-            AST_Module* ast = caching_parse_file(fn);
-            compileAndRunModule(ast, main_module);
-        } catch (ExcInfo e) {
-            int retcode = 1;
-            (void)handle_toplevel_exn(e, &retcode);
-            if (!force_repl) {
-                Stats::dump();
+        Stats::startEstimatingCPUFreq();
+
+        const char* fn = NULL;
+
+        threading::registerMainThread();
+        threading::acquireGLRead();
+
+        Py_SetProgramName(argv[0]);
+
+        if (unbuffered) {
+            setvbuf(stdin, (char*)NULL, _IONBF, BUFSIZ);
+            setvbuf(stdout, (char*)NULL, _IONBF, BUFSIZ);
+            setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
+        }
+
+        {
+            Timer _t("for initCodegen");
+            initCodegen();
+        }
+
+        // Arguments left over after option parsing are of the form:
+        //     [ script | - ] [ arguments... ]
+        // unless we've been already parsed a `-c command` option, in which case only:
+        //     [ arguments...]
+        // are parsed.
+        if (command)
+            addToSysArgv("-c");
+        else if (optind != argc) {
+            addToSysArgv(argv[optind]);
+            if (strcmp("-", argv[optind]) != 0)
+                fn = argv[optind];
+            ++optind;
+        } else
+            addToSysArgv("");
+
+        for (int i = optind; i < argc; i++) {
+            addToSysArgv(argv[i]);
+        }
+
+        llvm::StringRef module_search_path = Py_GetPath();
+        while (true) {
+            std::pair<llvm::StringRef, llvm::StringRef> split_str = module_search_path.split(DELIM);
+            if (split_str.first == module_search_path)
+                break; // could not find the delimiter
+            appendToSysPath(split_str.first);
+            module_search_path = split_str.second;
+        }
+
+        if (!fn) {
+            // if we are in repl or command mode prepend "" to the path
+            prependToSysPath("");
+        }
+
+        if (!Py_NoSiteFlag) {
+            try {
+                std::string module_name = "site";
+                importModuleLevel(module_name, None, None, 0);
+            } catch (ExcInfo e) {
+                e.printExcAndTraceback();
+                return 1;
+            }
+        }
+
+        // Set encoding for standard streams. This needs to be done after
+        // sys.path is properly set up, so that we can import the
+        // encodings module.
+        setEncodingAndErrors();
+
+        // end of argument parsing
+
+        _t.split("to run");
+        BoxedModule* main_module = NULL;
+
+        // if the user invoked `pyston -c command`
+        if (command != NULL) {
+            try {
+                main_module = createModule("__main__", "<string>");
+                AST_Module* m = parse_string(command);
+                compileAndRunModule(m, main_module);
+            } catch (ExcInfo e) {
+                int retcode = 1;
+                (void)handle_toplevel_exn(e, &retcode);
+                Stats::dump(false);
                 return retcode;
             }
         }
-    }
 
-    if (force_repl || !(command || fn)) {
-        printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
-        printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
+        if (fn != NULL) {
+            llvm::SmallString<128> path;
 
-        if (!main_module) {
-            main_module = createModule("__main__", "<stdin>");
-        } else {
-            // main_module->fn = "<stdin>";
-        }
+            if (!llvm::sys::path::is_absolute(fn)) {
+                char cwd_buf[1026];
+                char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
+                assert(cwd);
+                path = cwd;
+            }
 
-        for (;;) {
-            char* line = readline(">> ");
-            if (!line)
-                break;
+            llvm::sys::path::append(path, fn);
+            llvm::sys::path::remove_filename(path);
+            prependToSysPath(path.str());
 
-            add_history(line);
-
+            main_module = createModule("__main__", fn);
             try {
-                AST_Module* m = parse_string(line);
-
-                Timer _t("repl");
-
-                if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                    AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
-                    AST_Call* c = new AST_Call();
-                    AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
-                    c->func = r;
-                    c->starargs = NULL;
-                    c->kwargs = NULL;
-                    c->args.push_back(e->value);
-                    c->lineno = 0;
-
-                    AST_Print* p = new AST_Print();
-                    p->dest = NULL;
-                    p->nl = true;
-                    p->values.push_back(c);
-                    p->lineno = 0;
-                    m->body[0] = p;
-                }
-
-                compileAndRunModule(m, main_module);
+                AST_Module* ast = caching_parse_file(fn);
+                compileAndRunModule(ast, main_module);
             } catch (ExcInfo e) {
-                int retcode = 0xdeadbeef; // should never be seen
-                if (handle_toplevel_exn(e, &retcode)) {
-                    Stats::dump();
+                int retcode = 1;
+                (void)handle_toplevel_exn(e, &retcode);
+                if (!force_repl) {
+                    Stats::dump(false);
                     return retcode;
                 }
             }
         }
+
+        if (force_repl || !(command || fn)) {
+            printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
+            printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
+
+            if (!main_module) {
+                main_module = createModule("__main__", "<stdin>");
+            } else {
+                // main_module->fn = "<stdin>";
+            }
+
+            for (;;) {
+                char* line = readline(">> ");
+                if (!line)
+                    break;
+
+                add_history(line);
+
+                try {
+                    AST_Module* m = parse_string(line);
+
+                    Timer _t("repl");
+
+                    if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
+                        AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
+                        AST_Call* c = new AST_Call();
+                        AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
+                        c->func = r;
+                        c->starargs = NULL;
+                        c->kwargs = NULL;
+                        c->args.push_back(e->value);
+                        c->lineno = 0;
+
+                        AST_Print* p = new AST_Print();
+                        p->dest = NULL;
+                        p->nl = true;
+                        p->values.push_back(c);
+                        p->lineno = 0;
+                        m->body[0] = p;
+                    }
+
+                    compileAndRunModule(m, main_module);
+                } catch (ExcInfo e) {
+                    int retcode = 0xdeadbeef; // should never be seen
+                    if (handle_toplevel_exn(e, &retcode)) {
+                        Stats::dump(false);
+                        return retcode;
+                    }
+                }
+            }
+        }
+
+        threading::finishMainThread();
+
+        // Acquire the GIL to make sure we stop the other threads, since we will tear down
+        // data structures they are potentially running on.
+        // Note: we will purposefully not release the GIL on exiting.
+        threading::promoteGL();
+
+        _t.split("joinRuntime");
+
+        rtncode = joinRuntime();
+        _t.split("finishing up");
+
+        uint64_t main_time_ended_at;
+        uint64_t main_time_duration = main_time.end(&main_time_ended_at);
+        static StatCounter mt("ticks_in_main");
+        mt.log(main_time_duration);
+        STAT_TIMER_NAME(t0).pause(main_time_ended_at);
     }
+    Stats::dump(true);
 
-    threading::finishMainThread();
-
-    // Acquire the GIL to make sure we stop the other threads, since we will tear down
-    // data structures they are potentially running on.
-    // Note: we will purposefully not release the GIL on exiting.
-    threading::promoteGL();
-
-    _t.split("joinRuntime");
-
-    int rtncode = joinRuntime();
-    _t.split("finishing up");
-
-    Stats::dump();
 
     return rtncode;
 }

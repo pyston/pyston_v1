@@ -243,8 +243,6 @@ public:
     ScopingAnalysis* scoping;
     AST* ast;
     CFG* cfg;
-    LivenessAnalysis* liveness;
-    std::unordered_map<const OSREntryDescriptor*, PhiAnalysis*> phis;
     bool is_generator;
     std::string fn; // equivalent of code.co_filename
 
@@ -487,13 +485,26 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         return Box::operator new(size, default_cls);                                                                   \
     }
 
+#if STAT_ALLOCATIONS
+#define ALLOC_STATS(cls)                                                                                               \
+    std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                            \
+    std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                    \
+    Stats::log(Stats::getStatId(per_name_alloc_name));                                                                 \
+    Stats::log(Stats::getStatId(per_name_allocsize_name), size);
+#else
+#define ALLOC_STATS(cls)
+#endif
+
+
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
 // asserts in the 1-arg operator new function:
 #define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        ALLOC_STATS(cls);                                                                                              \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        ALLOC_STATS(default_cls);                                                                                      \
         /* In the simple cases, we can inline the following methods and simplify things a lot:                         \
          * - Box::operator new                                                                                         \
          * - cls->tp_alloc                                                                                             \
