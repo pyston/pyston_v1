@@ -1012,8 +1012,31 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    throwCAPIException();
+    char* str;
+
+    PyObject* line = raw_input(prompt);
+    if (line == NULL)
+        throwCAPIException();
+
+    if (!PyArg_Parse(line, "s;embedded '\\0' in input line", &str))
+        throwCAPIException();
+
+    // CPython trims the string first, but our eval function takes care of that.
+    // while (*str == ' ' || *str == '\t')
+    //    str++;
+
+    Box* gbls = globals();
+    Box* lcls = locals();
+
+    // CPython has these safety checks that the builtin functions exist
+    // in the current global scope.
+    // e.g. eval('input()', {})
+    if (PyDict_GetItemString(gbls, "__builtins__") == NULL) {
+        if (PyDict_SetItemString(gbls, "__builtins__", builtins_module) != 0)
+            throwCAPIException();
+    }
+
+    return eval(line, gbls, lcls);
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
