@@ -1437,23 +1437,58 @@ extern "C" Py_ssize_t PyMapping_Size(PyObject* o) noexcept {
 }
 
 extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    PyObject* v;
+
+    v = PyMapping_GetItemString(o, key);
+    if (v) {
+        Py_DECREF(v);
+        return 1;
+    }
+    PyErr_Clear();
+    return 0;
 }
 
 extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    PyObject* v;
+
+    v = PyObject_GetItem(o, key);
+    if (v) {
+        Py_DECREF(v);
+        return 1;
+    }
+    PyErr_Clear();
+    return 0;
 }
 
 extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PyObject* okey, *r;
+
+    if (key == NULL)
+        return null_error();
+
+    okey = PyString_FromString(key);
+    if (okey == NULL)
+        return NULL;
+    r = PyObject_GetItem(o, okey);
+    Py_DECREF(okey);
+    return r;
 }
 
-extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* value) noexcept {
+    PyObject* okey;
+    int r;
+
+    if (key == NULL) {
+        null_error();
+        return -1;
+    }
+
+    okey = PyString_FromString(key);
+    if (okey == NULL)
+        return -1;
+    r = PyObject_SetItem(o, okey, value);
+    Py_DECREF(okey);
+    return r;
 }
 
 extern "C" int PyNumber_Check(PyObject* obj) noexcept {

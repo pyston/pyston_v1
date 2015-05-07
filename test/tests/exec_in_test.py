@@ -149,3 +149,10 @@ try:
     raise Exception()
 except NameError as e:
     print e
+
+import types
+g = types.ModuleType("TestMod1")
+l = types.ModuleType("TestMod2")
+exec ("global a; a=1; print a; b=2", g.__dict__, l.__dict__)
+print g.a
+print l.b
