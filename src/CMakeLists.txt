@@ -30,7 +30,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		capi/codecs.cpp
 		capi/descrobject.cpp
 		capi/errors.cpp
-		capi/float.cpp
 		capi/modsupport.cpp
 		capi/object.cpp
 		capi/typeobject.cpp

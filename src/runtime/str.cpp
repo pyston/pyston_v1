@@ -2305,8 +2305,17 @@ extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexce
     return boxStrConstantSize(s, n);
 }
 
+static /*const*/ char* string_getbuffer(register PyObject* op) noexcept {
+    char* s;
+    Py_ssize_t len;
+    if (PyString_AsStringAndSize(op, &s, &len))
+        return NULL;
+    return s;
+}
+
 extern "C" char* PyString_AsString(PyObject* o) noexcept {
-    RELEASE_ASSERT(isSubclass(o->cls, str_cls), "");
+    if (!PyString_Check(o))
+        return string_getbuffer(o);
 
     BoxedString* s = static_cast<BoxedString*>(o);
     return getWriteableStringContents(s);

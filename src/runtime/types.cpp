@@ -978,7 +978,39 @@ Box* sliceRepr(BoxedSlice* self) {
 
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                   Py_ssize_t* step) noexcept {
-    Py_FatalError("unimplemented");
+    /* XXX support long ints */
+    if (r->step == Py_None) {
+        *step = 1;
+    } else {
+        if (!PyInt_Check(r->step) && !PyLong_Check(r->step))
+            return -1;
+        *step = PyInt_AsSsize_t(r->step);
+    }
+    if (r->start == Py_None) {
+        *start = *step < 0 ? length - 1 : 0;
+    } else {
+        if (!PyInt_Check(r->start) && !PyLong_Check(r->step))
+            return -1;
+        *start = PyInt_AsSsize_t(r->start);
+        if (*start < 0)
+            *start += length;
+    }
+    if (r->stop == Py_None) {
+        *stop = *step < 0 ? -1 : length;
+    } else {
+        if (!PyInt_Check(r->stop) && !PyLong_Check(r->step))
+            return -1;
+        *stop = PyInt_AsSsize_t(r->stop);
+        if (*stop < 0)
+            *stop += length;
+    }
+    if (*stop > length)
+        return -1;
+    if (*start >= length)
+        return -1;
+    if (*step == 0)
+        return -1;
+    return 0;
 }
 
 extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
