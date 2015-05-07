@@ -26,12 +26,12 @@
 
 namespace pyston {
 
-#define STAT_ALLOCATIONS 0
-
-
 #define DISABLE_STATS 0
 
-#if !DISABLE_STATS
+#define STAT_ALLOCATIONS 0 && !DISABLE_STATS
+#define STAT_TIMERS 0 && !DISABLE_STATS
+
+#if STAT_TIMERS
 #define STAT_TIMER(id, name)                                                                                           \
     static int _stid##id = Stats::getStatId(name);                                                                     \
     StatTimer _st##id(_stid##id)
@@ -80,6 +80,38 @@ public:
     void log(uint64_t count = 1) { Stats::log(id, count); }
 };
 
+struct StatPerThreadCounter {
+private:
+    int id = 0;
+
+public:
+    StatPerThreadCounter(const std::string& name);
+
+    void log(uint64_t count = 1) { Stats::log(id, count); }
+};
+
+#else
+struct Stats {
+    static void startEstimatingCPUFreq() {}
+    static double estimateCPUFreq() { return 0; }
+    static void setEnabled(bool enabled) {}
+    static void dump(bool includeZeros = true) { printf("(Stats disabled)\n"); }
+    static void clear() {}
+    static void log(int id, int count = 1) {}
+    static int getStatId(const std::string& name) { return 0; }
+    static void endOfInit() {}
+};
+struct StatCounter {
+    StatCounter(const char* name) {}
+    void log(uint64_t count = 1){};
+};
+struct StatPerThreadCounter {
+    StatPerThreadCounter(const char* name) {}
+    void log(uint64_t count = 1){};
+};
+#endif
+
+#if STAT_TIMERS
 class StatTimer {
 private:
     static __thread StatTimer* stack;
@@ -113,32 +145,7 @@ public:
 
     static void assertActive() { RELEASE_ASSERT(stack && !stack->isPaused(), ""); }
 };
-
-struct StatPerThreadCounter {
-private:
-    int id = 0;
-
-public:
-    StatPerThreadCounter(const std::string& name);
-
-    void log(uint64_t count = 1) { Stats::log(id, count); }
-};
-
 #else
-struct Stats {
-    static void startEstimatingCPUFreq() {}
-    static double estimateCPUFreq() { return 0; }
-    static void setEnabled(bool enabled) {}
-    static void dump(bool includeZeros = true) { printf("(Stats disabled)\n"); }
-    static void clear() {}
-    static void log(int id, int count = 1) {}
-    static int getStatId(const std::string& name) { return 0; }
-    static void endOfInit() {}
-};
-struct StatCounter {
-    StatCounter(const char* name) {}
-    void log(uint64_t count = 1){};
-};
 struct StatTimer {
     StatTimer(int statid, bool push = true) {}
     StatTimer(int statid, uint64_t at_time) {}
@@ -151,10 +158,6 @@ struct StatTimer {
     static StatTimer* getStack() { return NULL; }
     static StatTimer* swapStack(StatTimer* s, uint64_t at_time) { return NULL; }
     static void assertActive() {}
-};
-struct StatPerThreadCounter {
-    StatPerThreadCounter(const char* name) {}
-    void log(uint64_t count = 1){};
 };
 #endif
 }

@@ -2735,7 +2735,7 @@ static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
 
-#if !DISABLE_STATS
+#if STAT_TIMERS
     StatTimer::assertActive();
 #endif
     /*
