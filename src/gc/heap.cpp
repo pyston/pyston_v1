@@ -208,7 +208,7 @@ struct HeapStatistics {
     TypeStats total;
 
     HeapStatistics(bool collect_cls_stats, bool collect_hcls_stats)
-        : collect_cls_stats(collect_cls_stats), collect_hcls_stats(collect_hcls_stats) {
+        : collect_cls_stats(collect_cls_stats), collect_hcls_stats(collect_hcls_stats), num_hcls_by_attrs_exceed(0) {
         memset(num_hcls_by_attrs, 0, sizeof(num_hcls_by_attrs));
     }
 };
@@ -233,6 +233,10 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
             Box* b = (Box*)al->user_data;
             if (b->cls->instancesHaveHCAttrs()) {
                 HCAttrs* attrs = b->getHCAttrsPtr();
+                if (attrs->hcls->attributeArraySize() >= 20) {
+                    printf("%s object has %d attributes\n", b->cls->tp_name, attrs->hcls->attributeArraySize());
+                }
+
                 stats->hcls_uses[attrs->hcls]++;
             }
         }

@@ -418,7 +418,7 @@ public:
     HiddenClass* hcls;
     AttrList* attr_list;
 
-    HCAttrs() : hcls(root_hcls), attr_list(nullptr) {}
+    HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
 };
 
 class BoxedDict;
@@ -428,11 +428,8 @@ class Box {
 private:
     BoxedDict** getDictPtr();
 
-    // Adds a new attribute to a HCAttrs-backed object.  Must pass in the new hidden class object
-    // which must be the same as the current hidden class but with the new attribute at the end.
-    // Swaps the hidden class, reallocates and copies and updates the attribute array.
-    // The value of the current hidden class should be guarded before calling this.
-    void addNewHCAttr(HiddenClass* new_hcls, Box* val, SetattrRewriteArgs* rewrite_args);
+    // Appends a new value to the hcattrs array.
+    void appendNewHCAttr(Box* val, SetattrRewriteArgs* rewrite_args);
 
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls

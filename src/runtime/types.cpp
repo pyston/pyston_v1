@@ -383,7 +383,8 @@ static void functionDtor(Box* b) {
 }
 
 // TODO(kmod): builtin modules are not supposed to have a __file__ attribute
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc)
+    : attrs(HiddenClass::makeSingleton()) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
     this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
@@ -1255,7 +1256,8 @@ public:
         // This check doesn't cover all cases, since an attrwrapper could be created around
         // a normal object which then becomes dict-backed, so we RELEASE_ASSERT later
         // that that doesn't happen.
-        assert(b->getHCAttrsPtr()->hcls->type == HiddenClass::NORMAL);
+        assert(b->getHCAttrsPtr()->hcls->type == HiddenClass::NORMAL
+               || b->getHCAttrsPtr()->hcls->type == HiddenClass::SINGLETON);
     }
 
     DEFAULT_CLASS(attrwrapper_cls);
@@ -1374,7 +1376,7 @@ public:
         os << "attrwrapper({";
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         bool first = true;
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             if (!first)
@@ -1407,7 +1409,7 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             listAppend(rtn, boxString(p.first()));
         }
@@ -1422,7 +1424,7 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             listAppend(rtn, attrs->attr_list->attrs[p.second]);
         }
@@ -1437,7 +1439,7 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             BoxedTuple* t = BoxedTuple::create({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
@@ -1452,7 +1454,7 @@ public:
         BoxedDict* rtn = new BoxedDict();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
         }
@@ -1464,7 +1466,7 @@ public:
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         return boxInt(attrs->hcls->getStrAttrOffsets().size());
     }
 
@@ -1477,7 +1479,7 @@ public:
             AttrWrapper* container = static_cast<AttrWrapper*>(_container);
             HCAttrs* attrs = container->b->getHCAttrsPtr();
 
-            RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+            RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
             for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
                 self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
             }
@@ -1506,14 +1508,14 @@ public:
 AttrWrapperIter::AttrWrapperIter(AttrWrapper* aw) {
     hcls = aw->b->getHCAttrsPtr()->hcls;
     assert(hcls);
-    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL, "");
+    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON, "");
     it = hcls->getStrAttrOffsets().begin();
 }
 
 Box* AttrWrapperIter::hasnext(Box* _self) {
     RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
-    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
+    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL || self->hcls->type == HiddenClass::SINGLETON, "");
 
     return boxBool(self->it != self->hcls->getStrAttrOffsets().end());
 }
@@ -1521,7 +1523,7 @@ Box* AttrWrapperIter::hasnext(Box* _self) {
 Box* AttrWrapperIter::next(Box* _self) {
     RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
-    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
+    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL || self->hcls->type == HiddenClass::SINGLETON, "");
 
     assert(self->it != self->hcls->getStrAttrOffsets().end());
     Box* r = boxString(self->it->first());
@@ -1541,8 +1543,17 @@ Box* Box::getAttrWrapper() {
     int offset = hcls->getAttrwrapperOffset();
     if (offset == -1) {
         Box* aw = new AttrWrapper(this);
-        addNewHCAttr(hcls->getAttrwrapperChild(), aw, NULL);
-        return aw;
+        if (hcls->type == HiddenClass::NORMAL) {
+            auto new_hcls = hcls->getAttrwrapperChild();
+            appendNewHCAttr(aw, NULL);
+            attrs->hcls = new_hcls;
+            return aw;
+        } else {
+            assert(hcls->type == HiddenClass::SINGLETON);
+            appendNewHCAttr(aw, NULL);
+            hcls->appendAttrwrapper();
+            return aw;
+        }
     }
     return attrs->attr_list->attrs[offset];
 }

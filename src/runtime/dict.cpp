@@ -228,7 +228,6 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
     Box* item = static_cast<Box*>(_item);
 
     try {
-        // TODO should demote GIL?
         setitem(b, key, item);
     } catch (ExcInfo e) {
         abort();

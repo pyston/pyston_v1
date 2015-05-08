@@ -2717,13 +2717,14 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
 
-// I think it is safe to ignore these for for now:
-// RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
-// RELEASE_ASSERT(cls->tp_traverse == NULL, "");
-// RELEASE_ASSERT(cls->tp_clear == NULL, "");
+    // I think it is safe to ignore these for for now:
+    // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
+    // RELEASE_ASSERT(cls->tp_traverse == NULL, "");
+    // RELEASE_ASSERT(cls->tp_clear == NULL, "");
 
+    assert(cls->attrs.hcls == NULL);
+    new (&cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 #define INITIALIZE(a) new (&(a)) decltype(a)
-    INITIALIZE(cls->attrs);
     INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
