@@ -629,9 +629,9 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
         if (module == NULL)
             return NULL;
 
+        module->setattr("__file__", boxString(pathname), NULL);
         AST_Module* ast = parse_string(code->data());
         compileAndRunModule(ast, module);
-        module->setattr("__file__", boxString(pathname), NULL);
         return module;
     } catch (ExcInfo e) {
         removeModule(name);
