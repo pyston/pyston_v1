@@ -24,30 +24,36 @@
 
 namespace pyston {
 
+uint64_t getCPUTicks();
+
 class Timer {
 private:
     static int level;
-    timeval start_time;
+    uint64_t start_time;
     const char* desc;
     long min_usec;
     bool ended;
-    std::function<void(long)> exit_callback;
+    std::function<void(uint64_t)> exit_callback;
 
 public:
     Timer(const char* desc = NULL, long min_usec = -1);
     ~Timer();
 
-    void setExitCallback(std::function<void(long)> _exit_callback) { exit_callback = _exit_callback; }
+    void setExitCallback(std::function<void(uint64_t)> _exit_callback) { exit_callback = _exit_callback; }
 
     void restart(const char* newdesc, long new_min_usec);
     void restart(const char* newdesc = NULL);
 
-    long end();
-    long split(const char* newdesc = NULL) {
-        long rtn = end();
+    // returns the duration.  if @ended_at is non-null, it's filled in
+    // with the tick the timer stopped at.
+    uint64_t end(uint64_t* ended_at = NULL);
+    uint64_t split(const char* newdesc = NULL) {
+        uint64_t rtn = end();
         restart(newdesc);
         return rtn;
     }
+
+    uint64_t getStartTime() const { return start_time; }
 };
 
 bool startswith(const std::string& s, const std::string& pattern);

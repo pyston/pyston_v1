@@ -200,7 +200,7 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
         if (x < 0)
             return PyLong_FromString(s, pend, base);
     } else
-        x = strtoul(s, &end, base);
+        x = strtol(s, &end, base);
     if (end == s || !isalnum(Py_CHARMASK(end[-1])))
         goto bad;
     while (*end && isspace(Py_CHARMASK(*end)))
@@ -672,8 +672,13 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     if (rhs->n < 0)
         raiseExcHelper(ValueError, "negative shift count");
 
-    // TODO overflow?
-    return boxInt(lhs->n << rhs->n);
+    bool undefined = rhs->n >= sizeof(rhs->n) * 8;
+    if (!undefined) {
+        int64_t res = lhs->n << rhs->n;
+        if ((res >> rhs->n) == lhs->n)
+            return boxInt(lhs->n << rhs->n);
+    }
+    return longLshift(boxLong(lhs->n), rhs);
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {

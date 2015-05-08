@@ -125,6 +125,7 @@ static Box* (*callattrInternal3)(Box*, const std::string*, LookupScope, CallRewr
        * (*)(Box*, const std::string*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
 
 size_t PyHasher::operator()(Box* b) const {
+    STAT_TIMER(t0, "us_timer_PyHasher");
     if (b->cls == str_cls) {
         StringHash<char> H;
         auto s = static_cast<BoxedString*>(b);
@@ -138,6 +139,8 @@ size_t PyHasher::operator()(Box* b) const {
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
+    STAT_TIMER(t0, "us_timer_PyEq");
+
     if (lhs->cls == rhs->cls) {
         if (lhs->cls == str_cls) {
             return static_cast<BoxedString*>(lhs)->s == static_cast<BoxedString*>(rhs)->s;
@@ -151,6 +154,8 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
+    STAT_TIMER(t0, "us_timer_PyLt");
+
     // TODO fix this
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
     assert(cmp->cls == bool_cls);
@@ -211,6 +216,7 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+    STAT_TIMER(t0, "us_timer_isSubclass");
     return PyType_IsSubtype(child, parent);
 }
 
@@ -476,6 +482,7 @@ const char* getNameOfClass(BoxedClass* cls) {
 }
 
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
+    STAT_TIMER(t0, "us_timer_hiddenclass_getOrMakeChild");
     assert(type == NORMAL);
 
     auto it = children.find(attr);
@@ -507,6 +514,8 @@ HiddenClass* HiddenClass::getAttrwrapperChild() {
  * del attr from current HiddenClass, maintaining the order of the remaining attrs
  */
 HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
+    STAT_TIMER(t0, "us_timer_hiddenclass_delAttrToMakeHC");
+
     assert(type == NORMAL);
     int idx = getOffset(attr);
     assert(idx >= 0);
@@ -655,8 +664,9 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
 
         Box* key = boxString(attr);
         auto it = d->d.find(key);
-        if (it == d->d.end())
+        if (it == d->d.end()) {
             return NULL;
+        }
         return it->second;
     }
 
@@ -1211,6 +1221,8 @@ Box* getattrInternalEx(Box* obj, const std::string& attr, GetattrRewriteArgs* re
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
+            STAT_TIMER(t0, "us_timer_tp_getattro");
+
             Box* r = obj->cls->tp_getattro(obj, boxString(attr));
             if (!r)
                 throwCAPIException();
@@ -1218,6 +1230,8 @@ Box* getattrInternalEx(Box* obj, const std::string& attr, GetattrRewriteArgs* re
         }
 
         if (obj->cls->tp_getattr) {
+            STAT_TIMER(t0, "us_timer_tp_getattr");
+
             Box* r = obj->cls->tp_getattr(obj, const_cast<char*>(attr.c_str()));
             if (!r)
                 throwCAPIException();
@@ -1242,6 +1256,8 @@ inline Box* getclsattrInternal(Box* obj, const std::string& attr, GetattrRewrite
 }
 
 extern "C" Box* getclsattr(Box* obj, const char* attr) {
+    STAT_TIMER(t0, "us_timer_slowpath_getclsattr");
+
     static StatCounter slowpath_getclsattr("slowpath_getclsattr");
     slowpath_getclsattr.log();
 
@@ -1311,12 +1327,6 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
     return obj;
 }
 
-
-static Box* (*runtimeCall0)(Box*, ArgPassSpec) = (Box * (*)(Box*, ArgPassSpec))runtimeCall;
-static Box* (*runtimeCall1)(Box*, ArgPassSpec, Box*) = (Box * (*)(Box*, ArgPassSpec, Box*))runtimeCall;
-static Box* (*runtimeCall2)(Box*, ArgPassSpec, Box*, Box*) = (Box * (*)(Box*, ArgPassSpec, Box*, Box*))runtimeCall;
-static Box* (*runtimeCall3)(Box*, ArgPassSpec, Box*, Box*, Box*)
-    = (Box * (*)(Box*, ArgPassSpec, Box*, Box*, Box*))runtimeCall;
 
 Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
@@ -1635,6 +1645,8 @@ Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewr
 }
 
 extern "C" Box* getattr(Box* obj, const char* attr) {
+    STAT_TIMER(t0, "us_timer_slowpath_getattr");
+
     static StatCounter slowpath_getattr("slowpath_getattr");
     slowpath_getattr.log();
 
@@ -1845,10 +1857,14 @@ void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteA
 }
 
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
+    STAT_TIMER(t0, "us_timer_slowpath_setsattr");
+
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
 
     if (obj->cls->tp_setattr) {
+        STAT_TIMER(t1, "us_timer_tp_setattr");
+
         int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr), attr_val);
         if (rtn)
             throwCAPIException();
@@ -1923,6 +1939,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
         setattr = processDescriptor(setattr, obj, obj->cls);
         runtimeCallInternal(setattr, NULL, ArgPassSpec(2), boxstr, attr_val, NULL, NULL, NULL);
     } else {
+        STAT_TIMER(t0, "us_timer_tp_setattro");
         int r = tp_setattro(obj, boxstr, attr_val);
         if (r)
             throwCAPIException();
@@ -1935,6 +1952,8 @@ bool isUserDefined(BoxedClass* cls) {
 }
 
 extern "C" bool nonzero(Box* obj) {
+    STAT_TIMER(t0, "us_timer_slowpath_nonzero");
+
     assert(gc::isValidGCObject(obj));
 
     static StatCounter slowpath_nonzero("slowpath_nonzero");
@@ -2009,7 +2028,7 @@ extern "C" bool nonzero(Box* obj) {
         return true;
     }
 
-    Box* r = runtimeCall0(func, ArgPassSpec(0));
+    Box* r = runtimeCallInternal(func, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     // I believe this behavior is handled by the slot wrappers in CPython:
     if (r->cls == bool_cls) {
         BoxedBool* b = static_cast<BoxedBool*>(r);
@@ -2025,6 +2044,7 @@ extern "C" bool nonzero(Box* obj) {
 }
 
 extern "C" BoxedString* str(Box* obj) {
+    STAT_TIMER(t0, "us_timer_str");
     static StatCounter slowpath_str("slowpath_str");
     slowpath_str.log();
 
@@ -2046,6 +2066,7 @@ extern "C" BoxedString* str(Box* obj) {
 }
 
 extern "C" Box* strOrUnicode(Box* obj) {
+    STAT_TIMER(t0, "us_timer_strOrUnicode");
     // Like str, but returns unicode objects unchanged.
     if (obj->cls == unicode_cls) {
         return obj;
@@ -2054,6 +2075,7 @@ extern "C" Box* strOrUnicode(Box* obj) {
 }
 
 extern "C" BoxedString* repr(Box* obj) {
+    STAT_TIMER(t0, "us_timer_repr");
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 
@@ -2071,6 +2093,7 @@ extern "C" BoxedString* repr(Box* obj) {
 }
 
 extern "C" BoxedString* reprOrNull(Box* obj) {
+    STAT_TIMER(t0, "us_timer_reprOrNull");
     try {
         Box* r = repr(obj);
         assert(r->cls == str_cls); // this should be checked by repr()
@@ -2081,6 +2104,7 @@ extern "C" BoxedString* reprOrNull(Box* obj) {
 }
 
 extern "C" BoxedString* strOrNull(Box* obj) {
+    STAT_TIMER(t0, "us_timer_strOrNull");
     try {
         BoxedString* r = str(obj);
         return static_cast<BoxedString*>(r);
@@ -2090,6 +2114,7 @@ extern "C" BoxedString* strOrNull(Box* obj) {
 }
 
 extern "C" bool exceptionMatches(Box* obj, Box* cls) {
+    STAT_TIMER(t0, "us_timer_exceptionMatches");
     int rtn = PyErr_GivenExceptionMatches(obj, cls);
     RELEASE_ASSERT(rtn >= 0, "");
     return rtn;
@@ -2114,7 +2139,7 @@ extern "C" BoxedInt* hash(Box* obj) {
         raiseExcHelper(TypeError, "unhashable type: '%s'", obj->cls->tp_name);
     }
 
-    Box* rtn = runtimeCall0(hash, ArgPassSpec(0));
+    Box* rtn = runtimeCallInternal(hash, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     if (rtn->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");
     }
@@ -2167,6 +2192,8 @@ Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, Arg
 }
 
 extern "C" BoxedInt* len(Box* obj) {
+    STAT_TIMER(t0, "us_timer_slowpath_len");
+
     static StatCounter slowpath_len("slowpath_len");
     slowpath_len.log();
 
@@ -2174,6 +2201,8 @@ extern "C" BoxedInt* len(Box* obj) {
 }
 
 extern "C" i64 unboxedLen(Box* obj) {
+    STAT_TIMER(t0, "us_timer_slowpath_unboxedLen");
+
     static StatCounter slowpath_unboxedlen("slowpath_unboxedlen");
     slowpath_unboxedlen.log();
 
@@ -2515,6 +2544,8 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
 extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
+    STAT_TIMER(t0, "us_timer_slowpath_callattr");
+
     ASSERT(gc::isValidGCObject(obj), "%p", obj);
 
     int npassed_args = argspec.totalPassed();
@@ -2704,6 +2735,9 @@ static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
 
+#if STAT_TIMERS
+    StatTimer::assertActive();
+#endif
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3050,12 +3084,26 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     return res;
 }
 
+static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* oarg1,
+                         Box* oarg2, Box* oarg3, Box** oargs) {
+    if (closure && generator)
+        return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
+    else if (closure)
+        return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+    else if (generator)
+        return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
+    else
+        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+}
+
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
+        STAT_TIMER(t0, "us_timer_astInterpretFunction");
+
         return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
                                     oargs);
     }
@@ -3084,18 +3132,21 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     }
 
     Box* r;
-    if (closure && generator)
-        r = chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
-    else if (closure)
-        r = chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
-    else if (generator)
-        r = chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
-    else
-        r = chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+    // we duplicate the call to callChosenCf here so we can
+    // distinguish lexically between calls that target jitted python
+    // code and calls that target to builtins.
+    if (f->source) {
+        STAT_TIMER(t0, "us_timer_chosen_cf_body_jitted");
+        r = callChosenCF(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+    } else {
+        STAT_TIMER(t0, "us_timer_chosen_cf_body_builtins");
+        r = callChosenCF(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+    }
 
     ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
            g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
            chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
+
     return r;
 }
 
@@ -3225,9 +3276,9 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             Box** new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
             new_args[0] = arg3;
             memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
-            Box* rtn = runtimeCall(im->func, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                         argspec.has_starargs, argspec.has_kwargs),
-                                   im->obj, arg1, arg2, new_args, keyword_names);
+            Box* rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
+                                                                       argspec.has_starargs, argspec.has_kwargs),
+                                           im->obj, arg1, arg2, new_args, keyword_names);
             return rtn;
         }
     }
@@ -3237,6 +3288,8 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
 extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                             const std::vector<const std::string*>* keyword_names) {
+    STAT_TIMER(t0, "us_timer_slowpath_runtimecall");
+
     int npassed_args = argspec.totalPassed();
 
     static StatCounter slowpath_runtimecall("slowpath_runtimecall");
@@ -3394,6 +3447,8 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 }
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
+    STAT_TIMER(t0, "us_timer_slowpath_binop");
+
     static StatCounter slowpath_binop("slowpath_binop");
     slowpath_binop.log();
     // static StatCounter nopatch_binop("nopatch_binop");
@@ -3430,11 +3485,13 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
 }
 
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
-    static StatCounter slowpath_binop("slowpath_binop");
-    slowpath_binop.log();
-    // static StatCounter nopatch_binop("nopatch_binop");
+    STAT_TIMER(t0, "us_timer_slowpath_augbinop");
 
-    // int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
+    static StatCounter slowpath_augbinop("slowpath_augbinop");
+    slowpath_augbinop.log();
+    // static StatCounter nopatch_binop("nopatch_augbinop");
+
+    // int id = Stats::getStatId("slowpath_augbinop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
     std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
@@ -3597,6 +3654,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
+    STAT_TIMER(t0, "us_timer_slowpath_compare");
+
     static StatCounter slowpath_compare("slowpath_compare");
     slowpath_compare.log();
     static StatCounter nopatch_compare("nopatch_compare");
@@ -3622,6 +3681,8 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
 }
 
 extern "C" Box* unaryop(Box* operand, int op_type) {
+    STAT_TIMER(t0, "us_timer_slowpath_unaryop");
+
     static StatCounter slowpath_unaryop("slowpath_unaryop");
     slowpath_unaryop.log();
 
@@ -3631,11 +3692,13 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     ASSERT(attr_func, "%s.%s", getTypeName(operand), op_name.c_str());
 
-    Box* rtn = runtimeCall0(attr_func, ArgPassSpec(0));
+    Box* rtn = runtimeCallInternal(attr_func, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     return rtn;
 }
 
 extern "C" Box* getitem(Box* value, Box* slice) {
+    STAT_TIMER(t0, "us_timer_slowpath_getitem");
+
     // This possibly could just be represented as a single callattr; the only tricky part
     // are the error messages.
     // Ex "(1)[1]" and "(1).__getitem__(1)" give different error messages.
@@ -3679,6 +3742,8 @@ extern "C" Box* getitem(Box* value, Box* slice) {
 
 // target[slice] = value
 extern "C" void setitem(Box* target, Box* slice, Box* value) {
+    STAT_TIMER(t0, "us_timer_slowpath_setitem");
+
     static StatCounter slowpath_setitem("slowpath_setitem");
     slowpath_setitem.log();
 
@@ -3711,6 +3776,8 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 
 // del target[start:end:step]
 extern "C" void delitem(Box* target, Box* slice) {
+    STAT_TIMER(t0, "us_timer_slowpath_delitem");
+
     static StatCounter slowpath_delitem("slowpath_delitem");
     slowpath_delitem.log();
 
@@ -3793,7 +3860,7 @@ extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewrite
 
         if (delAttr != NULL) {
             Box* boxstr = boxString(attr);
-            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), clsAttr, obj);
+            Box* rtn = runtimeCallInternal(delAttr, NULL, ArgPassSpec(2), clsAttr, obj, NULL, NULL, NULL);
             return;
         }
     }
@@ -3841,7 +3908,7 @@ extern "C" void delattrInternal(Box* obj, const std::string& attr, DelattrRewrit
     Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
     if (delAttr != NULL) {
         Box* boxstr = boxString(attr);
-        Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+        Box* rtn = runtimeCallInternal(delAttr, NULL, ArgPassSpec(2), obj, boxstr, NULL, NULL, NULL);
         return;
     }
 
@@ -3850,6 +3917,8 @@ extern "C" void delattrInternal(Box* obj, const std::string& attr, DelattrRewrit
 
 // del target.attr
 extern "C" void delattr(Box* obj, const char* attr) {
+    STAT_TIMER(t0, "us_timer_slowpath_delattr");
+
     static StatCounter slowpath_delattr("slowpath_delattr");
     slowpath_delattr.log();
 
@@ -3869,6 +3938,8 @@ extern "C" Box* createBoxedIterWrapper(Box* o) {
 }
 
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
+    STAT_TIMER(t0, "us_timer_slowpath_createBoxedIterWrapperIfNeeded");
+
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), 1, "createBoxedIterWrapperIfNeeded"));
 
@@ -3901,6 +3972,8 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
 }
 
 extern "C" Box* getPystonIter(Box* o) {
+    STAT_TIMER(t0, "us_timer_slowpath_getPystonIter");
+
     Box* r = getiter(o);
     // assert((typeLookup(r->cls, hasnext_str, NULL) == NULL) == (r->cls->tpp_hasnext == object_cls->tpp_hasnext));
     if (r->cls->tpp_hasnext == object_cls->tpp_hasnext)
@@ -3938,6 +4011,9 @@ static void assertInitNone(Box* obj) {
 }
 
 Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
+
+    STAT_TIMER(t0, "us_timer_typeNew");
+
     Box* arg3 = _args[0];
 
     if (!isSubclass(_cls->cls, type_cls))
@@ -4391,6 +4467,8 @@ extern "C" void delGlobal(Box* globals, const std::string* name) {
 }
 
 extern "C" Box* getGlobal(Box* globals, const std::string* name) {
+    STAT_TIMER(t0, "us_timer_slowpath_getglobal");
+
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -4484,7 +4562,43 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
 }
 
+Box* getFromGlobals(Box* globals, llvm::StringRef name) {
+    if (globals->cls == attrwrapper_cls) {
+        globals = unwrapAttrWrapper(globals);
+        RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
+    }
+
+    if (globals->cls == module_cls) {
+        return globals->getattr(name);
+    } else if (globals->cls == dict_cls) {
+        auto d = static_cast<BoxedDict*>(globals)->d;
+        auto name_str = boxString(name.str());
+        auto it = d.find(name_str);
+        if (it != d.end())
+            return it->second;
+        return NULL;
+    } else {
+        RELEASE_ASSERT(0, "%s", globals->cls->tp_name);
+    }
+}
+
+void setGlobal(Box* globals, llvm::StringRef name, Box* value) {
+    if (globals->cls == attrwrapper_cls) {
+        globals = unwrapAttrWrapper(globals);
+        RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
+    }
+
+    if (globals->cls == module_cls) {
+        setattr(static_cast<BoxedModule*>(globals), name.data(), value);
+    } else {
+        RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
+        static_cast<BoxedDict*>(globals)->d[boxString(name)] = value;
+    }
+}
+
 extern "C" Box* importFrom(Box* _m, const std::string* name) {
+    STAT_TIMER(t0, "us_timer_importFrom");
+
     Box* r = getattrInternal(_m, *name, NULL);
     if (r)
         return r;
@@ -4493,6 +4607,8 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
 }
 
 extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
+    STAT_TIMER(t0, "us_timer_importStar");
+
     // TODO(kmod): it doesn't seem too bad to update this to take custom globals;
     // it looks like mostly a matter of changing the getattr calls to getitem.
     RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");

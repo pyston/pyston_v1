@@ -25,6 +25,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "gc/roots.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -423,23 +424,21 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     size_t v_size;
     Box** v_elts;
 
+    RootedBox v_as_seq((Box*)nullptr);
     if (!v) {
         v_size = 0;
         v_elts = NULL;
-    } else if (v->cls == list_cls || isSubclass(v->cls, list_cls)) {
-        BoxedList* lv = static_cast<BoxedList*>(v);
-        v_size = lv->size;
+    } else {
+        v_as_seq = RootedBox(PySequence_Fast(v, "can only assign an iterable"));
+        if (v_as_seq == NULL)
+            throwCAPIException();
+
+        v_size = PySequence_Fast_GET_SIZE(v_as_seq);
         // If lv->size is 0, lv->elts->elts is garbage
         if (v_size)
-            v_elts = lv->elts->elts;
+            v_elts = PySequence_Fast_ITEMS(v_as_seq);
         else
             v_elts = NULL;
-    } else if (v->cls == tuple_cls || isSubclass(v->cls, tuple_cls)) {
-        BoxedTuple* tv = static_cast<BoxedTuple*>(v);
-        v_size = tv->size();
-        v_elts = &tv->elts[0];
-    } else {
-        RELEASE_ASSERT(0, "unsupported type for list slice assignment: '%s'", getTypeName(v));
     }
 
     // If self->size is 0, self->elts->elts is garbage
@@ -542,6 +541,8 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
+    STAT_TIMER(t0, "us_timer_listMul");
+
     if (rhs->cls != int_cls) {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
@@ -961,7 +962,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 }
 
 Box* listLt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -971,7 +972,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
 }
 
 Box* listLe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -981,7 +982,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
 }
 
 Box* listGt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -991,7 +992,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
 }
 
 Box* listGe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 

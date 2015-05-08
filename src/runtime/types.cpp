@@ -978,7 +978,39 @@ Box* sliceRepr(BoxedSlice* self) {
 
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                   Py_ssize_t* step) noexcept {
-    Py_FatalError("unimplemented");
+    /* XXX support long ints */
+    if (r->step == Py_None) {
+        *step = 1;
+    } else {
+        if (!PyInt_Check(r->step) && !PyLong_Check(r->step))
+            return -1;
+        *step = PyInt_AsSsize_t(r->step);
+    }
+    if (r->start == Py_None) {
+        *start = *step < 0 ? length - 1 : 0;
+    } else {
+        if (!PyInt_Check(r->start) && !PyLong_Check(r->step))
+            return -1;
+        *start = PyInt_AsSsize_t(r->start);
+        if (*start < 0)
+            *start += length;
+    }
+    if (r->stop == Py_None) {
+        *stop = *step < 0 ? -1 : length;
+    } else {
+        if (!PyInt_Check(r->stop) && !PyLong_Check(r->step))
+            return -1;
+        *stop = PyInt_AsSsize_t(r->stop);
+        if (*stop < 0)
+            *stop += length;
+    }
+    if (*stop > length)
+        return -1;
+    if (*start >= length)
+        return -1;
+    if (*step == 0)
+        return -1;
+    return 0;
 }
 
 extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
@@ -1238,6 +1270,8 @@ public:
     }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_setitem");
+
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1250,6 +1284,7 @@ public:
     }
 
     static Box* setdefault(Box* _self, Box* _key, Box* value) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_setdefault");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1265,6 +1300,7 @@ public:
     }
 
     static Box* get(Box* _self, Box* _key, Box* def) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_get");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1279,6 +1315,7 @@ public:
     }
 
     static Box* getitem(Box* _self, Box* _key) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_getitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1312,6 +1349,7 @@ public:
     }
 
     static Box* delitem(Box* _self, Box* _key) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_delitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1377,6 +1415,7 @@ public:
     }
 
     static Box* values(Box* _self) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_values");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1391,6 +1430,7 @@ public:
     }
 
     static Box* items(Box* _self) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_items");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1429,6 +1469,7 @@ public:
     }
 
     static Box* update(Box* _self, Box* _container) {
+        STAT_TIMER(t0, "us_timer_AttrWrapper_update");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 

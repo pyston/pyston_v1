@@ -112,12 +112,25 @@ ifeq ($(NEED_OLD_JIT),1)
 	LLVM_LINK_LIBS += jit
 endif
 
+LLVM_CONFIG_DBG := $(LLVM_BUILD)/Release+Asserts/bin/llvm-config
+ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
 LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
+else
+LLVM_CXXFLAGS := DBG_NOT_BUILT
+LLVM_LDFLAGS := DBG_NOT_BUILT
+LLVM_LIB_DEPS := DBG_NOT_BUILT
+endif
 
+LLVM_CONFIG_DEBUG := $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config
+ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
 LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_DEBUG_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Debug+Asserts/lib/*)
+else
+LLVM_DEBUG_LDFLAGS := DEBUG_NOT_BUILT
+LLVM_DEBUG_LIB_DEPS := DEBUG_NOT_BUILT
+endif
 
 LLVM_CONFIG_RELEASE := $(LLVM_BUILD)/Release/bin/llvm-config
 ifneq ($(wildcard $(LLVM_CONFIG_RELEASE)),)

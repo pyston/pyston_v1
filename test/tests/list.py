@@ -124,7 +124,13 @@ for i in xrange(3):
             l[j:k] = ["added"]
             print i, j, k, l
 
-
+def G():
+    yield "a"
+    yield "b"
+    yield "c"
+l = [0, 1, 2, 3, 4, 5]
+l[1:] = G()
+print l
 
 l = [1, 3, 5, 7, 2, 4]
 print l.sort(key=lambda x:x%3)

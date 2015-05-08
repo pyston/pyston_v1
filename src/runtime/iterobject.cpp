@@ -109,7 +109,7 @@ Box* seqiterNext(Box* s) {
 }
 
 static void seqiterGCVisit(GCVisitor* v, Box* b) {
-    assert(b->cls == seqiter_cls);
+    assert(b->cls == seqiter_cls || b->cls == seqreviter_cls);
     boxGCHandler(v, b);
 
     BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
@@ -182,7 +182,8 @@ void setupIter() {
     seqiter_cls->freeze();
     seqiter_cls->tpp_hasnext = seqiterHasnextUnboxed;
 
-    seqreviter_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedSeqIter), false, "reversed");
+    seqreviter_cls
+        = BoxedHeapClass::create(type_cls, object_cls, seqiterGCVisit, 0, 0, sizeof(BoxedSeqIter), false, "reversed");
 
     seqreviter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqreviter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqreviterHasnext, BOXED_BOOL, 1)));

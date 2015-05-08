@@ -116,7 +116,48 @@ extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) noe
 }
 
 extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
-    Py_FatalError("unimplemented");
+    PY_LONG_LONG bytes;
+    int one = 1;
+    int res;
+
+    if (vv == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    if (!PyLong_Check(vv)) {
+        PyNumberMethods* nb;
+        PyObject* io;
+        if (PyInt_Check(vv))
+            return (PY_LONG_LONG)PyInt_AsLong(vv);
+        if ((nb = vv->cls->tp_as_number) == NULL || nb->nb_int == NULL) {
+            PyErr_SetString(PyExc_TypeError, "an integer is required");
+            return -1;
+        }
+        io = (*nb->nb_int)(vv);
+        if (io == NULL)
+            return -1;
+        if (PyInt_Check(io)) {
+            bytes = PyInt_AsLong(io);
+            Py_DECREF(io);
+            return bytes;
+        }
+        if (PyLong_Check(io)) {
+            bytes = PyLong_AsLongLong(io);
+            Py_DECREF(io);
+            return bytes;
+        }
+        Py_DECREF(io);
+        PyErr_SetString(PyExc_TypeError, "integer conversion failed");
+        return -1;
+    }
+
+    res = _PyLong_AsByteArray((PyLongObject*)vv, (unsigned char*)&bytes, SIZEOF_LONG_LONG, IS_LITTLE_ENDIAN, 1);
+
+    /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
+    if (res < 0)
+        return (PY_LONG_LONG)-1;
+    else
+        return bytes;
 }
 
 extern "C" PY_LONG_LONG PyLong_AsLongLongAndOverflow(PyObject* obj, int* overflow) noexcept {
@@ -442,7 +483,12 @@ extern "C" void* PyLong_AsVoidPtr(PyObject* vv) noexcept {
 
 extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian,
                                    int is_signed) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(little_endian == 1, "not implemented");
+    RELEASE_ASSERT(n == 8, "did not yet check if the behaviour is correct for sizes other than 8");
+    size_t count = 0;
+    mpz_export(bytes, &count, -1, n, 0, 0, ((BoxedLong*)v)->n);
+    RELEASE_ASSERT(count <= n, "overflow handling is not yet implemented");
+    return 0;
 }
 
 extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n, int little_endian,

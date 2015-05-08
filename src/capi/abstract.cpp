@@ -557,8 +557,29 @@ extern "C" int PyObject_CheckReadBuffer(PyObject* obj) noexcept {
 }
 
 extern "C" int PyObject_AsReadBuffer(PyObject* obj, const void** buffer, Py_ssize_t* buffer_len) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    PyBufferProcs* pb;
+    void* pp;
+    Py_ssize_t len;
+
+    if (obj == NULL || buffer == NULL || buffer_len == NULL) {
+        null_error();
+        return -1;
+    }
+    pb = obj->cls->tp_as_buffer;
+    if (pb == NULL || pb->bf_getreadbuffer == NULL || pb->bf_getsegcount == NULL) {
+        PyErr_SetString(PyExc_TypeError, "expected a readable buffer object");
+        return -1;
+    }
+    if ((*pb->bf_getsegcount)(obj, NULL) != 1) {
+        PyErr_SetString(PyExc_TypeError, "expected a single-segment buffer object");
+        return -1;
+    }
+    len = (*pb->bf_getreadbuffer)(obj, 0, &pp);
+    if (len < 0)
+        return -1;
+    *buffer = pp;
+    *buffer_len = len;
+    return 0;
 }
 
 static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
@@ -1818,6 +1839,21 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
+    if (o == NULL)
+        return null_error();
+
+    if (o->cls == float_cls)
+        return o;
+
+    if (PyInt_Check(o))
+        return boxFloat(((BoxedInt*)o)->n);
+    else if (PyLong_Check(o)) {
+        double result = PyLong_AsDouble(o);
+        if (result == -1.0 && PyErr_Occurred())
+            return NULL;
+        return boxFloat(result);
+    }
+
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
     return nullptr;
 }

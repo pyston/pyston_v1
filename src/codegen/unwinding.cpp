@@ -494,6 +494,7 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
+    STAT_TIMER(t0, "us_timer_getTopPythonFrame");
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> iter) {
         rtn = std::move(iter);
@@ -514,6 +515,7 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
 
 static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
+    STAT_TIMER(t0, "us_timer_gettraceback");
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
         if (!printed_warning) {
@@ -597,6 +599,8 @@ CompiledFunction* getTopCompiledFunction() {
 
 Box* getGlobals() {
     auto it = getTopPythonFrame();
+    if (!it)
+        return NULL;
     return it->getGlobals();
 }
 

@@ -1112,6 +1112,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
 }
 
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
+    STAT_TIMER(t0, "us_timer_strMul");
     assert(isSubclass(lhs->cls, str_cls));
 
     int n;
@@ -1514,6 +1515,7 @@ failed:
 }
 
 extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
+    STAT_TIMER(t0, "us_timer_unicodeHashUnboxed");
     if (self->hash != -1)
         return self->hash;
 
@@ -1524,6 +1526,7 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
+    STAT_TIMER(t0, "us_timer_strHash");
     assert(isSubclass(self->cls, str_cls));
 
     StringHash<char> H;
@@ -2302,8 +2305,17 @@ extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexce
     return boxStrConstantSize(s, n);
 }
 
+static /*const*/ char* string_getbuffer(register PyObject* op) noexcept {
+    char* s;
+    Py_ssize_t len;
+    if (PyString_AsStringAndSize(op, &s, &len))
+        return NULL;
+    return s;
+}
+
 extern "C" char* PyString_AsString(PyObject* o) noexcept {
-    RELEASE_ASSERT(isSubclass(o->cls, str_cls), "");
+    if (!PyString_Check(o))
+        return string_getbuffer(o);
 
     BoxedString* s = static_cast<BoxedString*>(o);
     return getWriteableStringContents(s);

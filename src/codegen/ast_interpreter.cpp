@@ -284,6 +284,8 @@ public:
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     threading::allowGLReadPreemption();
 
+    STAT_TIMER(t0, "us_timer_astinterpreter_execute");
+
     void* frame_addr = __builtin_frame_address(0);
     RegisterHelper frame_registerer(&interpreter, frame_addr);
 
@@ -340,12 +342,7 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
 void ASTInterpreter::doStore(InternedString name, Value value) {
     ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-        if (globals->cls == module_cls) {
-            setattr(static_cast<BoxedModule*>(globals), name.c_str(), value.o);
-        } else {
-            assert(globals->cls == dict_cls);
-            static_cast<BoxedDict*>(globals)->d[boxString(name.str())] = value.o;
-        }
+        setGlobal(globals, name, value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
@@ -540,6 +537,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 arg_array.push_back(it.second);
             }
 
+            STAT_TIMER(t0, "us_timer_astinterpreter_jump_osrexit");
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
             auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
             Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
@@ -876,7 +874,6 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
 
                 ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-                    // Can't use delattr since the errors are different:
                     delGlobal(globals, &target->id.str());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
@@ -926,6 +923,8 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     static const std::string write_str("write");
     static const std::string newline_str("\n");
     static const std::string space_str(" ");
+
+    STAT_TIMER(t0, "us_timer_visit_print");
 
     Box* dest = node->dest ? visit_expr(node->dest).o : getSysStdout();
     int nvals = node->values.size();

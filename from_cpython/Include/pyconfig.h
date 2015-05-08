@@ -27,6 +27,8 @@
 #define SIZEOF_INT 4
 #define SIZEOF_LONG 8
 #define SIZEOF_LONG_LONG 8
+#define SIZEOF_DOUBLE 8
+#define SIZEOF_FLOAT 4
 #define SIZEOF_OFF_T 8
 #define SIZEOF_PTHREAD_T 8
 #define HAVE_COPYSIGN 1
@@ -58,6 +60,9 @@
 #define HAVE_TIMES 1
 #define HAVE_STRUCT_TM_TM_ZONE 1
 #define HAVE_MKTIME 1
+
+#define TIME_WITH_SYS_TIME
+#define HAVE_GETTIMEOFDAY 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"

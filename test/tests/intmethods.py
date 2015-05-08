@@ -66,6 +66,9 @@ class L(object):
 print type(int(L()))
 
 print int(u'123')
+print int("9223372036854775808", 0)
+print 1 << 63, 1 << 64, -1 << 63, -1 << 64, 2 << 63
+print type(1 << 63), type(1 << 64), type(-1 << 63), type(-1 << 64), type(2 << 63)
 
 for b in range(26):
     try:

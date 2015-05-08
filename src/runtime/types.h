@@ -410,12 +410,37 @@ public:
     size_t size() { return s.size(); }
 
     void* operator new(size_t size, size_t ssize) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_str("alloc.str");
+        static StatCounter alloc_str1("alloc.str(1)");
+        static StatCounter allocsize_str("allocsize.str");
+
+        if (ssize == 1)
+            alloc_str1.log();
+        else
+            alloc_str.log();
+
+        allocsize_str.log(str_cls->tp_basicsize + ssize + 1);
+#endif
         Box* rtn = static_cast<Box*>(gc_alloc(str_cls->tp_basicsize + ssize + 1, gc::GCKind::PYTHON));
         rtn->cls = str_cls;
         return rtn;
     }
 
     void* operator new(size_t size, BoxedClass* cls, size_t ssize) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_str("alloc.str");
+        static StatCounter alloc_str1("alloc.str(1)");
+
+        static StatCounter allocsize_str("allocsize.str");
+
+        if (ssize == 1)
+            alloc_str1.log();
+        else
+            alloc_str.log();
+
+        allocsize_str.log(cls->tp_basicsize + ssize + 1);
+#endif
         Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, ssize + 1));
         rtn->cls = cls;
         return rtn;
@@ -517,12 +542,43 @@ public:
     Box** elts;
 
     void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_tuple("alloc.tuple");
+        static StatCounter alloc_tuple0("alloc.tuple(0)");
+
+        static StatCounter allocsize_tuple("allocsize.tuple");
+        static StatCounter allocsize_tuple0("allocsize.tuple(0)");
+
+        if (nelts == 0) {
+            alloc_tuple0.log();
+            allocsize_tuple0.log(_PyObject_VAR_SIZE(tuple_cls, nelts + 1));
+        } else {
+            alloc_tuple.log();
+            allocsize_tuple.log(_PyObject_VAR_SIZE(tuple_cls, nelts + 1));
+        }
+#endif
+
         Box* rtn = static_cast<Box*>(gc_alloc(_PyObject_VAR_SIZE(tuple_cls, nelts + 1), gc::GCKind::PYTHON));
         rtn->cls = tuple_cls;
         return rtn;
     }
 
     void* operator new(size_t size, BoxedClass* cls, size_t nelts) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_tuple("alloc.tuple");
+        static StatCounter alloc_tuple0("alloc.tuple(0)");
+
+        static StatCounter allocsize_tuple("allocsize.tuple");
+        static StatCounter allocsize_tuple0("allocsize.tuple(0)");
+
+        if (nelts == 0) {
+            alloc_tuple0.log();
+            allocsize_tuple0.log(_PyObject_VAR_SIZE(cls, nelts + 1));
+        } else {
+            alloc_tuple.log();
+            allocsize_tuple.log(_PyObject_VAR_SIZE(cls, nelts + 1));
+        }
+#endif
         Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, nelts));
         rtn->cls = cls;
         return rtn;
@@ -816,6 +872,11 @@ public:
 
     struct Context* context, *returnContext;
     void* stack_begin;
+
+#if STAT_TIMERS
+    StatTimer* statTimers;
+    uint64_t timer_time;
+#endif
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 

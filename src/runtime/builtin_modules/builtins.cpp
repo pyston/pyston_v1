@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <cfloat>
 #include <cstddef>
 #include <err.h>
 
@@ -303,6 +304,7 @@ extern "C" Box* ord(Box* obj) {
 }
 
 Box* range(Box* start, Box* stop, Box* step) {
+    STAT_TIMER(t0, "us_timer_builtin_range");
     i64 istart, istop, istep;
     if (stop == NULL) {
         istart = 0;
@@ -346,6 +348,7 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
+    STAT_TIMER(t0, "us_timer_builtin_sorted");
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
@@ -358,6 +361,7 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
+    STAT_TIMER(t0, "us_timer_builtin_isinstance");
     int rtn = PyObject_IsInstance(obj, cls);
     if (rtn < 0)
         checkAndThrowCAPIException();
@@ -365,15 +369,28 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
+    STAT_TIMER(t0, "us_timer_builtin_issubclass");
     int rtn = PyObject_IsSubclass(child, parent);
     if (rtn < 0)
         checkAndThrowCAPIException();
     return boxBool(rtn);
 }
 
+Box* intern_func(Box* str) {
+    if (!PyString_CheckExact(str)) // have to use exact check!
+        raiseExcHelper(TypeError, "can't intern subclass of string");
+    PyString_InternInPlace(&str);
+    checkAndThrowCAPIException();
+    return str;
+}
+
 Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
+
+    // __import__ takes a 'locals' argument, but it doesn't get used in CPython.
+    // Well, it gets passed to PyImport_ImportModuleLevel() and then import_module_level(),
+    // which ignores it.  So we don't even pass it through.
 
     name = coerceUnicodeToStr(name);
 
@@ -586,7 +603,6 @@ public:
     static Box* __reduce__(Box* self) {
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
-
         return BoxedTuple::create({ self->cls, EmptyTuple, self->getAttrWrapper() });
     }
 };
@@ -973,16 +989,38 @@ Box* builtinRound(Box* _number, Box* _ndigits) {
         raiseExcHelper(TypeError, "a float is required");
 
     BoxedFloat* number = (BoxedFloat*)_number;
+    double x = number->d;
 
-    if (isSubclass(_ndigits->cls, int_cls)) {
-        BoxedInt* ndigits = (BoxedInt*)_ndigits;
+    /* interpret 2nd argument as a Py_ssize_t; clip on overflow */
+    Py_ssize_t ndigits = PyNumber_AsSsize_t(_ndigits, NULL);
+    if (ndigits == -1 && PyErr_Occurred())
+        throwCAPIException();
 
-        if (ndigits->n == 0)
-            return boxFloat(round(number->d));
+    /* nans, infinities and zeros round to themselves */
+    if (!std::isfinite(x) || x == 0.0)
+        return boxFloat(x);
+
+/* Deal with extreme values for ndigits. For ndigits > NDIGITS_MAX, x
+   always rounds to itself.  For ndigits < NDIGITS_MIN, x always
+   rounds to +-0.0.  Here 0.30103 is an upper bound for log10(2). */
+#define NDIGITS_MAX ((int)((DBL_MANT_DIG - DBL_MIN_EXP) * 0.30103))
+#define NDIGITS_MIN (-(int)((DBL_MAX_EXP + 1) * 0.30103))
+    if (ndigits > NDIGITS_MAX)
+        /* return x */
+        return boxFloat(x);
+    else if (ndigits < NDIGITS_MIN)
+        /* return 0.0, but with sign of x */
+        return boxFloat(0.0 * x);
+    else {
+        /* finite x, and ndigits is not unreasonably large */
+        /* _Py_double_round is defined in floatobject.c */
+        Box* rtn = _Py_double_round(x, (int)ndigits);
+        if (!rtn)
+            throwCAPIException();
+        return rtn;
     }
-
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    throwCAPIException();
+#undef NDIGITS_MAX
+#undef NDIGITS_MIN
 }
 
 Box* builtinCmp(Box* a, Box* b) {
@@ -1108,6 +1146,9 @@ void setupBuiltins() {
     Box* issubclass_obj
         = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2), "issubclass");
     builtins_module->giveAttr("issubclass", issubclass_obj);
+
+    Box* intern_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)intern_func, UNKNOWN, 1), "intern");
+    builtins_module->giveAttr("intern", intern_obj);
 
     CLFunction* import_func = boxRTFunction((void*)bltinImport, UNKNOWN, 5, 4, false, false,
                                             ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
