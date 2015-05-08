@@ -79,7 +79,7 @@ extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* importFrom(Box* obj, const std::string* attr);
-extern "C" Box* importStar(Box* from_module, BoxedModule* to_module);
+extern "C" Box* importStar(Box* from_module, Box* to_globals);
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
 extern "C" void assertFailDerefNameDefined(const char* name);

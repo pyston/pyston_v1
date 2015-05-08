@@ -4863,12 +4863,8 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
     raiseExcHelper(ImportError, "cannot import name %s", name->c_str());
 }
 
-extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
+extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
     STAT_TIMER(t0, "us_timer_importStar");
-
-    // TODO(kmod): it doesn't seem too bad to update this to take custom globals;
-    // it looks like mostly a matter of changing the getattr calls to getitem.
-    RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");
 
     ASSERT(isSubclass(_from_module->cls, module_cls), "%s", _from_module->cls->tp_name);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
@@ -4902,8 +4898,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
 
             if (!attr_value)
                 raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
-
-            to_module->setattr(casted_attr_name->s, attr_value, NULL);
+            setGlobal(to_globals, casted_attr_name->s, attr_value);
         }
         return None;
     }
@@ -4913,7 +4908,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
         if (p.first()[0] == '_')
             continue;
 
-        to_module->setattr(p.first(), module_attrs->attr_list->attrs[p.second], NULL);
+        setGlobal(to_globals, p.first(), module_attrs->attr_list->attrs[p.second]);
     }
 
     return None;

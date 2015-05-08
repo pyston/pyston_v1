@@ -618,9 +618,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
         Value module = visit_expr(node->args[0]);
 
-        RELEASE_ASSERT(globals == source_info->parent_module,
-                       "'import *' currently not supported with overridden globals");
-        v = importStar(module.o, source_info->parent_module);
+        v = importStar(module.o, globals);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = None;
     } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {
