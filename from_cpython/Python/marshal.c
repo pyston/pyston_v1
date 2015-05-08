@@ -334,8 +334,6 @@ w_object(PyObject *v, WFILE *p)
     }
 #endif
     else if (PyString_CheckExact(v)) {
-        // Pyston change: I think we don't need this
-        /*
         if (p->strings && PyString_CHECK_INTERNED(v)) {
             PyObject *o = PyDict_GetItem(p->strings, v);
             if (o) {
@@ -361,8 +359,6 @@ w_object(PyObject *v, WFILE *p)
         else {
             w_byte(TYPE_STRING, p);
         }
-        */
-        w_byte(TYPE_STRING, p);
         w_pstring(PyBytes_AS_STRING(v), PyString_GET_SIZE(v), p);
     }
 #ifdef Py_USING_UNICODE

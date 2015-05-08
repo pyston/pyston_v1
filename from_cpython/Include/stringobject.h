@@ -98,7 +98,10 @@ PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char) PyString_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 
 /* Use only if you know it's a string */
-#define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+//#define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
+PyAPI_FUNC(int) _PyString_CheckInterned(PyObject *) PYSTON_NOEXCEPT;
+#define PyString_CHECK_INTERNED(op) _PyString_CheckInterned((PyObject*)op)
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]

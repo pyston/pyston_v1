@@ -405,6 +405,7 @@ public:
 class BoxedString : public Box {
 public:
     llvm::StringRef s;
+    char interned_state;
 
     char* data() { return const_cast<char*>(s.data()); }
     size_t size() { return s.size(); }

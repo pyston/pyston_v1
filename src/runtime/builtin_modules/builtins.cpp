@@ -974,16 +974,6 @@ Box* input(Box* prompt) {
     throwCAPIException();
 }
 
-Box* intern(Box* str) {
-    if (!PyString_Check(str)) {
-        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(str));
-    }
-    if (!PyString_CheckExact(str)) {
-        raiseExcHelper(TypeError, "can't intern subclass of string");
-    }
-    return PyString_InternFromString(PyString_AsString(str));
-}
-
 Box* builtinRound(Box* _number, Box* _ndigits) {
     if (!isSubclass(_number->cls, float_cls))
         raiseExcHelper(TypeError, "a float is required");
@@ -1154,9 +1144,6 @@ void setupBuiltins() {
                                             ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
     builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                                              { None, None, None, new BoxedInt(-1) }));
-
-    Box* intern_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)intern, UNKNOWN, 1), "intern");
-    builtins_module->giveAttr("intern", intern_obj);
 
     enumerate_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0,
                                            sizeof(BoxedEnumerate), false, "enumerate");

@@ -52,7 +52,7 @@ extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noe
 
 namespace pyston {
 
-BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n) {
+BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     if (s) {
         memmove(data(), s, n);
@@ -62,20 +62,21 @@ BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n) {
     }
 }
 
-BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : s(storage(), lhs.size() + rhs.size()) {
+BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs)
+    : s(storage(), lhs.size() + rhs.size()), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(lhs.size() + rhs.size() != llvm::StringRef::npos, "");
     memmove(data(), lhs.data(), lhs.size());
     memmove(data() + lhs.size(), rhs.data(), rhs.size());
     data()[lhs.size() + rhs.size()] = 0;
 }
 
-BoxedString::BoxedString(llvm::StringRef s) : s(storage(), s.size()) {
+BoxedString::BoxedString(llvm::StringRef s) : s(storage(), s.size()), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(s.size() != llvm::StringRef::npos, "");
     memmove(data(), s.data(), s.size());
     data()[s.size()] = 0;
 }
 
-BoxedString::BoxedString(size_t n, char c) : s(storage(), n) {
+BoxedString::BoxedString(size_t n, char c) : s(storage(), n), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
     data()[n] = 0;
@@ -345,23 +346,44 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 static llvm::StringMap<Box*> interned_strings;
-
 extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
     RELEASE_ASSERT(s, "");
-    auto it = interned_strings.find(s);
-    if (it == interned_strings.end()) {
-        Box* b = PyGC_AddRoot(boxString(s));
-        assert(b);
-        interned_strings[s] = b;
-        return b;
-    } else {
-        assert(it->second);
-        return it->second;
+    auto& entry = interned_strings[s];
+    if (!entry) {
+        entry = PyGC_AddRoot(boxString(s));
+        // CPython returns mortal but in our current implementation they are inmortal
+        ((BoxedString*)entry)->interned_state = SSTATE_INTERNED_IMMORTAL;
+    }
+    return entry;
+}
+
+extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
+    BoxedString* s = (BoxedString*)*p;
+    if (s == NULL || !PyString_Check(s))
+        Py_FatalError("PyString_InternInPlace: strings only please!");
+    /* If it's a string subclass, we don't really know what putting
+       it in the interned dict might do. */
+    if (!PyString_CheckExact(s))
+        return;
+
+    if (PyString_CHECK_INTERNED(s))
+        return;
+
+    auto& entry = interned_strings[s->s];
+    if (entry)
+        *p = entry;
+    else {
+        entry = PyGC_AddRoot(s);
+
+        // CPython returns mortal but in our current implementation they are inmortal
+        s->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
 }
 
-extern "C" void PyString_InternInPlace(PyObject** o) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" int _PyString_CheckInterned(PyObject* p) noexcept {
+    RELEASE_ASSERT(PyString_Check(p), "");
+    BoxedString* s = (BoxedString*)p;
+    return s->interned_state;
 }
 
 /* Format codes
@@ -2341,6 +2363,11 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 
     if (newsize == s->size())
         return 0;
+
+    if (PyString_CHECK_INTERNED(s)) {
+        *pv = 0;
+        return -1;
+    }
 
     if (newsize < s->size()) {
         // XXX resize the box (by reallocating) smaller if it makes sense
