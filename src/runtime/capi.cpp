@@ -1375,6 +1375,10 @@ extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject* tp, Py_ssize_t nitems)
     return op;
 }
 
+extern "C" void PyObject_GC_Del(void* op) noexcept {
+    PyObject_FREE(op);
+}
+
 extern "C" void _Py_FatalError(const char* fmt, const char* function, const char* message) {
     fprintf(stderr, fmt, function, message);
     fflush(stderr); /* it helps in Windows debug build */

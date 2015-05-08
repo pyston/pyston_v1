@@ -40,7 +40,7 @@ static void removeModule(const std::string& name) {
 }
 
 Box* createAndRunModule(const std::string& name, const std::string& fn) {
-    BoxedModule* module = createModule(name, fn);
+    BoxedModule* module = createModule(name, fn.c_str());
 
     AST_Module* ast = caching_parse_file(fn.c_str());
     try {
@@ -57,7 +57,7 @@ Box* createAndRunModule(const std::string& name, const std::string& fn) {
 }
 
 static Box* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
-    BoxedModule* module = createModule(name, fn);
+    BoxedModule* module = createModule(name, fn.c_str());
 
     Box* b_path = boxStringPtr(&module_path);
 
@@ -613,7 +613,7 @@ extern "C" PyObject* PyImport_AddModule(const char* name) noexcept {
 
         if (m != NULL && m->cls == module_cls)
             return m;
-        return createModule(name, name);
+        return createModule(name);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -708,7 +708,6 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
     Box* _description = args[0];
 
     RELEASE_ASSERT(_name->cls == str_cls, "");
-    RELEASE_ASSERT(_file == None, "");
     RELEASE_ASSERT(_pathname->cls == str_cls, "");
     RELEASE_ASSERT(_description->cls == tuple_cls, "");
 
@@ -721,15 +720,20 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
     BoxedString* mode = (BoxedString*)description->elts[1];
     BoxedInt* type = (BoxedInt*)description->elts[2];
 
-    RELEASE_ASSERT(suffix->cls == str_cls, "");
     RELEASE_ASSERT(mode->cls == str_cls, "");
     RELEASE_ASSERT(type->cls == int_cls, "");
-
-    RELEASE_ASSERT(suffix->s.empty(), "");
-    RELEASE_ASSERT(mode->s.empty(), "");
+    RELEASE_ASSERT(pathname->cls == str_cls, "");
+    RELEASE_ASSERT(pathname->size(), "");
 
     if (type->n == SearchResult::PKG_DIRECTORY) {
+        RELEASE_ASSERT(suffix->cls == str_cls, "");
+        RELEASE_ASSERT(suffix->s.empty(), "");
+        RELEASE_ASSERT(mode->s.empty(), "");
+        RELEASE_ASSERT(_file == None, "");
         return createAndRunModule(name->s, (llvm::Twine(pathname->s) + "/__init__.py").str(), pathname->s);
+    } else if (type->n == SearchResult::PY_SOURCE) {
+        RELEASE_ASSERT(_file->cls == file_cls, "");
+        return createAndRunModule(name->s, pathname->s);
     }
 
     Py_FatalError("unimplemented");
@@ -784,10 +788,38 @@ Box* impReleaseLock() {
     return None;
 }
 
+Box* impNewModule(Box* _name) {
+    if (!PyString_Check(_name))
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_name));
+
+    BoxedModule* module = new BoxedModule();
+    moduleInit(module, _name);
+    return module;
+}
+
+Box* impIsBuiltin(Box* _name) {
+    if (!PyString_Check(_name))
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_name));
+
+    BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr("builtin_module_names");
+    RELEASE_ASSERT(PyTuple_Check(builtin_modules), "");
+    for (Box* m : builtin_modules->pyElements()) {
+        if (compare(m, _name, AST_TYPE::Eq) == True)
+            return boxInt(-1); // CPython returns 1 for modules which can get reinitialized.
+    }
+    return boxInt(0);
+}
+
+Box* impIsFrozen(Box* name) {
+    if (!PyString_Check(name))
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(name));
+    return False;
+}
+
 void setupImport() {
     BoxedModule* imp_module
-        = createModule("imp", "__builtin__", "'This module provides the components needed to build your own\n"
-                                             "__import__ function.  Undocumented functions are obsolete.'");
+        = createModule("imp", NULL, "'This module provides the components needed to build your own\n"
+                                    "__import__ function.  Undocumented functions are obsolete.'");
 
     imp_module->giveAttr("PY_SOURCE", boxInt(SearchResult::PY_SOURCE));
     imp_module->giveAttr("PY_COMPILED", boxInt(SearchResult::PY_COMPILED));
@@ -827,5 +859,12 @@ void setupImport() {
                                                                           "acquire_lock"));
     imp_module->giveAttr("release_lock", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impReleaseLock, NONE, 0),
                                                                           "release_lock"));
+
+    imp_module->giveAttr("new_module",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impNewModule, MODULE, 1), "new_module"));
+    imp_module->giveAttr(
+        "is_builtin", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impIsBuiltin, BOXED_INT, 1), "is_builtin"));
+    imp_module->giveAttr(
+        "is_frozen", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impIsFrozen, BOXED_BOOL, 1), "is_frozen"));
 }
 }

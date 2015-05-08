@@ -22,3 +22,16 @@ m1 = imp.load_source("import_target", os.path.join(os.path.dirname(__file__), "i
 print "second load_source():"
 m2 = imp.load_source("import_target", os.path.join(os.path.dirname(__file__), "import_target.py"))
 print m1 is m2
+
+m = imp.new_module("My new module")
+print type(m), m, hasattr(m, "__file__")
+print imp.is_builtin("sys"), imp.is_frozen("sys")
+print imp.is_builtin("io"), imp.is_frozen("io")
+
+e = imp.find_module("1")
+m = imp.load_module("test_1", e[0], e[1], e[2])
+
+def n(s):
+    return str(s).replace(".pyc", ".py")
+
+print n(m), n(m.__name__), n(m.__file__), hasattr(m, "__path__")

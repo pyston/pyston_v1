@@ -607,6 +607,24 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     return evalOrExec(cl, globals, locals);
 }
 
+extern "C" PyObject* PyRun_StringFlags(const char* str, int start, PyObject* globals, PyObject* locals,
+                                       PyCompilerFlags* flags) noexcept {
+
+    try {
+        if (start == Py_file_input)
+            return exec(boxString(str), globals, locals);
+        else if (start == Py_eval_input)
+            return eval(boxString(str), globals, locals);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+
+    // Py_single_input is not yet implemented
+    RELEASE_ASSERT(0, "Unimplemented %d", start);
+    return 0;
+}
+
 // If a function version keeps failing its speculations, kill it (remove it
 // from the list of valid function versions).  The next time we go to call
 // the function, we will have to pick a different version, potentially recompiling.
