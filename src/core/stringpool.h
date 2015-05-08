@@ -80,6 +80,8 @@ public:
         return *this->_str < *rhs._str;
     }
 
+    operator llvm::StringRef() { return llvm::StringRef(*_str); }
+
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
     friend struct std::less<InternedString>;

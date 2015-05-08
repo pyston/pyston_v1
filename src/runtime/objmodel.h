@@ -183,7 +183,13 @@ inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int
 
 // The `globals` argument can be either a BoxedModule or a BoxedDict
 
+// Corresponds to a name lookup with GLOBAL scope.  Checks the passed globals object, then the builtins,
+// and if not found raises an exception.
 extern "C" Box* getGlobal(Box* globals, const std::string* name);
+// Checks for the name just in the passed globals object, and returns NULL if it is not found.
+// This includes if the globals object defined a custom __getattr__ method that threw an AttributeError.
+Box* getFromGlobals(Box* globals, llvm::StringRef name);
+void setGlobal(Box* globals, llvm::StringRef name, Box* value);
 extern "C" void delGlobal(Box* globals, const std::string* name);
 
 extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val);

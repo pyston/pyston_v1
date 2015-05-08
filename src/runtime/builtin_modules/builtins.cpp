@@ -388,6 +388,10 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
 
+    // __import__ takes a 'locals' argument, but it doesn't get used in CPython.
+    // Well, it gets passed to PyImport_ImportModuleLevel() and then import_module_level(),
+    // which ignores it.  So we don't even pass it through.
+
     name = coerceUnicodeToStr(name);
 
     if (name->cls != str_cls) {

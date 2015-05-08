@@ -21,6 +21,7 @@
 
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
+#include "codegen/unwinding.h"
 #include "runtime/capi.h"
 #include "runtime/objmodel.h"
 
@@ -267,7 +268,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
     if (globals == NULL || globals == None || level == 0)
         return None;
 
-    BoxedString* pkgname = static_cast<BoxedString*>(getattrInternal(globals, package_str, NULL));
+    BoxedString* pkgname = static_cast<BoxedString*>(getFromGlobals(globals, package_str));
     if (pkgname != NULL && pkgname != None) {
         /* __package__ is set, so use it */
         if (pkgname->cls != str_cls) {
@@ -286,17 +287,11 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
         buf += pkgname->s;
     } else {
         /* __package__ not set, so figure it out and set it */
-        BoxedString* modname = static_cast<BoxedString*>(getattrInternal(globals, name_str, NULL));
+        BoxedString* modname = static_cast<BoxedString*>(getFromGlobals(globals, name_str));
         if (modname == NULL || modname->cls != str_cls)
             return None;
 
-        Box* modpath = NULL;
-        try {
-            modpath = getattrInternal(globals, path_str, NULL);
-        } catch (ExcInfo e) {
-            if (!e.matches(AttributeError))
-                raiseRaw(e);
-        }
+        Box* modpath = getFromGlobals(globals, path_str);
 
         if (modpath != NULL) {
             /* __path__ is set, so modname is already the package name */
@@ -304,7 +299,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
                 raiseExcHelper(ValueError, "Module name too long");
             }
             buf += modname->s;
-            globals->setattr(package_str, modname, NULL);
+            setGlobal(globals, package_str, modname);
         } else {
             /* Normal module, so work out the package name if any */
             size_t lastdot = modname->s.rfind('.');
@@ -312,7 +307,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
                 raiseExcHelper(ValueError, "Attempted relative import in non-package");
             }
             if (lastdot == std::string::npos) {
-                globals->setattr(package_str, None, NULL);
+                setGlobal(globals, package_str, None);
                 return None;
             }
             if (lastdot >= PATH_MAX) {
@@ -320,7 +315,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
             }
 
             buf = std::string(modname->s, 0, lastdot);
-            globals->setattr(package_str, boxStringPtr(&buf), NULL);
+            setGlobal(globals, package_str, boxStringPtr(&buf));
         }
     }
 
@@ -471,7 +466,6 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
 
 static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive);
 Box* importModuleLevel(const std::string& name, Box* globals, Box* from_imports, int level) {
-    RELEASE_ASSERT(!globals || globals == None || isSubclass(globals->cls, module_cls), "");
     bool return_first = from_imports == None;
 
     static StatCounter slowpath_import("slowpath_import");
@@ -665,7 +659,7 @@ Box* nullImporterFindModule(Box* self, Box* fullname, Box* path) {
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
     std::string _module_name(*module_name);
-    return importModuleLevel(_module_name, getCurrentModule(), from_imports, level);
+    return importModuleLevel(_module_name, getGlobals(), from_imports, level);
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {

@@ -16,10 +16,12 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "llvm/Support/FileSystem.h"
@@ -90,6 +92,86 @@ static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
 static bool force_repl = false;
 static bool unbuffered = false;
 
+static const char* argv0;
+static int pipefds[2];
+static void handle_sigsegv(int signum) {
+    assert(signum == SIGSEGV);
+    // TODO: this should set a flag saying a KeyboardInterrupt is pending.
+    // For now, just call abort(), so that we get a traceback at least.
+    fprintf(stderr, "child encountered segfault!  signalling parent watcher to backtrace.\n");
+
+    char buf[1];
+    int r = write(pipefds[1], buf, 1);
+    RELEASE_ASSERT(r == 1, "");
+
+    while (true) {
+        sleep(1);
+    }
+}
+
+static int gdb_child_pid;
+static void propagate_sig(int signum) {
+    // fprintf(stderr, "parent received signal %d, passing to child and then ignoring\n", signum);
+    assert(gdb_child_pid);
+    int r = kill(gdb_child_pid, signum);
+    assert(!r);
+}
+
+static void enableGdbSegfaultWatcher() {
+    int r = pipe2(pipefds, 0);
+    RELEASE_ASSERT(r == 0, "");
+
+    gdb_child_pid = fork();
+    if (gdb_child_pid) {
+        // parent watcher process
+
+        close(pipefds[1]);
+
+        for (int i = 0; i < _NSIG; i++) {
+            if (i == SIGCHLD)
+                continue;
+            signal(i, &propagate_sig);
+        }
+
+        while (true) {
+            char buf[1];
+            int r = read(pipefds[0], buf, 1);
+
+            if (r == 1) {
+                fprintf(stderr, "Parent process woken up by child; collecting backtrace and killing child\n");
+                char pidbuf[20];
+                snprintf(pidbuf, sizeof(pidbuf), "%d", gdb_child_pid);
+
+                close(STDOUT_FILENO);
+                dup2(STDERR_FILENO, STDOUT_FILENO);
+                r = execlp("gdb", "gdb", "-p", pidbuf, argv0, "-batch", "-ex", "set pagination 0", "-ex",
+                           "thread apply all bt", "-ex", "kill", "-ex", "quit -11", NULL);
+                RELEASE_ASSERT(0, "%d %d %s", r, errno, strerror(errno));
+            }
+
+            if (r == 0) {
+                int status;
+                r = waitpid(gdb_child_pid, &status, 0);
+                RELEASE_ASSERT(r == gdb_child_pid, "%d %d %s", r, errno, strerror(errno));
+
+                int rtncode = 0;
+                if (WIFEXITED(status))
+                    rtncode = WEXITSTATUS(status);
+                else
+                    rtncode = 128 + WTERMSIG(status);
+
+                exit(rtncode);
+            }
+
+            RELEASE_ASSERT(0, "%d %d %s", r, errno, strerror(errno));
+        }
+        RELEASE_ASSERT(0, "");
+    }
+
+    close(pipefds[0]);
+    signal(SIGSEGV, &handle_sigsegv);
+}
+
 int handleArg(char code) {
     if (code == 'O')
         FORCE_OPTIMIZE = true;
@@ -131,6 +213,8 @@ int handleArg(char code) {
         CONTINUE_AFTER_FATAL = true;
     } else if (code == 'T') {
         ENABLE_TRACEBACKS = false;
+    } else if (code == 'G') {
+        enableGdbSegfaultWatcher();
     } else {
         fprintf(stderr, "Unknown option: -%c\n", code);
         return 2;
@@ -139,6 +223,7 @@ int handleArg(char code) {
 }
 
 static int main(int argc, char** argv) {
+    argv0 = argv[0];
 
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
@@ -168,7 +253,7 @@ static int main(int argc, char** argv) {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPT")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPTG")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;
@@ -286,7 +371,10 @@ static int main(int argc, char** argv) {
 
             llvm::sys::path::append(path, fn);
             llvm::sys::path::remove_filename(path);
-            prependToSysPath(path.str());
+            char* real_path
+                = realpath(path.str().str().c_str(), NULL); // inefficient way of null-terminating the string
+            prependToSysPath(real_path);
+            free(real_path);
 
             main_module = createModule("__main__", fn);
             try {

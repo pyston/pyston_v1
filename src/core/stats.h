@@ -116,9 +116,6 @@ class StatTimer {
 private:
     static __thread StatTimer* stack;
 
-    // the accumulated active duration of this timer
-    uint64_t _duration;
-
     // the start time of the current active segment (0 == paused)
     uint64_t _start_time;
 

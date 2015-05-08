@@ -4562,6 +4562,40 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
 }
 
+Box* getFromGlobals(Box* globals, llvm::StringRef name) {
+    if (globals->cls == attrwrapper_cls) {
+        globals = unwrapAttrWrapper(globals);
+        RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
+    }
+
+    if (globals->cls == module_cls) {
+        return globals->getattr(name);
+    } else if (globals->cls == dict_cls) {
+        auto d = static_cast<BoxedDict*>(globals)->d;
+        auto name_str = boxString(name.str());
+        auto it = d.find(name_str);
+        if (it != d.end())
+            return it->second;
+        return NULL;
+    } else {
+        RELEASE_ASSERT(0, "%s", globals->cls->tp_name);
+    }
+}
+
+void setGlobal(Box* globals, llvm::StringRef name, Box* value) {
+    if (globals->cls == attrwrapper_cls) {
+        globals = unwrapAttrWrapper(globals);
+        RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
+    }
+
+    if (globals->cls == module_cls) {
+        setattr(static_cast<BoxedModule*>(globals), name.data(), value);
+    } else {
+        RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
+        static_cast<BoxedDict*>(globals)->d[boxString(name)] = value;
+    }
+}
+
 extern "C" Box* importFrom(Box* _m, const std::string* name) {
     STAT_TIMER(t0, "us_timer_importFrom");
 

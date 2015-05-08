@@ -599,6 +599,8 @@ CompiledFunction* getTopCompiledFunction() {
 
 Box* getGlobals() {
     auto it = getTopPythonFrame();
+    if (!it)
+        return NULL;
     return it->getGlobals();
 }
 
