@@ -485,7 +485,10 @@ private:
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
                                              embedRelocatablePtr(node, g.i8->getPointerTo()), node_value);
-        emitter.getBuilder()->CreateRet(v);
+        if (irstate->getReturnType() == VOID)
+            emitter.getBuilder()->CreateRetVoid();
+        else
+            emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
