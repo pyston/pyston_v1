@@ -1530,28 +1530,43 @@ public:
         return boxInt(attrs->hcls->getStrAttrOffsets().size());
     }
 
-    static Box* update(Box* _self, Box* _container) {
+    static Box* update(Box* _self, BoxedTuple* args, BoxedDict* kwargs) {
         STAT_TIMER(t0, "us_timer_AttrWrapper_update");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        if (_container->cls == attrwrapper_cls) {
-            AttrWrapper* container = static_cast<AttrWrapper*>(_container);
-            HCAttrs* attrs = container->b->getHCAttrsPtr();
+        assert(args->cls == tuple_cls);
+        assert(kwargs);
+        assert(kwargs->cls == dict_cls);
 
-            RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
-            for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-                self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
-            }
-        } else if (_container->cls == dict_cls) {
-            BoxedDict* container = static_cast<BoxedDict*>(_container);
+        RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
 
-            for (const auto& p : container->d) {
-                AttrWrapper::setitem(self, p.first, p.second);
+        auto handle = [&](Box* _container) {
+            if (_container->cls == attrwrapper_cls) {
+                AttrWrapper* container = static_cast<AttrWrapper*>(_container);
+                HCAttrs* attrs = container->b->getHCAttrsPtr();
+
+                RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON,
+                               "");
+                for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
+                    self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
+                }
+            } else if (_container->cls == dict_cls) {
+                BoxedDict* container = static_cast<BoxedDict*>(_container);
+
+                for (const auto& p : container->d) {
+                    AttrWrapper::setitem(self, p.first, p.second);
+                }
+            } else {
+                RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
             }
-        } else {
-            RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
+        };
+
+        for (auto e : *args) {
+            handle(e);
         }
+        handle(kwargs);
+
         return None;
     }
 
@@ -2481,7 +2496,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 2)));
+    attrwrapper_cls->giveAttr("update",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 1, 0, true, true)));
     attrwrapper_cls->freeze();
 
     attrwrapperiter_cls->giveAttr("__hasnext__",

@@ -95,7 +95,7 @@ l.sort()
 print l
 
 c = C1()
-c.__dict__.update(dict(a=1, b=5))
+c.__dict__.update(dict(a=1, b=5), d=4)
 print sorted(c.__dict__.items())
 
 class TestClass3: # old-style

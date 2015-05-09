@@ -222,6 +222,41 @@ int handleArg(char code) {
     return 0;
 }
 
+static int RunModule(const char* module, int set_argv0) {
+    PyObject* runpy, *runmodule, *runargs, *result;
+    runpy = PyImport_ImportModule("runpy");
+    if (runpy == NULL) {
+        fprintf(stderr, "Could not import runpy module\n");
+        return -1;
+    }
+    runmodule = PyObject_GetAttrString(runpy, "_run_module_as_main");
+    if (runmodule == NULL) {
+        fprintf(stderr, "Could not access runpy._run_module_as_main\n");
+        Py_DECREF(runpy);
+        return -1;
+    }
+    runargs = Py_BuildValue("(si)", module, set_argv0);
+    if (runargs == NULL) {
+        fprintf(stderr, "Could not create arguments for runpy._run_module_as_main\n");
+        Py_DECREF(runpy);
+        Py_DECREF(runmodule);
+        return -1;
+    }
+    result = PyObject_Call(runmodule, runargs, NULL);
+    if (result == NULL) {
+        PyErr_Print();
+    }
+    Py_DECREF(runpy);
+    Py_DECREF(runmodule);
+    Py_DECREF(runargs);
+    if (result == NULL) {
+        return -1;
+    }
+    Py_DECREF(result);
+    return 0;
+}
+
+
 static int main(int argc, char** argv) {
     argv0 = argv[0];
 
@@ -239,6 +274,7 @@ static int main(int argc, char** argv) {
 
         int code;
         const char* command = NULL;
+        const char* module = NULL;
 
         char* env_args = getenv("PYSTON_RUN_ARGS");
 
@@ -253,10 +289,15 @@ static int main(int argc, char** argv) {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPTG")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;
+                // no more option parsing; the rest of our arguments go into sys.argv.
+                break;
+            } else if (code == 'm') {
+                assert(optarg);
+                module = optarg;
                 // no more option parsing; the rest of our arguments go into sys.argv.
                 break;
             } else if (code == ':') {
@@ -299,7 +340,10 @@ static int main(int argc, char** argv) {
         // are parsed.
         if (command)
             addToSysArgv("-c");
-        else if (optind != argc) {
+        else if (module) {
+            // CPython does this...
+            addToSysArgv("-c");
+        } else if (optind != argc) {
             addToSysArgv(argv[optind]);
             if (strcmp("-", argv[optind]) != 0)
                 fn = argv[optind];
@@ -352,10 +396,22 @@ static int main(int argc, char** argv) {
                 AST_Module* m = parse_string(command);
                 compileAndRunModule(m, main_module);
             } catch (ExcInfo e) {
-                int retcode = 1;
-                (void)handle_toplevel_exn(e, &retcode);
-                Stats::dump(false);
-                return retcode;
+                if (!force_repl) {
+                    int retcode = 1;
+                    (void)handle_toplevel_exn(e, &retcode);
+                    Stats::dump(false);
+                    return retcode;
+                }
+            }
+        } else if (module != NULL) {
+            // TODO: CPython uses the same main module for all code paths
+            main_module = createModule("__main__", "<string>");
+            bool sts = (RunModule(module, 1) != 0);
+            printf("TODO check this\n");
+            if (!force_repl) {
+                if (sts)
+                    return 1;
+                return 0;
             }
         }
 
