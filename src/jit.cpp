@@ -31,6 +31,7 @@
 
 #include "osdefs.h"
 
+#include "capi/types.h"
 #include "codegen/entry.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
@@ -54,42 +55,7 @@ namespace pyston {
 
 extern void setEncodingAndErrors();
 
-// returns true iff we got a request to exit, i.e. SystemExit, placing the
-// return code in `*retcode`. does not touch `*retcode* if it returns false.
-static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
-    if (e.matches(SystemExit)) {
-        Box* value = e.value;
 
-        if (value && PyExceptionInstance_Check(value)) {
-            Box* code = getattr(value, "code");
-            if (code)
-                value = code;
-        }
-
-        if (!value || value == None)
-            *retcode = 0;
-        else if (isSubclass(value->cls, int_cls))
-            *retcode = static_cast<BoxedInt*>(value)->n;
-        else {
-            *retcode = 1;
-
-            PyObject* sys_stderr = PySys_GetObject("stderr");
-            if (sys_stderr != NULL && sys_stderr != Py_None) {
-                PyFile_WriteObject(value, sys_stderr, Py_PRINT_RAW);
-            } else {
-                PyObject_Print(value, stderr, Py_PRINT_RAW);
-                fflush(stderr);
-            }
-            PySys_WriteStderr("\n");
-        }
-
-        return true;
-    }
-    e.printExcAndTraceback();
-    return false;
-}
-
-static bool force_repl = false;
 static bool unbuffered = false;
 
 static const char* argv0;
@@ -186,7 +152,7 @@ int handleArg(char code) {
     else if (code == 'I')
         FORCE_INTERPRETER = true;
     else if (code == 'i')
-        force_repl = true;
+        Py_InspectFlag = true;
     else if (code == 'n') {
         ENABLE_INTERPRETER = false;
     } else if (code == 'p') {
@@ -268,7 +234,7 @@ static int main(int argc, char** argv) {
     timespec before_ts, after_ts;
 
     Timer main_time;
-    int rtncode;
+    int rtncode = 0;
     {
         STAT_TIMER2(t0, "us_timer_main_toplevel", main_time.getStartTime());
 
@@ -395,60 +361,52 @@ static int main(int argc, char** argv) {
                 main_module = createModule("__main__", "<string>");
                 AST_Module* m = parse_string(command);
                 compileAndRunModule(m, main_module);
+                rtncode = 0;
             } catch (ExcInfo e) {
-                if (!force_repl) {
-                    int retcode = 1;
-                    (void)handle_toplevel_exn(e, &retcode);
-                    Stats::dump(false);
-                    return retcode;
-                }
+                setCAPIException(e);
+                PyErr_Print();
+                rtncode = 1;
             }
         } else if (module != NULL) {
             // TODO: CPython uses the same main module for all code paths
             main_module = createModule("__main__", "<string>");
-            bool sts = (RunModule(module, 1) != 0);
-            printf("TODO check this\n");
-            if (!force_repl) {
-                if (sts)
-                    return 1;
-                return 0;
-            }
-        }
+            rtncode = (RunModule(module, 1) != 0);
+        } else {
+            rtncode = 0;
+            if (fn != NULL) {
+                llvm::SmallString<128> path;
 
-        if (fn != NULL) {
-            llvm::SmallString<128> path;
+                if (!llvm::sys::path::is_absolute(fn)) {
+                    char cwd_buf[1026];
+                    char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
+                    assert(cwd);
+                    path = cwd;
+                }
 
-            if (!llvm::sys::path::is_absolute(fn)) {
-                char cwd_buf[1026];
-                char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
-                assert(cwd);
-                path = cwd;
-            }
+                llvm::sys::path::append(path, fn);
+                llvm::sys::path::remove_filename(path);
+                char* real_path
+                    = realpath(path.str().str().c_str(), NULL); // inefficient way of null-terminating the string
+                prependToSysPath(real_path);
+                free(real_path);
 
-            llvm::sys::path::append(path, fn);
-            llvm::sys::path::remove_filename(path);
-            char* real_path
-                = realpath(path.str().str().c_str(), NULL); // inefficient way of null-terminating the string
-            prependToSysPath(real_path);
-            free(real_path);
-
-            main_module = createModule("__main__", fn);
-            try {
-                AST_Module* ast = caching_parse_file(fn);
-                compileAndRunModule(ast, main_module);
-            } catch (ExcInfo e) {
-                int retcode = 1;
-                (void)handle_toplevel_exn(e, &retcode);
-                if (!force_repl) {
-                    Stats::dump(false);
-                    return retcode;
+                main_module = createModule("__main__", fn);
+                try {
+                    AST_Module* ast = caching_parse_file(fn);
+                    compileAndRunModule(ast, main_module);
+                } catch (ExcInfo e) {
+                    setCAPIException(e);
+                    PyErr_Print();
+                    rtncode = 1;
                 }
             }
         }
 
-        if (force_repl || !(command || fn)) {
+        if (Py_InspectFlag || !(command || fn || module)) {
             printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
             printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
+
+            Py_InspectFlag = 0;
 
             if (!main_module) {
                 main_module = createModule("__main__", "<stdin>");
@@ -488,11 +446,8 @@ static int main(int argc, char** argv) {
 
                     compileAndRunModule(m, main_module);
                 } catch (ExcInfo e) {
-                    int retcode = 0xdeadbeef; // should never be seen
-                    if (handle_toplevel_exn(e, &retcode)) {
-                        Stats::dump(false);
-                        return retcode;
-                    }
+                    setCAPIException(e);
+                    PyErr_Print();
                 }
             }
         }
@@ -506,7 +461,7 @@ static int main(int argc, char** argv) {
 
         _t.split("joinRuntime");
 
-        rtncode = joinRuntime();
+        joinRuntime();
         _t.split("finishing up");
 
         uint64_t main_time_ended_at;
