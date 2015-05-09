@@ -278,6 +278,7 @@ public:
     enum HCType {
         NORMAL,      // attributes stored in attributes array, name->offset map stored in hidden class
         DICT_BACKED, // first attribute in array is a dict-like object which stores the attributes
+        SINGLETON,   // name->offset map stored in hidden class, but hcls is mutable
     } const type;
 
     static HiddenClass* dict_backed;
@@ -291,14 +292,21 @@ private:
         }
     }
 
-    // These fields only make sense for NORMAL hidden classes:
+    // These fields only make sense for NORMAL or SINGLETON hidden classes:
     llvm::StringMap<int> attr_offsets;
-    ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
     // If >= 0, is the offset where we stored an attrwrapper object
     int attrwrapper_offset = -1;
+
+    // These are only for NORMAL hidden classes:
+    ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
     HiddenClass* attrwrapper_child = NULL;
 
+    // Only for SINGLETON hidden classes:
+    ICInvalidator dependent_getattrs;
+
 public:
+    static HiddenClass* makeSingleton() { return new HiddenClass(SINGLETON); }
+
     static HiddenClass* makeRoot() {
 #ifndef NDEBUG
         static bool made = false;
@@ -329,7 +337,7 @@ public:
         if (type == DICT_BACKED)
             return 1;
 
-        ASSERT(type == NORMAL, "%d", type);
+        ASSERT(type == NORMAL || type == SINGLETON, "%d", type);
         int r = attr_offsets.size();
         if (attrwrapper_offset != -1)
             r += 1;
@@ -338,18 +346,18 @@ public:
 
     // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
     // array.
-    // Only valid for NORMAL hidden classes
+    // Only valid for NORMAL or SINGLETON hidden classes
     const llvm::StringMap<int>& getStrAttrOffsets() {
-        assert(type == NORMAL);
+        assert(type == NORMAL || type == SINGLETON);
         return attr_offsets;
     }
 
     // Only valid for NORMAL hidden classes:
     HiddenClass* getOrMakeChild(const std::string& attr);
 
-    // Only valid for NORMAL hidden classes:
+    // Only valid for NORMAL or SINGLETON hidden classes:
     int getOffset(const std::string& attr) {
-        assert(type == NORMAL);
+        assert(type == NORMAL || type == SINGLETON);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
             return -1;
@@ -357,10 +365,17 @@ public:
     }
 
     int getAttrwrapperOffset() {
-        assert(type == NORMAL);
+        assert(type == NORMAL || type == SINGLETON);
         return attrwrapper_offset;
     }
 
+    // Only valid for SINGLETON hidden classes:
+    void appendAttribute(llvm::StringRef attr);
+    void appendAttrwrapper();
+    void delAttribute(llvm::StringRef attr);
+    void addDependence(Rewriter* rewriter);
+
+    // Only valid for NORMAL hidden classes:
     HiddenClass* getAttrwrapperChild();
 
     // Only valid for NORMAL hidden classes:

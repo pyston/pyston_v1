@@ -228,7 +228,6 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
     Box* item = static_cast<Box*>(_item);
 
     try {
-        // TODO should demote GIL?
         setitem(b, key, item);
     } catch (ExcInfo e) {
         abort();
@@ -249,6 +248,16 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
 
 extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     ASSERT(isSubclass(dict->cls, dict_cls) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
+    if (isSubclass(dict->cls, dict_cls)) {
+        BoxedDict* d = static_cast<BoxedDict*>(dict);
+        auto it = d->d.find(key);
+        if (it != d->d.end())
+            return it->second;
+        return NULL;
+    }
+
+    // This path doesn't exist in CPython; we have it to support extension modules that do
+    // something along the lines of PyDict_GetItem(PyModule_GetDict()):
     try {
         return getitem(dict, key);
     } catch (ExcInfo e) {

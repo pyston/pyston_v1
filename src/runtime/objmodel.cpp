@@ -318,8 +318,8 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined)
-    : BoxVar(0), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset), is_constant(false),
-      is_user_defined(is_user_defined), is_pyston_class(true) {
+    : BoxVar(0), attrs(HiddenClass::makeSingleton()), gc_visit(gc_visit), simple_destructor(NULL),
+      attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined), is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -481,6 +481,43 @@ const char* getNameOfClass(BoxedClass* cls) {
     return cls->tp_name;
 }
 
+void HiddenClass::appendAttribute(llvm::StringRef attr) {
+    assert(type == SINGLETON);
+    dependent_getattrs.invalidateAll();
+    assert(attr_offsets.count(attr) == 0);
+    int n = this->attributeArraySize();
+    attr_offsets[attr] = n;
+}
+
+void HiddenClass::appendAttrwrapper() {
+    assert(type == SINGLETON);
+    dependent_getattrs.invalidateAll();
+    assert(attrwrapper_offset == -1);
+    attrwrapper_offset = this->attributeArraySize();
+}
+
+void HiddenClass::delAttribute(llvm::StringRef attr) {
+    assert(type == SINGLETON);
+    dependent_getattrs.invalidateAll();
+    assert(attr_offsets.count(attr));
+
+    int prev_idx = attr_offsets[attr];
+    attr_offsets.erase(attr);
+
+    for (auto it = attr_offsets.begin(), end = attr_offsets.end(); it != end; ++it) {
+        assert(it->second != prev_idx);
+        if (it->second > prev_idx)
+            it->second--;
+    }
+    if (attrwrapper_offset != -1 && attrwrapper_offset > prev_idx)
+        attrwrapper_offset--;
+}
+
+void HiddenClass::addDependence(Rewriter* rewriter) {
+    assert(type == SINGLETON);
+    rewriter->addDependenceOn(dependent_getattrs);
+}
+
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
     STAT_TIMER(t0, "us_timer_hiddenclass_getOrMakeChild");
     assert(type == NORMAL);
@@ -629,14 +666,16 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
             return r;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL);
-
-        if (rewrite_args)
-            rewrite_args->out_success = true;
+        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
         if (rewrite_args) {
-            if (!rewrite_args->obj_hcls_guarded)
+            if (!rewrite_args->obj_hcls_guarded) {
                 rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+                if (hcls->type == HiddenClass::SINGLETON)
+                    hcls->addDependence(rewrite_args->rewriter);
+            }
+
+            rewrite_args->out_success = true;
         }
 
         int offset = hcls->getOffset(attr);
@@ -645,8 +684,6 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
         }
 
         if (rewrite_args) {
-            // TODO using the output register as the temporary makes register allocation easier
-            // since we don't need to clobber a register, but does it make the code slower?
             RewriterVar* r_attrs
                 = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
             rewrite_args->out_rtn = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
@@ -676,20 +713,12 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     return NULL;
 }
 
-void Box::addNewHCAttr(HiddenClass* new_hcls, Box* new_attr, SetattrRewriteArgs* rewrite_args) {
+void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
 
-#ifndef NDEBUG
-    // make sure we don't need to rearrange the attributes
-    assert(new_hcls->attributeArraySize() == hcls->attributeArraySize() + 1);
-    for (const auto& p : hcls->getStrAttrOffsets()) {
-        assert(new_hcls->getStrAttrOffsets().lookup(p.first()) == p.second);
-    }
-    if (hcls->getAttrwrapperOffset() != -1)
-        assert(hcls->getAttrwrapperOffset() == new_hcls->getAttrwrapperOffset());
-#endif
+    assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
     int numattrs = hcls->attributeArraySize();
 
@@ -711,17 +740,10 @@ void Box::addNewHCAttr(HiddenClass* new_hcls, Box* new_attr, SetattrRewriteArgs*
             r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
         }
     }
-    // Don't set the new hcls until after we do the allocation for the new attr_list;
-    // that allocation can cause a collection, and we want the collector to always
-    // see a consistent state between the hcls and the attr_list
-    attrs->hcls = new_hcls;
 
     if (rewrite_args) {
         r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
         rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
-
-        RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
-        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
 
         rewrite_args->out_success = true;
     }
@@ -760,13 +782,14 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
             return;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL);
+        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
         int offset = hcls->getOffset(attr);
 
         if (rewrite_args) {
             rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-            // rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
+            if (hcls->type == HiddenClass::SINGLETON)
+                hcls->addDependence(rewrite_args->rewriter);
         }
 
         if (offset >= 0) {
@@ -788,12 +811,33 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         }
 
         assert(offset == -1);
-        HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
 
-        // make sure we don't need to rearrange the attributes
-        assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
+        if (hcls->type == HiddenClass::NORMAL) {
+            HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
+            // make sure we don't need to rearrange the attributes
+            assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
 
-        addNewHCAttr(new_hcls, val, rewrite_args);
+            this->appendNewHCAttr(val, rewrite_args);
+            attrs->hcls = new_hcls;
+
+            if (rewrite_args) {
+                if (!rewrite_args->out_success) {
+                    rewrite_args = NULL;
+                } else {
+                    RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
+                    rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
+                    rewrite_args->out_success = true;
+                }
+            }
+        } else {
+            assert(hcls->type == HiddenClass::SINGLETON);
+
+            assert(!rewrite_args || !rewrite_args->out_success);
+            rewrite_args = NULL;
+
+            this->appendNewHCAttr(val, NULL);
+            hcls->appendAttribute(attr);
+        }
 
         return;
     }
@@ -3825,8 +3869,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
             return;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL);
-        HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
         // The order of attributes is pertained as delAttrToMakeHC constructs
         // the new HiddenClass by invoking getOrMakeChild in the prevous order
@@ -3837,7 +3880,13 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
         Box** start = attrs->attr_list->attrs;
         memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
 
-        attrs->hcls = new_hcls;
+        if (hcls->type == HiddenClass::NORMAL) {
+            HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+            attrs->hcls = new_hcls;
+        } else {
+            assert(hcls->type == HiddenClass::SINGLETON);
+            hcls->delAttribute(attr);
+        }
 
         // guarantee the size of the attr_list equals the number of attrs
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
