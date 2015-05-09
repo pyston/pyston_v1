@@ -75,9 +75,10 @@ std::string ValuedCompilerType<llvm::Value*>::debugName() {
 }
 
 struct RawInstanceMethod {
-    CompilerVariable* obj, *func;
+    CompilerVariable* obj, *func, *im_class;
 
-    RawInstanceMethod(CompilerVariable* obj, CompilerVariable* func) : obj(obj), func(func) {}
+    RawInstanceMethod(CompilerVariable* obj, CompilerVariable* func, CompilerVariable* im_class)
+        : obj(obj), func(func), im_class(im_class) {}
 };
 
 class InstanceMethodType : public ValuedCompilerType<RawInstanceMethod*> {
@@ -108,9 +109,9 @@ public:
         return rtn;
     }
 
-    static CompilerVariable* makeIM(CompilerVariable* obj, CompilerVariable* func) {
+    static CompilerVariable* makeIM(CompilerVariable* obj, CompilerVariable* func, CompilerVariable* im_class) {
         CompilerVariable* rtn = new ValuedCompilerVariable<RawInstanceMethod*>(
-            InstanceMethodType::get(obj->getType(), func->getType()), new RawInstanceMethod(obj, func), true);
+            InstanceMethodType::get(obj->getType(), func->getType()), new RawInstanceMethod(obj, func, im_class), true);
         obj->incvref();
         func->incvref();
         return rtn;
@@ -160,9 +161,10 @@ public:
         assert(im->func);
         ConcreteCompilerVariable* obj = im->obj->makeConverted(emitter, UNKNOWN);
         ConcreteCompilerVariable* func = im->func->makeConverted(emitter, UNKNOWN);
+        ConcreteCompilerVariable* im_class = im->im_class->makeConverted(emitter, UNKNOWN);
 
-        llvm::Value* boxed
-            = emitter.getBuilder()->CreateCall2(g.funcs.boxInstanceMethod, obj->getValue(), func->getValue());
+        llvm::Value* boxed = emitter.getBuilder()->CreateCall3(g.funcs.boxInstanceMethod, obj->getValue(),
+                                                               func->getValue(), im_class->getValue());
 
         obj->decvref(emitter);
         func->decvref(emitter);
@@ -175,7 +177,8 @@ public:
         CompilerVariable* rtn = cache[var];
         if (rtn == NULL) {
             RawInstanceMethod* im = var->getValue();
-            RawInstanceMethod* new_im = new RawInstanceMethod(im->obj->dup(cache), im->func->dup(cache));
+            RawInstanceMethod* new_im
+                = new RawInstanceMethod(im->obj->dup(cache), im->func->dup(cache), im->im_class->dup(cache));
             rtn = new VAR(this, new_im, var->isGrabbed());
             while (rtn->getVrefs() < var->getVrefs())
                 rtn->incvref();
@@ -1476,7 +1479,10 @@ public:
             if (rtattr->cls == function_cls) {
                 CompilerVariable* clattr = new ConcreteCompilerVariable(
                     typeFromClass(function_cls), embedRelocatablePtr(rtattr, g.llvm_value_type_ptr), false);
-                return InstanceMethodType::makeIM(var, clattr);
+
+                return InstanceMethodType::makeIM(
+                    var, clattr,
+                    new ConcreteCompilerVariable(UNKNOWN, embedRelocatablePtr(cls, g.llvm_value_type_ptr), false));
             }
         }
 

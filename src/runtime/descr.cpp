@@ -165,7 +165,7 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
         type = obj->cls;
     }
 
-    return new BoxedInstanceMethod(type, cm->cm_callable);
+    return new BoxedInstanceMethod(type, cm->cm_callable, type);
 }
 
 void setupDescr() {

@@ -107,8 +107,8 @@ extern "C" Box* boxBool(bool);
 extern "C" Box* boxInt(i64);
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
-extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
-extern "C" Box* boxUnboundInstanceMethod(Box* func);
+extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type);
+extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type);
 
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
@@ -511,10 +511,10 @@ public:
     Box** in_weakreflist;
 
     // obj is NULL for unbound instancemethod
-    Box* obj, *func;
+    Box* obj, *func, *im_class;
 
-    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
-    : in_weakreflist(NULL), obj(obj), func(func) {}
+    BoxedInstanceMethod(Box* obj, Box* func, Box* im_class) __attribute__((visibility("default")))
+    : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
 
     DEFAULT_CLASS_SIMPLE(instancemethod_cls);
 };

@@ -716,15 +716,15 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
     }
 }
 
-extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
+extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type) {
     static StatCounter num_ims("num_instancemethods");
     num_ims.log();
 
-    return new BoxedInstanceMethod(obj, func);
+    return new BoxedInstanceMethod(obj, func, type);
 }
 
-extern "C" Box* boxUnboundInstanceMethod(Box* func) {
-    return new BoxedInstanceMethod(NULL, func);
+extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type) {
+    return new BoxedInstanceMethod(NULL, func, type);
 }
 
 extern "C" BoxedString* noneRepr(Box* v) {
@@ -774,8 +774,8 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == function_cls, "");
 
     if (inst == None)
-        return boxUnboundInstanceMethod(self);
-    return boxInstanceMethod(inst, self);
+        inst = NULL;
+    return new BoxedInstanceMethod(inst, self, owner);
 }
 
 static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
@@ -920,9 +920,11 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
         return self;
     }
 
-    // TODO subclass test
+    if (!PyObject_IsSubclass(type, self->im_class)) {
+        return self;
+    }
 
-    return new BoxedInstanceMethod(obj, self->func);
+    return new BoxedInstanceMethod(obj, self->func, self->im_class);
 }
 
 Box* instancemethodNew(BoxedClass* cls, Box* func, Box* self, Box** args) {
@@ -939,14 +941,49 @@ Box* instancemethodNew(BoxedClass* cls, Box* func, Box* self, Box** args) {
         return NULL;
     }
 
-    return new BoxedInstanceMethod(self, func);
+    return new BoxedInstanceMethod(self, func, classObj);
 }
 
-Box* instancemethodRepr(BoxedInstanceMethod* self) {
-    if (self->obj)
-        return boxStrConstant("<bound instancemethod object>");
-    else
-        return boxStrConstant("<unbound instancemethod object>");
+// Modified from cpython, Objects/object.c, instancemethod_repr
+static Box* instancemethodRepr(Box* b) {
+    assert(isSubclass(b->cls, instancemethod_cls));
+    BoxedInstanceMethod* a = static_cast<BoxedInstanceMethod*>(b);
+    Box* self = a->obj;
+    Box* func = a->func;
+    Box* klass = a->im_class;
+    Box* funcname = NULL, * klassname = NULL, * result = NULL;
+    const char* sfuncname = "?", * sklassname = "?";
+
+    funcname = getattrInternal(func, "__name__", NULL);
+    if (funcname != NULL) {
+        if (!PyString_Check(funcname)) {
+            funcname = NULL;
+        } else
+            sfuncname = PyString_AS_STRING(funcname);
+    }
+
+    if (klass == NULL) {
+        klassname = NULL;
+    } else {
+        klassname = getattrInternal(klass, "__name__", NULL);
+        if (klassname != NULL) {
+            if (!PyString_Check(klassname)) {
+                klassname = NULL;
+            } else {
+                sklassname = PyString_AS_STRING(klassname);
+            }
+        }
+    }
+
+    if (self == NULL)
+        result = PyString_FromFormat("<unbound method %s.%s>", sklassname, sfuncname);
+    else {
+        // This was a CPython comment: /* XXX Shouldn't use repr() here! */
+        Box* selfrepr = repr(self);
+        assert(PyString_Check(selfrepr));
+        result = PyString_FromFormat("<bound method %s.%s of %s>", sklassname, sfuncname, PyString_AS_STRING(selfrepr));
+    }
+    return result;
 }
 
 Box* instancemethodEq(BoxedInstanceMethod* self, Box* rhs) {
@@ -2255,9 +2292,10 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr(
-        "__subclasshook__",
-        boxInstanceMethod(object_cls, new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2))));
+    object_cls->giveAttr("__subclasshook__",
+                         boxInstanceMethod(object_cls,
+                                           new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
+                                           object_cls));
     // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
     // object_cls->setattr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)), NULL);
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
@@ -2368,6 +2406,9 @@ void setupRuntime() {
         "im_self", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, obj)));
     instancemethod_cls->giveAttr("__self__", instancemethod_cls->getattr("im_self"));
     instancemethod_cls->freeze();
+
+    instancemethod_cls->giveAttr("im_class", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
+                                                                       offsetof(BoxedInstanceMethod, im_class), true));
 
     slice_cls->giveAttr("__new__",
                         new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));

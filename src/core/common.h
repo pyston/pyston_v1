@@ -87,4 +87,12 @@ template <typename T1, typename T2> struct hash<pair<T1, T2>> {
 };
 }
 
+namespace std {
+template <typename T1, typename T2, typename T3> struct hash<tuple<T1, T2, T3>> {
+    size_t operator()(const tuple<T1, T2, T3> p) const {
+        return hash<T1>()(std::get<0>(p)) ^ (hash<T2>()(std::get<1>(p)) << 1) ^ (hash<T3>()(std::get<2>(p)) << 2);
+    }
+};
+}
+
 #endif
