@@ -318,8 +318,8 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined)
-    : BoxVar(0), attrs(HiddenClass::makeSingleton()), gc_visit(gc_visit), simple_destructor(NULL),
-      attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined), is_pyston_class(true) {
+    : attrs(HiddenClass::makeSingleton()), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset),
+      is_constant(false), is_user_defined(is_user_defined), is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -375,16 +375,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (base && cls && str_cls)
         giveAttr("__base__", base);
 
-    // this isn't strictly correct, as it permits subclasses from
-    // e.g. Tuples/Longs to have weakrefs, which cpython disallows.
-    if (tp_weaklistoffset == 0 && base)
-        tp_weaklistoffset = base->tp_weaklistoffset;
-    if (is_user_defined && tp_weaklistoffset == 0) {
-        tp_weaklistoffset = tp_basicsize;
-        tp_basicsize += sizeof(Box**);
-    }
-
-    assert(tp_basicsize % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
@@ -433,13 +423,13 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
                                        int weaklist_offset, int instance_size, bool is_user_defined,
                                        const std::string& name) {
     return create(metaclass, base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined,
-                  static_cast<BoxedString*>(boxString(name)), NULL);
+                  static_cast<BoxedString*>(boxString(name)), NULL, 0);
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                        int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
-                                       BoxedTuple* bases) {
-    BoxedHeapClass* made = new (metaclass)
+                                       BoxedTuple* bases, size_t nslots) {
+    BoxedHeapClass* made = new (metaclass, nslots)
         BoxedHeapClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
 
     assert((name || str_cls == NULL) && "name can only be NULL before str_cls has been initialized.");
@@ -584,16 +574,33 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     return cur;
 }
 
-HCAttrs* Box::getHCAttrsPtr() {
+size_t Box::getHCAttrsOffset() {
     assert(cls->instancesHaveHCAttrs());
 
+    if (unlikely(cls->attrs_offset < 0)) {
+        // negative indicates an offset from the end of an object
+        if (cls->tp_itemsize != 0) {
+            size_t ob_size = static_cast<BoxVar*>(this)->ob_size;
+            return cls->tp_basicsize + ob_size * cls->tp_itemsize + cls->attrs_offset;
+        } else {
+            // This case is unlikely: why would we use a negative attrs_offset
+            // if it wasn't a var-sized object? But I guess it's technically allowed.
+            return cls->attrs_offset;
+        }
+    } else {
+        return cls->attrs_offset;
+    }
+}
+
+HCAttrs* Box::getHCAttrsPtr() {
     char* p = reinterpret_cast<char*>(this);
-    p += cls->attrs_offset;
+    p += this->getHCAttrsOffset();
     return reinterpret_cast<HCAttrs*>(p);
 }
 
 BoxedDict** Box::getDictPtr() {
     assert(cls->instancesHaveDictAttrs());
+    RELEASE_ASSERT(cls->tp_dictoffset > 0, "not implemented: handle < 0 case like in getHCAttrsPtr");
 
     char* p = reinterpret_cast<char*>(this);
     p += cls->tp_dictoffset;
@@ -670,23 +677,39 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
 
         if (rewrite_args) {
             if (!rewrite_args->obj_hcls_guarded) {
-                rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-                if (hcls->type == HiddenClass::SINGLETON)
-                    hcls->addDependence(rewrite_args->rewriter);
+                if (cls->attrs_offset < 0) {
+                    REWRITE_ABORTED("");
+                    rewrite_args = NULL;
+                } else {
+                    rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+                    if (hcls->type == HiddenClass::SINGLETON)
+                        hcls->addDependence(rewrite_args->rewriter);
+                }
             }
-
-            rewrite_args->out_success = true;
         }
 
         int offset = hcls->getOffset(attr);
         if (offset == -1) {
+            if (rewrite_args) {
+                rewrite_args->out_success = true;
+            }
             return NULL;
         }
 
         if (rewrite_args) {
-            RewriterVar* r_attrs
-                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
-            rewrite_args->out_rtn = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
+            if (cls->attrs_offset < 0) {
+                REWRITE_ABORTED("");
+                rewrite_args = NULL;
+            } else {
+                RewriterVar* r_attrs
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+                rewrite_args->out_rtn
+                    = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
+            }
+        }
+
+        if (rewrite_args) {
+            rewrite_args->out_success = true;
         }
 
         Box* rtn = attrs->attr_list->attrs[offset];
@@ -707,8 +730,9 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
         return it->second;
     }
 
-    if (rewrite_args)
+    if (rewrite_args) {
         rewrite_args->out_success = true;
+    }
 
     return NULL;
 }
@@ -734,10 +758,15 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
     } else {
         attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
         if (rewrite_args) {
-            RewriterVar* r_oldarray
-                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
-            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-            r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+            if (cls->attrs_offset < 0) {
+                REWRITE_ABORTED("");
+                rewrite_args = NULL;
+            } else {
+                RewriterVar* r_oldarray
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
+                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
+                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+            }
         }
     }
 
@@ -787,9 +816,14 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         int offset = hcls->getOffset(attr);
 
         if (rewrite_args) {
-            rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-            if (hcls->type == HiddenClass::SINGLETON)
-                hcls->addDependence(rewrite_args->rewriter);
+            if (cls->attrs_offset < 0) {
+                REWRITE_ABORTED("");
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+                if (hcls->type == HiddenClass::SINGLETON)
+                    hcls->addDependence(rewrite_args->rewriter);
+            }
         }
 
         if (offset >= 0) {
@@ -799,12 +833,17 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
 
             if (rewrite_args) {
 
-                RewriterVar* r_hattrs
-                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+                if (cls->attrs_offset < 0) {
+                    REWRITE_ABORTED("");
+                    rewrite_args = NULL;
+                } else {
+                    RewriterVar* r_hattrs
+                        = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
 
-                r_hattrs->setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+                    r_hattrs->setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
 
-                rewrite_args->out_success = true;
+                    rewrite_args->out_success = true;
+                }
             }
 
             return;
@@ -4066,6 +4105,28 @@ static void assertInitNone(Box* obj) {
     }
 }
 
+void assertValidSlotIdentifier(Box* s) {
+    // Ported from `valid_identifier` in cpython
+
+    unsigned char* p;
+    size_t i, n;
+
+    if (!PyString_Check(s)) {
+        raiseExcHelper(TypeError, "__slots__ items must be strings, not '%.200s'", Py_TYPE(s)->tp_name);
+    }
+    p = (unsigned char*)PyString_AS_STRING(s);
+    n = PyString_GET_SIZE(s);
+    /* We must reject an empty name.  As a hack, we bump the
+       length to 1 so that the loop will balk on the trailing \0. */
+    if (n == 0)
+        n = 1;
+    for (i = 0; i < n; i++, p++) {
+        if (!(i == 0 ? isalpha(*p) : isalnum(*p)) && *p != '_') {
+            raiseExcHelper(TypeError, "__slots__ must be identifiers");
+        }
+    }
+}
+
 Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     STAT_TIMER(t0, "us_timer_typeNew");
@@ -4134,28 +4195,166 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);
     assert(isSubclass(base->cls, type_cls));
 
-
-    // TODO I don't think we have to implement the __slots__ memory savings behavior
-    // (we get almost all of that automatically with hidden classes), but adding a __slots__
-    // adds other restrictions (ex for multiple inheritance) that we won't end up enforcing.
-    // I guess it should be ok if we're more permissive?
-    // auto slots = PyDict_GetItemString(attr_dict, "__slots__");
-    // RELEASE_ASSERT(!slots, "__slots__ unsupported");
-
-
-    BoxedClass* made;
-
-    if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
-        made = BoxedHeapClass::create(metatype, base, NULL, base->attrs_offset, base->tp_weaklistoffset,
-                                      base->tp_basicsize, true, name, bases);
+    // Handle slots
+    Box* boxedSlots = PyDict_GetItemString(attr_dict, "__slots__");
+    int add_dict = 0;
+    int add_weak = 0;
+    bool may_add_dict = base->tp_dictoffset == 0 && base->attrs_offset == 0;
+    bool may_add_weak = base->tp_weaklistoffset == 0 && base->tp_itemsize == 0;
+    std::vector<Box*> final_slot_names;
+    if (boxedSlots == NULL) {
+        if (may_add_dict) {
+            add_dict++;
+        }
+        if (may_add_weak) {
+            add_weak++;
+        }
     } else {
-        assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = BoxedHeapClass::create(metatype, base, NULL, base->tp_basicsize, base->tp_weaklistoffset,
-                                      base->tp_basicsize + sizeof(HCAttrs), true, name, bases);
+        // Get a pointer to an array of slots.
+        std::vector<Box*> slots;
+        if (PyString_Check(boxedSlots) || PyUnicode_Check(boxedSlots)) {
+            slots = { boxedSlots };
+        } else {
+            BoxedTuple* tuple = static_cast<BoxedTuple*>(PySequence_Tuple(boxedSlots));
+            checkAndThrowCAPIException();
+            slots = std::vector<Box*>(tuple->size());
+            for (size_t i = 0; i < tuple->size(); i++) {
+                slots[i] = (*tuple)[i];
+            }
+        }
+
+        // Check that slots are allowed
+        if (slots.size() > 0 && base->tp_itemsize != 0) {
+            raiseExcHelper(TypeError, "nonempty __slots__ not supported for subtype of '%s'", base->tp_name);
+        }
+
+        // Convert unicode -> string
+        for (size_t i = 0; i < slots.size(); i++) {
+            Box* slot_name = slots[i];
+            if (PyUnicode_Check(slot_name)) {
+                slots[i] = _PyUnicode_AsDefaultEncodedString(slot_name, NULL);
+                checkAndThrowCAPIException();
+            }
+        }
+
+        // Check for valid slot names and two special cases
+        // Mangle and sort names
+        for (size_t i = 0; i < slots.size(); i++) {
+            Box* tmp = slots[i];
+            assertValidSlotIdentifier(tmp);
+            assert(PyString_Check(tmp));
+            if (static_cast<BoxedString*>(tmp)->s == "__dict__") {
+                if (!may_add_dict || add_dict) {
+                    raiseExcHelper(TypeError, "__dict__ slot disallowed: "
+                                              "we already got one");
+                }
+                add_dict++;
+                continue;
+            } else if (static_cast<BoxedString*>(tmp)->s == "__weakref__") {
+                if (!may_add_weak || add_weak) {
+                    raiseExcHelper(TypeError, "__weakref__ slot disallowed: "
+                                              "either we already got one, "
+                                              "or __itemsize__ != 0");
+                }
+                add_weak++;
+                continue;
+            }
+
+            assert(tmp->cls == str_cls);
+            final_slot_names.push_back(mangleNameBoxedString(static_cast<BoxedString*>(tmp), name));
+        }
+
+        std::sort(final_slot_names.begin(), final_slot_names.end(), PyLt());
+
+        if (nbases > 1 && ((may_add_dict && !add_dict) || (may_add_weak && !add_weak))) {
+            for (size_t i = 0; i < nbases; i++) {
+                Box* tmp = PyTuple_GET_ITEM(bases, i);
+                if (tmp == (PyObject*)base)
+                    continue; /* Skip primary base */
+                if (PyClass_Check(tmp)) {
+                    /* Classic base class provides both */
+                    if (may_add_dict && !add_dict)
+                        add_dict++;
+                    if (may_add_weak && !add_weak)
+                        add_weak++;
+                    break;
+                }
+                assert(PyType_Check(tmp));
+                BoxedClass* tmptype = static_cast<BoxedClass*>(tmp);
+                if (may_add_dict && !add_dict && (tmptype->tp_dictoffset != 0 || tmptype->attrs_offset != 0))
+                    add_dict++;
+                if (may_add_weak && !add_weak && tmptype->tp_weaklistoffset != 0)
+                    add_weak++;
+                if (may_add_dict && !add_dict)
+                    continue;
+                if (may_add_weak && !add_weak)
+                    continue;
+                /* Nothing more to check */
+                break;
+            }
+        }
     }
 
-    // TODO: how much of these should be in BoxedClass::finishInitialization()?
-    made->tp_dictoffset = base->tp_dictoffset;
+    int attrs_offset = base->attrs_offset;
+    int dict_offset = base->tp_dictoffset;
+    int weaklist_offset = 0;
+    int basic_size = 0;
+
+    int cur_offset = base->tp_basicsize + sizeof(Box*) * final_slot_names.size();
+    if (add_dict) {
+        // CPython would set tp_dictoffset here, but we want to use attrs instead.
+        if (base->tp_itemsize) {
+            // A negative value indicates an offset from the end of the object
+            attrs_offset = -(long)sizeof(HCAttrs);
+        } else {
+            attrs_offset = cur_offset;
+        }
+        cur_offset += sizeof(HCAttrs);
+    }
+    if (add_weak) {
+        assert(!base->tp_itemsize);
+        weaklist_offset = cur_offset;
+        cur_offset += sizeof(Box*);
+    }
+    basic_size = cur_offset;
+
+    size_t total_slots = final_slot_names.size()
+                         + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);
+    BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, NULL, attrs_offset, weaklist_offset, basic_size, true,
+                                                  name, bases, total_slots);
+    made->tp_dictoffset = dict_offset;
+
+    if (boxedSlots) {
+        // Set ht_slots
+        BoxedTuple* slotsTuple = BoxedTuple::create(final_slot_names.size());
+        for (size_t i = 0; i < final_slot_names.size(); i++)
+            (*slotsTuple)[i] = final_slot_names[i];
+        assert(made->tp_flags & Py_TPFLAGS_HEAPTYPE);
+        static_cast<BoxedHeapClass*>(made)->ht_slots = slotsTuple;
+
+        BoxedHeapClass::SlotOffset* slot_offsets = made->slotOffsets();
+        size_t slot_offset_offset = made->tp_basicsize;
+
+        // Add the member descriptors
+        size_t offset = base->tp_basicsize;
+        for (size_t i = 0; i < final_slot_names.size(); i++) {
+            made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->s.data(),
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT_EX, offset, false /* read only */));
+            slot_offsets[i] = offset;
+            offset += sizeof(Box*);
+        }
+    }
+
+    // Add slot offsets for slots of the base
+    // NOTE: CPython does this, but I don't want to have to traverse the class hierarchy to
+    // traverse all the slots, so I'm putting them all here.
+    if (base->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        BoxedHeapClass::SlotOffset* slot_offsets = made->slotOffsets();
+        BoxedHeapClass* base_heap_cls = static_cast<BoxedHeapClass*>(base);
+        BoxedHeapClass::SlotOffset* base_slot_offsets = base_heap_cls->slotOffsets();
+        memcpy(&slot_offsets[final_slot_names.size()], base_slot_offsets,
+               base_heap_cls->nslots() * sizeof(BoxedHeapClass::SlotOffset));
+    }
 
     if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
         made->giveAttr("__dict__", dict_descr);

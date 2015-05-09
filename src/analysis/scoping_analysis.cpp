@@ -20,6 +20,7 @@
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -50,6 +51,30 @@ bool containsYield(AST* ast) {
         ast->accept(&visitor);
     }
     return visitor.containsYield;
+}
+
+// TODO
+// Combine this with the below? Basically the same logic with different string types...
+// Also should this go in this file?
+BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
+    assert(id);
+    assert(private_name);
+    int len = id->s.size();
+    if (len < 2 || id->s[0] != '_' || id->s[1] != '_')
+        return id;
+
+    if ((id->s[len - 2] == '_' && id->s[len - 1] == '_') || id->s.find('.') != llvm::StringRef::npos)
+        return id;
+
+    const char* p = private_name->s.data();
+    while (*p == '_') {
+        p++;
+        len--;
+    }
+    if (*p == '\0')
+        return id;
+
+    return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s)));
 }
 
 static void mangleNameInPlace(InternedString& id, const std::string* private_name,

@@ -178,6 +178,9 @@ public:
 };
 
 bool containsYield(AST* ast);
+
+class BoxedString;
+BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name);
 }
 
 #endif

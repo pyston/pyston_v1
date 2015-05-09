@@ -177,7 +177,10 @@ public:
     void (*simple_destructor)(Box*);
 
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
+    // Negative offset is from the end of the class (useful for variable-size objects with the attrs at the end)
     // Analogous to tp_dictoffset
+    // A class should have at most of one attrs_offset and tp_dictoffset be nonzero.
+    // (But having nonzero attrs_offset here would map to having nonzero tp_dictoffset in CPython)
     const int attrs_offset;
 
     bool instancesHaveHCAttrs() { return attrs_offset != 0; }
@@ -231,12 +234,16 @@ public:
     PyBufferProcs as_buffer;
 
     BoxedString* ht_name;
-    PyObject** ht_slots;
+    PyObject* ht_slots;
+
+    typedef size_t SlotOffset;
+    SlotOffset* slotOffsets() { return (BoxedHeapClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
+    size_t nslots() { return this->ob_size; }
 
     // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
-                                  BoxedTuple* bases);
+                                  BoxedTuple* bases, size_t nslots);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined,
                                   const std::string& name);
@@ -251,7 +258,7 @@ private:
     friend void setupRuntime();
     friend void setupSys();
 
-    DEFAULT_CLASS(type_cls);
+    DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
@@ -417,7 +424,7 @@ public:
     DEFAULT_CLASS_SIMPLE(bool_cls);
 };
 
-class BoxedString : public Box {
+class BoxedString : public BoxVar {
 public:
     llvm::StringRef s;
     char interned_state;
@@ -425,40 +432,28 @@ public:
     char* data() { return const_cast<char*>(s.data()); }
     size_t size() { return s.size(); }
 
-    void* operator new(size_t size, size_t ssize) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_str("alloc.str");
-        static StatCounter alloc_str1("alloc.str(1)");
-        static StatCounter allocsize_str("allocsize.str");
+    // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
+        ALLOC_STATS_VAR(str_cls)
 
-        if (ssize == 1)
-            alloc_str1.log();
-        else
-            alloc_str.log();
-
-        allocsize_str.log(str_cls->tp_basicsize + ssize + 1);
-#endif
-        Box* rtn = static_cast<Box*>(gc_alloc(str_cls->tp_basicsize + ssize + 1, gc::GCKind::PYTHON));
-        rtn->cls = str_cls;
-        return rtn;
+        assert(cls->tp_itemsize == sizeof(char));
+        return BoxVar::operator new(size, cls, nitems);
     }
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
+        ALLOC_STATS_VAR(str_cls)
 
-    void* operator new(size_t size, BoxedClass* cls, size_t ssize) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_str("alloc.str");
-        static StatCounter alloc_str1("alloc.str(1)");
+        assert(str_cls->tp_alloc == PystonType_GenericAlloc);
+        assert(str_cls->tp_itemsize == 1);
+        assert(str_cls->tp_basicsize == sizeof(BoxedString) + 1);
+        assert(str_cls->is_pyston_class);
+        assert(str_cls->attrs_offset == 0);
 
-        static StatCounter allocsize_str("allocsize.str");
+        void* mem = gc_alloc(sizeof(BoxedString) + 1 + nitems, gc::GCKind::PYTHON);
+        assert(mem);
 
-        if (ssize == 1)
-            alloc_str1.log();
-        else
-            alloc_str.log();
-
-        allocsize_str.log(cls->tp_basicsize + ssize + 1);
-#endif
-        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, ssize + 1));
-        rtn->cls = cls;
+        BoxVar* rtn = static_cast<BoxVar*>(mem);
+        rtn->cls = str_cls;
+        rtn->ob_size = nitems;
         return rtn;
     }
 
@@ -470,7 +465,8 @@ public:
 
 private:
     // used only in ctors to give our llvm::StringRef the proper pointer
-    char* storage() { return (char*)this + cls->tp_basicsize; }
+    // Note: sizeof(BoxedString) = str_cls->tp_basicsize - 1
+    char* storage() { return (char*)this + sizeof(BoxedString); }
 
     void* operator new(size_t size) = delete;
 };
@@ -551,54 +547,13 @@ public:
     DEFAULT_CLASS_SIMPLE(list_cls);
 };
 
-class BoxedTuple : public Box {
+class BoxedTuple : public BoxVar {
 public:
     typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
 
     Box** elts;
 
-    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_tuple("alloc.tuple");
-        static StatCounter alloc_tuple0("alloc.tuple(0)");
-
-        static StatCounter allocsize_tuple("allocsize.tuple");
-        static StatCounter allocsize_tuple0("allocsize.tuple(0)");
-
-        if (nelts == 0) {
-            alloc_tuple0.log();
-            allocsize_tuple0.log(_PyObject_VAR_SIZE(tuple_cls, nelts + 1));
-        } else {
-            alloc_tuple.log();
-            allocsize_tuple.log(_PyObject_VAR_SIZE(tuple_cls, nelts + 1));
-        }
-#endif
-
-        Box* rtn = static_cast<Box*>(gc_alloc(_PyObject_VAR_SIZE(tuple_cls, nelts + 1), gc::GCKind::PYTHON));
-        rtn->cls = tuple_cls;
-        return rtn;
-    }
-
-    void* operator new(size_t size, BoxedClass* cls, size_t nelts) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_tuple("alloc.tuple");
-        static StatCounter alloc_tuple0("alloc.tuple(0)");
-
-        static StatCounter allocsize_tuple("allocsize.tuple");
-        static StatCounter allocsize_tuple0("allocsize.tuple(0)");
-
-        if (nelts == 0) {
-            alloc_tuple0.log();
-            allocsize_tuple0.log(_PyObject_VAR_SIZE(cls, nelts + 1));
-        } else {
-            alloc_tuple.log();
-            allocsize_tuple.log(_PyObject_VAR_SIZE(cls, nelts + 1));
-        }
-#endif
-        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, nelts));
-        rtn->cls = cls;
-        return rtn;
-    }
+    DEFAULT_CLASS_VAR_SIMPLE(tuple_cls, sizeof(Box*));
 
     static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
@@ -640,18 +595,19 @@ public:
 
     Box** begin() const { return &elts[0]; }
     Box** end() const { return &elts[nelts]; }
+    Box*& operator[](size_t index) { return elts[index]; }
 
     size_t size() const { return nelts; }
 
 private:
     size_t nelts;
 
-    BoxedTuple(size_t size) : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(size) {
+    BoxedTuple(size_t size) : elts(reinterpret_cast<Box**>((char*)this + tuple_cls->tp_basicsize)), nelts(size) {
         memset(elts, 0, sizeof(Box*) * size);
     }
 
     BoxedTuple(std::initializer_list<Box*>& members)
-        : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(members.size()) {
+        : elts(reinterpret_cast<Box**>((char*)this + tuple_cls->tp_basicsize)), nelts(members.size()) {
         // by the time we make it here elts[] is big enough to contain members
         Box** p = &elts[0];
         for (auto b : members) {
