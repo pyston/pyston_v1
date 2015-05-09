@@ -16,6 +16,7 @@
 #define PYSTON_CAPI_TYPES_H
 
 #include "runtime/capi.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -72,8 +73,12 @@ public:
             assert(varargs->size() == 0);
             rtn = (Box*)self->func(self->passthrough, NULL);
         } else if (self->ml_flags == METH_O) {
-            assert(kwargs->d.size() == 0);
-            assert(varargs->size() == 1);
+            if (kwargs->d.size() != 0) {
+                raiseExcHelper(TypeError, "%s() takes no keyword arguments", self->name);
+            }
+            if (varargs->size() != 1) {
+                raiseExcHelper(TypeError, "%s() takes exactly one argument (%d given)", self->name, varargs->size());
+            }
             rtn = (Box*)self->func(self->passthrough, varargs->elts[0]);
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
