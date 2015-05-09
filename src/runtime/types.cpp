@@ -278,7 +278,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
         this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
-        this->modname = boxStringPtr(&builtinStr);
+        this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
 
@@ -301,7 +301,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
-        this->modname = boxStringPtr(&builtinStr);
+        this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
 
