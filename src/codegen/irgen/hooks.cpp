@@ -514,6 +514,9 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = module;
 
+    if (globals->cls == attrwrapper_cls)
+        globals = unwrapAttrWrapper(globals);
+
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
     if (boxedCode->cls == unicode_cls) {
@@ -568,6 +571,9 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     BoxedModule* module = getCurrentModule();
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = module;
+
+    if (globals->cls == attrwrapper_cls)
+        globals = unwrapAttrWrapper(globals);
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 

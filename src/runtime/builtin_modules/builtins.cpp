@@ -478,8 +478,14 @@ Box* hasattr(Box* obj, Box* _str) {
 
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
+    bool use_identity_func = f == None;
     for (Box* e : container->pyElements()) {
-        listAppendInternal(rtn, runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL));
+        Box* val;
+        if (use_identity_func)
+            val = e;
+        else
+            val = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+        listAppendInternal(rtn, val);
     }
     return rtn;
 }
@@ -505,6 +511,7 @@ Box* map(Box* f, BoxedTuple* args) {
     assert(args_it.size() == num_iterable);
     assert(args_end.size() == num_iterable);
 
+    bool use_identity_func = f == None;
     Box* rtn = new BoxedList();
     std::vector<Box*, StlCompatAllocator<Box*>> current_val(num_iterable);
     while (true) {
@@ -521,9 +528,14 @@ Box* map(Box* f, BoxedTuple* args) {
         if (num_done == num_iterable)
             break;
 
-        auto v = getTupleFromArgsArray(&current_val[0], num_iterable);
-        listAppendInternal(rtn, runtimeCall(f, ArgPassSpec(num_iterable), std::get<0>(v), std::get<1>(v),
-                                            std::get<2>(v), std::get<3>(v), NULL));
+        Box* entry;
+        if (!use_identity_func) {
+            auto v = getTupleFromArgsArray(&current_val[0], num_iterable);
+            entry = runtimeCall(f, ArgPassSpec(num_iterable), std::get<0>(v), std::get<1>(v), std::get<2>(v),
+                                std::get<3>(v), NULL);
+        } else
+            entry = BoxedTuple::create(num_iterable, &current_val[0]);
+        listAppendInternal(rtn, entry);
 
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] != args_end[i])
@@ -760,6 +772,19 @@ extern "C" PyObject* PyEval_GetLocals(void) noexcept {
         setCAPIException(e);
         return NULL;
     }
+}
+
+extern "C" PyObject* PyEval_GetGlobals(void) noexcept {
+    try {
+        return globals();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyEval_GetBuiltins(void) noexcept {
+    return builtins_module;
 }
 
 Box* divmod(Box* lhs, Box* rhs) {
