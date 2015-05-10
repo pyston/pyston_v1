@@ -20,3 +20,6 @@
 	path = test/integration/gflags
 	url = https://github.com/google/python-gflags
 	ignore = untracked
+[submodule "test/integration/sqlalchemy"]
+	path = test/integration/sqlalchemy
+	url = https://github.com/zzzeek/sqlalchemy
