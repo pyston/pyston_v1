@@ -275,3 +275,27 @@ class OldSeqTest:
         return n ** 2
 m = OldSeqTest()
 print list(m)
+
+import sys
+class E:
+    def __init__(self, *args):
+        print "__init__", args
+    def __repr__(self):
+        return "<E object>"
+try:
+    raise E
+except:
+    print sys.exc_info()[0].__name__, sys.exc_info()[1]
+try:
+    raise E, 1
+except:
+    print sys.exc_info()[0].__name__, sys.exc_info()[1]
+try:
+    raise E()
+except:
+    print sys.exc_info()[0].__name__, sys.exc_info()[1]
+try:
+    raise E(), 1
+except:
+    print sys.exc_info()[0].__name__, sys.exc_info()[1]
+

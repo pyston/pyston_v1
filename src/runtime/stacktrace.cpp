@@ -235,9 +235,6 @@ extern "C" void raise0() {
 
 #ifndef NDEBUG
 ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
-    if (this->type && this->type != None)
-        RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
-                       getTypeName(this->type));
 }
 #endif
 
@@ -253,39 +250,50 @@ bool ExcInfo::matches(BoxedClass* cls) const {
 }
 
 // takes the three arguments of a `raise' and produces the ExcInfo to throw
-ExcInfo excInfoForRaise(Box* exc_cls, Box* exc_val, Box* exc_tb) {
-    assert(exc_cls && exc_val && exc_tb); // use None for default behavior, not nullptr
+ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
+    assert(type && value && tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
-    if (exc_tb == None)
-        exc_tb = getTraceback();
+    if (tb == None)
+        tb = getTraceback();
 
-    if (isSubclass(exc_cls->cls, type_cls)) {
-        BoxedClass* c = static_cast<BoxedClass*>(exc_cls);
-        if (isSubclass(c, BaseException)) {
-            Box* exc_obj;
+    /* Next, repeatedly, replace a tuple exception with its first item */
+    while (PyTuple_Check(type) && PyTuple_Size(type) > 0) {
+        PyObject* tmp = type;
+        type = PyTuple_GET_ITEM(type, 0);
+        Py_INCREF(type);
+        Py_DECREF(tmp);
+    }
 
-            if (isSubclass(exc_val->cls, BaseException)) {
-                exc_obj = exc_val;
-                c = exc_obj->cls;
-            } else if (exc_val != None) {
-                exc_obj = runtimeCall(c, ArgPassSpec(1), exc_val, NULL, NULL, NULL, NULL);
-            } else {
-                exc_obj = runtimeCall(c, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-            }
-
-            return ExcInfo(c, exc_obj, exc_tb);
+    if (PyExceptionClass_Check(type)) {
+        PyErr_NormalizeException(&type, &value, &tb);
+        if (!PyExceptionInstance_Check(value)) {
+            raiseExcHelper(TypeError, "calling %s() should have returned an instance of "
+                                      "BaseException, not '%s'",
+                           ((PyTypeObject*)type)->tp_name, Py_TYPE(value)->tp_name);
         }
-    }
-
-    if (isSubclass(exc_cls->cls, BaseException)) {
-        if (exc_val != None)
+    } else if (PyExceptionInstance_Check(type)) {
+        /* Raising an instance.  The value should be a dummy. */
+        if (value != Py_None) {
             raiseExcHelper(TypeError, "instance exception may not have a separate value");
-        return ExcInfo(exc_cls->cls, exc_cls, exc_tb);
+        } else {
+            /* Normalize to raise <class>, <instance> */
+            Py_DECREF(value);
+            value = type;
+            type = PyExceptionInstance_Class(type);
+            Py_INCREF(type);
+        }
+    } else {
+        /* Not something you can raise.  You get an exception
+           anyway, just not what you specified :-) */
+        raiseExcHelper(TypeError, "exceptions must be old-style classes or "
+                                  "derived from BaseException, not %s",
+                       type->cls->tp_name);
     }
 
-    raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                   getTypeName(exc_cls));
+    assert(PyExceptionClass_Check(type));
+
+    return ExcInfo(type, value, tb);
 }
 
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {

@@ -1572,6 +1572,10 @@ static PyObject* file_isatty(BoxedFile* f) noexcept {
     return PyBool_FromLong(res);
 }
 
+static PyObject* get_closed(BoxedFile* f, void* closure) noexcept {
+    return PyBool_FromLong((long)(f->f_fp == 0));
+}
+
 PyDoc_STRVAR(seek_doc, "seek(offset[, whence]) -> None.  Move to new file position.\n"
                        "\n"
                        "Argument offset is a byte count.  Optional argument whence defaults to\n"
@@ -1592,11 +1596,15 @@ PyDoc_STRVAR(readlines_doc, "readlines([size]) -> list of strings, each a line f
 
 PyDoc_STRVAR(isatty_doc, "isatty() -> true or false.  True if the file is connected to a tty device.");
 
-PyMethodDef file_methods[] = {
+static PyMethodDef file_methods[] = {
     { "seek", (PyCFunction)file_seek, METH_VARARGS, seek_doc },
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
     { "writelines", (PyCFunction)file_writelines, METH_O, NULL },
     { "isatty", (PyCFunction)file_isatty, METH_NOARGS, isatty_doc },
+};
+
+static PyGetSetDef file_getsetlist[] = {
+    { "closed", (getter)get_closed, NULL, "True if the file is closed", NULL },
 };
 
 void fileDestructor(Box* b) {
@@ -1655,6 +1663,11 @@ void setupFile() {
 
     for (auto& md : file_methods) {
         file_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, file_cls));
+    }
+
+    for (auto& getset : file_getsetlist) {
+        file_cls->giveAttr(getset.name, new (capi_getset_cls) BoxedGetsetDescriptor(
+                                            getset.get, (void (*)(Box*, Box*, void*))getset.set, getset.closure));
     }
 
     file_cls->freeze();

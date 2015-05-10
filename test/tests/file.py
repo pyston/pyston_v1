@@ -91,3 +91,5 @@ try:
         print "succeeded"
 except Exception as e:
     print e
+
+print sys.stdout.closed

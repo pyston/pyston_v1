@@ -685,6 +685,13 @@ void checkAndThrowCAPIException() {
     }
 }
 
+extern "C" void Py_Exit(int sts) noexcept {
+    // Py_Finalize();
+
+    Stats::dump(false);
+    exit(sts);
+}
+
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
     cur_thread_state.curexc_type = type;
     cur_thread_state.curexc_value = value;

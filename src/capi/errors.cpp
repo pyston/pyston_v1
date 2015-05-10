@@ -354,7 +354,55 @@ extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb
 }
 
 static void handle_system_exit(void) noexcept {
-    Py_FatalError("unimplemented");
+    PyObject* exception, *value, *tb;
+    int exitcode = 0;
+
+    if (Py_InspectFlag)
+        /* Don't exit if -i flag was given. This flag is set to 0
+         * when entering interactive mode for inspecting. */
+        return;
+
+    PyErr_Fetch(&exception, &value, &tb);
+    if (Py_FlushLine())
+        PyErr_Clear();
+    fflush(stdout);
+    if (value == NULL || value == Py_None)
+        goto done;
+    if (PyExceptionInstance_Check(value)) {
+        /* The error code should be in the `code' attribute. */
+        PyObject* code = PyObject_GetAttrString(value, "code");
+        if (code) {
+            Py_DECREF(value);
+            value = code;
+            if (value == Py_None)
+                goto done;
+        }
+        /* If we failed to dig out the 'code' attribute,
+           just let the else clause below print the error. */
+    }
+    if (PyInt_Check(value))
+        exitcode = (int)PyInt_AsLong(value);
+    else {
+        PyObject* sys_stderr = PySys_GetObject("stderr");
+        if (sys_stderr != NULL && sys_stderr != Py_None) {
+            PyFile_WriteObject(value, sys_stderr, Py_PRINT_RAW);
+        } else {
+            PyObject_Print(value, stderr, Py_PRINT_RAW);
+            fflush(stderr);
+        }
+        PySys_WriteStderr("\n");
+        exitcode = 1;
+    }
+done:
+    /* Restore and clear the exception info, in order to properly decref
+     * the exception, value, and traceback.      If we just exit instead,
+     * these leak, which confuses PYTHONDUMPREFS output, and may prevent
+     * some finalizers from running.
+     */
+    PyErr_Restore(exception, value, tb);
+    PyErr_Clear();
+    Py_Exit(exitcode);
+    /* NOTREACHED */
 }
 
 extern "C" void PyErr_PrintEx(int set_sys_last_vars) noexcept {
