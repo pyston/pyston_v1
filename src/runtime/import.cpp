@@ -735,6 +735,15 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
     Py_FatalError("unimplemented");
 }
 
+Box* impLoadSource(Box* _name, Box* _pathname, Box* _file) {
+    RELEASE_ASSERT(!_file, "'file' argument not support yet");
+
+    RELEASE_ASSERT(_name->cls == str_cls, "");
+    RELEASE_ASSERT(_pathname->cls == str_cls, "");
+
+    return createAndRunModule(static_cast<BoxedString*>(_name)->s, static_cast<BoxedString*>(_pathname)->s);
+}
+
 Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
     RELEASE_ASSERT(_name->cls == str_cls, "");
     RELEASE_ASSERT(_pathname->cls == str_cls, "");
@@ -804,6 +813,9 @@ void setupImport() {
     CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
                                                  ParamNames({ "name", "file", "pathname", "description" }, "", ""));
     imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
+    imp_module->giveAttr(
+        "load_source", new BoxedBuiltinFunctionOrMethod(
+                           boxRTFunction((void*)impLoadSource, UNKNOWN, 3, 1, false, false), "load_source", { NULL }));
 
     CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, 1, false, false,
                                                   ParamNames({ "name", "pathname", "file" }, "", ""));
