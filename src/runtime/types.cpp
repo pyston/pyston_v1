@@ -2589,18 +2589,16 @@ BoxedModule* createModule(const std::string& name, const std::string& fn, const 
 
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
-    Box*& ptr = d->d[b_name];
-    if (ptr && isSubclass(ptr->cls, module_cls)) {
-        return static_cast<BoxedModule*>(ptr);
-    } else {
-        ptr = NULL;
+    Box* existing = d->getOrNull(b_name);
+    if (existing && isSubclass(existing->cls, module_cls)) {
+        return static_cast<BoxedModule*>(existing);
     }
 
     BoxedModule* module = new BoxedModule();
     moduleInit(module, boxString(name), boxString(doc ? doc : ""));
     module->giveAttr("__file__", boxString(fn));
 
-    ptr = module;
+    d->d[b_name] = module;
     return module;
 }
 

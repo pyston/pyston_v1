@@ -612,7 +612,7 @@ class BoxedClass;
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-BoxedModule* createAndRunModule(const std::string& name, const std::string& fn);
+Box* createAndRunModule(const std::string& name, const std::string& fn);
 BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc = NULL);
 
 // TODO where to put this

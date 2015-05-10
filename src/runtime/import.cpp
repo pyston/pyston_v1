@@ -39,7 +39,7 @@ static void removeModule(const std::string& name) {
     d->d.erase(b_name);
 }
 
-BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
+Box* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
@@ -49,10 +49,14 @@ BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) 
         removeModule(name);
         raiseRaw(e);
     }
-    return module;
+
+    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    if (!r)
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+    return r;
 }
 
-static BoxedModule* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
+static Box* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
     BoxedModule* module = createModule(name, fn);
 
     Box* b_path = boxStringPtr(&module_path);
@@ -69,7 +73,11 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
         removeModule(name);
         raiseRaw(e);
     }
-    return module;
+
+    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    if (!r)
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+    return r;
 }
 
 #if LLVMREV < 210072
