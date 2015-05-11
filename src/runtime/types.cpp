@@ -838,7 +838,6 @@ static Box* builtinFunctionOrMethodName(Box* b, void*) {
 static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
-    // This fails "f.func_code is f.func_code"
     return codeForFunction(func);
 }
 
@@ -2424,6 +2423,7 @@ void setupRuntime() {
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
+    function_cls->giveAttr("__code__", function_cls->getattr("func_code"));
     function_cls->giveAttr("func_name", function_cls->getattr("__name__"));
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));

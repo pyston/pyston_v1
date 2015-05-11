@@ -264,6 +264,7 @@ public:
 
 typedef std::vector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
+class BoxedCode;
 class CLFunction {
 public:
     int num_args;
@@ -278,6 +279,9 @@ public:
     CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
+    // Please use codeForFunction() to access this:
+    BoxedCode* code_obj;
+
     // Functions can provide an "internal" version, which will get called instead
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
@@ -289,12 +293,12 @@ public:
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                std::unique_ptr<SourceInfo> source)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(std::move(source)), param_names(this->source->ast), always_use_version(NULL) {
+          source(std::move(source)), param_names(this->source->ast), always_use_version(NULL), code_obj(NULL) {
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(nullptr), param_names(param_names), always_use_version(NULL) {
+          source(nullptr), param_names(param_names), always_use_version(NULL), code_obj(NULL) {
         assert(num_args >= num_defaults);
     }
 

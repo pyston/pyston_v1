@@ -102,12 +102,17 @@ public:
     }
 };
 
-Box* codeForFunction(BoxedFunction* f) {
-    return new BoxedCode(f->f);
+Box* codeForCLFunction(CLFunction* f) {
+    if (!f->code_obj) {
+        f->code_obj = new BoxedCode(f);
+        // CLFunctions don't currently participate in GC.  They actually never get freed currently.
+        gc::registerPermanentRoot(f->code_obj);
+    }
+    return f->code_obj;
 }
 
-Box* codeForCLFunction(CLFunction* f) {
-    return new BoxedCode(f);
+Box* codeForFunction(BoxedFunction* f) {
+    return codeForCLFunction(f->f);
 }
 
 CLFunction* clfunctionFromCode(Box* code) {
