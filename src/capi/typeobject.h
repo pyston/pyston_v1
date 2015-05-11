@@ -20,7 +20,7 @@
 namespace pyston {
 
 // Returns if a slot was updated
-bool update_slot(BoxedClass* self, const std::string& attr) noexcept;
+bool update_slot(BoxedClass* self, llvm::StringRef attr) noexcept;
 
 void add_operators(BoxedClass* self) noexcept;
 void fixup_slot_dispatchers(BoxedClass* self) noexcept;
