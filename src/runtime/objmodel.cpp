@@ -2844,7 +2844,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
 
-    if (argspec.has_starargs || argspec.has_kwargs || func->isGenerator) {
+    if (argspec.has_starargs || argspec.has_kwargs || f->isGenerator()) {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
     }
@@ -2878,7 +2878,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
-    if (!func->isGenerator) {
+    if (!f->isGenerator()) {
         if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
             && !f->takes_varargs && !f->takes_kwargs) {
             return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, func->globals, arg1, arg2, arg3, args);
@@ -3165,7 +3165,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // special handling for generators:
     // the call to function containing a yield should just create a new generator object.
     Box* res;
-    if (func->isGenerator) {
+    if (f->isGenerator()) {
         res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
     } else {
         res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);

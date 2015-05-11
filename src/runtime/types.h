@@ -129,8 +129,7 @@ char* getWriteableStringContents(BoxedString* s);
 
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, Box* globals,
-                              std::initializer_list<Box*> defaults);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals, std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
@@ -663,7 +662,6 @@ public:
     BoxedClosure* closure;
     Box* globals;
 
-    bool isGenerator;
     int ndefaults;
     GCdArray* defaults;
 
@@ -675,8 +673,7 @@ public:
     Box* doc;          // __doc__
 
     BoxedFunctionBase(CLFunction* f);
-    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                      bool isGenerator = false);
+    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL);
 };
 
 class BoxedFunction : public BoxedFunctionBase {
@@ -685,7 +682,7 @@ public:
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false, Box* globals = NULL);
+                  Box* globals = NULL);
 
     DEFAULT_CLASS(function_cls);
 };
@@ -694,7 +691,7 @@ class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
     BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
     BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
-                                 BoxedClosure* closure = NULL, bool isGenerator = false, const char* doc = NULL);
+                                 BoxedClosure* closure = NULL, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };

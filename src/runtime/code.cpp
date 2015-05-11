@@ -98,6 +98,8 @@ public:
             flags |= CO_VARARGS;
         if (code->f->param_names.kwarg.size())
             flags |= CO_VARKEYWORDS;
+        if (code->f->isGenerator())
+            flags |= CO_GENERATOR;
         return boxInt(flags);
     }
 };

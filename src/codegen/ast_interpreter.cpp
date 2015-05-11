@@ -759,8 +759,6 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         takes_closure = source_info->scoping->getScopeInfoForNode(node)->takesClosure();
     }
 
-    bool is_generator = cl->source->is_generator;
-
     BoxedClosure* closure = 0;
     if (takes_closure) {
         if (scope_info->createsClosure()) {
@@ -775,7 +773,7 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     Box* passed_globals = NULL;
     if (!getCF()->clfunc->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
-    return boxCLFunction(cl, closure, is_generator, passed_globals, u.il);
+    return boxCLFunction(cl, closure, passed_globals, u.il);
 }
 
 Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
@@ -815,7 +813,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     Box* passed_globals = NULL;
     if (!getCF()->clfunc->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
-    Box* attrDict = runtimeCall(boxCLFunction(cl, closure, false, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
+    Box* attrDict = runtimeCall(boxCLFunction(cl, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
 
     Box* classobj = createUserClass(&node->name.str(), basesTuple, attrDict);
 
