@@ -101,6 +101,9 @@ void raiseRaw(const ExcInfo& e) {
     assert(e.type);
     assert(e.value);
     assert(e.traceback);
+    assert(gc::isValidGCObject(e.type));
+    assert(gc::isValidGCObject(e.value));
+    assert(gc::isValidGCObject(e.traceback));
 
     // Using libgcc:
     throw e;

@@ -428,7 +428,7 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -445,7 +445,7 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -462,7 +462,7 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -590,7 +590,7 @@ extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -607,7 +607,7 @@ extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -624,7 +624,7 @@ extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__le__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -641,7 +641,7 @@ extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -658,7 +658,7 @@ extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -689,7 +689,7 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
     if (rhs->cls == long_cls)
         return longLshift(boxLong(lhs->n), rhs);
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -706,7 +706,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -812,7 +812,7 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
     if (rhs->cls == long_cls)
         return longRshift(boxLong(lhs->n), rhs);
 
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(rhs->cls, int_cls)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);

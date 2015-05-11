@@ -107,4 +107,4 @@ print s
 s = set(range(5))
 for i in xrange(10):
     s2 = set(range(i))
-    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2)
+    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2), s.issubset(range(i)), s.issuperset(range(i))
