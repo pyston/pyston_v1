@@ -21,6 +21,7 @@ pyston_grwl
 pyston_grwl_dbg
 pyston_nosync
 pyston_gcc
+pystontmp*/
 /*_unittest
 
 *.cache
