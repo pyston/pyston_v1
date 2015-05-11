@@ -188,7 +188,7 @@ void setupDescr() {
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_set)));
     property_cls->giveAttr("fdel",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_del)));
-    property_cls->giveAttr("fdoc",
+    property_cls->giveAttr("__doc__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_doc)));
     property_cls->freeze();
 

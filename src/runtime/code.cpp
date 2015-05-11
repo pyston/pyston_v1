@@ -62,6 +62,9 @@ public:
             return boxInt(-1);
         }
 
+        if (cl->source->ast->lineno == (uint32_t)-1)
+            return boxInt(-1);
+
         return boxInt(cl->source->ast->lineno);
     }
 

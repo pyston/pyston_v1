@@ -1017,11 +1017,9 @@ Box* input(Box* prompt) {
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
-    if (!isSubclass(_number->cls, float_cls))
+    double x = PyFloat_AsDouble(_number);
+    if (PyErr_Occurred())
         raiseExcHelper(TypeError, "a float is required");
-
-    BoxedFloat* number = (BoxedFloat*)_number;
-    double x = number->d;
 
     /* interpret 2nd argument as a Py_ssize_t; clip on overflow */
     Py_ssize_t ndigits = PyNumber_AsSsize_t(_ndigits, NULL);

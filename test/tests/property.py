@@ -8,7 +8,7 @@ class C(object):
     def fset(self, val):
         print 'in fset, val =', val
 
-    x = property(fget, fset)
+    x = property(fget, fset, None, "Doc String")
 
 c = C()
 print c.x
@@ -16,6 +16,7 @@ print C.x.__get__(c, C)
 print type(C.x.__get__(None, C))
 c.x = 7
 print c.x
+print C.x.__doc__
 
 class C2(object):
     @property
