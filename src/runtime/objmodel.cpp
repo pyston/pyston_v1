@@ -220,12 +220,13 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
     return PyType_IsSubtype(child, parent);
 }
 
-extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
+extern "C" void assertFail(Box* assertion_type, Box* msg) {
+    RELEASE_ASSERT(assertion_type->cls == type_cls, "%s", assertion_type->cls->tp_name);
     if (msg) {
         BoxedString* tostr = str(msg);
-        raiseExcHelper(AssertionError, "%s", tostr->data());
+        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "%s", tostr->data());
     } else {
-        raiseExcHelper(AssertionError, "");
+        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "");
     }
 }
 

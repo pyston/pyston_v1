@@ -843,7 +843,10 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     Value v = visit_expr(node->test);
     assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
 #endif
-    assertFail(source_info->parent_module, node->msg ? visit_expr(node->msg).o : 0);
+
+    static std::string AssertionError_str("AssertionError");
+    Box* assertion_type = getGlobal(globals, &AssertionError_str);
+    assertFail(assertion_type, node->msg ? visit_expr(node->msg).o : 0);
 
     return Value();
 }
