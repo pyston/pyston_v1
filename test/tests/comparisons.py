@@ -96,3 +96,20 @@ class EqOnly(object):
 
 print EqOnly() == 1
 print EqOnly() != 1
+
+
+class NonboolEq(object):
+    def __init__(self, n):
+        self.n = n
+    def __eq__(self, rhs):
+        return 2 if self.n == rhs.n else ()
+    def __hash__(self):
+        return 0
+
+print NonboolEq(1) == NonboolEq(2)
+print NonboolEq(1) == NonboolEq(True)
+
+d = {}
+for i in xrange(20):
+    d[NonboolEq(i % 10)] = i
+print len(d), sorted(d.values())

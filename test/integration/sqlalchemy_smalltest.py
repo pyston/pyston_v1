@@ -70,6 +70,7 @@ for fn in test_files:
     mname = fn[len(SQLALCHEMY_DIR) + 1:-3].replace('/', '.')
     if mname not in MODULES_TO_TEST:
         continue
+    print
     print mname
 
     try:
@@ -91,11 +92,9 @@ for fn in test_files:
     except Exception:
         print mname, "FAILED"
         traceback.print_exc()
-        print
         failed.append(mname)
     else:
         print mname, "PASSED"
-        print
         passed.append(mname)
 
 print "passing:", passed

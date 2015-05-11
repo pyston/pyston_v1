@@ -129,3 +129,7 @@ for i in xrange(10):
 for s1 in set(range(5)), frozenset(range(5)):
     for s2 in compare_to:
         print type(s2), sorted(s2), s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2), s.isdisjoint(s2), sorted(s1.union(s2)), sorted(s1.intersection(s2))
+
+f = float('nan')
+s = set([f])
+print f in s, f == list(s)[0]
