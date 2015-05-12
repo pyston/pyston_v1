@@ -20,6 +20,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "capi/types.h"
 #include "codegen/unwinding.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -381,6 +382,23 @@ extern "C" const char* Py_GetPlatform() noexcept {
 #endif
 }
 
+static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {
+    PyObject* exc, *value, *tb;
+    if (!PyArg_UnpackTuple(args, "excepthook", 3, 3, &exc, &value, &tb))
+        return NULL;
+    PyErr_Display(exc, value, tb);
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+PyDoc_STRVAR(excepthook_doc, "excepthook(exctype, value, traceback) -> None\n"
+                             "\n"
+                             "Handle an exception by displaying it with a traceback on sys.stderr.\n");
+
+static PyMethodDef sys_methods[] = {
+    { "excepthook", sys_excepthook, METH_VARARGS, excepthook_doc },
+};
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerPermanentRoot(sys_modules_dict);
@@ -481,6 +499,10 @@ void setupSys() {
 
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
+
+    for (auto& md : sys_methods) {
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(md.ml_flags, sys_module, md.ml_name, md.ml_meth));
+    }
 
     sys_module->giveAttr("flags", new BoxedSysFlags());
 }

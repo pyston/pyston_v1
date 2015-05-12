@@ -11,3 +11,9 @@ print type(sys.maxsize)
 print sys.stdout is sys.__stdout__
 print sys.stderr is sys.__stderr__
 print sys.stdin is sys.__stdin__
+
+try:
+    1/0
+except ZeroDivisionError:
+    # Our tester won't check the output of this, but at least we can make sure it exists and runs:
+    sys.excepthook(*sys.exc_info())
