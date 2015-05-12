@@ -225,7 +225,7 @@ Box* stackSize() {
 }
 
 void setupThread() {
-    thread_module = createModule("thread", "__builtin__");
+    thread_module = createModule("thread");
 
     thread_module->giveAttr("start_new_thread", new BoxedBuiltinFunctionOrMethod(
                                                     boxRTFunction((void*)startNewThread, BOXED_INT, 3, 1, false, false),

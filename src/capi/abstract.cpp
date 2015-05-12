@@ -52,6 +52,12 @@ extern "C" int PyObject_Cmp(PyObject* o1, PyObject* o2, int* result) noexcept {
     return 0;
 }
 
+extern "C" PyObject* PyObject_Type(PyObject* o) noexcept {
+    if (o == NULL)
+        return null_error();
+    return o->cls;
+}
+
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
     static PyObject* hintstrobj = NULL;
     PyObject* ro, *hintmeth;

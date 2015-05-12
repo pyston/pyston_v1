@@ -156,3 +156,8 @@ l = types.ModuleType("TestMod2")
 exec ("global a; a=1; print a; b=2", g.__dict__, l.__dict__)
 print g.a
 print l.b
+
+s = "from sys import *"
+g = dict()
+exec s in g
+print "version" in g

@@ -311,8 +311,11 @@ extern PyGC_Head *_PyGC_generation0;
 #define _PyObject_GC_MAY_BE_TRACKED(obj) \
     (PyObject_IS_GC(obj) && \
         (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
-
+#else
+/* for source compatibility with 2.2 */
+#define _PyObject_GC_Del PyObject_GC_Del
 #endif
+
 PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;

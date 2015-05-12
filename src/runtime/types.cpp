@@ -805,7 +805,8 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
 static Box* funcName(Box* b, void*) {
     assert(b->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
-    RELEASE_ASSERT(func->name != NULL, "func->name is not set");
+    if (func->name == NULL)
+        return boxString("<unknown function name>");
     return func->name;
 }
 
@@ -1181,9 +1182,7 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
 
 Box* typeHash(BoxedClass* self) {
     assert(isSubclass(self->cls, type_cls));
-
-    // This is how CPython defines it; seems reasonable enough:
-    return boxInt(reinterpret_cast<intptr_t>(self) >> 4);
+    return boxInt(_Py_HashPointer(self));
 }
 
 static PyObject* type_subclasses(PyTypeObject* type, PyObject* args_ignored) noexcept {
@@ -1678,6 +1677,10 @@ Box* objectRepr(Box* obj) {
 
 Box* objectStr(Box* obj) {
     return obj->reprIC();
+}
+
+Box* objectHash(Box* obj) {
+    return boxInt(_Py_HashPointer(obj));
 }
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value) {
@@ -2339,6 +2342,8 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr("__hash__",
+                         new BoxedFunction(boxRTFunction((void*)objectHash, BOXED_INT, 1, 0, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -2578,8 +2583,8 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc) {
-    assert(fn.size() && "probably wanted to set the fn to <stdin>?");
+BoxedModule* createModule(const std::string& name, const char* fn, const char* doc) {
+    assert(!fn || strlen(fn) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
@@ -2593,7 +2598,8 @@ BoxedModule* createModule(const std::string& name, const std::string& fn, const 
 
     BoxedModule* module = new BoxedModule();
     moduleInit(module, boxString(name), boxString(doc ? doc : ""));
-    module->giveAttr("__file__", boxString(fn));
+    if (fn)
+        module->giveAttr("__file__", boxString(fn));
 
     d->d[b_name] = module;
     return module;
