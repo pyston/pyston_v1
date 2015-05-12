@@ -8,3 +8,9 @@ def f2():
 print inspect.getargspec(f1)
 print inspect.getargspec(f2)
 
+def G():
+    yield 1
+print inspect.isgenerator(f1)
+print inspect.isgenerator(G)
+print inspect.isgenerator(G())
+

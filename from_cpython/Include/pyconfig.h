@@ -129,6 +129,7 @@
 #define HAVE_UNISTD_H 1
 #define HAVE_UTIME_H 1
 #define HAVE_WCHAR_H 1
+#define HAVE_WORKING_TZSET 1
 #define HAVE_PUTENV 1
 
 // Added this for some Pyston modifications:

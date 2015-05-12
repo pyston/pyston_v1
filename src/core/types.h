@@ -322,6 +322,12 @@ public:
             osr_versions[compiled->entry_descriptor] = compiled;
         }
     }
+
+    bool isGenerator() const {
+        if (source)
+            return source->is_generator;
+        return false;
+    }
 };
 
 CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,

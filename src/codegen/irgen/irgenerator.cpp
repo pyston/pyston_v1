@@ -1269,7 +1269,7 @@ private:
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
         assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, NULL, {});
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, NULL, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1333,7 +1333,7 @@ private:
         }
 
         assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, NULL, defaults);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, NULL, defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);

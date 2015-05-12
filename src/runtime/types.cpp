@@ -287,8 +287,7 @@ Box* Box::nextIC() {
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
-    : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
-      name(NULL), doc(NULL) {
+    : in_weakreflist(NULL), f(f), closure(NULL), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
     if (f->source) {
         this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
@@ -301,9 +300,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
-                                                BoxedClosure* closure, bool isGenerator)
-    : in_weakreflist(NULL), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL),
-      modname(NULL), name(NULL), doc(NULL) {
+                                                BoxedClosure* closure)
+    : in_weakreflist(NULL), f(f), closure(closure), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -326,9 +324,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
 BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
-BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                             bool isGenerator, Box* globals)
-    : BoxedFunctionBase(f, defaults, closure, isGenerator) {
+BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure, Box* globals)
+    : BoxedFunctionBase(f, defaults, closure) {
 
     assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
     this->globals = globals;
@@ -349,8 +346,8 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const 
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
                                                            std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                                           bool isGenerator, const char* doc)
-    : BoxedFunctionBase(f, defaults, closure, isGenerator) {
+                                                           const char* doc)
+    : BoxedFunctionBase(f, defaults, closure) {
 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
@@ -429,12 +426,12 @@ extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
 // TODO: should we use C++11 `noexcept' here?
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, Box* globals,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
                               std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure, isGenerator, globals);
+    return new BoxedFunction(f, defaults, closure, globals);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {

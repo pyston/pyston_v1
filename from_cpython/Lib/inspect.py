@@ -44,6 +44,7 @@ from collections import namedtuple
 # Pyston change: we don't support all of these flags yet, so just enable the ones that we do:
 CO_VARARGS = 0x4
 CO_VARKEYWORDS = 0x8
+CO_GENERATOR = 0x20
 # These constants are from Include/code.h.
 # CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
 # CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
