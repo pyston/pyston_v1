@@ -778,6 +778,7 @@ public:
     Box* prop_set;
     Box* prop_del;
     Box* prop_doc;
+    bool getter_doc;
 
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}

@@ -83,3 +83,87 @@ class C(object):
 c = C()
 c.p = "worked"
 print c.p
+
+print 'test the setting of __doc__'
+class C(object):
+    @property
+    def f(self):
+        """doc string of f"""
+print C.f.__doc__
+
+print 'test the setting of __doc__ with a __get__'
+class Desc(object):
+    def __get__(self, obj, typ):
+        print 'desc called'
+        return "blah"
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+class C(object):
+    f = property(ObjWithDocDesc)
+print C.f.__doc__
+
+print 'test the setting of __doc__ with a __get__ throwing an exception (should get swallowed)'
+class Desc(object):
+    def __get__(self, obj, typ):
+        raise ValueError("arbitrary exception")
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+class C(object):
+    f = property(ObjWithDocDesc)
+print C.f.__doc__
+
+print 'test the setting of __doc__ with a __get__ throwing an exception (should not get swallowed)'
+class Desc(object):
+    def __get__(self, obj, typ):
+        raise BaseException("not a subclass of Exception")
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+try:
+    class C(object):
+        f = property(ObjWithDocDesc)
+except BaseException as e:
+    print e.message
+
+print 'test the setting of a __doc__ when you copy it'
+class Desc(object):
+    def __get__(self, obj, typ):
+        print 'desc called'
+        return "blah"
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+prop = property(ObjWithDocDesc)
+print 'made prop'
+print prop.__doc__
+def g():
+    """doc of g"""
+    return 5
+prop2 = prop.getter(g)
+print 'made prop2'
+print prop2.__doc__
+prop3 = prop.setter(lambda self, val : None)
+print prop3.__doc__
+prop4 = prop.deleter(lambda self, val : None)
+print prop4.__doc__
+
+print 'test the setting of a __doc__ when you copy it when using a subclass of property'
+class PropertySubclass(property):
+    pass
+class Desc(object):
+    def __get__(self, obj, typ):
+        print 'desc called'
+        return "blah"
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+prop = PropertySubclass(ObjWithDocDesc)
+print 'made prop'
+print prop.__doc__
+def g():
+    """doc of g"""
+    return 5
+prop2 = prop.getter(g)
+print 'made prop2'
+print prop2.__doc__
+prop3 = prop.setter(lambda self, val : None)
+print prop3.__doc__
+prop4 = prop.deleter(lambda self, val : None)
+print prop4.__doc__
