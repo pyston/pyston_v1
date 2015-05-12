@@ -136,6 +136,12 @@ void registerPermanentRoot(void* obj, bool allow_duplicates) {
     roots.insert(obj);
 }
 
+void deregisterPermanentRoot(void* obj) {
+    assert(global_heap.getAllocationFromInteriorPointer(obj));
+    ASSERT(roots.count(obj), "");
+    roots.erase(obj);
+}
+
 extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     if (obj) {
         // Allow duplicates from CAPI code since they shouldn't have to know

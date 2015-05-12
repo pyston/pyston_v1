@@ -1134,7 +1134,7 @@ extern "C" void PyFile_SetFP(PyObject* _f, FILE* fp) noexcept {
     f->f_fp = fp;
 }
 
-extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) noexcept {
+extern "C" PyObject* PyFile_FromFile(FILE* fp, const char* name, const char* mode, int (*close)(FILE*)) noexcept {
     return new BoxedFile(fp, name, mode, close);
 }
 

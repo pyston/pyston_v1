@@ -51,7 +51,7 @@ PyAPI_FUNC(PyObject *) PyFile_FromString(char *, char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyFile_SetBufSize(PyObject *, int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyFile_SetEncoding(PyObject *, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyFile_SetEncodingAndErrors(PyObject *, const char *, char *errors) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyFile_FromFile(FILE *, char *, char *,
+PyAPI_FUNC(PyObject *) PyFile_FromFile(FILE *, const char *, const char *,
                                              int (*)(FILE *)) PYSTON_NOEXCEPT;
 PyAPI_FUNC(FILE *) PyFile_AsFile(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyFile_IncUseCount(PyFileObject *) PYSTON_NOEXCEPT;
