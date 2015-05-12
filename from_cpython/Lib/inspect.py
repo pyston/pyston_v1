@@ -818,6 +818,11 @@ def getargspec(func):
         func = func.im_func
     if not isfunction(func):
         raise TypeError('{!r} is not a Python function'.format(func))
+    # Pyston change: many of our builtin functions are of type FunctionType, but
+    # don't have full introspection available.  I think this check catches most of them,
+    # though I think it allows some cases that CPython does not:
+    if func.func_code.co_argcount > len(func.func_code.co_varnames):
+        raise TypeError('{!r} is not a Python function'.format(func))
     args, varargs, varkw = getargs(func.func_code)
     return ArgSpec(args, varargs, varkw, func.func_defaults)
 
