@@ -23,3 +23,6 @@
 [submodule "test/integration/sqlalchemy"]
 	path = test/integration/sqlalchemy
 	url = https://github.com/zzzeek/sqlalchemy
+[submodule "test/integration/pyxl"]
+	path = test/integration/pyxl
+	url = https://github.com/dropbox/pyxl.git
