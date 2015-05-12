@@ -36,4 +36,6 @@ print
 print "Output: '%s'" % out
 assert out == "<html><body>Hello World!</body></html>\n"
 
+subprocess.check_call(["rm", "-rf", os.path.join(PYXL_DIR, "build")])
+
 print "PASSED"

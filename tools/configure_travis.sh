@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -exu
+
+CMAKE_ARGS="-GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR -DCMAKE_BUILD_TYPE=${TRAVIS_BUILD_TYPE}"
+
+if [ "${TRAVIS_BUILD_TYPE}" = "Release" ]; then
+    CMAKE_ARGS="${CMAKE_ARGS} -DENABLE_EXTRA_TESTS=ON"
+fi
+
+cmake ${CMAKE_ARGS}
