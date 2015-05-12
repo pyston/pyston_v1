@@ -550,8 +550,6 @@ class BoxedTuple : public BoxVar {
 public:
     typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
 
-    Box** elts;
-
     DEFAULT_CLASS_VAR_SIMPLE(tuple_cls, sizeof(Box*));
 
     static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
@@ -592,27 +590,25 @@ public:
 
     static int Resize(BoxedTuple** pt, size_t newsize) noexcept;
 
-    Box** begin() const { return &elts[0]; }
-    Box** end() const { return &elts[nelts]; }
+    Box* const* begin() const { return &elts[0]; }
+    Box* const* end() const { return &elts[ob_size]; }
     Box*& operator[](size_t index) { return elts[index]; }
 
-    size_t size() const { return nelts; }
+    size_t size() const { return ob_size; }
 
 private:
-    size_t nelts;
+    BoxedTuple(size_t size) { memset(elts, 0, sizeof(Box*) * size); }
 
-    BoxedTuple(size_t size) : elts(reinterpret_cast<Box**>((char*)this + tuple_cls->tp_basicsize)), nelts(size) {
-        memset(elts, 0, sizeof(Box*) * size);
-    }
-
-    BoxedTuple(std::initializer_list<Box*>& members)
-        : elts(reinterpret_cast<Box**>((char*)this + tuple_cls->tp_basicsize)), nelts(members.size()) {
+    BoxedTuple(std::initializer_list<Box*>& members) {
         // by the time we make it here elts[] is big enough to contain members
         Box** p = &elts[0];
         for (auto b : members) {
             *p++ = b;
         }
     }
+
+public:
+    Box* elts[0];
 };
 
 extern "C" BoxedTuple* EmptyTuple;

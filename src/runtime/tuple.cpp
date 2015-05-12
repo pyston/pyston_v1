@@ -128,7 +128,7 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
 
     if (newsize < t->size()) {
         // XXX resize the box (by reallocating) smaller if it makes sense
-        t->nelts = newsize;
+        t->ob_size = newsize;
         return 0;
     }
 
@@ -436,8 +436,8 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupTuple() {
-    tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0, sizeof(BoxedTuple),
-                                                false, "tuple");
+    tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
+                                                sizeof(BoxedTupleIterator), false, "tuple");
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
