@@ -244,8 +244,13 @@ struct ScopingAnalysis::ScopeNameUsage {
     bool child_free;
 
     ScopeNameUsage(AST* node, ScopeNameUsage* parent, ScopingAnalysis* scoping)
-        : node(node), parent(parent), scoping(scoping), nameForcingNodeImportStar(NULL), nameForcingNodeBareExec(NULL),
-          free(false), child_free(false) {
+        : node(node),
+          parent(parent),
+          scoping(scoping),
+          nameForcingNodeImportStar(NULL),
+          nameForcingNodeBareExec(NULL),
+          free(false),
+          child_free(false) {
         if (node->type == AST_TYPE::ClassDef) {
             AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
 
@@ -303,7 +308,11 @@ private:
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup,
                   bool globals_from_module)
-        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup), allDerefVarsAndInfoCached(false),
+        : parent(parent),
+          usage(usage),
+          ast(ast),
+          usesNameLookup_(usesNameLookup),
+          allDerefVarsAndInfoCached(false),
           globals_from_module(globals_from_module) {
         assert(usage);
         assert(ast);

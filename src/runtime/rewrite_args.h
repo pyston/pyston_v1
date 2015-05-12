@@ -30,7 +30,11 @@ struct GetattrRewriteArgs {
     bool obj_hcls_guarded;
 
     GetattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
-        : rewriter(rewriter), obj(obj), destination(destination), out_success(false), out_rtn(NULL),
+        : rewriter(rewriter),
+          obj(obj),
+          destination(destination),
+          out_success(false),
+          out_rtn(NULL),
           obj_hcls_guarded(false) {}
 };
 
@@ -78,8 +82,17 @@ struct CallRewriteArgs {
     RewriterVar* out_rtn;
 
     CallRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
-        : rewriter(rewriter), obj(obj), arg1(NULL), arg2(NULL), arg3(NULL), args(NULL), func_guarded(false),
-          args_guarded(false), destination(destination), out_success(false), out_rtn(NULL) {}
+        : rewriter(rewriter),
+          obj(obj),
+          arg1(NULL),
+          arg2(NULL),
+          arg3(NULL),
+          args(NULL),
+          func_guarded(false),
+          args_guarded(false),
+          destination(destination),
+          out_success(false),
+          out_rtn(NULL) {}
 };
 
 struct BinopRewriteArgs {

@@ -1379,8 +1379,13 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 }
 
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
-    : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
-      added_changing_action(false), marked_inside_ic(false), last_guard_action(-1), done_guarding(false) {
+    : rewrite(rewrite),
+      assembler(rewrite->getAssembler()),
+      return_location(rewrite->returnRegister()),
+      added_changing_action(false),
+      marked_inside_ic(false),
+      last_guard_action(-1),
+      done_guarding(false) {
     initPhaseCollecting();
 
 #ifndef NDEBUG

@@ -9,6 +9,7 @@ AllowShortIfStatementsOnASingleLine: false
 BreakBeforeBraces: Attach
 BreakConstructorInitializersBeforeComma: false
 ColumnLimit: 120
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
 IndentCaseLabels: true
 IndentWidth: 4
 Language: Cpp

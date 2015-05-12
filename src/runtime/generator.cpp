@@ -224,8 +224,17 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg
 
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
-    : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
-      returnValue(nullptr), exception(nullptr, nullptr, nullptr), context(nullptr), returnContext(nullptr) {
+    : function(function),
+      arg1(arg1),
+      arg2(arg2),
+      arg3(arg3),
+      args(nullptr),
+      entryExited(false),
+      running(false),
+      returnValue(nullptr),
+      exception(nullptr, nullptr, nullptr),
+      context(nullptr),
+      returnContext(nullptr) {
 
     int numArgs = function->f->num_args;
     if (numArgs > 3) {

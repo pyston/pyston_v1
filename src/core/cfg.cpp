@@ -147,8 +147,12 @@ private:
 
         ContInfo(CFGBlock* continue_dest, CFGBlock* break_dest, CFGBlock* return_dest, bool say_why,
                  InternedString why_name)
-            : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
-              did_why(0), why_name(why_name) {}
+            : continue_dest(continue_dest),
+              break_dest(break_dest),
+              return_dest(return_dest),
+              say_why(say_why),
+              did_why(0),
+              why_name(why_name) {}
     };
 
     struct ExcBlockInfo {
@@ -179,7 +183,10 @@ private:
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
                ScopingAnalysis* scoping_analysis, CFG* cfg)
-        : source(source), root_type(root_type), future_flags(future_flags), cfg(cfg),
+        : source(source),
+          root_type(root_type),
+          future_flags(future_flags),
+          cfg(cfg),
           scoping_analysis(scoping_analysis) {
         curblock = cfg->addBlock();
         curblock->info = "entry";

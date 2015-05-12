@@ -223,9 +223,18 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source.get()), scope_info(0), phis(NULL),
-      current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
-      generator(0), edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
+    : compiled_func(compiled_function),
+      source_info(compiled_function->clfunc->source.get()),
+      scope_info(0),
+      phis(NULL),
+      current_block(0),
+      current_inst(0),
+      last_exception(NULL, NULL, NULL),
+      passed_closure(0),
+      created_closure(0),
+      generator(0),
+      edgecount(0),
+      frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)

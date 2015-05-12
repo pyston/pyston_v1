@@ -98,8 +98,12 @@ private:
     BasicBlockTypePropagator(CFGBlock* block, TypeMap& initial, ExprTypeMap& expr_types,
                              TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
                              ScopeInfo* scope_info)
-        : block(block), sym_table(initial), expr_types(expr_types), type_speculations(type_speculations),
-          speculation(speculation), scope_info(scope_info) {}
+        : block(block),
+          sym_table(initial),
+          expr_types(expr_types),
+          type_speculations(type_speculations),
+          speculation(speculation),
+          scope_info(scope_info) {}
 
     void run() {
         for (int i = 0; i < block->body.size(); i++) {
@@ -661,7 +665,9 @@ private:
 
     PropagatingTypeAnalysis(const AllTypeMap& starting_types, const ExprTypeMap& expr_types,
                             TypeSpeculations& type_speculations, SpeculationLevel speculation)
-        : starting_types(starting_types), expr_types(expr_types), type_speculations(type_speculations),
+        : starting_types(starting_types),
+          expr_types(expr_types),
+          type_speculations(type_speculations),
           speculation(speculation) {}
 
 public:

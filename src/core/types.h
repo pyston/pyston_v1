@@ -200,8 +200,16 @@ public:
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
                      EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
-        : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), effort(effort), times_called(0), times_speculation_failed(0), location_map(nullptr) {
+        : clfunc(NULL),
+          func(func),
+          spec(spec),
+          entry_descriptor(entry_descriptor),
+          is_interpreted(is_interpreted),
+          code(code),
+          effort(effort),
+          times_called(0),
+          times_speculation_failed(0),
+          location_map(nullptr) {
         assert((spec != NULL) + (entry_descriptor != NULL) == 1);
     }
 
@@ -292,13 +300,25 @@ public:
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                std::unique_ptr<SourceInfo> source)
-        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(std::move(source)), param_names(this->source->ast), always_use_version(NULL), code_obj(NULL) {
+        : num_args(num_args),
+          num_defaults(num_defaults),
+          takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs),
+          source(std::move(source)),
+          param_names(this->source->ast),
+          always_use_version(NULL),
+          code_obj(NULL) {
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(nullptr), param_names(param_names), always_use_version(NULL), code_obj(NULL) {
+        : num_args(num_args),
+          num_defaults(num_defaults),
+          takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs),
+          source(nullptr),
+          param_names(param_names),
+          always_use_version(NULL),
+          code_obj(NULL) {
         assert(num_args >= num_defaults);
     }
 
