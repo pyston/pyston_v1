@@ -431,8 +431,28 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
     return 0;
 }
 
-extern "C" int PyObject_SetAttr(PyObject* v, PyObject* name, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
+    if (!PyString_Check(name)) {
+        if (PyUnicode_Check(name)) {
+            name = PyUnicode_AsEncodedString(name, NULL, NULL);
+            if (name == NULL)
+                return -1;
+        } else {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
+            return -1;
+        }
+    }
+
+    try {
+        if (value == NULL)
+            delattr(obj, static_cast<BoxedString*>(name)->s.data());
+        else
+            setattr(obj, static_cast<BoxedString*>(name)->s.data(), value);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
 }
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
