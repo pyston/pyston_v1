@@ -104,7 +104,28 @@ print s
 s.discard(1)
 print s
 
-s = set(range(5))
+
+s = set(range(10))
+print s.difference_update(range(-3, 2), range(7, 23))
+print sorted(s)
+
+
+# Check set subclassing:
+
+class MySet(set):
+    pass
+class MyFrozenset(frozenset):
+    pass
+
+compare_to = []
 for i in xrange(10):
-    s2 = set(range(i))
-    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2), s.issubset(range(i)), s.issuperset(range(i))
+    compare_to.append(set(range(i)))
+    compare_to.append(frozenset(range(i)))
+    compare_to.append(MySet(range(i)))
+    compare_to.append(MyFrozenset(range(i)))
+    compare_to.append(range(i))
+    compare_to.append(range(i, 10))
+
+for s1 in set(range(5)), frozenset(range(5)):
+    for s2 in compare_to:
+        print type(s2), sorted(s2), s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2), s.isdisjoint(s2), sorted(s1.union(s2)), sorted(s1.intersection(s2))
