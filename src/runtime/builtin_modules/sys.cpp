@@ -474,6 +474,11 @@ void setupSys() {
     ADD(optimize);
 #undef ADD
 
+#define SET_SYS_FROM_STRING(key, value) sys_module->giveAttr((key), (value))
+#ifdef Py_USING_UNICODE
+    SET_SYS_FROM_STRING("maxunicode", PyInt_FromLong(PyUnicode_GetMax()));
+#endif
+
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 

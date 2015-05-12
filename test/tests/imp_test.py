@@ -16,3 +16,9 @@ for a in (1, "", "/proc", "nonexisting_dir"):
 imp.acquire_lock()
 imp.release_lock()
 
+import os
+print "first load_source():"
+m1 = imp.load_source("import_target", os.path.join(os.path.dirname(__file__), "import_target.py"))
+print "second load_source():"
+m2 = imp.load_source("import_target", os.path.join(os.path.dirname(__file__), "import_target.py"))
+print m1 is m2

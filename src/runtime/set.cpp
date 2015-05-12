@@ -292,7 +292,11 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
 
 static Box* setIssubset(BoxedSet* self, Box* container) {
     assert(self->cls == set_cls);
-    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    if (container->cls != set_cls && container->cls != frozenset_cls) {
+        container = setNew(set_cls, container);
+    }
+    assert(container->cls == set_cls || container->cls == frozenset_cls);
 
     BoxedSet* rhs = static_cast<BoxedSet*>(container);
     for (auto e : self->s) {
@@ -304,7 +308,11 @@ static Box* setIssubset(BoxedSet* self, Box* container) {
 
 static Box* setIssuperset(BoxedSet* self, Box* container) {
     assert(self->cls == set_cls);
-    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    if (container->cls != set_cls && container->cls != frozenset_cls) {
+        container = setNew(set_cls, container);
+    }
+    assert(container->cls == set_cls || container->cls == frozenset_cls);
 
     BoxedSet* rhs = static_cast<BoxedSet*>(container);
     for (auto e : rhs->s) {

@@ -39,7 +39,7 @@ static void removeModule(const std::string& name) {
     d->d.erase(b_name);
 }
 
-BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
+Box* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
@@ -49,10 +49,14 @@ BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) 
         removeModule(name);
         raiseRaw(e);
     }
-    return module;
+
+    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    if (!r)
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+    return r;
 }
 
-static BoxedModule* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
+static Box* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
     BoxedModule* module = createModule(name, fn);
 
     Box* b_path = boxStringPtr(&module_path);
@@ -69,7 +73,11 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
         removeModule(name);
         raiseRaw(e);
     }
-    return module;
+
+    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    if (!r)
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+    return r;
 }
 
 #if LLVMREV < 210072
@@ -727,6 +735,15 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
     Py_FatalError("unimplemented");
 }
 
+Box* impLoadSource(Box* _name, Box* _pathname, Box* _file) {
+    RELEASE_ASSERT(!_file, "'file' argument not support yet");
+
+    RELEASE_ASSERT(_name->cls == str_cls, "");
+    RELEASE_ASSERT(_pathname->cls == str_cls, "");
+
+    return createAndRunModule(static_cast<BoxedString*>(_name)->s, static_cast<BoxedString*>(_pathname)->s);
+}
+
 Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
     RELEASE_ASSERT(_name->cls == str_cls, "");
     RELEASE_ASSERT(_pathname->cls == str_cls, "");
@@ -796,6 +813,9 @@ void setupImport() {
     CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
                                                  ParamNames({ "name", "file", "pathname", "description" }, "", ""));
     imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
+    imp_module->giveAttr(
+        "load_source", new BoxedBuiltinFunctionOrMethod(
+                           boxRTFunction((void*)impLoadSource, UNKNOWN, 3, 1, false, false), "load_source", { NULL }));
 
     CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, 1, false, false,
                                                   ParamNames({ "name", "pathname", "file" }, "", ""));

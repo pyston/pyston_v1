@@ -397,14 +397,6 @@ static void functionDtor(Box* b) {
     self->dependent_ics.~ICInvalidator();
 }
 
-// TODO(kmod): builtin modules are not supposed to have a __file__ attribute
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc)
-    : attrs(HiddenClass::makeSingleton()) {
-    this->giveAttr("__name__", boxString(name));
-    this->giveAttr("__file__", boxString(fn));
-    this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
-}
-
 std::string BoxedModule::name() {
     Box* name = this->getattr("__name__");
     if (!name || name->cls != str_cls) {
@@ -846,7 +838,6 @@ static Box* builtinFunctionOrMethodName(Box* b, void*) {
 static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
-    // This fails "f.func_code is f.func_code"
     return codeForFunction(func);
 }
 
@@ -1240,15 +1231,19 @@ Box* typeMro(BoxedClass* self) {
     return r;
 }
 
-Box* moduleNew(BoxedClass* cls, BoxedString* name, BoxedString* fn) {
-    RELEASE_ASSERT(isSubclass(cls, module_cls), "");
+Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
+    RELEASE_ASSERT(isSubclass(self->cls, module_cls), "");
     RELEASE_ASSERT(name->cls == str_cls, "");
-    RELEASE_ASSERT(!fn || fn->cls == str_cls, "");
+    RELEASE_ASSERT(!doc || doc->cls == str_cls, "");
 
-    if (fn)
-        return new (cls) BoxedModule(name->s, fn->s);
-    else
-        return new (cls) BoxedModule(name->s, "__builtin__");
+    HCAttrs* attrs = self->getHCAttrsPtr();
+    RELEASE_ASSERT(attrs->hcls->attributeArraySize() == 0, "");
+    attrs->hcls = HiddenClass::makeSingleton();
+
+    self->giveAttr("__name__", name);
+    self->giveAttr("__doc__", doc ? doc : boxString(""));
+
+    return None;
 }
 
 Box* moduleRepr(BoxedModule* m) {
@@ -2379,8 +2374,8 @@ void setupRuntime() {
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->freeze();
 
-    module_cls->giveAttr("__new__",
-                         new BoxedFunction(boxRTFunction((void*)moduleNew, UNKNOWN, 3, 1, false, false), { NULL }));
+    module_cls->giveAttr("__init__",
+                         new BoxedFunction(boxRTFunction((void*)moduleInit, UNKNOWN, 3, 1, false, false), { NULL }));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
     module_cls->giveAttr("__dict__", dict_descr);
     module_cls->freeze();
@@ -2428,6 +2423,7 @@ void setupRuntime() {
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
+    function_cls->giveAttr("__code__", function_cls->getattr("func_code"));
     function_cls->giveAttr("func_name", function_cls->getattr("__name__"));
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));
@@ -2593,15 +2589,16 @@ BoxedModule* createModule(const std::string& name, const std::string& fn, const 
 
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
-    Box*& ptr = d->d[b_name];
-    if (ptr && isSubclass(ptr->cls, module_cls)) {
-        return static_cast<BoxedModule*>(ptr);
-    } else {
-        ptr = NULL;
+    Box* existing = d->getOrNull(b_name);
+    if (existing && isSubclass(existing->cls, module_cls)) {
+        return static_cast<BoxedModule*>(existing);
     }
 
-    BoxedModule* module = new BoxedModule(name, fn, doc);
-    ptr = module;
+    BoxedModule* module = new BoxedModule();
+    moduleInit(module, boxString(name), boxString(doc ? doc : ""));
+    module->giveAttr("__file__", boxString(fn));
+
+    d->d[b_name] = module;
     return module;
 }
 

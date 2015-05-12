@@ -79,3 +79,11 @@ for b in range(26):
         print int(u'123', b)
     except ValueError as e:
         print e
+
+
+class I(int):
+    pass
+
+for i1 in [1, I(2), 3, I(4)]:
+    for i2 in [1, I(2), 3, I(4)]:
+        print -i1, +i1, ~i1, i1 < i2, i1 <= i2, i1 == i2, i1 > i2, i1 >= i2, i1 != i2, i1 | i2, i1 ^ i2, i1 & i2, i1 * i2, i1 + i2, i1 / i2, i1 - i2, i1 ** i2, i1 // i2

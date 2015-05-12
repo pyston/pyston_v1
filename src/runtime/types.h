@@ -705,7 +705,7 @@ public:
 
     FutureFlags future_flags;
 
-    BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
+    BoxedModule() {} // noop constructor to disable zero-initialization of cls
     std::string name();
 
     Box* getStringConstant(const std::string& ast_str);

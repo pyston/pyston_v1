@@ -17,3 +17,6 @@ def f():
     pass
 print f.func_defaults
 print f.func_code.co_firstlineno
+
+# pytest uses this:
+print f.__code__ is f.__code__

@@ -152,3 +152,6 @@ for m in str.strip, str.lstrip, str.rstrip:
         print repr(m(s, *args))
 
 print "".join([u"\xB2", u"\xB3"])
+
+import sys
+print type(sys.maxunicode)

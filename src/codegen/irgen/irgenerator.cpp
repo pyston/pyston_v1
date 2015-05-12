@@ -1660,6 +1660,7 @@ private:
     }
 
     void doAssert(AST_Assert* node, UnwindInfo unw_info) {
+        // cfg translates all asserts into only 'assert 0' on the failing path.
         AST_expr* test = node->test;
         assert(test->type == AST_TYPE::Num);
         AST_Num* num = ast_cast<AST_Num>(test);
@@ -1667,7 +1668,12 @@ private:
         assert(num->n_int == 0);
 
         std::vector<llvm::Value*> llvm_args;
-        llvm_args.push_back(embedParentModulePtr());
+
+        // We could patchpoint this or try to avoid the overhead, but this should only
+        // happen when the assertion is actually thrown so I don't think it will be necessary.
+        static std::string AssertionError_str("AssertionError");
+        llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
+                                                embedRelocatablePtr(&AssertionError_str, g.llvm_str_type_ptr)));
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {
