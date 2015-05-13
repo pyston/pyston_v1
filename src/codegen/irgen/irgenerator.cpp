@@ -1273,7 +1273,12 @@ private:
         // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
         if (scope_info->takesClosure()) {
-            created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+            if (irstate->getScopeInfo()->createsClosure()) {
+                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+            } else {
+                assert(irstate->getScopeInfo()->passesThroughClosure());
+                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+            }
             assert(created_closure);
         }
 
