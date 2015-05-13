@@ -99,11 +99,10 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
         return rtn;
     }
 
-    if (idx->cls != int_cls) {
+    int64_t n = PyInt_AsSsize_t(idx);
+    if (n == -1 && PyErr_Occurred())
         raiseExcHelper(TypeError, "an integer is required");
-    }
 
-    int64_t n = static_cast<BoxedInt*>(idx)->n;
     if (n < 0)
         n = self->size + n;
 
