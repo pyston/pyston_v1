@@ -2587,7 +2587,7 @@ void setupRuntime() {
 }
 
 BoxedModule* createModule(const std::string& name, const char* fn, const char* doc) {
-    assert(!fn || strlen(fn) && "probably wanted to set the fn to <stdin>?");
+    assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
