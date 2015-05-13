@@ -80,6 +80,19 @@ public:
                 raiseExcHelper(TypeError, "%s() takes exactly one argument (%d given)", self->name, varargs->size());
             }
             rtn = (Box*)self->func(self->passthrough, varargs->elts[0]);
+        } else if (self->ml_flags == METH_OLDARGS) {
+            /* the really old style */
+            if (kwargs == NULL || PyDict_Size(kwargs) == 0) {
+                int size = PyTuple_GET_SIZE(varargs);
+                Box* arg = varargs;
+                if (size == 1)
+                    arg = PyTuple_GET_ITEM(varargs, 0);
+                else if (size == 0)
+                    arg = NULL;
+                rtn = self->func(self->passthrough, arg);
+            } else {
+                raiseExcHelper(TypeError, "%.200s() takes no keyword arguments", self->name);
+            }
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
         }

@@ -22,6 +22,7 @@ for i in xrange(-10, 10):
 for i in xrange(-5, 4):
     l3 = range(5)
     print i, l3.pop(i), l3
+print range(5).pop(2L)
 
 for i in xrange(-5, 4):
     l3 = range(5)
