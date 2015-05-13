@@ -651,6 +651,8 @@ class Pickler:
     dispatch[DictionaryType] = save_dict
     if not PyStringMap is None:
         dispatch[PyStringMap] = save_dict
+    # Pyston change:
+    dispatch[AttrwrapperType] = save_dict
 
     def _batch_setitems(self, items):
         # Helper to batch up SETITEMS sequences; proto >= 1 only
@@ -771,6 +773,11 @@ class Pickler:
     dispatch[FunctionType] = save_global
     dispatch[BuiltinFunctionType] = save_global
     dispatch[TypeType] = save_global
+
+    # Pyston change: extension functions have a different type from our
+    # builtin functions (which is BuiltinFunctionType):
+    import math
+    dispatch[type(math.sin)] = save_global
 
 # Pickling helpers
 
