@@ -16,3 +16,7 @@ f = operator.attrgetter("count")
 print f(["a", "a"])("a")
 print f("ababa")("a")
 
+for op in sorted(dir(operator)):
+    if op.startswith("_"):
+        continue
+    print getattr(operator, op).__name__

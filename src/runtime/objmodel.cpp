@@ -141,6 +141,9 @@ size_t PyHasher::operator()(Box* b) const {
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
     STAT_TIMER(t0, "us_timer_PyEq");
 
+    if (lhs == rhs)
+        return true;
+
     if (lhs->cls == rhs->cls) {
         if (lhs->cls == str_cls) {
             return static_cast<BoxedString*>(lhs)->s == static_cast<BoxedString*>(rhs)->s;
@@ -149,8 +152,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 
     // TODO fix this
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Eq, NULL);
-    assert(cmp->cls == bool_cls);
-    return cmp == True;
+    return cmp->nonzeroIC();
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
@@ -158,8 +160,7 @@ bool PyLt::operator()(Box* lhs, Box* rhs) const {
 
     // TODO fix this
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
-    assert(cmp->cls == bool_cls);
-    return cmp == True;
+    return cmp->nonzeroIC();
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {

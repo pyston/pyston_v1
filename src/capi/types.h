@@ -89,6 +89,14 @@ public:
         return rtn;
     }
 
+    static Box* getname(Box* b, void*) {
+        RELEASE_ASSERT(b->cls == capifunc_cls, "");
+        const char* s = static_cast<BoxedCApiFunction*>(b)->name;
+        if (s)
+            return boxStrConstant(s);
+        return None;
+    }
+
     static Box* callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                              Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 };

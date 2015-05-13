@@ -81,6 +81,9 @@ EllipsisType = type(Ellipsis)
 # DictProxyType = type(TypeType.__dict__)
 NotImplementedType = type(NotImplemented)
 
+# Pyston change:
+AttrwrapperType = type(_C().__dict__)
+
 # For Jython, the following two types are identical
 # Pyston change: don't support these yet
 # GetSetDescriptorType = type(FunctionType.func_code)

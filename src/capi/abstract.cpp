@@ -1621,8 +1621,12 @@ extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    try {
+        return unaryop(o, AST_TYPE::Invert);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return nullptr;
+    }
 }
 
 extern "C" PyObject* PyNumber_Lshift(PyObject* lhs, PyObject* rhs) noexcept {

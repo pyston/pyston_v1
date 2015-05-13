@@ -814,7 +814,14 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
-    BoxedClosure* closure = scope_info->takesClosure() ? created_closure : 0;
+    BoxedClosure* closure = NULL;
+    if (scope_info->takesClosure()) {
+        if (this->scope_info->passesThroughClosure())
+            closure = passed_closure;
+        else
+            closure = created_closure;
+        assert(closure);
+    }
     CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
 
     Box* passed_globals = NULL;

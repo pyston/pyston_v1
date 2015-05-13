@@ -1392,6 +1392,8 @@ void setupCAPI() {
     auto capi_call = new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true));
     capi_call->f->internal_callable = BoxedCApiFunction::callInternal;
     capifunc_cls->giveAttr("__call__", capi_call);
+    capifunc_cls->giveAttr("__name__",
+                           new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::getname, NULL, NULL));
 
     capifunc_cls->freeze();
 

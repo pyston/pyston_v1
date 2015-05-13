@@ -18,3 +18,5 @@ print min(range(5))
 
 for x in [float("inf"), math.pi]:
     print x, math.isinf(x), math.fabs(x), math.ceil(x), math.log(x), math.log10(x)
+
+print math.sqrt.__name__

@@ -95,12 +95,13 @@ inline void sweepList(ListT* head, std::list<Box*, StlCompatAllocator<Box*>>& we
             cur = cur->next;
         } else {
             if (_doFree(al, &weakly_referenced)) {
-
                 removeFromLL(cur);
 
                 auto to_free = cur;
                 cur = cur->next;
                 free_func(to_free);
+            } else {
+                cur = cur->next;
             }
         }
     }

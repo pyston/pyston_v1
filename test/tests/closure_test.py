@@ -69,3 +69,16 @@ def f6():
 
     print (lambda a=1: x)()
 f6()
+
+
+# Regression test: make sure we can handle two pass-through-closure frames in a row
+def f7(n):
+    class C(object):
+        class D(object):
+            def foo(self):
+                return n
+
+    return C.D
+
+c = f7(5)()
+print c.foo()
