@@ -23,6 +23,15 @@ class BoxedSlice;
 
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end, i64* out_length = nullptr);
 
+// Analogue of _PyEval_SliceIndex
+void sliceIndex(Box* b, int64_t* out);
+
+// Adjust the start and stop bounds of the sequence we are slicing to its size.
+// Negative values greater or equal to (-length) become positive values.
+// Ensure stop >= start
+// Remain within bounds.
+void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size);
+
 template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
     assert(dst != src);
     if (step == 1) {

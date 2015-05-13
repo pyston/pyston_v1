@@ -2250,6 +2250,18 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     }
 }
 
+extern "C" Box* strGetslice(BoxedString* self, Box* boxedStart, Box* boxedStop) {
+    assert(isSubclass(self->cls, str_cls));
+
+    i64 start, stop;
+    sliceIndex(boxedStart, &start);
+    sliceIndex(boxedStop, &stop);
+
+    boundSliceWithLength(&start, &stop, start, stop, self->s().size());
+
+    return _strSlice(self, start, stop, 1, stop - start);
+}
+
 
 // TODO it looks like strings don't have their own iterators, but instead
 // rely on the sequence iteration protocol.
@@ -2755,6 +2767,8 @@ void setupStr() {
                       new BoxedFunction(boxRTFunction((void*)strCenter, UNKNOWN, 3, 1, false, false), { spaceChar }));
 
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
+
+    str_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)strGetslice, STR, 3)));
 
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
 
