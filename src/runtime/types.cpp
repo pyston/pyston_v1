@@ -2058,6 +2058,8 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
     }
 }
 
+extern "C" void PyCallIter_AddHasNext();
+
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(op);
     assert(tp);
@@ -2512,6 +2514,7 @@ void setupRuntime() {
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
+    PyCallIter_AddHasNext();
     PyType_Ready(&PyCallIter_Type);
     PyType_Ready(&PyCObject_Type);
 

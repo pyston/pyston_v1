@@ -9,6 +9,8 @@ typedef struct {
     PyObject_HEAD
     PyObject *it_callable; /* Set to NULL when iterator is exhausted */
     PyObject *it_sentinel; /* Set to NULL when iterator is exhausted */
+    // Pyston changes:
+    PyObject *it_nextvalue; /* Set to non-null when iterator is advanced in __hasnext__ */
 } calliterobject;
 
 PyObject *
@@ -22,6 +24,8 @@ PyCallIter_New(PyObject *callable, PyObject *sentinel)
     it->it_callable = callable;
     Py_INCREF(sentinel);
     it->it_sentinel = sentinel;
+    // Pyston change: initialize nextvalue
+    it->it_nextvalue = NULL;
     _PyObject_GC_TRACK(it);
     return (PyObject *)it;
 }
@@ -31,6 +35,8 @@ calliter_dealloc(calliterobject *it)
     _PyObject_GC_UNTRACK(it);
     Py_XDECREF(it->it_callable);
     Py_XDECREF(it->it_sentinel);
+    // Pyston change: xdecref nextvalue
+    Py_XDECREF(it->it_nextvalue);
     PyObject_GC_Del(it);
 }
 
@@ -39,11 +45,15 @@ calliter_traverse(calliterobject *it, visitproc visit, void *arg)
 {
     Py_VISIT(it->it_callable);
     Py_VISIT(it->it_sentinel);
+    // Pyston change: visit nextvalue
+    Py_VISIT(it->it_nextvalue);
     return 0;
 }
 
+// Pyston change: extract most of the body of calliter_iternext here
+// so we can use it from both calliter_iternext and calliter_hasnext
 static PyObject *
-calliter_iternext(calliterobject *it)
+calliter_next(calliterobject *it)
 {
     if (it->it_callable != NULL) {
         PyObject *args = PyTuple_New(0);
@@ -69,10 +79,42 @@ calliter_iternext(calliterobject *it)
             PyErr_Clear();
             Py_CLEAR(it->it_callable);
             Py_CLEAR(it->it_sentinel);
+            Py_CLEAR(it->it_nextvalue);
         }
     }
     return NULL;
 }
+
+static PyObject *
+calliter_iternext(calliterobject *it)
+{
+    // Pyston change: for __hasnext__ based iteration, return the cached next value
+    if (it->it_nextvalue != NULL) {
+        PyObject* rv = it->it_nextvalue;
+        Py_CLEAR(it->it_nextvalue);
+        return rv;
+    }
+
+    return calliter_next(it);
+}
+
+// Pyston addition: __hasnext__ based iteration
+static int
+calliter_hasnext(calliterobject *it)
+{
+    if (!it->it_nextvalue) {
+        it->it_nextvalue = calliter_next(it);
+    }
+    return it->it_nextvalue != NULL;
+}
+
+// Pyston change: give iter objects a __hasnext__ method
+void
+PyCallIter_AddHasNext()
+{
+    PyCallIter_Type._tpp_hasnext = calliter_hasnext;
+}
+
 
 PyTypeObject PyCallIter_Type = {
     // Pyston change:
