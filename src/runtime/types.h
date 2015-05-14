@@ -223,6 +223,7 @@ protected:
 
     friend void setupRuntime();
     friend void setupSysEnd();
+    friend void setupThread();
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -256,6 +257,7 @@ private:
 
     friend void setupRuntime();
     friend void setupSys();
+    friend void setupThread();
 
     DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
 };
