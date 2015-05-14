@@ -31,6 +31,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/dict.h"
 #include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
@@ -1541,14 +1542,21 @@ public:
                 for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
                     self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
                 }
-            } else if (_container->cls == dict_cls) {
+            } else {
+                // The update rules are too complicated to be worth duplicating here;
+                // just create a new dict object and defer to dictUpdate.
+                // Hopefully this does not happen very often.
+                if (!isSubclass(_container->cls, dict_cls)) {
+                    BoxedDict* new_container = new BoxedDict();
+                    dictUpdate(new_container, BoxedTuple::create({ _container }), new BoxedDict());
+                    _container = new_container;
+                }
+                assert(isSubclass(_container->cls, dict_cls));
                 BoxedDict* container = static_cast<BoxedDict*>(_container);
 
                 for (const auto& p : container->d) {
                     AttrWrapper::setitem(self, p.first, p.second);
                 }
-            } else {
-                RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
             }
         };
 
