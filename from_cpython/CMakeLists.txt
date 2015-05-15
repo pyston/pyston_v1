@@ -48,6 +48,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     md5module.c
     microprotocols.c
     module.c
+    multiprocessing.c
     operator.c
     posixmodule.c
     prepare_protocol.c
@@ -55,10 +56,12 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     resource.c
     row.c
     selectmodule.c
+    semaphore.c
     sha256module.c
     sha512module.c
     shamodule.c
     signalmodule.c
+    socket_connection.c
     socketmodule.c
     statement.c
     stringio.c

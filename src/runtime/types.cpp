@@ -2589,8 +2589,6 @@ void setupRuntime() {
 
     setupSysEnd();
 
-    Stats::endOfInit();
-
     TRACK_ALLOCATIONS = true;
 }
 

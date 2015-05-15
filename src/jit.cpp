@@ -51,6 +51,8 @@
 #error
 #endif
 
+extern "C" void init_multiprocessing();
+
 namespace pyston {
 
 extern void setEncodingAndErrors();
@@ -350,7 +352,11 @@ static int main(int argc, char** argv) {
         // encodings module.
         setEncodingAndErrors();
 
-        // end of argument parsing
+        // _multiprocessing relies on a bit more state being set up than the other modules.
+        // At some point we should try to make our initialization closer to CPython's
+        init_multiprocessing();
+
+        Stats::endOfInit();
 
         _t.split("to run");
         BoxedModule* main_module = NULL;
