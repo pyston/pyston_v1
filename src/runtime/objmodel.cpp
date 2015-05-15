@@ -4741,6 +4741,7 @@ extern "C" void delGlobal(Box* globals, const std::string* name) {
 
 extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     STAT_TIMER(t0, "us_timer_slowpath_getglobal");
+    ASSERT(gc::isValidGCObject(globals), "%p", globals);
 
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();

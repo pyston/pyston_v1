@@ -323,7 +323,7 @@ void markPhase() {
 #endif
 }
 
-static void sweepPhase(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced) {
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
     global_heap.freeUnmarked(weakly_referenced);
@@ -341,6 +341,7 @@ void disableGC() {
 }
 
 static int ncollections = 0;
+static bool should_not_reenter_gc = false;
 void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
@@ -352,25 +353,62 @@ void runCollection() {
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ncollections);
 
+    // The bulk of the GC work is not reentrant-safe.
+    // In theory we should never try to reenter that section, but it's happened due to bugs,
+    // which show up as very-hard-to-understand gc issues.
+    // So keep track if we're in the non-reentrant section and abort if we try to go back in.
+    // We could also just skip the collection if we're currently in the gc, but I think if we
+    // run into this case it's way more likely that it's a bug than something we should ignore.
+    RELEASE_ASSERT(!should_not_reenter_gc, "");
+    should_not_reenter_gc = true; // begin non-reentrant section
+
     Timer _t("collecting", /*min_usec=*/10000);
 
     markPhase();
-    std::list<Box*, StlCompatAllocator<Box*>> weakly_referenced;
+
+    // The sweep phase will not free weakly-referenced objects, so that we can inspect their
+    // weakrefs_list.  We want to defer looking at those lists until the end of the sweep phase,
+    // since the deallocation of other objects (namely, the weakref objects themselves) can affect
+    // those lists, and we want to see the final versions.
+    std::vector<Box*> weakly_referenced;
     sweepPhase(weakly_referenced);
 
+    // Handle weakrefs in two passes:
+    // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
+    //   over the garbage-and-corrupt-but-still-alive weakly_referenced list in order to find these objects,
+    //   so the gc is not reentrant during this section.  after this we discard that list.
+    // - then, call all the weakref callbacks we collected from the first pass.
+
+    // Use a StlCompatAllocator to keep the pending weakref objects alive in case we trigger a new collection.
+    // In theory we could push so much onto this list that we would cause a new collection to start:
+    std::list<PyWeakReference*, StlCompatAllocator<PyWeakReference*>> weak_references;
+
     for (auto o : weakly_referenced) {
+        assert(isValidGCObject(o));
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
         while (PyWeakReference* head = *list) {
             assert(isValidGCObject(head));
             if (head->wr_object != Py_None) {
+                assert(head->wr_object == o);
                 _PyWeakref_ClearRef(head);
-                if (head->wr_callback) {
 
-                    runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL,
-                                NULL);
-                    head->wr_callback = NULL;
-                }
+                if (head->wr_callback)
+                    weak_references.push_back(head);
             }
+        }
+        global_heap.free(GCAllocation::fromUserData(o));
+    }
+
+    should_not_reenter_gc = false; // end non-reentrant section
+
+    while (!weak_references.empty()) {
+        PyWeakReference* head = weak_references.front();
+        weak_references.pop_front();
+
+        if (head->wr_callback) {
+
+            runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+            head->wr_callback = NULL;
         }
     }
 
