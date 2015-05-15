@@ -455,10 +455,10 @@ $1_unittest:
 	ln -sf $(HOME)/pyston-build-dbg/$1_unittest .
 endif
 dbg_$1_unittests: $1_unittest
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
+	zsh -c 'ulimit -m $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
 unittests:: $1_unittest
 run_$1_unittests: $1_unittest
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$1_unittest $(ARGS)'
+	zsh -c 'ulimit -m $(MAX_MEM_KB); time ./$1_unittest $(ARGS)'
 run_unittests:: run_$1_unittests
 )
 endef
@@ -980,12 +980,12 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
 run$1: pyston$1 $$(RUN_DEPS)
 	PYTHONPATH=test/test_extension ./pyston$1 $$(ARGS)
 dbg$1: pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
+	PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
 nosearch_run$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,run$1_%)
 nosearch_dbg$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,dbg$1_%)
 
 ifneq ($$(ENABLE_VALGRIND),0)
@@ -1110,7 +1110,7 @@ opreportcg:
 
 .PHONY: watch_% watch wdbg_%
 watch_%:
-	@ ( ulimit -t 60; ulimit -d $(MAK_MEM_KB); ulimit -v $(MAK_MEM_KB); \
+	@ ( ulimit -t 60; ulimit -m $(MAK_MEM_KB); \
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
@@ -1145,7 +1145,7 @@ test_cpp_ll:
 .PHONY: bench_exceptions
 bench_exceptions:
 	$(CLANGPP_EXE) $(TEST_DIR)/bench_exceptions.cpp -o bench_exceptions -O3 -std=c++11
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./bench_exceptions'
+	zsh -c 'ulimit -m $(MAX_MEM_KB); time ./bench_exceptions'
 	rm bench_exceptions
 
 TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
