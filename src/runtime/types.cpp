@@ -1498,6 +1498,21 @@ public:
         return rtn;
     }
 
+    static Box* iterkeys(Box* _self) {
+        Box* r = AttrWrapper::keys(_self);
+        return getiter(r);
+    }
+
+    static Box* itervalues(Box* _self) {
+        Box* r = AttrWrapper::values(_self);
+        return getiter(r);
+    }
+
+    static Box* iteritems(Box* _self) {
+        Box* r = AttrWrapper::items(_self);
+        return getiter(r);
+    }
+
     static Box* copy(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -2496,10 +2511,10 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
-    // TODO: not quite right
-    attrwrapper_cls->giveAttr("iterkeys", attrwrapper_cls->getattr("keys"));
-    attrwrapper_cls->giveAttr("itervalues", attrwrapper_cls->getattr("values"));
-    attrwrapper_cls->giveAttr("iteritems", attrwrapper_cls->getattr("items"));
+    attrwrapper_cls->giveAttr("iterkeys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iterkeys, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("itervalues",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::itervalues, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iteritems, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));

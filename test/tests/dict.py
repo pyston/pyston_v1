@@ -219,3 +219,14 @@ for i in xrange(6):
     d1[i] = 5 - i
     d2[5 - i] = i
     print d1 == d2, d1 != d2
+
+
+d = dict([(i, i**2) for i in xrange(10)])
+i = d.iteritems()
+l = []
+while True:
+    try:
+        l.append(i.next())
+    except StopIteration:
+        break
+print sorted(l)

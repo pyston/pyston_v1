@@ -114,3 +114,12 @@ print sorted([d for d in dir(TestClass3()) if not d.startswith('_')])
 c = C1()
 c.__dict__.update([('a', 1), ('b', 2)])
 print c.a, c.b
+
+i = c.__dict__.iteritems()
+l = []
+while True:
+    try:
+        l.append(i.next())
+    except StopIteration:
+        break
+print sorted(l)
