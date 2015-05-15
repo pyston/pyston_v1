@@ -33,6 +33,8 @@ void deregisterPermanentRoot(void* root_obj);
 // even if they are not heap allocated.
 void registerNonheapRootObject(void* obj);
 
+void registerPotentialRootRange(void* start, void* end);
+
 // If you want to have a static root "location" where multiple values could be stored, use this:
 class GCRootHandle {
 public:

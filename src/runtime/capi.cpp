@@ -1290,6 +1290,15 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
 
     assert(init);
 
+    // Let the GC know about the static variables.
+    uintptr_t bss_start = (uintptr_t)dlsym(handle, "__bss_start");
+    uintptr_t bss_end = (uintptr_t)dlsym(handle, "_end");
+    RELEASE_ASSERT(bss_end - bss_start < 100000, "Large BSS section detected - there maybe something wrong");
+    // only track void* aligned memory
+    bss_start = (bss_start + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
+    bss_end -= bss_end % sizeof(void*);
+    gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
+
     char* packagecontext = strdup(full_name.c_str());
     char* oldcontext = _Py_PackageContext;
     _Py_PackageContext = packagecontext;
