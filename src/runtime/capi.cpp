@@ -1241,6 +1241,26 @@ extern "C" void PyEval_InitThreads(void) noexcept {
     // nothing to do here
 }
 
+extern "C" void PyEval_AcquireThread(PyThreadState* tstate) noexcept {
+    Py_FatalError("Unimplemented");
+}
+
+extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
+    Py_FatalError("Unimplemented");
+}
+
+extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
+    Py_FatalError("Unimplemented");
+}
+
+extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {
+    Py_FatalError("Unimplemented");
+}
+
+extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
+    Py_FatalError("Unimplemented");
+}
+
 extern "C" char* PyModule_GetName(PyObject* m) noexcept {
     PyObject* d;
     PyObject* nameobj;

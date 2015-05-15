@@ -437,6 +437,18 @@ Box* dictContains(BoxedDict* self, Box* k) {
     return boxBool(self->d.count(k) != 0);
 }
 
+/* Return 1 if `key` is in dict `op`, 0 if not, and -1 on error. */
+extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
+    BoxedDict* mp = (BoxedDict*)op;
+    try {
+        return mp->getOrNull(key) ? 1 : 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+}
+
+
 Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }

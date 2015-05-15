@@ -74,6 +74,7 @@
 #include "setobject.h"
 #include "methodobject.h"
 #include "moduleobject.h"
+#include "funcobject.h"
 #include "classobject.h"
 #include "cobject.h"
 #include "fileobject.h"
