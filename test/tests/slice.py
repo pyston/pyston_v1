@@ -37,13 +37,26 @@ class Both(object):
     def __setslice__(self, start, stop, item):
         print "called setslice on object", start, stop
 
+class IndexZero(object):
+    def __index__(self):
+        return 0
+    def __repr__(self):
+        return "0"
+
+class FalseIndex(object):
+    def __index__(self):
+        return "troll"
+
 indexable = Indexable()
 sliceable = Sliceable()
+index_zero = IndexZero()
+false_index = FalseIndex()
 both = Both()
 numbers = range(10)
 
 # Can use index and slice notation for object with only getitem
 indexable[0]
+indexable[index_zero]
 indexable[:10]
 indexable[11:]
 indexable[:]
@@ -61,17 +74,22 @@ del indexable[:]
 del indexable[3:8]
 del indexable[slice(1,12,2)]
 
-# Can't use index notation or pass in a slice for objects with only getslice
 try:
     sliceable[0]
 except TypeError:
-    print "no index notation with index"
+    print "can't use index notation or pass in a slice for objects with only getslice"
+
+try:
+    sliceable['a':'b']
+except TypeError:
+    print "can't pass in any type into a slice with only getslice"
 
 try:
     sliceable[1:10:2]
 except TypeError:
     print "need getitem to support variable-sized steps"
 
+sliceable[index_zero:index_zero]
 sliceable[:10]
 sliceable[11:]
 sliceable[:]
@@ -88,10 +106,20 @@ both[:] = xrange(2)
 both[3:8] = xrange(2)
 both[::2] = xrange(2)
 
+# Should all call getitem as a fallback
+both['a']
+both['a':'b']
+both['a':'b':'c']
+
 del both[0]
 del both[:]
 del both[3:8]
 del both [::2]
+
+try:
+    both[false_index:false_index]
+except TypeError:
+    print "even if we have getitem, __index__ should not return a non-int"
 
 # Number lists should have the set/get/del|item/slice functions
 print numbers[0]

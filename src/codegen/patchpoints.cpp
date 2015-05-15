@@ -302,11 +302,11 @@ ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder) {
 }
 
 ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1, 256, ICSetupInfo::Setitem, type_recorder);
+    return ICSetupInfo::initialize(true, 1, 512, ICSetupInfo::Setitem, type_recorder);
 }
 
 ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 1, 256, ICSetupInfo::Delitem, type_recorder);
+    return ICSetupInfo::initialize(false, 1, 512, ICSetupInfo::Delitem, type_recorder);
 }
 
 ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder) {

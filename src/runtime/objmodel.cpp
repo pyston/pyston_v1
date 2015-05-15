@@ -2335,7 +2335,8 @@ extern "C" bool nonzero(Box* obj) {
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                    || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
                    || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
-                   || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls,
+                   || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
+                   || obj->cls == wrapperdescr_cls,
                "%s.__nonzero__", getTypeName(obj)); // TODO
 
         // TODO should rewrite these?
@@ -4365,38 +4366,58 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     return rtn;
 }
 
+Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* value, CallRewriteArgs* rewrite_args) {
+    if (value) {
+        return callattrInternal2(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), item, value);
+    } else {
+        return callattrInternal1(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), item);
+    }
+}
+
 // This function decides whether to call the slice operator (e.g. __getslice__)
 // or the item operator (__getitem__).
 Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_str, Box* slice, Box* value,
                          CallRewriteArgs* rewrite_args) {
-    // If we don't have a slice operator, fall back to item operator.
-    // No rewriting for the typeLookup here (i.e. no guards if there is no slice operator). These guards
-    // will be added when we call callattrInternal on a slice operator later. If the guards fail, we fall
-    // back into the slow path which has this fallback to the item operator.
-    Box* slice_attr = typeLookup(target->cls, slice_str, NULL);
-    if (!slice_attr) {
-        if (value) {
-            return callattrInternal2(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), slice, value);
-        } else {
-            return callattrInternal1(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), slice);
+
+    // This function contains a lot of logic for deciding between whether to call
+    // the slice operator or the item operator, so we can match CPython's behavior
+    // on custom classes that define those operators. However, for builtin types,
+    // we know we can call either and the behavior will be the same. Adding all those
+    // guards are unnecessary and bad for performance.
+    //
+    // Also, for special slicing logic (e.g. open slice ranges [:]), the builtin types
+    // have C-implemented functions that already handle all the edge cases, so we don't
+    // need to have a slowpath for them here.
+    if (target->cls == list_cls || target->cls == str_cls || target->cls == unicode_cls) {
+        if (rewrite_args) {
+            rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (uint64_t)target->cls);
         }
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
+    }
+
+    // Guard on the type of the object (need to have the slice operator attribute to call it).
+    Box* slice_attr = NULL;
+    if (rewrite_args) {
+        RewriterVar* target_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, target_cls, Location::any());
+        slice_attr = typeLookup(target->cls, slice_str, &grewrite_args);
+        if (!grewrite_args.out_success) {
+            rewrite_args = NULL;
+        }
+    } else {
+        slice_attr = typeLookup(target->cls, slice_str, NULL);
+    }
+
+    if (!slice_attr) {
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
     }
 
     // Need a slice object to use the slice operators.
+    if (rewrite_args) {
+        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (uint64_t)slice->cls);
+    }
     if (slice->cls != slice_cls) {
-        if (rewrite_args) {
-            rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (uint64_t)slice_cls, /*negate=*/true);
-        }
-
-        if (value) {
-            return callattrInternal2(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), slice, value);
-        } else {
-            return callattrInternal1(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), slice);
-        }
-    } else {
-        if (rewrite_args) {
-            rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (uint64_t)slice_cls);
-        }
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
     }
 
     BoxedSlice* bslice = (BoxedSlice*)slice;
@@ -4409,29 +4430,33 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
                 ->addAttrGuard(offsetof(Box, cls), (uint64_t)none_cls, /*negate=*/true);
         }
 
-        if (value) {
-            return callattrInternal2(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), slice, value);
-        } else {
-            return callattrInternal1(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), slice);
-        }
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
     } else {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
 
-        Box* start = bslice->start;
-        Box* stop = bslice->stop;
+        // If the slice cannot be used as integer slices, also fall back to the get operator.
+        // We could optimize further here by having a version of isSliceIndex that
+        // creates guards, but it would only affect some rare edge cases.
+        if (!isSliceIndex(bslice->start) || !isSliceIndex(bslice->stop)) {
+            return callItemAttr(target, item_str, slice, value, rewrite_args);
+        }
 
         // If we don't specify the start/stop (e.g. o[:]), the slice operator functions
         // CPython seems to use 0 and sys.maxint as the default values.
-        if (bslice->start->cls == none_cls)
-            start = boxInt(0);
-        if (bslice->stop->cls == none_cls)
-            stop = boxInt(PyInt_GetMax());
+        int64_t start = 0, stop = PyInt_GetMax();
+        sliceIndex(bslice->start, &start);
+        sliceIndex(bslice->stop, &stop);
+
+        Box* boxedStart = boxInt(start);
+        Box* boxedStop = boxInt(stop);
 
         if (value) {
-            return callattrInternal3(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(3), start, stop, value);
+            return callattrInternal3(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(3), boxedStart, boxedStop,
+                                     value);
         } else {
-            return callattrInternal2(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), start, stop);
+            return callattrInternal2(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), boxedStart,
+                                     boxedStop);
         }
     }
 }

@@ -17,7 +17,6 @@
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
-#include "runtime/types.h"
 
 namespace pyston {
 
@@ -27,19 +26,8 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
         throwCAPIException();
 }
 
-void sliceIndex(Box* b, int64_t* out) {
-    if (b->cls == none_cls) {
-        // Leave default value in case of None (useful for slices like [2:])
-    } else if (b->cls == int_cls) {
-        *out = static_cast<BoxedInt*>(b)->n;
-    } else if (PyIndex_Check(b)) {
-        int64_t x = PyNumber_AsSsize_t(b, NULL);
-        if (!(x == -1 && PyErr_Occurred()))
-            *out = x;
-    } else {
-        raiseExcHelper(TypeError, "slice indices must be integers or "
-                                  "None or have an __index__ method");
-    }
+bool isSliceIndex(Box* b) {
+    return b->cls == none_cls || b->cls == int_cls || PyIndex_Check(b);
 }
 
 void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size) {

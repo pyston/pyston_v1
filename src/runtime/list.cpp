@@ -134,7 +134,6 @@ static Py_ssize_t list_length(Box* self) noexcept {
 }
 
 Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
-    // printf("%ld %ld %ld\n", start, stop, step);
     assert(step != 0);
     if (step > 0) {
         assert(0 <= start);
@@ -419,7 +418,7 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
 }
 
 Box* listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i64 step, Box* v) {
-    RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+    RELEASE_ASSERT(step == 1, "step sizes must be 1 in this code path");
 
     boundSliceWithLength(&start, &stop, start, stop, self->size);
 
