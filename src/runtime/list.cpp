@@ -1094,7 +1094,7 @@ void setupList() {
     list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
 
     list_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None }));
+                       new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 1, 1, true, false), { None }));
     list_cls->giveAttr("__init__",
                        new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, 1, false, false), { None }));
 

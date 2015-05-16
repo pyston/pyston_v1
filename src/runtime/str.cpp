@@ -23,6 +23,10 @@
 
 #include "Python.h"
 
+#include "../Objects/stringlib/stringdefs.h"
+#include "../Objects/stringlib/fastsearch.h"
+#include "../Objects/stringlib/find.h"
+
 #include "capi/types.h"
 #include "core/common.h"
 #include "core/types.h"
@@ -44,6 +48,9 @@ extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_partition(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_rpartition(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 // from cpython's stringobject.c:
 #define LEFTSTRIP 0
@@ -1587,9 +1594,9 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(step != 0);
     if (step > 0) {
         assert(0 <= start);
-        assert(stop <= s.size());
+        assert(stop <= (i64)s.size());
     } else {
-        assert(start < s.size());
+        assert(start < (i64)s.size());
         assert(-1 <= stop);
     }
 
@@ -1776,33 +1783,6 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
         start_pos += new_->size(); // Handles case where 'to' is a substring of 'from'
     }
     return boxString(s);
-}
-
-Box* strPartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
-
-    size_t found_idx = self->s.find(sep->s);
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ self, EmptyString, EmptyString });
-
-
-    return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
-}
-
-Box* strRpartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
-
-    size_t found_idx = self->s.rfind(sep->s);
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ EmptyString, EmptyString, self });
-
-    return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
 }
 
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
@@ -2641,6 +2621,182 @@ static PyBufferProcs string_as_buffer = {
     (releasebufferproc)NULL,
 };
 
+static Py_ssize_t string_length(PyStringObject* a) {
+    return Py_SIZE(a);
+}
+
+static PyObject* string_concat(PyObject* a, PyObject* bb) {
+    Py_ssize_t size;
+    PyStringObject* op;
+    if (!PyString_Check(bb)) {
+#ifdef Py_USING_UNICODE
+        if (PyUnicode_Check(bb))
+            return PyUnicode_Concat((PyObject*)a, bb);
+#endif
+        if (PyByteArray_Check(bb))
+            return PyByteArray_Concat((PyObject*)a, bb);
+        PyErr_Format(PyExc_TypeError, "cannot concatenate 'str' and '%.200s' objects", Py_TYPE(bb)->tp_name);
+        return NULL;
+    }
+#define b ((PyStringObject*)bb)
+    /* Optimize cases with empty left or right operand */
+    if ((Py_SIZE(a) == 0 || Py_SIZE(b) == 0) && PyString_CheckExact((PyObject*)a)
+        && PyString_CheckExact((PyObject*)b)) {
+        if (Py_SIZE(a) == 0) {
+            Py_INCREF(bb);
+            return bb;
+        }
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    size = Py_SIZE(a) + Py_SIZE(b);
+    /* Check that string sizes are not negative, to prevent an
+       overflow in cases where we are passed incorrectly-created
+       strings with negative lengths (due to a bug in other code).
+    */
+    if (Py_SIZE(a) < 0 || Py_SIZE(b) < 0 || Py_SIZE(a) > PY_SSIZE_T_MAX - Py_SIZE(b)) {
+        PyErr_SetString(PyExc_OverflowError, "strings are too large to concat");
+        return NULL;
+    }
+
+    /* Inline PyObject_NewVar */
+    if (size > PY_SSIZE_T_MAX - sizeof(BoxedString)) {
+        PyErr_SetString(PyExc_OverflowError, "strings are too large to concat");
+        return NULL;
+    }
+    return new (size) BoxedString(static_cast<BoxedString*>(a)->s, static_cast<BoxedString*>(a)->s);
+#undef b
+}
+
+static PyObject* string_repeat(PyObject* a, Py_ssize_t n) {
+    Py_ssize_t i;
+    Py_ssize_t j;
+    Py_ssize_t size;
+    PyObject* op;
+    size_t nbytes;
+    if (n < 0)
+        n = 0;
+    /* watch out for overflows:  the size can overflow int,
+     * and the # of bytes needed can overflow size_t
+     */
+    size = Py_SIZE(a) * n;
+    if (n && size / n != Py_SIZE(a)) {
+        PyErr_SetString(PyExc_OverflowError, "repeated string is too long");
+        return NULL;
+    }
+    if (size == Py_SIZE(a) && PyString_CheckExact(a)) {
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    nbytes = (size_t)size;
+    if (nbytes + sizeof(BoxedString) <= nbytes) {
+        PyErr_SetString(PyExc_OverflowError, "repeated string is too long");
+        return NULL;
+    }
+    op = new (nbytes) BoxedString(nbytes, 0);
+
+// Pyston change: ifdef out these unused bits */
+#if 0
+    op->ob_shash = -1;
+    op->ob_sstate = SSTATE_NOT_INTERNED;
+#endif
+    BoxedString* op_s = static_cast<BoxedString*>(op);
+    BoxedString* a_s = static_cast<BoxedString*>(a);
+
+    op_s->data()[size] = '\0';
+
+    if (Py_SIZE(a) == 1 && n > 0) {
+        memset(op_s->data(), a_s->data()[0], n);
+        return (PyObject*)op;
+    }
+    i = 0;
+    if (i < size) {
+        Py_MEMCPY(op_s->data(), a_s->data(), Py_SIZE(a));
+        i = Py_SIZE(a);
+    }
+    while (i < size) {
+        j = (i <= size - i) ? i : size - i;
+        Py_MEMCPY(op_s->data() + i, op_s->data(), j);
+        i += j;
+    }
+    return (PyObject*)op;
+}
+
+/* String slice a[i:j] consists of characters a[i] ... a[j-1] */
+
+static PyObject* string_slice(PyObject* a, Py_ssize_t i, Py_ssize_t j)
+/* j -- may be negative! */
+{
+    if (i < 0)
+        i = 0;
+    if (j < 0)
+        j = 0; /* Avoid signed/unsigned bug in next line */
+    if (j > Py_SIZE(a))
+        j = Py_SIZE(a);
+    if (i == 0 && j == Py_SIZE(a) && PyString_CheckExact(a)) {
+        /* It's the same as a */
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    if (j < i)
+        j = i;
+    return PyString_FromStringAndSize(static_cast<BoxedString*>(a)->data() + i, j - i);
+}
+
+static int string_contains(PyObject* str_obj, PyObject* sub_obj) {
+    if (!PyString_CheckExact(sub_obj)) {
+#ifdef Py_USING_UNICODE
+        if (PyUnicode_Check(sub_obj))
+            return PyUnicode_Contains(str_obj, sub_obj);
+#endif
+        if (!PyString_Check(sub_obj)) {
+            PyErr_Format(PyExc_TypeError, "'in <string>' requires string as left operand, "
+                                          "not %.200s",
+                         Py_TYPE(sub_obj)->tp_name);
+            return -1;
+        }
+    }
+
+    return stringlib_contains_obj(str_obj, sub_obj);
+}
+
+static PyObject* string_item(PyObject* a, Py_ssize_t i) {
+    char pchar;
+    PyObject* v;
+    if (i < 0 || i >= Py_SIZE(a)) {
+        PyErr_SetString(PyExc_IndexError, "string index out of range");
+        return NULL;
+    }
+    pchar = static_cast<BoxedString*>(a)->data()[i];
+// Pyston change: we don't cache, just call boxString
+#if 0
+    v = (PyObject*)characters[pchar & UCHAR_MAX];
+    if (v == NULL)
+        v = PyString_FromStringAndSize(&pchar, 1);
+    else {
+#ifdef COUNT_ALLOCS
+        one_strings++;
+#endif
+        Py_INCREF(v);
+    }
+#else
+    v = boxString(llvm::StringRef(&pchar, 1));
+#endif
+    return v;
+}
+
+static PySequenceMethods string_as_sequence
+    = { (lenfunc)string_length,          // comments are the only way I've found of
+        (binaryfunc)string_concat,       // forcing clang-format to break these onto multiple lines
+        (ssizeargfunc)string_repeat,     //
+        (ssizeargfunc)string_item,       //
+        (ssizessizeargfunc)string_slice, //
+        0,                               //
+        0,                               //
+        (objobjproc)string_contains,     //
+        0,                               //
+        0 };
+
 static PyMethodDef string_methods[] = {
     { "count", (PyCFunction)string_count, METH_VARARGS, NULL },
     { "join", (PyCFunction)string_join, METH_O, NULL },
@@ -2653,6 +2809,9 @@ static PyMethodDef string_methods[] = {
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
+    { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
+    { "partition", (PyCFunction)string_partition, METH_O, NULL },
+    { "rpartition", (PyCFunction)string_rpartition, METH_O, NULL },
 };
 
 void setupStr() {
@@ -2669,6 +2828,7 @@ void setupStr() {
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
 
     str_cls->tp_as_buffer = &string_as_buffer;
+    str_cls->tp_as_sequence = &string_as_sequence;
     str_cls->tp_print = string_print;
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
@@ -2714,9 +2874,6 @@ void setupStr() {
     str_cls->giveAttr("endswith",
                       new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
 
-    str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
-    str_cls->giveAttr("rpartition", new BoxedFunction(boxRTFunction((void*)strRpartition, UNKNOWN, 2)));
-
     str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, 0, true, true)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
@@ -2742,7 +2899,9 @@ void setupStr() {
 
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
 
+#if false
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
+#endif
 
     str_cls->giveAttr("replace",
                       new BoxedFunction(boxRTFunction((void*)strReplace, UNKNOWN, 4, 1, false, false), { boxInt(-1) }));

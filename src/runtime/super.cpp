@@ -59,6 +59,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
 
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
+    std::string attr_s(attr->s);
 
     bool skip = s->obj_type == NULL;
 
@@ -101,7 +102,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
                 continue;
             res = PyDict_GetItem(dict, name);
 #endif
-            res = tmp->getattr(std::string(attr->s));
+            res = tmp->getattr(attr_s);
 
             if (res != NULL) {
 // Pyston change:
@@ -128,10 +129,10 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, std::string(attr->s), NULL);
-    // TODO implement this
-    RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
-    return processDescriptor(r, s, s->cls);
+    Box* r = getattrInternalGeneric(s, attr_s, NULL, true, false, NULL, NULL);
+    if (r)
+        return processDescriptor(r, s, s->cls);
+    raiseExcHelper(AttributeError, "'super' object has no attribute '%s'", attr->data());
 }
 
 Box* superRepr(Box* _s) {
