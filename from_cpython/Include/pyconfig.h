@@ -88,6 +88,7 @@
 #define HAVE_ERRNO_H 1
 #define HAVE_FCNTL_H 1
 #define HAVE_FTIME 1
+#define HAVE_FTRUNCATE 1
 #define HAVE_GRP_H 1
 #define HAVE_INTTYPES_H 1
 #define HAVE_LANGINFO_H 1
