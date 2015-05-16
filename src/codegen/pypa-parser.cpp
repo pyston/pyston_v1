@@ -1064,8 +1064,7 @@ std::string PystonSourceReader::get_line() {
                 break;
             line.push_back(c);
         } while (c != '\n' && c != '\x0c');
-        if (!eof())
-            ++line_number;
+        ++line_number;
         return line;
     }
 
