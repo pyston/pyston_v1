@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_binop'] < 10
+# statcheck: noninit_count('slowpath_binop') < 10
 
 class O(object):
     def __init__(self, n):
