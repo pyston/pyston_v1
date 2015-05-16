@@ -420,16 +420,23 @@ UNITTEST_SRCS := $(wildcard $(UNITTEST_DIR)/*.cpp)
 
 NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 
-.DEFAULT_GOAL := pyston_dbg
-# _ :
-	# $(MAKE) pyston_dbg || (clear; $(MAKE) pyston_dbg -j1 ERROR_LIMIT=1)
+.DEFAULT_GOAL := small_all
+
+RUN_DEPS := ext_pyston
+
+ifneq ($(USE_CMAKE),1)
+	RUN_DEPS := $(RUN_DEPS) sharedmods
+endif
+
+.PHONY: small_all
+small_all: pyston_dbg $(RUN_DEPS)
 
 .PHONY: all _all
 # all: llvm
 	# @# have to do this in a recursive make so that dependency is enforced:
 	# $(MAKE) pyston_all
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
-all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
+all: pyston_dbg pyston_release pyston_gcc ext_python ext_pyston unittests sharedmods
 
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
@@ -913,10 +920,10 @@ $(CMAKE_SETUP_RELEASE):
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
@@ -927,14 +934,14 @@ $(CMAKE_SETUP_GCC):
 	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
 .PHONY: clean
 clean:
-	@ find src $(TOOLS_DIR) $(TEST_DIR) ./from_cpython/Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
+	@ find src $(TOOLS_DIR) $(TEST_DIR) ./from_cpython ./lib_pyston \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
@@ -962,8 +969,6 @@ $1: $(HOME)/pyston-perf/benchmarking/benchmark_suite/nosearch_$1 ;
 $(patsubst %, $$1: %/nosearch_$$1 ;,$(EXTRA_SEARCH_DIRS))
 )
 endef
-
-RUN_DEPS :=
 
 define make_target
 $(eval \
@@ -1149,47 +1154,39 @@ bench_exceptions:
 	rm bench_exceptions
 
 TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
+TEST_EXT_MODULE_SRCS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.c)
+TEST_EXT_MODULE_OBJS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.pyston.so)
 
-# SELF_HOST_EXTENSIONS = SELF_HOST or USE_CMAKE
-# - cmake doesn't support non-self-hosting extensions
-SELF_HOST_EXTENSIONS := $(SELF_HOST)
-ifeq ($(USE_CMAKE),1)
-	SELF_HOST_EXTENSIONS := 1
-endif
+SHAREDMODS_NAMES := _multiprocessing
+SHAREDMODS_SRCS := \
+	_multiprocessing/multiprocessing.c \
+	_multiprocessing/semaphore.c \
+	_multiprocessing/socket_connection.c
+SHAREDMODS_SRCS := $(SHAREDMODS_SRCS:%=from_cpython/Modules/%)
+SHAREDMODS_OBJS := $(SHAREDMODS_NAMES:%=lib_pyston/%.pyston.so)
+
+.PHONY: sharedmods
+sharedmods: $(SHAREDMODS_OBJS)
 
 .PHONY: ext_pyston
-ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
-ifneq ($(SELF_HOST_EXTENSIONS),1)
-$(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
-	$(CC) -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
-$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard from_cpython/Include/*.h)
-	$(CC) -pthread $(EXT_CFLAGS) -c $< -o $@
-else
+ext_pyston: $(TEST_EXT_MODULE_OBJS)
+
 # Hax: we want to generate multiple targets from a single rule, and run the rule only if the
 # dependencies have been updated, and only run it once for all the targets.
 # So just tell make to generate the first extension module, and that the non-first ones just
 # depend on the first one.
-$(TEST_DIR)/test_extension/$(firstword $(TEST_EXT_MODULE_NAMES)).pyston.so: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.c) | pyston_dbg
-	$(MAKE) ext_pyston_selfhost
-NONFIRST_EXT := $(wordlist 2,9999,$(TEST_EXT_MODULE_NAMES))
-$(NONFIRST_EXT:%=$(TEST_DIR)/test_extension/%.pyston.so): $(TEST_DIR)/test_extension/$(firstword $(TEST_EXT_MODULE_NAMES)).pyston.so
-endif
-
-.PHONY: ext_pyston_selfhost dbg_ext_pyston_selfhost ext_pyston_selfhost_release
-ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
-	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_dbg setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
-dbg_ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
-	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 $(GDB) $(GDB_CMDS) --args ../../pyston_dbg setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
-ext_pyston_selfhost_release: pyston_release $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
-	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_release setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
+$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) pyston_dbg
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg setup.py build
+	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
+$(wordlist 2,9999,$(TEST_EXT_MODULE_OBJS)): $(firstword $(TEST_EXT_MODULE_OBJS))
+$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) pyston_dbg
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg ../../from_cpython/setup.py build --build-lib ../../lib_pyston
+$(wordlist 2,9999,$(SHAREDMODS_OBJS)): $(firstword $(SHAREDMODS_OBJS))
 
 .PHONY: ext_python ext_pythondbg
-ext_python: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+ext_python: $(TEST_EXT_MODULE_SRCS)
 	cd $(TEST_DIR)/test_extension; python setup.py build
-ext_pythondbg: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+ext_pythondbg: $(TEST_EXT_MODULE_SRCS)
 	cd $(TEST_DIR)/test_extension; python2.7-dbg setup.py build
 
 $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)

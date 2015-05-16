@@ -51,8 +51,6 @@
 #error
 #endif
 
-extern "C" void init_multiprocessing();
-
 namespace pyston {
 
 extern void setEncodingAndErrors();
@@ -351,10 +349,6 @@ static int main(int argc, char** argv) {
         // sys.path is properly set up, so that we can import the
         // encodings module.
         setEncodingAndErrors();
-
-        // _multiprocessing relies on a bit more state being set up than the other modules.
-        // At some point we should try to make our initialization closer to CPython's
-        init_multiprocessing();
 
         Stats::endOfInit();
 

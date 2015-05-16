@@ -48,7 +48,6 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     md5module.c
     microprotocols.c
     module.c
-    multiprocessing.c
     operator.c
     posixmodule.c
     prepare_protocol.c
@@ -56,12 +55,10 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     resource.c
     row.c
     selectmodule.c
-    semaphore.c
     sha256module.c
     sha512module.c
     shamodule.c
     signalmodule.c
-    socket_connection.c
     socketmodule.c
     statement.c
     stringio.c
@@ -111,3 +108,15 @@ file(GLOB_RECURSE STDPARSER_SRCS Parser
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautological-compare -Wno-type-limits -Wno-unused-result -Wno-strict-aliasing")
 add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS} ${STDPARSER_SRCS})
+
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
+                   COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
+                   DEPENDS
+                       pyston
+                       copy_stdlib
+                       copy_libpyston
+                       Modules/_multiprocessing/multiprocessing.c
+                       Modules/_multiprocessing/semaphore.c
+                       Modules/_multiprocessing/socket_connection.c
+                   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)
