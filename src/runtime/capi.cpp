@@ -1196,10 +1196,9 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 }
 
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
-    RELEASE_ASSERT(module == NULL, "not implemented");
     assert((ml->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
 
-    return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth);
+    return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth, module);
 }
 
 extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
@@ -1414,6 +1413,8 @@ void setupCAPI() {
     capifunc_cls->giveAttr("__call__", capi_call);
     capifunc_cls->giveAttr("__name__",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::getname, NULL, NULL));
+    capifunc_cls->giveAttr(
+        "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
 
     capifunc_cls->freeze();
 

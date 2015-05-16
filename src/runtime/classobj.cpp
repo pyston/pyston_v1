@@ -609,6 +609,33 @@ Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     return runtimeCall(call_func, ArgPassSpec(0, 0, true, true), _args, _kwargs, NULL, NULL, NULL);
 }
 
+extern "C" PyObject* PyClass_New(PyObject* bases, PyObject* dict, PyObject* name) noexcept {
+    try {
+        if (name == NULL || !PyString_Check(name)) {
+            PyErr_SetString(PyExc_TypeError, "PyClass_New: name must be a string");
+            return NULL;
+        }
+        if (dict == NULL || !PyDict_Check(dict)) {
+            PyErr_SetString(PyExc_TypeError, "PyClass_New: dict must be a dictionary");
+            return NULL;
+        }
+
+        return runtimeCall(classobj_cls, ArgPassSpec(3), name, bases, dict, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klass) noexcept {
+    try {
+        return new BoxedInstanceMethod(self, func, klass);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
