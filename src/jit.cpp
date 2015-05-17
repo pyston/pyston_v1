@@ -376,6 +376,11 @@ static int main(int argc, char** argv) {
             if (fn != NULL) {
                 llvm::SmallString<128> path;
 
+                if (!llvm::sys::fs::exists(fn)) {
+                    fprintf(stderr, "[Errno 2] No such file or directory: '%s'\n", fn);
+                    return 2;
+                }
+
                 if (!llvm::sys::path::is_absolute(fn)) {
                     char cwd_buf[1026];
                     char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
@@ -387,6 +392,7 @@ static int main(int argc, char** argv) {
                 llvm::sys::path::remove_filename(path);
                 char* real_path
                     = realpath(path.str().str().c_str(), NULL); // inefficient way of null-terminating the string
+                ASSERT(real_path, "%s %s", path.str().str().c_str(), strerror(errno));
                 prependToSysPath(real_path);
                 free(real_path);
 
