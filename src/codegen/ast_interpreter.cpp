@@ -206,6 +206,7 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 }
 
 void ASTInterpreter::setGlobals(Box* globals) {
+    assert(gc::isValidGCObject(globals));
     this->globals = globals;
 }
 

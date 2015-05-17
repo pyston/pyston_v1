@@ -58,6 +58,7 @@ Box* dictViewKeysIter(Box* self);
 Box* dictViewValuesIter(Box* self);
 Box* dictViewItemsIter(Box* self);
 void dictMerge(BoxedDict* self, Box* other);
+Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs);
 }
 
 #endif

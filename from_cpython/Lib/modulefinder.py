@@ -17,12 +17,13 @@ else:
     # remain compatible with Python  < 2.3
     READ_MODE = "r"
 
-LOAD_CONST = chr(dis.opname.index('LOAD_CONST'))
-IMPORT_NAME = chr(dis.opname.index('IMPORT_NAME'))
-STORE_NAME = chr(dis.opname.index('STORE_NAME'))
-STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
-STORE_OPS = [STORE_NAME, STORE_GLOBAL]
-HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
+# Pyston change: comment these out
+# LOAD_CONST = chr(dis.opname.index('LOAD_CONST'))
+# IMPORT_NAME = chr(dis.opname.index('IMPORT_NAME'))
+# STORE_NAME = chr(dis.opname.index('STORE_NAME'))
+# STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
+# STORE_OPS = [STORE_NAME, STORE_GLOBAL]
+# HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
 
 # Modulefinder does a good job at simulating Python's, but it can not
 # handle __path__ modifications packages make at runtime.  Therefore there

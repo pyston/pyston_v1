@@ -60,6 +60,9 @@ Box* dictIterNext(Box* s) {
     assert(s->cls == dict_iterator_cls);
     BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
 
+    if (self->it == self->itEnd)
+        raiseExcHelper(StopIteration, "");
+
     Box* rtn = nullptr;
     if (self->type == BoxedDictIterator::KeyIterator) {
         rtn = self->it->first;

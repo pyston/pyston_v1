@@ -31,6 +31,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/dict.h"
 #include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
@@ -1497,6 +1498,21 @@ public:
         return rtn;
     }
 
+    static Box* iterkeys(Box* _self) {
+        Box* r = AttrWrapper::keys(_self);
+        return getiter(r);
+    }
+
+    static Box* itervalues(Box* _self) {
+        Box* r = AttrWrapper::values(_self);
+        return getiter(r);
+    }
+
+    static Box* iteritems(Box* _self) {
+        Box* r = AttrWrapper::items(_self);
+        return getiter(r);
+    }
+
     static Box* copy(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1541,14 +1557,21 @@ public:
                 for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
                     self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
                 }
-            } else if (_container->cls == dict_cls) {
+            } else {
+                // The update rules are too complicated to be worth duplicating here;
+                // just create a new dict object and defer to dictUpdate.
+                // Hopefully this does not happen very often.
+                if (!isSubclass(_container->cls, dict_cls)) {
+                    BoxedDict* new_container = new BoxedDict();
+                    dictUpdate(new_container, BoxedTuple::create({ _container }), new BoxedDict());
+                    _container = new_container;
+                }
+                assert(isSubclass(_container->cls, dict_cls));
                 BoxedDict* container = static_cast<BoxedDict*>(_container);
 
                 for (const auto& p : container->d) {
                     AttrWrapper::setitem(self, p.first, p.second);
                 }
-            } else {
-                RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
             }
         };
 
@@ -2488,10 +2511,10 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
-    // TODO: not quite right
-    attrwrapper_cls->giveAttr("iterkeys", attrwrapper_cls->getattr("keys"));
-    attrwrapper_cls->giveAttr("itervalues", attrwrapper_cls->getattr("values"));
-    attrwrapper_cls->giveAttr("iteritems", attrwrapper_cls->getattr("items"));
+    attrwrapper_cls->giveAttr("iterkeys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iterkeys, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("itervalues",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::itervalues, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iteritems, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
@@ -2580,8 +2603,6 @@ void setupRuntime() {
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
 
     setupSysEnd();
-
-    Stats::endOfInit();
 
     TRACK_ALLOCATIONS = true;
 }

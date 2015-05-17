@@ -231,10 +231,9 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
             return SearchResult("", SearchResult::SEARCH_ERROR);
 
         if (importer != None) {
-            auto path_pass = path_list ? path_list : None;
             Box* loader = callattr(importer, &find_module_str,
-                                   CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
-                                   boxString(full_name), path_pass, NULL, NULL, NULL);
+                                   CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(1),
+                                   boxString(full_name), NULL, NULL, NULL, NULL);
             if (loader != None)
                 return SearchResult(loader);
         }
@@ -489,7 +488,7 @@ Box* importModuleLevel(const std::string& name, Box* globals, Box* from_imports,
     std::string _name = name;
 
     Box* head;
-    bool again = loadNext(parent, level < 0 ? NULL : parent, _name, buf, &head);
+    bool again = loadNext(parent, level < 0 ? None : parent, _name, buf, &head);
     if (head == NULL)
         return NULL;
 

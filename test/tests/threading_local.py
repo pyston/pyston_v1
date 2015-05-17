@@ -4,9 +4,21 @@ import threading
 a = threading.local()
 a.x = "hello world"
 
+class CustomThreadingLocal(threading.local):
+    n = 0
+    def __init__(self):
+        print "__init__", self.n
+        self.a = self.n
+        self.n += 1
+        print self.a, self.n
+print CustomThreadingLocal().a
+print CustomThreadingLocal().a
+
 def f():
     a.x = "goodbye world"
     print a.x
+    print CustomThreadingLocal().a
+    print CustomThreadingLocal().a
 
 def test():
     thread = threading.Thread(target=f)

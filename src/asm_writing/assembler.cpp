@@ -714,7 +714,7 @@ void Assembler::cmp(Register reg, Immediate imm) {
     int reg_idx = reg.regnum;
 
     int rex = REX_W;
-    if (reg_idx > 8) {
+    if (reg_idx >= 8) {
         rex |= REX_B;
         reg_idx -= 8;
     }

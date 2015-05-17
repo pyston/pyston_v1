@@ -177,9 +177,9 @@ public:
         return None;
     }
 
-    static int setattr(Box* obj, char* name, Box* val) noexcept {
+    static int setattro(Box* obj, Box* name, Box* val) noexcept {
         try {
-            setattrPyston(obj, boxString(name), val);
+            setattrPyston(obj, name, val);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return -1;
@@ -187,18 +187,21 @@ public:
         return 0;
     }
 
-    static Box* getattr(Box* obj, char* name) noexcept {
+    static Box* getattro(Box* obj, Box* name) noexcept {
+        assert(name->cls == str_cls);
+        llvm::StringRef s = static_cast<BoxedString*>(name)->s;
+
         Box* tls_obj = getThreadLocalObject(obj);
-        if (!strcmp(name, "__dict__"))
+        if (s == "__dict__")
             return tls_obj;
 
         try {
-            return getitem(tls_obj, boxString(name));
+            return getitem(tls_obj, name);
         } catch (ExcInfo e) {
         }
 
         try {
-            Box* r = getattrInternalGeneric(obj, name, NULL, false, false, NULL, NULL);
+            Box* r = getattrInternalGeneric(obj, s, NULL, false, false, NULL, NULL);
             if (r)
                 return r;
         } catch (ExcInfo e) {
@@ -206,7 +209,7 @@ public:
             return NULL;
         }
 
-        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", Py_TYPE(obj)->tp_name, name);
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", Py_TYPE(obj)->tp_name, s.data());
         return NULL;
     }
 
@@ -249,18 +252,20 @@ void setupThread() {
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
 
-    thread_local_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLocal), false, "_local");
+    thread_local_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedThreadLocal), false,
+                                              static_cast<BoxedString*>(boxString("_local")));
     thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_local_cls->giveAttr("__hash__",
                                new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::hash, BOXED_INT, 1)));
     thread_local_cls->giveAttr("__setattr__",
                                new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::setattrPyston, UNKNOWN, 3)));
-    thread_local_cls->freeze();
     thread_module->giveAttr("_local", thread_local_cls);
 
-    thread_local_cls->tp_setattr = BoxedThreadLocal::setattr;
-    thread_local_cls->tp_getattr = BoxedThreadLocal::getattr;
+    thread_local_cls->tp_setattro = BoxedThreadLocal::setattro;
+    thread_local_cls->tp_getattro = BoxedThreadLocal::getattro;
+    add_operators(thread_local_cls);
+    thread_local_cls->finishInitialization();
+    thread_local_cls->freeze();
 
     BoxedClass* ThreadError
         = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,

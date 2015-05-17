@@ -2439,7 +2439,16 @@ extern "C" void dumpEx(void* p, int levels) {
         }
 
         if (isSubclass(b->cls, list_cls)) {
-            printf("%ld elements\n", static_cast<BoxedList*>(b)->size);
+            auto l = static_cast<BoxedList*>(b);
+            printf("%ld elements\n", l->size);
+
+            if (levels > 0) {
+                int i = 0;
+                for (int i = 0; i < l->size; i++) {
+                    printf("\nElement %d:", i);
+                    dumpEx(l->elts->elts[i], levels - 1);
+                }
+            }
         }
 
         if (isSubclass(b->cls, module_cls)) {
@@ -4732,6 +4741,7 @@ extern "C" void delGlobal(Box* globals, const std::string* name) {
 
 extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     STAT_TIMER(t0, "us_timer_slowpath_getglobal");
+    ASSERT(gc::isValidGCObject(globals), "%p", globals);
 
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();

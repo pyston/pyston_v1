@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_getattr'] <= 20
+# statcheck: noninit_count('slowpath_getattr') <= 20
 
 class C(object):
     def f(self):

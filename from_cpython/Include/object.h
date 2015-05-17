@@ -1044,6 +1044,9 @@ PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void) PYSTON_NOEXCEPT;
 
 #define PyTrash_UNWIND_LEVEL 50
 
+// Pyston change: I don't think we need this since destructors
+// are run differently
+#if 0
 /* Note the workaround for when the thread state is NULL (issue #17703) */
 #define Py_TRASHCAN_SAFE_BEGIN(op) \
     do { \
@@ -1064,6 +1067,9 @@ PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void) PYSTON_NOEXCEPT;
         else \
             _PyTrash_thread_deposit_object((PyObject*)op); \
     } while (0);
+#endif
+#define Py_TRASHCAN_SAFE_BEGIN(op) do {
+#define Py_TRASHCAN_SAFE_END(op) } while (0);
 
 #ifdef __cplusplus
 }
