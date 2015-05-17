@@ -358,7 +358,7 @@ connection_poll(ConnectionObject *self, PyObject *args)
     }
 
     Py_BEGIN_ALLOW_THREADS
-    res = conn_poll(self, timeout, _save);
+    res = conn_poll(self, timeout /* Pyston change, don't need this argument: , _save */);
     Py_END_ALLOW_THREADS
 
     switch (res) {

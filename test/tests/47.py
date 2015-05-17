@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: 1 <= stats['slowpath_binop'] <= 5
+# statcheck: 1 <= noninit_count('slowpath_binop') <= 5
 def i():
     return 0
 

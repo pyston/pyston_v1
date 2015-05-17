@@ -185,7 +185,7 @@ conn_recv_string(ConnectionObject *conn, char *buffer,
  */
 
 static int
-conn_poll(ConnectionObject *conn, double timeout, PyThreadState *_save)
+conn_poll(ConnectionObject *conn, double timeout /* Pyston change: don't need this argument: , PyThreadState *_save */)
 {
 #if defined(HAVE_POLL) && !defined(HAVE_BROKEN_POLL)
     int res;

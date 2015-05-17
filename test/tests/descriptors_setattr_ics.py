@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_setattr'] <= 120
+# statcheck: noninit_count('slowpath_setattr') <= 120
 
 class Descriptor(object):
     def __set__(self, obj, value):

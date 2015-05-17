@@ -350,7 +350,7 @@ static int main(int argc, char** argv) {
         // encodings module.
         setEncodingAndErrors();
 
-        // end of argument parsing
+        Stats::endOfInit();
 
         _t.split("to run");
         BoxedModule* main_module = NULL;

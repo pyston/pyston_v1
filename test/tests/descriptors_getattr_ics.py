@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_getattr'] <= 80
+# statcheck: noninit_count('slowpath_getattr') <= 80
 
 class DataDescriptor(object):
     def __get__(self, obj, typ):

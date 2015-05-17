@@ -1,6 +1,6 @@
 # run_args: -n
-# statcheck: stats['slowpath_getattr'] <= 10
-# statcheck: stats['slowpath_setattr'] <= 10
+# statcheck: noninit_count('slowpath_getattr') <= 10
+# statcheck: noninit_count('slowpath_setattr') <= 10
 
 class C(object):
     pass
