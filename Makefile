@@ -124,7 +124,7 @@ LLVM_LIB_DEPS := DBG_NOT_BUILT
 endif
 
 LLVM_CONFIG_DEBUG := $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config
-ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
+ifneq ($(wildcard $(LLVM_CONFIG_DEBUG)),)
 LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_DEBUG_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Debug+Asserts/lib/*)
 else
@@ -422,10 +422,20 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 
 .DEFAULT_GOAL := small_all
 
+# The set of dependencies (beyond the executable) required to do `make run_foo`.
+# ext_pyston (building test/test_extension) is required even in cmake mode since
+# we manually add test/test_extension to the path
 RUN_DEPS := ext_pyston
-
 ifneq ($(USE_CMAKE),1)
 	RUN_DEPS := $(RUN_DEPS) sharedmods
+endif
+
+# The set of dependencies (beyond the executable) required to do `make check` / `make check_foo`.
+# The tester bases all paths based on the executable, so in cmake mode we need to have cmake
+# build all of the shared modules.
+CHECK_DEPS :=
+ifneq ($(USE_CMAKE),1)
+	CHECK_DEPS := ext_pyston ext_python sharedmods
 endif
 
 .PHONY: small_all
@@ -436,7 +446,7 @@ small_all: pyston_dbg $(RUN_DEPS)
 	# @# have to do this in a recursive make so that dependency is enforced:
 	# $(MAKE) pyston_all
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
-all: pyston_dbg pyston_release pyston_gcc ext_python ext_pyston unittests sharedmods
+all: pyston_dbg pyston_release pyston_gcc unittests $(RUN_DEPS) $(CHECK_DEPS)
 
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
@@ -517,7 +527,7 @@ check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
 	$(MAKE) check_format
-	$(MAKE) ext_python ext_pyston pyston_dbg
+	$(MAKE) pyston_dbg $(CHECK_DEPS)
 
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
@@ -546,10 +556,9 @@ check:
 	echo "All tests passed"
 
 quick_check:
-	$(MAKE) pyston_dbg
+	$(MAKE) pyston_dbg $(CHECK_DEPS)
 	$(MAKE) check_format
 	$(MAKE) unittests
-	$(MAKE) ext_pyston ext_python
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
 
@@ -920,10 +929,10 @@ $(CMAKE_SETUP_RELEASE):
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
@@ -934,7 +943,7 @@ $(CMAKE_SETUP_GCC):
 	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston sharedmods ext_pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
@@ -974,7 +983,7 @@ endef
 define make_target
 $(eval \
 .PHONY: test$1 check$1
-check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
+check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
@@ -1051,7 +1060,7 @@ $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 $(call make_search,pypyrun_%)
 
-nosearch_check_%: %.py ext_python ext_pyston
+nosearch_check_%: %.py pyston_dbg $(CHECK_DEPS)
 	$(MAKE) check_dbg ARGS="$(patsubst %.py,%,$(notdir $<)) -K"
 $(call make_search,check_%)
 
@@ -1176,12 +1185,14 @@ ext_pyston: $(TEST_EXT_MODULE_OBJS)
 # dependencies have been updated, and only run it once for all the targets.
 # So just tell make to generate the first extension module, and that the non-first ones just
 # depend on the first one.
-$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) pyston_dbg
+$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | pyston_dbg
 	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg setup.py build
 	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
+	$(VERB) touch -c $(TEST_EXT_MODULE_OBJS)
 $(wordlist 2,9999,$(TEST_EXT_MODULE_OBJS)): $(firstword $(TEST_EXT_MODULE_OBJS))
-$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) pyston_dbg
+$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | pyston_dbg
 	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg ../../from_cpython/setup.py build --build-lib ../../lib_pyston
+	$(VERB) touch -c $(SHAREDMODS_OBJS)
 $(wordlist 2,9999,$(SHAREDMODS_OBJS)): $(firstword $(SHAREDMODS_OBJS))
 
 .PHONY: ext_python ext_pythondbg
