@@ -53,6 +53,8 @@ index_zero = IndexZero()
 false_index = FalseIndex()
 both = Both()
 numbers = range(10)
+letters = "abcde"
+unicodestr = unicode("abcde")
 
 # Can use index and slice notation for object with only getitem
 indexable[0]
@@ -109,7 +111,9 @@ both[::2] = xrange(2)
 # Should all call getitem as a fallback
 both['a']
 both['a':'b']
-both['a':'b':'c']
+both[1:'b']
+both['a':2]
+both[1:2:'c']
 
 del both[0]
 del both[:]
@@ -139,10 +143,29 @@ print numbers[:-2]
 print numbers[-2:]
 
 # String support slicing
-print "abcd"[2]
-print "abcd"[:2]
-print "abcd"[2:]
-print "abcd"[1:3]
+print letters[2]
+print letters[:2]
+print letters[2:]
+print letters[1:3]
+print letters[:-2]
+print letters[-2:]
+
+# Unicode string support slicing
+# Note that unicode strings are not the same type of object as strings,
+# (but both have base class basestring)
+print unicodestr[2]
+print unicodestr[:2]
+print unicodestr[2:]
+print unicodestr[1:3]
+print unicodestr[:-2]
+print unicodestr[-2:]
+
+# Calling the slice operator directly does not have the same behavior
+# as using the slice notation []. Namely, it will not modify negative
+# indices.
+print numbers.__getslice__(0, -1);
+print letters.__getslice__(0, -1);
+print unicodestr.__getslice__(0, -1);
 
 # Other
 class C(object):

@@ -30,13 +30,32 @@ bool isSliceIndex(Box* b) {
     return b->cls == none_cls || b->cls == int_cls || PyIndex_Check(b);
 }
 
-void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size) {
-    // Logic from PySequence_GetSlice:
-    if (start < 0)
-        start += size;
-    if (stop < 0)
-        stop += size;
+void adjustNegativeIndicesOnObject(Box* obj, i64* start_out, i64* stop_out) {
+    i64 start = *start_out;
+    i64 stop = *stop_out;
+    PySequenceMethods* m;
 
+    // Logic from PySequence_GetSlice:
+    m = obj->cls->tp_as_sequence;
+    if (m && m->sq_slice) {
+        if (start < 0 || stop < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(obj);
+                if (l >= 0) {
+                    if (start < 0)
+                        start += l;
+                    if (stop < 0)
+                        stop += l;
+                }
+            }
+        }
+    }
+
+    *start_out = start;
+    *stop_out = stop;
+}
+
+void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size) {
     if (start < 0)
         start = 0;
     else if (start > size)

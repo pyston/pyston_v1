@@ -4448,6 +4448,8 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
         sliceIndex(bslice->start, &start);
         sliceIndex(bslice->stop, &stop);
 
+        adjustNegativeIndicesOnObject(target, &start, &stop);
+
         Box* boxedStart = boxInt(start);
         Box* boxedStop = boxInt(stop);
 

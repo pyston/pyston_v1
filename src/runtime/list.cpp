@@ -470,6 +470,8 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     sliceIndex(slice->stop, &stop);
     sliceIndex(slice->step, &step);
 
+    adjustNegativeIndicesOnObject(self, &start, &stop);
+
     if (step != 1) {
         int r = list_ass_ext_slice(self, slice, v);
         if (r)

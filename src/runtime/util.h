@@ -38,10 +38,10 @@ inline void sliceIndex(Box* b, int64_t* out) {
 
 bool isSliceIndex(Box* b);
 
+void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop);
+
 // Adjust the start and stop bounds of the sequence we are slicing to its size.
-// Negative values greater or equal to (-length) become positive values.
-// Ensure stop >= start
-// Remain within bounds.
+// Ensure stop >= start and remain within bounds.
 void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size);
 
 template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
