@@ -26,3 +26,7 @@ a = 0
 g = {'_c':c}
 exec "exec _c" in g
 print a, sorted(g.keys())
+
+print
+c = compile("a = 1; b = 2; a - b; b - a; c = a - b; c; print c", "test.py", "single")
+exec c
