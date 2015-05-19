@@ -936,6 +936,9 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
         return self;
     }
 
+    if (obj == None)
+        obj = NULL;
+
     return new BoxedInstanceMethod(obj, self->func, self->im_class);
 }
 
@@ -2235,14 +2238,17 @@ void setupRuntime() {
                        static_cast<BoxedString*>(boxStrConstant("module")));
     member_descriptor_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
                                                    static_cast<BoxedString*>(boxStrConstant("member_descriptor")));
-    capifunc_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false,
-                                          static_cast<BoxedString*>(boxStrConstant("capifunc")));
-    method_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false,
-                                        static_cast<BoxedString*>(boxStrConstant("method")));
-    wrapperobject_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperObject), false,
-                                               static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
-    wrapperdescr_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
-                                              static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
+    capifunc_cls = new (0) BoxedHeapClass(object_cls, BoxedCApiFunction::gcHandler, 0, 0, sizeof(BoxedCApiFunction),
+                                          false, static_cast<BoxedString*>(boxStrConstant("capifunc")));
+    method_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedMethodDescriptor::gcHandler, 0, 0, sizeof(BoxedMethodDescriptor), false,
+                       static_cast<BoxedString*>(boxStrConstant("method")));
+    wrapperobject_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedWrapperObject::gcHandler, 0, 0, sizeof(BoxedWrapperObject), false,
+                       static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
+    wrapperdescr_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedWrapperDescriptor::gcHandler, 0, 0, sizeof(BoxedWrapperDescriptor), false,
+                       static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
 
     EmptyString = boxStrConstant("");
     gc::registerPermanentRoot(EmptyString);
