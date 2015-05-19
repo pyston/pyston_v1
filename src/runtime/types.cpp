@@ -490,6 +490,8 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
         v->visit(cls->tp_bases);
     if (cls->tp_subclasses)
         v->visit(cls->tp_subclasses);
+    if (cls->total_shape)
+        v->visit(cls->total_shape);
 
     if (cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* hcls = static_cast<BoxedHeapClass*>(cls);
@@ -2301,6 +2303,9 @@ void setupRuntime() {
     gc::registerPermanentRoot(root_hcls);
     HiddenClass::dict_backed = HiddenClass::makeDictBacked();
     gc::registerPermanentRoot(HiddenClass::dict_backed);
+
+    Shape::root_shape = Shape::makeRoot();
+    gc::registerPermanentRoot(Shape::root_shape);
 
     // Disable the GC while we do some manual initialization of the object hierarchy:
     gc::disableGC();

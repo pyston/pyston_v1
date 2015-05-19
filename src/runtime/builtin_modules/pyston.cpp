@@ -61,6 +61,16 @@ static Box* dumpStats(Box* includeZeros) {
     return None;
 }
 
+static Box* dumpTotalShape(Box* cls) {
+    if (!isSubclass(cls->cls, type_cls))
+        raiseExcHelper(TypeError, "cls must be a 'type' object but received a '%s'", getTypeName(cls));
+
+    auto _cls = static_cast<BoxedClass*>(cls);
+    _cls->computeTotalShape();
+    fprintf(stderr, "TotalShape(%p)\n", _cls->total_shape);
+    return None;
+}
+
 void setupPyston() {
     pyston_module = createModule("__pyston__");
 
@@ -72,5 +82,9 @@ void setupPyston() {
     pyston_module->giveAttr("dumpStats",
                             new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 1, 1, false, false),
                                                              "dumpStats", { False }));
+
+    pyston_module->giveAttr("dumpTotalShape",
+                            new BoxedBuiltinFunctionOrMethod(
+                                boxRTFunction((void*)dumpTotalShape, NONE, 1, 0, false, false), "dumpTotalShape"));
 }
 }

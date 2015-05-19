@@ -34,6 +34,7 @@
 #include "codegen/type_recording.h"
 #include "codegen/unwinding.h"
 #include "core/ast.h"
+#include "core/hash.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -53,6 +54,7 @@
 #include "runtime/util.h"
 
 #define BOX_CLS_OFFSET ((char*)&(((Box*)0x01)->cls) - (char*)0x1)
+#define CLS_TOTAL_SHAPE_OFFSET ((char*)&(((BoxedClass*)0x01)->total_shape) - (char*)0x1)
 #define HCATTRS_HCLS_OFFSET ((char*)&(((HCAttrs*)0x01)->hcls) - (char*)0x1)
 #define HCATTRS_ATTRS_OFFSET ((char*)&(((HCAttrs*)0x01)->attr_list) - (char*)0x1)
 #define ATTRLIST_ATTRS_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->attrs) - (char*)0x1)
@@ -300,6 +302,9 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
+Shape* Shape::root_shape = new Shape(NULL);
+
+
 void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
@@ -317,6 +322,8 @@ void BoxedClass::freeze() {
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined)
     : attrs(HiddenClass::makeSingleton()),
+      local_shape(LocalShape::uninitialized()),
+      total_shape(NULL),
       gc_visit(gc_visit),
       simple_destructor(NULL),
       attrs_offset(attrs_offset),
@@ -399,6 +406,54 @@ void BoxedClass::finishInitialization() {
     this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
+}
+
+LocalShape BoxedClass::computeLocalShape() {
+    if (local_shape.isUninitialized()) {
+        std::vector<std::pair<llvm::StringRef, int>> attrs;
+
+        // iterate over all class attributes, storing the pairs of name, offset into attrs
+        auto hcls = getHCAttrsPtr()->hcls;
+        llvm::StringMap<int>::const_iterator it;
+        for (it = hcls->getStrAttrOffsets().begin(); it != hcls->getStrAttrOffsets().end(); it++) {
+            attrs.emplace_back(it->first(), it->second);
+        }
+        // sort the vector to hopefully give a deterministic ordering
+        std::sort(attrs.begin(), attrs.end(), [](std::pair<llvm::StringRef, int> a, std::pair<llvm::StringRef, int> b) {
+            return a.second < b.second;
+        });
+
+        // compute a hash of all attribute names
+        SHA256OStream hash_stream;
+        for (auto& s : attrs) {
+            hash_stream << s.first;
+        }
+        uint64_t lshape[4];
+        hash_stream.getHash(lshape);
+        local_shape = LocalShape(lshape[0], lshape[1], lshape[2], lshape[3]);
+    }
+
+    return local_shape;
+}
+
+Shape* BoxedClass::computeTotalShape() {
+    if (total_shape)
+        return total_shape;
+
+    Shape* shape = Shape::root_shape;
+    auto mro = static_cast<BoxedTuple*>(this->tp_mro);
+
+    assert(this == mro->elts[0]);
+
+    for (int i = mro->ob_size - 1; i >= 0; i--) {
+        BoxedClass* b = static_cast<BoxedClass*>(mro->elts[i]);
+
+        LocalShape b_shape = computeLocalShape();
+        b->total_shape = shape->getOrMakeChild(b_shape);
+        shape = b->total_shape;
+    }
+
+    return total_shape;
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
@@ -915,43 +970,57 @@ Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewri
     if (rewrite_args) {
         assert(!rewrite_args->out_success);
 
-        RewriterVar* obj_saved = rewrite_args->obj;
+        // Guard on the total shape of the class.
+        // from here we can assume that the index into the mro + the offset into the object remain the same.
+        Shape* total_shape = cls->computeTotalShape();
+        rewrite_args->obj->addAttrGuard(CLS_TOTAL_SHAPE_OFFSET, (intptr_t)total_shape);
 
-        auto _mro = cls->tp_mro;
-        assert(_mro->cls == tuple_cls);
-        BoxedTuple* mro = static_cast<BoxedTuple*>(_mro);
+        auto mro = static_cast<BoxedTuple*>(cls->tp_mro);
+        assert(mro->cls == tuple_cls);
 
-        // Guarding approach:
-        // Guard on the value of the tp_mro slot, which should be a tuple and thus be
-        // immutable.  Then we don't have to figure out the guards to emit that check
-        // the individual mro entries.
-        // We can probably move this guard to after we call getattr() on the given cls.
-        //
-        // TODO this can fail if we replace the mro with another mro that lives in the same
-        // address.
-        obj_saved->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)mro);
+        int index = 0;
 
-        for (auto base : *mro) {
-            rewrite_args->out_success = false;
-            if (base == cls) {
-                // Small optimization: don't have to load the class again since it was given to us in
-                // a register.
-                assert(rewrite_args->obj == obj_saved);
-            } else {
-                rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
-            }
-            val = base->getattr(attr, rewrite_args);
-            assert(rewrite_args->out_success);
-            if (val)
+        // we always succeed here, we just might return NULL;
+        rewrite_args->out_success = true;
+
+        for (auto mc : *mro) {
+            BoxedClass* mro_cls = static_cast<BoxedClass*>(mc);
+
+            auto mro_cls_hcattrs = mro_cls->getHCAttrsPtr();
+            auto mro_cls_hcls = mro_cls_hcattrs->hcls;
+
+            int offset = mro_cls_hcls->getOffset(attr);
+
+            // this shouldn't be necessary since if a hidden class
+            // changes, we should also change the shapes of everything
+            // below it in its inheritance hierarchy.
+            if (mro_cls_hcls->type == HiddenClass::SINGLETON)
+                mro_cls_hcls->addDependence(rewrite_args->rewriter);
+
+            if (offset != -1) {
+                val = mro_cls_hcattrs->attr_list->attrs[offset];
+
+                // this encodes _mro_cls = rewrite_args->obj->tp_mro->elts[index]
+                RewriterVar* _mro = rewrite_args->obj->getAttr(offsetof(BoxedClass, tp_mro));
+                RewriterVar* _mro_cls = _mro->getAttr(offsetof(BoxedTuple, elts) + index * sizeof(Box*));
+
+                RewriterVar* r_attrs
+                    = _mro_cls->getAttr(mro_cls->cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+                rewrite_args->out_rtn
+                    = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
+
                 return val;
+            }
+
+            index++;
         }
 
         return NULL;
     } else {
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
-        for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
-            val = b->getattr(attr, NULL);
+        for (auto mc : *static_cast<BoxedTuple*>(cls->tp_mro)) {
+            val = mc->getattr(attr, NULL);
             if (val)
                 return val;
         }
@@ -4111,12 +4180,15 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (r) {
-            rewrite_args.out_rtn->addGuard((uint64_t)r);
+            // guard that r is non-null, don't guard on the specific value
+            rewrite_args.out_rtn->addGuardNotEq((uint64_t)0);
             if (rewrite_args.out_success) {
                 rewriter->commitReturning(r_o);
                 return o;
             }
         } else if (!r) {
+            // guard that r null
+            // rewrite_args.out_rtn->addGuard((uint64_t)0);
             RewriterVar* var = rewriter.get()->call(true, (void*)createBoxedIterWrapper, rewriter->getArg(0));
             if (rewrite_args.out_success) {
                 rewriter->commitReturning(var);
