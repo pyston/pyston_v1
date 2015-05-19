@@ -138,6 +138,7 @@
 #define HAVE_WCHAR_H 1
 #define HAVE_WORKING_TZSET 1
 #define HAVE_PUTENV 1
+#define HAVE_LSTAT 1
 
 // Added this for some Pyston modifications:
 #define MAX_PYSTRING_SIZE (PY_SSIZE_T_MAX/2 - (1<<20))

@@ -433,10 +433,7 @@ void setupSys() {
 
     sys_module->giveAttr("platform", boxStrConstant(Py_GetPlatform()));
 
-    llvm::SmallString<128> main_fn;
-    // TODO supposed to pass argv0, main_addr to this function:
-    main_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
-    sys_module->giveAttr("executable", boxString(main_fn.str()));
+    sys_module->giveAttr("executable", boxString(Py_GetProgramFullPath()));
 
     sys_module->giveAttr("_getframe",
                          new BoxedFunction(boxRTFunction((void*)sysGetFrame, UNKNOWN, 1, 1, false, false), { NULL }));
