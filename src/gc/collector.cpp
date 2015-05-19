@@ -49,7 +49,7 @@ FILE* trace_fp;
 #endif
 
 class TraceStack {
-private:
+protected:
     const int CHUNK_SIZE = 256;
     const int MAX_FREE_CHUNKS = 50;
 
@@ -59,6 +59,11 @@ private:
     void** cur;
     void** start;
     void** end;
+
+    // Returns false if we should skip visiting the children.
+    // true otherwise.
+    typedef std::function<bool(GCAllocation*)> VisitFunc;
+    VisitFunc visit_action;
 
     void get_chunk() {
         if (free_chunks.size()) {
@@ -85,8 +90,8 @@ private:
     }
 
 public:
-    TraceStack() { get_chunk(); }
-    TraceStack(const std::unordered_set<void*>& rhs) {
+    TraceStack(VisitFunc func) : visit_action(func) { get_chunk(); }
+    TraceStack(VisitFunc func, const std::unordered_set<void*>& rhs) : visit_action(func) {
         get_chunk();
         for (void* p : rhs) {
             assert(!isMarked(GCAllocation::fromUserData(p)));
@@ -97,10 +102,10 @@ public:
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
-        if (isMarked(al))
-            return;
 
-        setMark(al);
+        if (!visit_action(al)) {
+            return;
+        }
 
         *cur++ = p;
         if (cur == end) {
@@ -128,7 +133,6 @@ public:
     }
 };
 std::vector<void**> TraceStack::free_chunks;
-
 
 static std::unordered_set<void*> roots;
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
@@ -285,6 +289,45 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
 
 static int ncollections = 0;
 
+void visitByGCKind(void* p, GCVisitor& visitor) {
+    assert(((intptr_t)p) % 8 == 0);
+    GCAllocation* al = GCAllocation::fromUserData(p);
+
+    GCKind kind_id = al->kind_id;
+    if (kind_id == GCKind::UNTRACKED) {
+        // Nothing here.
+    } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
+        uint32_t bytes = al->kind_data;
+        if (DEBUG >= 2) {
+            global_heap.assertSmallArenaContains(p, bytes);
+        }
+        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PRECISE) {
+        uint32_t bytes = al->kind_data;
+        if (DEBUG >= 2) {
+            global_heap.assertSmallArenaContains(p, bytes);
+        }
+        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
+    } else if (kind_id == GCKind::HIDDEN_CLASS) {
+        HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
+        hcls->gc_visit(&visitor);
+    } else {
+        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    }
+}
+
 void markPhase() {
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
@@ -304,7 +347,16 @@ void markPhase() {
     GC_TRACE_LOG("Starting collection %d\n", ncollections);
 
     GC_TRACE_LOG("Looking at roots\n");
-    TraceStack stack(roots);
+    auto visit_action = [](GCAllocation* al) {
+        if (isMarked(al)) {
+            return false;
+        } else {
+            setMark(al);
+            return true;
+        }
+    };
+
+    TraceStack stack(visit_action, roots);
     GCVisitor visitor(&stack);
 
     GC_TRACE_LOG("Looking at the stack\n");
@@ -320,7 +372,6 @@ void markPhase() {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
-    // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
         assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
@@ -333,48 +384,7 @@ void markPhase() {
 #endif
 
         assert(isMarked(al));
-
-        // printf("Marking + scanning %p\n", p);
-
-        GCKind kind_id = al->kind_id;
-        if (kind_id == GCKind::UNTRACKED) {
-            continue;
-        } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PRECISE) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PYTHON) {
-            Box* b = reinterpret_cast<Box*>(p);
-            BoxedClass* cls = b->cls;
-
-            if (cls) {
-                // The cls can be NULL since we use 'new' to construct them.
-                // An arbitrary amount of stuff can happen between the 'new' and
-                // the call to the constructor (ie the args get evaluated), which
-                // can trigger a collection.
-                ASSERT(cls->gc_visit, "%s", getTypeName(b));
-                cls->gc_visit(&visitor, b);
-            }
-        } else if (kind_id == GCKind::HIDDEN_CLASS) {
-            HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
-            hcls->gc_visit(&visitor);
-        } else {
-            RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
-        }
+        visitByGCKind(p, visitor);
     }
 
 #if TRACE_GC_MARKING
@@ -385,6 +395,82 @@ void markPhase() {
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
+}
+
+void finalizationOrderingFirstPass(Box* obj) {
+    static auto visit_action = [](GCAllocation* al) {
+        if (orderingState(al) == FinalizationState::UNREACHABLE) {
+            setOrderingState(al, FinalizationState::TEMPORARY);
+            return true;
+        } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
+            setOrderingState(al, FinalizationState::ALIVE);
+            return true;
+        } else {
+            return false;
+        }
+    };
+
+    TraceStack stack(visit_action);
+    GCVisitor visitor(&stack);
+
+    stack.push(obj);
+    while (void* p = stack.pop()) {
+        visitByGCKind(p, visitor);
+    }
+}
+
+void finalizationOrderingSecondPass(Box* obj) {
+    static auto visit_action = [](GCAllocation* al) {
+        if (orderingState(al) == FinalizationState::TEMPORARY) {
+            setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
+            return true;
+        } else {
+            return false;
+        }
+    };
+
+    TraceStack stack(visit_action);
+    GCVisitor visitor(&stack);
+
+    stack.push(obj);
+    while (void* p = stack.pop()) {
+        GCAllocation* al = GCAllocation::fromUserData(p);
+        assert(orderingState(al) != FinalizationState::UNREACHABLE);
+        visitByGCKind(p, visitor);
+    }
+}
+
+// Implementation of PyPy's finalization ordering algorithm:
+// http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
+void finalizationOrderingPhase(std::vector<Box*>& to_be_finalized) {
+    // TODO: Replace with iterator or something that takes a lambda for memory efficiency?.
+    std::vector<Box*> objects_with_finalizers;
+    global_heap.getObjectsWithFinalizers(objects_with_finalizers);
+
+    std::vector<Box*> finalizer_marked;
+
+    for (Box* obj : objects_with_finalizers) {
+        GCAllocation* al = GCAllocation::fromUserData(obj);
+
+        // We are only interested in object with finalizers that need to be
+        // garbage-collected.
+        if (orderingState(al) == FinalizationState::UNREACHABLE) {
+            finalizer_marked.push_back(obj);
+            finalizationOrderingFirstPass(obj);
+            finalizationOrderingSecondPass(obj);
+        }
+    }
+
+    for (Box* marked : finalizer_marked) {
+        GCAllocation* al = GCAllocation::fromUserData(marked);
+
+        FinalizationState state = orderingState(al);
+        assert(state == FinalizationState::REACHABLE_FROM_FINALIZER || state == FinalizationState::ALIVE);
+
+        if (state == FinalizationState::REACHABLE_FROM_FINALIZER) {
+            to_be_finalized.push_back(marked);
+        }
+    }
 }
 
 static void sweepPhase(std::vector<Box*>& weakly_referenced) {
@@ -422,6 +508,10 @@ void runCollection() {
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_gc_collection");
 
+    // Temporary hack to initialize the boxed strings.
+    hasFinalizer(NULL);
+    finalizeIfNeeded(NULL);
+
     ncollections++;
 
     if (VERBOSITY("gc") >= 2)
@@ -440,12 +530,24 @@ void runCollection() {
 
     markPhase();
 
+    // Objects with finalizers cannot be freed in any order. During the call to a finalizer
+    // of an object, the finalizer expects the object's references to still point to valid
+    // memory. So we build a list of objects whose finalizers need to be called in this GC pass.
+    std::vector<Box*> to_be_finalized;
+    finalizationOrderingPhase(to_be_finalized);
+
     // The sweep phase will not free weakly-referenced objects, so that we can inspect their
     // weakrefs_list.  We want to defer looking at those lists until the end of the sweep phase,
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
     sweepPhase(weakly_referenced);
+
+    // An object can be resurrected during the finalizer. So when we call a finalizer, we
+    // mark the finalizer as having been called, but the object is only freed in another GC pass.
+    for (Box* box : to_be_finalized) {
+        finalizeIfNeeded(box);
+    }
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate

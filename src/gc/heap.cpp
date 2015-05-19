@@ -21,6 +21,7 @@
 #include "core/common.h"
 #include "core/util.h"
 #include "gc/gc_alloc.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 #ifndef NVALGRIND
@@ -90,6 +91,7 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free fr
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
+        clearOrderingState(al);
         if (isMarked(al)) {
             clearMark(al);
             cur = cur->next;
@@ -118,6 +120,53 @@ void _bytesAllocatedTripped() {
 
     threading::GLPromoteRegion _lock;
     runCollection();
+}
+
+//////
+/// Finalizers
+
+// TODO: Compare with gcmodule.c:has_finalizer
+bool hasFinalizer(Box* b) {
+    static BoxedString* _del_str = static_cast<BoxedString*>(PyString_InternFromString("__mydel__"));
+    if (b == NULL)
+        return true;
+
+    Box* del_attr = typeLookup(b->cls, _del_str->s(), NULL);
+    return del_attr || b->cls->simple_destructor || b->cls->tp_dealloc || b->cls->tp_del;
+}
+
+void finalizeIfNeeded(Box* b) {
+    static BoxedString* _del_str = static_cast<BoxedString*>(PyString_InternFromString("__mydel__"));
+    if (b == NULL)
+        return;
+
+    GCAllocation* al = GCAllocation::fromUserData(b);
+
+    // Temporary dummy finalizer for testing.
+    Box* del_attr = typeLookup(b->cls, _del_str->s(), NULL);
+    if (del_attr) {
+        callattr(b, _del_str, {.cls_only = false, .null_on_nonexistent = true }, ArgPassSpec(0, 0, false, false), NULL,
+                 NULL, NULL, NULL, NULL);
+    } else if (b->cls->tp_del) {
+        // b->cls->tp_del(b);
+    } else if (b->cls->simple_destructor) {
+        b->cls->simple_destructor(b);
+    } else if (b->cls->tp_dealloc) {
+        // b->cls->tp_dealloc(b);
+    } else {
+    }
+
+    setFinalized(al);
+}
+
+bool heapObjectHasCallableFinalizer(GCAllocation* al) {
+    if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON) {
+        Box* b = (Box*)al->user_data;
+        if (hasFinalizer(b) && !hasFinalized(al)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Heap global_heap;
@@ -149,13 +198,8 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
             }
         }
 
-        // XXX: we are currently ignoring destructors (tp_dealloc) for extension objects, since we have
-        // historically done that (whoops) and there are too many to be worth changing for now as long
-        // as we can get real destructor support soon.
-        ASSERT(b->cls->tp_dealloc == NULL || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s", getTypeName(b));
-
-        if (b->cls->simple_destructor)
-            b->cls->simple_destructor(b);
+        // ASSERT(!hasFinalizer(b) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
+        // getTypeName(b));
     }
     return true;
 }
@@ -411,6 +455,44 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     }
 }
 
+void SmallArena::_getObjectsWithFinalizersFromBlock(std::vector<Box*>& objs, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            if (heapObjectHasCallableFinalizer(al)) {
+                objs.push_back((Box*)al->user_data);
+            }
+        }
+
+        head = &b->next;
+    }
+}
+
+void SmallArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+    thread_caches.forEachValue([this, &objs](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            _getObjectsWithFinalizersFromBlock(objs, &cache->cache_free_heads[bidx]);
+            _getObjectsWithFinalizersFromBlock(objs, &cache->cache_full_heads[bidx]);
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        _getObjectsWithFinalizersFromBlock(objs, &heads[bidx]);
+        _getObjectsWithFinalizersFromBlock(objs, &full_heads[bidx]);
+    }
+}
+
 // TODO: copy-pasted from freeUnmarked()
 void SmallArena::getStatistics(HeapStatistics* stats) {
     thread_caches.forEachValue([this, stats](ThreadBlockCache* cache) {
@@ -450,6 +532,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
 
+            clearOrderingState(al);
             if (isMarked(al)) {
                 clearMark(al);
             } else {
@@ -668,6 +751,15 @@ void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     sweepList(head, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
+void LargeArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+    forEach(head, [&objs](LargeObj* obj) {
+        GCAllocation* al = obj->data;
+        if (heapObjectHasCallableFinalizer(al)) {
+            objs.push_back((Box*)al->user_data);
+        }
+    });
+}
+
 void LargeArena::getStatistics(HeapStatistics* stats) {
     forEach(head, [stats](LargeObj* obj) { addStatistic(stats, obj->data, obj->size); });
 }
@@ -859,6 +951,15 @@ GCAllocation* HugeArena::allocationFrom(void* ptr) {
 
 void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     sweepList(head, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
+}
+
+void HugeArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+    forEach(head, [&objs](HugeObj* obj) {
+        GCAllocation* al = obj->data;
+        if (heapObjectHasCallableFinalizer(al)) {
+            objs.push_back((Box*)al->user_data);
+        }
+    });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {

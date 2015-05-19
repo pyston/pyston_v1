@@ -207,7 +207,7 @@ public:
         assert(inter->cls == astinterpreter_cls);
         if (inter->frame_addr)
             RegisterHelper::deregister(inter->frame_addr);
-        inter->~ASTInterpreter();
+        // inter->~ASTInterpreter();
     }
 
     friend class RegisterHelper;

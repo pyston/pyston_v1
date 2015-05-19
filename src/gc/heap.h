@@ -170,6 +170,9 @@ inline void clearOrderingState(GCAllocation* header) {
 #undef FINALIZER_HAS_RUN_BIT
 #undef ORDERING_BITS
 
+bool hasFinalizer(Box* b);
+void finalizeIfNeeded(Box* b);
+
 #define PAGE_SIZE 4096
 
 template <uintptr_t arena_start, uintptr_t arena_size, uintptr_t initial_mapsize, uintptr_t increment> class Arena {
@@ -264,6 +267,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void getObjectsWithFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -396,6 +400,7 @@ private:
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
     Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
+    void _getObjectsWithFinalizersFromBlock(std::vector<Box*>& objs, Block** head);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -469,6 +474,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void getObjectsWithFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -487,6 +493,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void getObjectsWithFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -518,6 +525,7 @@ private:
     Heap* heap;
 };
 
+extern Heap global_heap;
 
 class Heap {
 private:
@@ -603,12 +611,22 @@ public:
         huge_arena.freeUnmarked(weakly_referenced);
     }
 
+    void getObjectsWithFinalizers(std::vector<Box*>& objs) {
+        small_arena.getObjectsWithFinalizers(objs);
+        large_arena.getObjectsWithFinalizers(objs);
+        huge_arena.getObjectsWithFinalizers(objs);
+    }
+
     void dumpHeapStatistics(int level);
 
-    friend void markPhase();
+    void assertSmallArenaContains(void* p, uint32_t bytes) {
+        if (global_heap.small_arena.contains(p)) {
+            SmallArena::Block* b = SmallArena::Block::forPointer(p);
+            assert(b->size >= bytes + sizeof(GCAllocation));
+        }
+    }
 };
 
-extern Heap global_heap;
 void dumpHeapStatistics(int level);
 
 } // namespace gc
