@@ -161,3 +161,20 @@ s = "from sys import *"
 g = dict()
 exec s in g
 print "version" in g
+
+# Test to make sure that 'exec s in other_module' is handled correctly:
+import import_target
+assert import_target.z == 2
+z = 3
+
+exec "print z" in import_target.__dict__, {}
+exec "print z" in globals(), {}
+# Try it with osr as well:
+s = """
+print z
+for i in xrange(20000):
+    pass
+print z
+"""
+exec s in import_target.__dict__, {}
+exec s in globals(), {}
