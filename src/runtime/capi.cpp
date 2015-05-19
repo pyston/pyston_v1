@@ -50,11 +50,10 @@ extern "C" bool _PyObject_CheckBuffer(PyObject* obj) noexcept {
 
 extern "C" {
 int Py_Py3kWarningFlag;
-}
 
 BoxedClass* capifunc_cls;
-
 BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
+}
 
 Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");

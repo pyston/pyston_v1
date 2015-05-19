@@ -2706,7 +2706,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
     }
 
-    RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del || cls->tp_free == PyObject_GC_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
@@ -2750,7 +2749,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     }
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
-        cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method, cls));
+        cls->setattr(method->ml_name, new BoxedMethodDescriptor(method, cls), NULL);
     }
 
     for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {

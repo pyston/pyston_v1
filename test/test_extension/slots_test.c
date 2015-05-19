@@ -573,6 +573,55 @@ static PyTypeObject slots_tester_nullreturngetattr = {
     0,                                  /* tp_free */
 };
 
+static PyObject* descr_get_func(PyObject* obj, PyObject* inst, PyObject* owner) {
+    printf("Inside descr_get_func:\n");
+    return PyInt_FromLong(42);
+}
+
+static PyTypeObject slots_tester_descrget = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "slots_test.slots_tester_descr_get",            /* tp_name */
+    sizeof(PyObject),          /* tp_basicsize */
+    0,                                  /* tp_itemsize */
+    /* methods */
+    0,                                  /* tp_dealloc */
+    0,                                  /* tp_print */
+    0,                                  /* tp_getattr */
+    0,                                  /* tp_setattr */
+    0,                                  /* tp_compare */
+    0,                                  /* tp_repr */
+    0,                                  /* tp_as_number */
+    0,                                  /* tp_as_sequence */
+    0,                                  /* tp_as_mapping */
+    0,                                  /* tp_hash */
+    0,                                  /* tp_call */
+    0,                                  /* tp_str */
+    PyObject_GenericGetAttr,            /* tp_getattro */
+    0,                                  /* tp_setattro */
+    0,                                  /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    0,                                  /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    descr_get_func,                     /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    0,                                  /* tp_alloc */
+    PyType_GenericNew,                  /* tp_new */
+    0,                                  /* tp_free */
+};
+
+
 // Tests the correctness of the CAPI slots when the attributes get set in Python code:
 static PyObject *
 call_funcs(PyObject* _module, PyObject* args) {
@@ -787,6 +836,10 @@ initslots_test(void)
     res = PyType_Ready(&slots_tester_nullreturngetattr);
     if (res < 0)
         return;
+        
+    res = PyType_Ready(&slots_tester_descrget);
+    if (res < 0)
+        return;
 
     // Not sure if the result of PyInt_FromLong needs to be decref'd
     PyDict_SetItemString(slots_tester_seq.tp_dict, "set_through_tpdict", PyInt_FromLong(123));
@@ -797,4 +850,5 @@ initslots_test(void)
     PyModule_AddObject(m, "SlotsTesterSub", (PyObject *)&slots_tester_sub);
     PyModule_AddObject(m, "SlotsTesterNonsubclassable", (PyObject *)&slots_tester_nonsubclassable);
     PyModule_AddObject(m, "SlotsTesterNullReturnGetAttr", (PyObject *)&slots_tester_nullreturngetattr);
+    PyModule_AddObject(m, "SlotsTesterDescrGet", (PyObject *)&slots_tester_descrget);
 }

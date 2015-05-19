@@ -34,7 +34,7 @@ struct wrapper_def {
     // exists in CPython: PyObject *name_strobj
 };
 
-extern BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
+extern "C" BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
 
 class BoxedCApiFunction : public Box {
 private:
