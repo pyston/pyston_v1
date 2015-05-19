@@ -60,12 +60,7 @@ static bool unbuffered = false;
 
 static const char* argv0;
 static int pipefds[2];
-static void handle_sigsegv(int signum) {
-    assert(signum == SIGSEGV);
-    // TODO: this should set a flag saying a KeyboardInterrupt is pending.
-    // For now, just call abort(), so that we get a traceback at least.
-    fprintf(stderr, "child encountered segfault!  signalling parent watcher to backtrace.\n");
-
+static void signal_parent_watcher() {
     char buf[1];
     int r = write(pipefds[1], buf, 1);
     RELEASE_ASSERT(r == 1, "");
@@ -73,6 +68,20 @@ static void handle_sigsegv(int signum) {
     while (true) {
         sleep(1);
     }
+}
+
+static void handle_sigsegv(int signum) {
+    assert(signum == SIGSEGV);
+    fprintf(stderr, "child encountered segfault!  signalling parent watcher to backtrace.\n");
+
+    signal_parent_watcher();
+}
+
+static void handle_sigabrt(int signum) {
+    assert(signum == SIGABRT);
+    fprintf(stderr, "child aborted!  signalling parent watcher to backtrace.\n");
+
+    signal_parent_watcher();
 }
 
 static int gdb_child_pid;
@@ -136,6 +145,7 @@ static void enableGdbSegfaultWatcher() {
 
     close(pipefds[0]);
     signal(SIGSEGV, &handle_sigsegv);
+    signal(SIGABRT, &handle_sigabrt);
 }
 
 int handleArg(char code) {

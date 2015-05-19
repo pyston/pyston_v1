@@ -310,7 +310,8 @@ public:
     explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
         : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
 
-        ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(), "jit doesn't support custom globals yet");
+        RELEASE_ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(),
+                       "jit doesn't support custom globals yet");
 
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);

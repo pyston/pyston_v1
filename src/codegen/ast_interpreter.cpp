@@ -441,9 +441,9 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (backedge)
         threading::allowGLReadPreemption();
 
-    if (ENABLE_OSR && backedge && (globals->cls == module_cls)) {
-        bool can_osr = !FORCE_INTERPRETER && (globals->cls == module_cls);
-        if (can_osr && edgecount++ == OSR_THRESHOLD_INTERPRETER) {
+    if (ENABLE_OSR && backedge && edgecount++ == OSR_THRESHOLD_INTERPRETER) {
+        bool can_osr = !FORCE_INTERPRETER && source_info->scoping->areGlobalsFromModule();
+        if (can_osr) {
             static StatCounter ast_osrs("num_ast_osrs");
             ast_osrs.log();
 

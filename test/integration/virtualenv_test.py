@@ -29,7 +29,7 @@ python -c 'from PIL import Image; print "Pillow imports"'
 """.strip()
 
 # print sh_script
-subprocess.check_call(["sh", "-c", sh_script])
+subprocess.check_call(["sh", "-c", sh_script], stdout=sys.stderr)
 
 print
 print "PASSED"
