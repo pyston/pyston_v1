@@ -2,6 +2,10 @@
 
 #ifndef Py_PYMATH_H
 #define Py_PYMATH_H
+// Pyston change: most other files include this:
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "pyconfig.h" /* include for defines */
 
@@ -189,6 +193,11 @@ PyAPI_FUNC(void) _Py_set_387controlword(unsigned short) PYSTON_NOEXCEPT;
 #define Py_OVERFLOWED(X) ((X) != 0.0 && (errno == ERANGE ||    \
                      (X) == Py_HUGE_VAL || \
                      (X) == -Py_HUGE_VAL))
+#endif
+
+// Pyston change: most other files include this:
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* Py_PYMATH_H */
