@@ -59,6 +59,28 @@ See the main README for more information about available make targets and option
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:
 
+### GCC 4.8.2
+
+Pyston (and LLVM) requires a fairly modern [host compiler](http://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library), so you will have to compile a recent GCC if it's not already available for your system. The easiest thing to do is to just create a fresh build of GCC:
+
+```
+sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
+cd ~/pyston_deps
+wget http://ftpmirror.gnu.org/gcc/gcc-4.8.2/gcc-4.8.2.tar.bz2
+tar xvf gcc-4.8.2.tar.bz2
+mkdir gcc-4.8.2-{build,install}
+cd gcc-4.8.2-build
+# Space- and time-saving configuration:
+../gcc-4.8.2/configure --disable-bootstrap --enable-languages=c,c++ --prefix=$HOME/pyston_deps/gcc-4.8.2-install
+# full configuration:
+# ../gcc-4.8.2/configure --prefix=$HOME/pyston_deps/gcc-4.8.2-install
+# Specifying LIBRARY_PATH is a workaround to get gcc to compile on newer Ubuntus with multiarch
+LIBRARY_PATH=/usr/lib32 make -j4
+make check
+make install
+```
+
+
 ### gdb
 A modern gdb is highly recommended; users on Ubuntu 12.04 should definitely update:
 
@@ -141,6 +163,8 @@ cd valgrind-3.10.0
 make -j4
 make install
 sudo apt-get install libc6-dbg
+cd ~/pyston
+echo "ENABLE_VALGRIND := 1" >> Makefile.local
 ```
 
 ### gperftools (-lprofiler)
