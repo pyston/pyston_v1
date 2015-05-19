@@ -856,6 +856,7 @@ static Box* functionGlobals(Box* self, void*) {
         return func->globals;
     }
     assert(func->f->source);
+    assert(func->f->source->scoping->areGlobalsFromModule());
     return getattr(func->f->source->parent_module, "__dict__");
 }
 

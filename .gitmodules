@@ -26,3 +26,4 @@
 [submodule "test/integration/pyxl"]
 	path = test/integration/pyxl
 	url = https://github.com/dropbox/pyxl.git
+	ignore = untracked

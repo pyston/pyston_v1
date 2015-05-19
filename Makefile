@@ -522,7 +522,7 @@ lint: $(PYTHON_EXE_DEPS)
 cpplint:
 	$(VERB) $(PYTHON) $(TOOLS_DIR)/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
 
-.PHONY: check quick_check
+.PHONY: check
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
@@ -532,7 +532,7 @@ check:
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t180 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t300 $(TEST_DIR)/integration $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 	@# skip -O for dbg
 
@@ -555,12 +555,33 @@ check:
 
 	echo "All tests passed"
 
+# A stripped down set of tests, meant as a quick smoke test to run before submitting a PR and having
+# Travis-CI do the full test.
+.PHONY: quick_check
 quick_check:
 	$(MAKE) pyston_dbg $(CHECK_DEPS)
 	$(MAKE) check_format
 	$(MAKE) unittests
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
+
+# A comprehensive test that checks that all three build formats (makefile, makefile->cmake shim, cmake) work.
+# This should only be necessary when doing work on the build system; it shouldn't be necessary for normal development.
+.PHONY: full_check
+full_check:
+	$(MAKE) clean
+	rm -rfv $(CMAKE_DIR_DBG)
+	$(MAKE) llvm_quick llvm_release USE_CMAKE=0
+	$(MAKE) check_dbg USE_CMAKE=0
+	\
+	$(MAKE) clean
+	rm -rfv $(CMAKE_DIR_DBG)
+	$(MAKE) check_dbg USE_CMAKE=0
+	\
+	$(MAKE) clean
+	rm -rfv $(CMAKE_DIR_DBG)
+	$(MAKE) $(CMAKE_SETUP_DBG)
+	ninja -C $(CMAKE_DIR_DBG) check-pyston
 
 Makefile.local:
 	echo "Creating default Makefile.local"
@@ -952,6 +973,7 @@ pyston_gcc: $(CMAKE_SETUP_GCC)
 clean:
 	@ find src $(TOOLS_DIR) $(TEST_DIR) ./from_cpython ./lib_pyston \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
+	@ rm -vf pyston_dbg pyston_release pyston_gcc
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
 	@ rm -f *_unittest
@@ -987,7 +1009,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t180 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t300 $(TEST_DIR)/integration $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
