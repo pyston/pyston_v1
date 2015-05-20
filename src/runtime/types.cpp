@@ -1542,6 +1542,22 @@ public:
         return rtn;
     }
 
+    static Box* clear(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
+
+        while (true) {
+            const auto& attrMap = attrs->hcls->getStrAttrOffsets();
+            if (attrMap.size() == 0)
+                break;
+            self->b->delattr(attrMap.begin()->first(), NULL);
+        }
+        return None;
+    }
+
     static Box* len(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -2539,6 +2555,7 @@ void setupRuntime() {
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::itervalues, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iteritems, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)AttrWrapper::clear, NONE, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("update",

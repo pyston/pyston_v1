@@ -38,3 +38,12 @@ p()
 c1.__dict__ = d = {}
 d['i'] = 5
 p()
+
+class C(object):
+    def foo(self):
+        return 0
+c = C()
+c.attr = "test"
+c.__dict__.clear()
+print hasattr(c, "attr")
+print hasattr(c, "foo")
