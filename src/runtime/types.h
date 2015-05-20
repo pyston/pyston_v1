@@ -36,6 +36,7 @@ struct LocalShape {
     uint64_t t3;
 
     LocalShape(uint64_t t0, uint64_t t1, uint64_t t2, uint64_t t3) : t0(t0), t1(t1), t2(t2), t3(t3) {}
+    LocalShape(Box* b) : t0((uintptr_t)b), t1((uintptr_t)b), t2((uintptr_t)b), t3((uintptr_t)b) {}
 
     bool isUninitialized() const { return t0 == 0 && t1 == 0 && t2 == 0 && t3 == 0; }
 
@@ -177,7 +178,9 @@ public:
     ContiguousMap<LocalShape, Shape*, llvm::DenseMap<LocalShape, int>> children;
     Shape* parent;
 
-    static uint64_t computeLocalShape(BoxedClass* cls);
+    static LocalShape computeLocalShape(Box* b);
+    static Shape* computeTotalShape(Box* b);
+
 
     Shape* getOrMakeChild(LocalShape child_local_shape) {
         auto it = children.find(child_local_shape);
@@ -275,9 +278,6 @@ public:
     bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();
-
-    LocalShape computeLocalShape();
-    Shape* computeTotalShape();
 
 protected:
     // These functions are not meant for external callers and will mostly just be called

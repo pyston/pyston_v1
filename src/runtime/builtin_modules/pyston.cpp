@@ -62,12 +62,8 @@ static Box* dumpStats(Box* includeZeros) {
 }
 
 static Box* dumpTotalShape(Box* cls) {
-    if (!isSubclass(cls->cls, type_cls))
-        raiseExcHelper(TypeError, "cls must be a 'type' object but received a '%s'", getTypeName(cls));
-
-    auto _cls = static_cast<BoxedClass*>(cls);
-    _cls->computeTotalShape();
-    fprintf(stderr, "TotalShape(%p)\n", _cls->total_shape);
+    Shape* s = Shape::computeTotalShape(cls);
+    fprintf(stderr, "TotalShape(%p)\n", s);
     return None;
 }
 

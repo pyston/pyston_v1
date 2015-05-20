@@ -407,15 +407,20 @@ void BoxedClass::finishInitialization() {
 
     commonClassSetup(this);
 
-    computeTotalShape();
+    Shape::computeTotalShape(cls);
 }
 
-LocalShape BoxedClass::computeLocalShape() {
-    if (local_shape.isUninitialized()) {
+LocalShape Shape::computeLocalShape(Box* b) {
+    if (!isSubclass(b->cls, type_cls))
+        return LocalShape(b);
+
+    auto cls = static_cast<BoxedClass*>(b);
+
+    if (cls->local_shape.isUninitialized()) {
         std::vector<std::pair<llvm::StringRef, int>> attrs;
 
         // iterate over all class attributes, storing the pairs of name, offset into attrs
-        auto hcls = getHCAttrsPtr()->hcls;
+        auto hcls = cls->getHCAttrsPtr()->hcls;
         llvm::StringMap<int>::const_iterator it;
         for (it = hcls->getStrAttrOffsets().begin(); it != hcls->getStrAttrOffsets().end(); it++) {
             attrs.emplace_back(it->first(), it->second);
@@ -432,30 +437,43 @@ LocalShape BoxedClass::computeLocalShape() {
         }
         uint64_t lshape[4];
         hash_stream.getHash(lshape);
-        local_shape = LocalShape(lshape[0], lshape[1], lshape[2], lshape[3]);
+        cls->local_shape = LocalShape(lshape[0], lshape[1], lshape[2], lshape[3]);
     }
 
-    return local_shape;
+    return cls->local_shape;
 }
 
-Shape* BoxedClass::computeTotalShape() {
-    if (total_shape)
-        return total_shape;
-
-    Shape* shape = Shape::root_shape;
-    auto mro = static_cast<BoxedTuple*>(this->tp_mro);
-
-    assert(this == mro->elts[0]);
-
-    for (int i = mro->ob_size - 1; i >= 0; i--) {
-        BoxedClass* b = static_cast<BoxedClass*>(mro->elts[i]);
-
-        LocalShape b_shape = b->computeLocalShape();
-        b->total_shape = shape->getOrMakeChild(b_shape);
-        shape = b->total_shape;
+Shape* Shape::computeTotalShape(Box* b) {
+    if (!isSubclass(b->cls, type_cls)) {
+        return Shape::root_shape->getOrMakeChild(Shape::computeLocalShape(b));
     }
 
-    return total_shape;
+    auto self = static_cast<BoxedClass*>(b);
+    if (self->total_shape)
+        return self->total_shape;
+
+    Shape* shape = Shape::root_shape;
+    auto mro = static_cast<BoxedTuple*>(self->tp_mro);
+
+    assert(self == mro->elts[0]);
+
+    for (int i = mro->ob_size - 1; i >= 0; i--) {
+        Box* mro_b = mro->elts[i];
+
+        LocalShape _local_shape = Shape::computeLocalShape(mro_b);
+        Shape* _total_shape = shape->getOrMakeChild(_local_shape);
+
+        if (isSubclass(mro_b->cls, type_cls)) {
+            // for new-style classes, we cache both local and total shape on the object
+            BoxedClass* cls = static_cast<BoxedClass*>(mro_b);
+            cls->local_shape = _local_shape;
+            cls->total_shape = _total_shape;
+        }
+
+        shape = _total_shape;
+    }
+
+    return self->total_shape;
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
@@ -974,7 +992,7 @@ Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewri
 
         // Guard on the total shape of the class.
         // from here we can assume that the index into the mro + the offset into the object remain the same.
-        Shape* total_shape = cls->computeTotalShape();
+        Shape* total_shape = Shape::computeTotalShape(cls);
         rewrite_args->obj->addAttrGuard(CLS_TOTAL_SHAPE_OFFSET, (intptr_t)total_shape);
 
         auto mro = static_cast<BoxedTuple*>(cls->tp_mro);

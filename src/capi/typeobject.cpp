@@ -2936,7 +2936,7 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
 
     // Pyston change: invalidate the things we cache on types.
     type->total_shape = NULL;
-    type->computeTotalShape();
+    Shape::computeTotalShape(type);
 
     raw = type->tp_subclasses;
     if (raw != NULL) {
