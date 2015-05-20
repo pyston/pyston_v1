@@ -2082,8 +2082,11 @@ static Box* typeBases(Box* b, void*) {
     return type->tp_bases;
 }
 
-static void typeSetBases(Box* b, Box* v, void*) {
-    Py_FatalError("unimplemented");
+static void typeSetBases(Box* b, Box* v, void* c) {
+    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+    if (type_set_bases(type, v, c) == -1)
+        throwCAPIException();
 }
 
 // cls should be obj->cls.

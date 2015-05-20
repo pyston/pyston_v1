@@ -32,6 +32,7 @@ void commonClassSetup(BoxedClass* cls);
 // We could probably unify things more but that's for later.
 PyTypeObject* best_base(PyObject* bases) noexcept;
 PyObject* mro_external(PyObject* self) noexcept;
+int type_set_bases(PyTypeObject* type, PyObject* value, void* context) noexcept;
 }
 
 #endif
