@@ -54,7 +54,10 @@ public:
         return reinterpret_cast<pointer>(gc_alloc(to_allocate, gc::GCKind::CONSERVATIVE));
     }
 
-    void deallocate(pointer p, size_t n) { gc::gc_free(p); }
+    void deallocate(pointer p, size_t n) {
+        if (p != NULL)
+            gc::gc_free(p);
+    }
 
     // I would never be able to come up with this on my own:
     // http://en.cppreference.com/w/cpp/memory/allocator/construct
