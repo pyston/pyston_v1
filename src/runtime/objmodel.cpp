@@ -302,7 +302,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-Shape* Shape::root_shape = new Shape(NULL);
+Shape* Shape::root_shape;
 
 
 void BoxedClass::freeze() {
