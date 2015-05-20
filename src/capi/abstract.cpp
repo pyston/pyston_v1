@@ -1879,6 +1879,9 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     if (o->cls == float_cls)
         return PyLong_FromDouble(PyFloat_AsDouble(o));
 
+    if (o->cls == int_cls)
+        return PyLong_FromLong(((BoxedInt*)o)->n);
+
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
     return nullptr;
 }

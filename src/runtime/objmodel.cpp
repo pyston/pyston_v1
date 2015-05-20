@@ -4165,7 +4165,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         return rtn;
     }
 
-    RELEASE_ASSERT(arg3->cls == dict_cls, "%s", getTypeName(arg3));
+    RELEASE_ASSERT(PyDict_Check(arg3), "%s", getTypeName(arg3));
     BoxedDict* attr_dict = static_cast<BoxedDict*>(arg3);
 
     RELEASE_ASSERT(arg2->cls == tuple_cls, "");
