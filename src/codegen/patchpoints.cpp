@@ -299,7 +299,7 @@ PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetu
 }
 
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
-    return ICSetupInfo::initialize(has_return_value, 1, size, ICSetupInfo::Generic, type_recorder);
+    return ICSetupInfo::initialize(has_return_value, 4, size, ICSetupInfo::Generic, type_recorder);
 }
 
 ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder) {
