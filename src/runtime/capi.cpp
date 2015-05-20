@@ -1406,6 +1406,23 @@ extern "C" void PyObject_GC_Del(void* op) noexcept {
     PyObject_FREE(op);
 }
 
+#ifdef HAVE_GCC_ASM_FOR_X87
+
+/* inline assembly for getting and setting the 387 FPU control word on
+   gcc/x86 */
+
+extern "C" unsigned short _Py_get_387controlword(void) noexcept {
+    unsigned short cw;
+    __asm__ __volatile__("fnstcw %0" : "=m"(cw));
+    return cw;
+}
+
+extern "C" void _Py_set_387controlword(unsigned short cw) noexcept {
+    __asm__ __volatile__("fldcw %0" : : "m"(cw));
+}
+
+#endif
+
 extern "C" void _Py_FatalError(const char* fmt, const char* function, const char* message) {
     fprintf(stderr, fmt, function, message);
     fflush(stderr); /* it helps in Windows debug build */
