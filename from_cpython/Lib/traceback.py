@@ -292,29 +292,29 @@ def print_stack(f=None, limit=None, file=None):
     stack frame at which to start. The optional 'limit' and 'file'
     arguments have the same meaning as for print_exception().
     """
-
-    if f is not None or limit is not None:
-        raise NotImplementedError("print_stack() does not currently support the 'f' or 'limit' arguments in Pyston")
-
-    try:
-        raise ZeroDivisionError
-    except ZeroDivisionError:
-        # Make use of Pyston's incorrect behavior, that we generate exception tracebacks all the
-        # way to the top stack frame:
-        l = format_exception(*sys.exc_info())[1:-2]
-
-    for s in l:
-        _print(file, s, '')
-
-def format_stack(f=None, limit=None):
-    """Shorthand for 'format_list(extract_stack(f, limit))'."""
-
-    raise NotImplementedError("This function is currently not implemented in Pyston")
     if f is None:
+        # Pyston change:
+        """
         try:
             raise ZeroDivisionError
         except ZeroDivisionError:
             f = sys.exc_info()[2].tb_frame.f_back
+        """
+        f = sys._getframe(1)
+    print_list(extract_stack(f, limit), file)
+
+def format_stack(f=None, limit=None):
+    """Shorthand for 'format_list(extract_stack(f, limit))'."""
+
+    if f is None:
+        # Pyston change:
+        """
+        try:
+            raise ZeroDivisionError
+        except ZeroDivisionError:
+            f = sys.exc_info()[2].tb_frame.f_back
+        """
+        f = sys._getframe(1)
     return format_list(extract_stack(f, limit))
 
 def extract_stack(f=None, limit = None):
@@ -327,12 +327,15 @@ def extract_stack(f=None, limit = None):
     from oldest to newest stack frame.
     """
 
-    raise NotImplementedError("This function is currently not implemented in Pyston")
     if f is None:
+        # Pyston change:
+        """
         try:
             raise ZeroDivisionError
         except ZeroDivisionError:
             f = sys.exc_info()[2].tb_frame.f_back
+        """
+        f = sys._getframe(1)
     if limit is None:
         if hasattr(sys, 'tracebacklimit'):
             limit = sys.tracebacklimit
