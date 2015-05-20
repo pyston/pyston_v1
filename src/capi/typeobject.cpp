@@ -2931,7 +2931,24 @@ void commonClassSetup(BoxedClass* cls) {
 }
 
 extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
-    // We don't cache anything yet that would need to be invalidated:
+    PyObject* raw, *ref;
+    Py_ssize_t i, n;
+
+    // Pyston change: invalidate the things we cache on types.
+    type->total_shape = NULL;
+    type->computeTotalShape();
+
+    raw = type->tp_subclasses;
+    if (raw != NULL) {
+        n = PyList_GET_SIZE(raw);
+        for (i = 0; i < n; i++) {
+            ref = PyList_GET_ITEM(raw, i);
+            ref = PyWeakref_GET_OBJECT(ref);
+            if (ref != Py_None) {
+                PyType_Modified((PyTypeObject*)ref);
+            }
+        }
+    }
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {

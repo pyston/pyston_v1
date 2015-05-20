@@ -406,6 +406,8 @@ void BoxedClass::finishInitialization() {
     this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
+
+    computeTotalShape();
 }
 
 LocalShape BoxedClass::computeLocalShape() {
@@ -426,7 +428,7 @@ LocalShape BoxedClass::computeLocalShape() {
         // compute a hash of all attribute names
         SHA256OStream hash_stream;
         for (auto& s : attrs) {
-            hash_stream << s.first;
+            hash_stream << s.first.size() << s.first;
         }
         uint64_t lshape[4];
         hash_stream.getHash(lshape);
@@ -448,7 +450,7 @@ Shape* BoxedClass::computeTotalShape() {
     for (int i = mro->ob_size - 1; i >= 0; i--) {
         BoxedClass* b = static_cast<BoxedClass*>(mro->elts[i]);
 
-        LocalShape b_shape = computeLocalShape();
+        LocalShape b_shape = b->computeLocalShape();
         b->total_shape = shape->getOrMakeChild(b_shape);
         shape = b->total_shape;
     }
@@ -2022,6 +2024,9 @@ void setattrGeneric(Box* obj, llvm::StringRef attr, Box* val, SetattrRewriteArgs
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
+
+        self->local_shape = LocalShape::uninitialized();
+        PyType_Modified(self);
     }
 }
 
@@ -4127,6 +4132,9 @@ extern "C" void delattrGeneric(Box* obj, llvm::StringRef attr, DelattrRewriteArg
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
+
+        self->local_shape = LocalShape::uninitialized();
+        PyType_Modified(self);
     }
 
     // Extra "use" of rewrite_args to make the compiler happy:
