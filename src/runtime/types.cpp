@@ -848,6 +848,18 @@ static Box* functionDefaults(Box* self, void*) {
     return BoxedTuple::create(func->ndefaults, &func->defaults->elts[0]);
 }
 
+static Box* functionGlobals(Box* self, void*) {
+    assert(self->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(self);
+    if (func->globals) {
+        assert(!func->f->source || !func->f->source->scoping->areGlobalsFromModule());
+        return func->globals;
+    }
+    assert(func->f->source);
+    assert(func->f->source->scoping->areGlobalsFromModule());
+    return getattr(func->f->source->parent_module, "__dict__");
+}
+
 static void functionSetDefaults(Box* b, Box* v, void*) {
     RELEASE_ASSERT(v, "can't delete __defaults__");
 
@@ -935,6 +947,9 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
     if (!PyObject_IsSubclass(type, self->im_class)) {
         return self;
     }
+
+    if (obj == None)
+        obj = NULL;
 
     return new BoxedInstanceMethod(obj, self->func, self->im_class);
 }
@@ -2235,14 +2250,17 @@ void setupRuntime() {
                        static_cast<BoxedString*>(boxStrConstant("module")));
     member_descriptor_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
                                                    static_cast<BoxedString*>(boxStrConstant("member_descriptor")));
-    capifunc_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false,
-                                          static_cast<BoxedString*>(boxStrConstant("capifunc")));
-    method_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false,
-                                        static_cast<BoxedString*>(boxStrConstant("method")));
-    wrapperobject_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperObject), false,
-                                               static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
-    wrapperdescr_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
-                                              static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
+    capifunc_cls = new (0) BoxedHeapClass(object_cls, BoxedCApiFunction::gcHandler, 0, 0, sizeof(BoxedCApiFunction),
+                                          false, static_cast<BoxedString*>(boxStrConstant("capifunc")));
+    method_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedMethodDescriptor::gcHandler, 0, 0, sizeof(BoxedMethodDescriptor), false,
+                       static_cast<BoxedString*>(boxStrConstant("method")));
+    wrapperobject_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedWrapperObject::gcHandler, 0, 0, sizeof(BoxedWrapperObject), false,
+                       static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
+    wrapperdescr_cls = new (0)
+        BoxedHeapClass(object_cls, BoxedWrapperDescriptor::gcHandler, 0, 0, sizeof(BoxedWrapperDescriptor), false,
+                       static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
 
     EmptyString = boxStrConstant("");
     gc::registerPermanentRoot(EmptyString);
@@ -2445,6 +2463,7 @@ void setupRuntime() {
                                                                    offsetof(BoxedFunction, modname), false));
     function_cls->giveAttr(
         "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
+    function_cls->giveAttr("__globals__", new (pyston_getset_cls) BoxedGetsetDescriptor(functionGlobals, NULL, NULL));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
@@ -2455,6 +2474,7 @@ void setupRuntime() {
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));
     function_cls->giveAttr("__defaults__", function_cls->getattr("func_defaults"));
+    function_cls->giveAttr("func_globals", function_cls->getattr("__globals__"));
     function_cls->freeze();
 
     builtin_function_or_method_cls->giveAttr(

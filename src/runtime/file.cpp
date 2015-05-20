@@ -1576,6 +1576,113 @@ static PyObject* get_closed(BoxedFile* f, void* closure) noexcept {
     return PyBool_FromLong((long)(f->f_fp == 0));
 }
 
+static PyObject* file_truncate(BoxedFile* f, PyObject* args) {
+    Py_off_t newsize;
+    PyObject* newsizeobj = NULL;
+    Py_off_t initialpos;
+    int ret;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    if (!f->writable)
+        return err_mode("writing");
+    if (!PyArg_UnpackTuple(args, "truncate", 0, 1, &newsizeobj))
+        return NULL;
+
+    /* Get current file position.  If the file happens to be open for
+     * update and the last operation was an input operation, C doesn't
+     * define what the later fflush() will do, but we promise truncate()
+     * won't change the current position (and fflush() *does* change it
+     * then at least on Windows).  The easiest thing is to capture
+     * current pos now and seek back to it at the end.
+     */
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    initialpos = _portable_ftell(f->f_fp);
+    FILE_END_ALLOW_THREADS(f)
+    if (initialpos == -1)
+        goto onioerror;
+
+    /* Set newsize to current postion if newsizeobj NULL, else to the
+     * specified value.
+     */
+    if (newsizeobj != NULL) {
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+        newsize = PyInt_AsLong(newsizeobj);
+#else
+        newsize = PyLong_Check(newsizeobj) ? PyLong_AsLongLong(newsizeobj) : PyInt_AsLong(newsizeobj);
+#endif
+        if (PyErr_Occurred())
+            return NULL;
+    } else /* default to current position */
+        newsize = initialpos;
+
+    /* Flush the stream.  We're mixing stream-level I/O with lower-level
+     * I/O, and a flush may be necessary to synch both platform views
+     * of the current file state.
+     */
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    ret = fflush(f->f_fp);
+    FILE_END_ALLOW_THREADS(f)
+    if (ret != 0)
+        goto onioerror;
+
+#ifdef MS_WINDOWS
+    /* MS _chsize doesn't work if newsize doesn't fit in 32 bits,
+       so don't even try using it. */
+    {
+        HANDLE hFile;
+
+        /* Have to move current pos to desired endpoint on Windows. */
+        FILE_BEGIN_ALLOW_THREADS(f)
+        errno = 0;
+        ret = _portable_fseek(f->f_fp, newsize, SEEK_SET) != 0;
+        FILE_END_ALLOW_THREADS(f)
+        if (ret)
+            goto onioerror;
+
+        /* Truncate.  Note that this may grow the file! */
+        FILE_BEGIN_ALLOW_THREADS(f)
+        errno = 0;
+        hFile = (HANDLE)_get_osfhandle(fileno(f->f_fp));
+        ret = hFile == (HANDLE)-1;
+        if (ret == 0) {
+            ret = SetEndOfFile(hFile) == 0;
+            if (ret)
+                errno = EACCES;
+        }
+        FILE_END_ALLOW_THREADS(f)
+        if (ret)
+            goto onioerror;
+    }
+#else
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    ret = ftruncate(fileno(f->f_fp), newsize);
+    FILE_END_ALLOW_THREADS(f)
+    if (ret != 0)
+        goto onioerror;
+#endif /* !MS_WINDOWS */
+
+    /* Restore original file position. */
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    ret = _portable_fseek(f->f_fp, initialpos, SEEK_SET) != 0;
+    FILE_END_ALLOW_THREADS(f)
+    if (ret)
+        goto onioerror;
+
+    Py_INCREF(Py_None);
+    return Py_None;
+
+onioerror:
+    PyErr_SetFromErrno(PyExc_IOError);
+    clearerr(f->f_fp);
+    return NULL;
+}
+
+
 PyDoc_STRVAR(seek_doc, "seek(offset[, whence]) -> None.  Move to new file position.\n"
                        "\n"
                        "Argument offset is a byte count.  Optional argument whence defaults to\n"
@@ -1588,6 +1695,10 @@ PyDoc_STRVAR(seek_doc, "seek(offset[, whence]) -> None.  Move to new file positi
                        "\n"
                        "Note that not all file objects are seekable.");
 
+PyDoc_STRVAR(truncate_doc, "truncate([size]) -> None.  Truncate the file to at most size bytes.\n"
+                           "\n"
+                           "Size defaults to the current file position, as returned by tell().");
+
 PyDoc_STRVAR(readlines_doc, "readlines([size]) -> list of strings, each a line from the file.\n"
                             "\n"
                             "Call readline() repeatedly and return a list of the lines so read.\n"
@@ -1598,6 +1709,7 @@ PyDoc_STRVAR(isatty_doc, "isatty() -> true or false.  True if the file is connec
 
 static PyMethodDef file_methods[] = {
     { "seek", (PyCFunction)file_seek, METH_VARARGS, seek_doc },
+    { "truncate", (PyCFunction)file_truncate, METH_VARARGS, truncate_doc },
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
     { "writelines", (PyCFunction)file_writelines, METH_O, NULL },
     { "isatty", (PyCFunction)file_isatty, METH_NOARGS, isatty_doc },

@@ -217,3 +217,8 @@ C.__get__ = lambda *args: None
 slots_test.call_funcs(C())
 del C.__get__
 slots_test.call_funcs(C())
+
+# test if __get__'s called
+class C(object):
+    val = slots_test.SlotsTesterDescrGet()
+print C().val

@@ -34,6 +34,12 @@ typedef ssize_t         Py_ssize_t;
 
 // Pyston change: the rest of these have just been copied from CPython's pyport.h, in an arbitrary order:
 
+#if defined(__GNUC__) && __GNUC__ >= 3
+#define Py_ALIGNED(x) __attribute__((aligned(x)))
+#else
+#define Py_ALIGNED(x)
+#endif
+
 #if defined(_MSC_VER)
 #if defined(PY_LOCAL_AGGRESSIVE)
 /* enable more aggressive optimization for visual studio */

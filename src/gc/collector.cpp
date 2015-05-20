@@ -142,6 +142,11 @@ void deregisterPermanentRoot(void* obj) {
     roots.erase(obj);
 }
 
+static std::vector<std::pair<void*, void*>> potential_root_ranges;
+void registerPotentialRootRange(void* start, void* end) {
+    potential_root_ranges.push_back(std::make_pair(start, end));
+}
+
 extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     if (obj) {
         // Allow duplicates from CAPI code since they shouldn't have to know
@@ -266,6 +271,10 @@ void markPhase() {
 
     for (auto h : *getRootHandles()) {
         visitor.visit(h->value);
+    }
+
+    for (auto& e : potential_root_ranges) {
+        visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());

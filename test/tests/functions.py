@@ -40,3 +40,11 @@ except TypeError as e:
 def func_without_defaults():
     pass
 print repr(func_without_defaults.__defaults__)
+
+print func_without_defaults.func_globals == globals()
+import os
+print os.renames.__globals__ == os.__dict__
+print os.renames.__globals__ == globals()
+d = {}
+exec "def foo(): pass" in d
+print d["foo"].func_globals == d

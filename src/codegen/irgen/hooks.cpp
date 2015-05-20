@@ -360,12 +360,30 @@ CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::
 // TODO: CPython parses execs as Modules, not as Suites.  This is probably not too hard to change,
 // but is non-trivial since we will later decide some things (ex in scoping_analysis) based off
 // the type of the root ast node.
-static AST_Suite* parseExec(llvm::StringRef source) {
+static AST_Suite* parseExec(llvm::StringRef source, bool interactive = false) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
     const char* code = source.data();
     AST_Module* parsedModule = parse_string(code);
+
+    if (interactive) {
+        for (int i = 0; i < parsedModule->body.size(); ++i) {
+            AST_stmt* s = parsedModule->body[i];
+            if (s->type != AST_TYPE::Expr)
+                continue;
+
+            AST_Expr* expr = (AST_Expr*)s;
+            AST_Print* print = new AST_Print;
+            print->lineno = expr->lineno;
+            print->col_offset = expr->col_offset;
+            print->dest = NULL;
+            print->nl = true;
+            print->values.push_back(expr->value);
+            parsedModule->body[i] = print;
+        }
+    }
+
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = std::move(parsedModule->body);
     return parsedSuite;
@@ -462,8 +480,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         } else if (type_str == "eval") {
             parsed = parseEval(source_str);
         } else if (type_str == "single") {
-            fatalOrError(NotImplemented, "unimplemented");
-            throwCAPIException();
+            parsed = parseExec(source_str, true);
         } else {
             raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
         }
@@ -473,7 +490,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         return boxAst(parsed);
 
     CLFunction* cl;
-    if (type_str == "exec") {
+    if (type_str == "exec" || type_str == "single") {
         // TODO: CPython parses execs as Modules
         if (parsed->type != AST_TYPE::Suite)
             raiseExcHelper(TypeError, "expected Suite node, got %s", boxAst(parsed)->cls->tp_name);
@@ -482,9 +499,6 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         if (parsed->type != AST_TYPE::Expression)
             raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
         cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str);
-    } else if (type_str == "single") {
-        fatalOrError(NotImplemented, "unimplemented");
-        throwCAPIException();
     } else {
         raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
     }

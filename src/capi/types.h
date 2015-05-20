@@ -34,7 +34,7 @@ struct wrapper_def {
     // exists in CPython: PyObject *name_strobj
 };
 
-extern BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
+extern "C" BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
 
 class BoxedCApiFunction : public Box {
 private:
@@ -44,8 +44,11 @@ private:
     PyCFunction func;
 
 public:
-    BoxedCApiFunction(int ml_flags, Box* passthrough, const char* name, PyCFunction func)
-        : ml_flags(ml_flags), passthrough(passthrough), name(name), func(func) {}
+    Box* module;
+
+public:
+    BoxedCApiFunction(int ml_flags, Box* passthrough, const char* name, PyCFunction func, Box* module = NULL)
+        : ml_flags(ml_flags), passthrough(passthrough), name(name), func(func), module(module) {}
 
     DEFAULT_CLASS(capifunc_cls);
 
@@ -112,6 +115,15 @@ public:
 
     static Box* callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                              Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == capifunc_cls);
+        BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
+
+        boxGCHandler(v, o);
+        v->visit(o->passthrough);
+        v->visit(o->module);
+    }
 };
 
 class BoxedWrapperDescriptor : public Box {
@@ -126,6 +138,14 @@ public:
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
     static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == wrapperdescr_cls);
+        BoxedWrapperDescriptor* o = static_cast<BoxedWrapperDescriptor*>(_o);
+
+        boxGCHandler(v, o);
+        v->visit(o->type);
+    }
 };
 
 class BoxedWrapperObject : public Box {
@@ -162,6 +182,14 @@ public:
         assert(rtn && "should have set + thrown an exception!");
         return rtn;
     }
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == wrapperobject_cls);
+        BoxedWrapperObject* o = static_cast<BoxedWrapperObject*>(_o);
+
+        boxGCHandler(v, o);
+        v->visit(o->obj);
+    }
 };
 
 class BoxedMethodDescriptor : public Box {
@@ -193,6 +221,14 @@ public:
     }
 
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == method_cls);
+        BoxedMethodDescriptor* o = static_cast<BoxedMethodDescriptor*>(_o);
+
+        boxGCHandler(v, o);
+        v->visit(o->type);
+    }
 };
 
 } // namespace pyston

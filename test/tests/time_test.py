@@ -8,3 +8,5 @@ time.clock()
 print time.timezone
 
 print long(time.mktime(time.localtime(1020)))
+
+print time.sleep.__module__

@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 
 def file_is_from_cpython(fn):
     if 'from_cpython' in fn:
@@ -49,6 +50,8 @@ PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(o
 CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../from_cpython/Include")
 CAPI_HEADERS = [bn for bn in os.listdir(CAPI_HEADER_DIR) if bn.endswith(".h")]
 
+include_re = re.compile(r'^\#include \s+ (<.+?>|".+?") (?:\s+ //.*)? $', re.VERBOSE)
+
 def verify_include_order(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
@@ -71,10 +74,11 @@ def verify_include_order(_, dir, files):
                         section = None
                     continue
 
-                if l.startswith("#include"):
+                m = include_re.match(l)
+                if m:
                     if section is None:
                         section = []
-                    section.append(l)
+                    section.append(m.group(1))
                     continue
 
                 if l.startswith("#ifndef PYSTON") or l.startswith("#define PYSTON"):
@@ -99,7 +103,7 @@ def verify_include_order(_, dir, files):
 
         def is_third_party_section(section):
             for incl in section:
-                if incl.startswith('#include "llvm/'):
+                if incl.startswith('"llvm/'):
                     continue
                 if '"opagent.h"' in incl:
                     continue
@@ -119,7 +123,7 @@ def verify_include_order(_, dir, files):
             # TODO generate this
             include_dirs = PYSTON_SRC_SUBDIRS
             for incl in section:
-                if not any(incl.startswith('#include "%s/' % d) for d in include_dirs):
+                if not any(incl.startswith('"%s/' % d) for d in include_dirs):
                     return False
             return True
 

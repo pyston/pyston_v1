@@ -82,6 +82,8 @@ PyAPI_DATA(PyTypeObject) PyGetSetDescr_Type;
 PyAPI_DATA(PyTypeObject) PyMemberDescr_Type;
 #endif
 // (Pyston TODO: add #defines to our names)
+PyAPI_DATA(PyTypeObject*) wrapperdescr_cls;
+#define PyWrapperDescr_Type (*wrapperdescr_cls)
 
 PyAPI_FUNC(PyObject *) PyDescr_NewMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyDescr_NewClassMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
