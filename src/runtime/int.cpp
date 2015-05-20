@@ -196,11 +196,11 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
         s++;
     errno = 0;
     if (base == 0 && s[0] == '0') {
-        x = (long)strtoul(s, &end, base);
+        x = (long)PyOS_strtoul(const_cast<char*>(s), &end, base);
         if (x < 0)
             return PyLong_FromString(s, pend, base);
     } else
-        x = strtol(s, &end, base);
+        x = PyOS_strtol(const_cast<char*>(s), &end, base);
     if (end == s || !isalnum(Py_CHARMASK(end[-1])))
         goto bad;
     while (*end && isspace(Py_CHARMASK(*end)))
