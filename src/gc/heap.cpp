@@ -141,6 +141,7 @@ void finalizeIfNeeded(Box* b) {
         return;
 
     GCAllocation* al = GCAllocation::fromUserData(b);
+    setFinalized(al);
 
     // Temporary dummy finalizer for testing.
     Box* del_attr = typeLookup(b->cls, _del_str->s(), NULL);
@@ -155,8 +156,17 @@ void finalizeIfNeeded(Box* b) {
         // b->cls->tp_dealloc(b);
     } else {
     }
+}
 
-    setFinalized(al);
+bool isWeakReference(Box* b) {
+    if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
+        PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
+        if (list && *list) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool heapObjectHasCallableFinalizer(GCAllocation* al) {
@@ -189,13 +199,10 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
-        if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
-            PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
-            if (list && *list) {
-                assert(weakly_referenced && "attempting to free a weakly referenced object manually");
-                weakly_referenced->push_back(b);
-                return false;
-            }
+        if (isWeakReference(b)) {
+            assert(weakly_referenced && "attempting to free a weakly referenced object manually");
+            weakly_referenced->push_back(b);
+            return false;
         }
 
         // ASSERT(!hasFinalizer(b) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
