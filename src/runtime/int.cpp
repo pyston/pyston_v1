@@ -345,16 +345,20 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     }
 
     assert(rhs > 0);
-    while (rhs) {
+    while (true) {
         if (rhs & 1) {
             // TODO: could potentially avoid restarting the entire computation on overflow?
             if (__builtin_smull_overflow(rtn, curpow, &rtn))
                 return longPow(boxLong(lhs), boxLong(orig_rhs));
         }
-        if (__builtin_smull_overflow(curpow, curpow, &curpow))
-            return longPow(boxLong(lhs), boxLong(orig_rhs));
 
         rhs >>= 1;
+
+        if (!rhs)
+            break;
+
+        if (__builtin_smull_overflow(curpow, curpow, &curpow))
+            return longPow(boxLong(lhs), boxLong(orig_rhs));
     }
     return boxInt(rtn);
 }
