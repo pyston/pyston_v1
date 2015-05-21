@@ -1997,6 +1997,63 @@ static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
     return _common_reduce(self, proto);
 }
 
+/*
+   from PEP 3101, this code implements:
+
+   class object:
+       def __format__(self, format_spec):
+       if isinstance(format_spec, str):
+           return format(str(self), format_spec)
+       elif isinstance(format_spec, unicode):
+           return format(unicode(self), format_spec)
+*/
+static PyObject* object_format(PyObject* self, PyObject* args) noexcept {
+    PyObject* format_spec;
+    PyObject* self_as_str = NULL;
+    PyObject* result = NULL;
+    Py_ssize_t format_len;
+
+    if (!PyArg_ParseTuple(args, "O:__format__", &format_spec))
+        return NULL;
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(format_spec)) {
+        format_len = PyUnicode_GET_SIZE(format_spec);
+        self_as_str = PyObject_Unicode(self);
+    } else if (PyString_Check(format_spec)) {
+#else
+    if (PyString_Check(format_spec)) {
+#endif
+        format_len = PyString_GET_SIZE(format_spec);
+        self_as_str = PyObject_Str(self);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "argument to __format__ must be unicode or str");
+        return NULL;
+    }
+
+    if (self_as_str != NULL) {
+        /* Issue 7994: If we're converting to a string, we
+           should reject format specifications */
+        if (format_len > 0) {
+            if (PyErr_WarnEx(PyExc_PendingDeprecationWarning, "object.__format__ with a non-empty format "
+                                                              "string is deprecated",
+                             1) < 0) {
+                goto done;
+            }
+            /* Eventually this will become an error:
+            PyErr_Format(PyExc_TypeError,
+               "non-empty format string passed to object.__format__");
+            goto done;
+            */
+        }
+        result = PyObject_Format(self_as_str, format_spec);
+    }
+
+done:
+    Py_XDECREF(self_as_str);
+
+    return result;
+}
+
 static Box* objectClass(Box* obj, void* context) {
     assert(obj->cls != instance_cls); // should override __class__ in classobj
     return obj->cls;
@@ -2041,6 +2098,7 @@ static void objectSetClass(Box* obj, Box* val, void* context) {
 static PyMethodDef object_methods[] = {
     { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
     { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
+    { "__format__", object_format, METH_VARARGS, PyDoc_STR("default object formatter") },
 };
 
 static Box* typeName(Box* b, void*) {
