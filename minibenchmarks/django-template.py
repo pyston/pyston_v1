@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "../test/integration/django"))
+
 from django.template.base import Origin, Template, Context, TemplateDoesNotExist
 from django.conf import settings
 from django.apps import apps

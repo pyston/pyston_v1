@@ -290,6 +290,10 @@ bool ICInfo::shouldAttempt() {
         retry_in--;
         return false;
     }
-    return times_rewritten < MEGAMORPHIC_THRESHOLD;
+    return !isMegamorphic();
+}
+
+bool ICInfo::isMegamorphic() {
+    return times_rewritten >= MEGAMORPHIC_THRESHOLD;
 }
 }

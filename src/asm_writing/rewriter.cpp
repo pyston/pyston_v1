@@ -746,8 +746,8 @@ void Rewriter::abort() {
     finished = true;
     rewrite->abort();
 
-    static StatCounter rewriter_aborts("rewriter_aborts");
-    rewriter_aborts.log();
+    static StatCounter ic_rewrites_aborted("ic_rewrites_aborted");
+    ic_rewrites_aborted.log();
 }
 
 void RewriterVar::bumpUse() {
@@ -786,10 +786,10 @@ void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
 
-    static StatCounter rewriter_assemblyfail("rewriter_assemblyfail");
+    static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
 
     auto on_assemblyfail = [&]() {
-        rewriter_assemblyfail.log();
+        ic_rewrites_aborted_assemblyfail.log();
         this->abort();
     };
 
@@ -971,8 +971,8 @@ void Rewriter::commit() {
 
     finished = true;
 
-    static StatCounter rewriter_commits("rewriter_commits");
-    rewriter_commits.log();
+    static StatCounter ic_rewrites_committed("ic_rewrites_committed");
+    ic_rewrites_committed.log();
 }
 
 bool Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
@@ -1404,8 +1404,8 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
         args.push_back(var);
     }
 
-    static StatCounter rewriter_starts("rewriter_starts");
-    rewriter_starts.log();
+    static StatCounter ic_rewrites_starts("ic_rewrites");
+    ic_rewrites_starts.log();
     static StatCounter rewriter_spillsavoided("rewriter_spillsavoided");
 
     // Calculate the list of live-ins based off the live-outs list,
@@ -1457,22 +1457,28 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
         assert(!getICInfo(rtn_addr));
     }
 
-    static StatCounter rewriter_attempts("rewriter_attempts");
-    rewriter_attempts.log();
+    static StatCounter ic_attempts("ic_attempts");
+    static StatCounter ic_attempts_nopatch("ic_attempts_nopatch");
+    static StatCounter ic_attempts_skipped("ic_attempts_skipped");
+    static StatCounter ic_attempts_skipped_megamorphic("ic_attempts_skipped_megamorphic");
+    static StatCounter ic_attempts_started("ic_attempts_started");
 
-    static StatCounter rewriter_nopatch("rewriter_nopatch");
-    static StatCounter rewriter_skipped("rewriter_skipped");
+    ic_attempts.log();
 
     if (!ic) {
-        rewriter_nopatch.log();
+        ic_attempts_nopatch.log();
         return NULL;
     }
 
     if (!ic->shouldAttempt()) {
-        rewriter_skipped.log();
+        ic_attempts_skipped.log();
+
+        if (ic->isMegamorphic())
+            ic_attempts_skipped_megamorphic.log();
         return NULL;
     }
 
+    ic_attempts_started.log();
     return new Rewriter(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
 }
 
