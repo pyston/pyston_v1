@@ -180,6 +180,8 @@ extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
 
 // Analogue of PyType_GenericNew
 void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
+    ALLOC_STATS_VAR(cls);
+
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_itemsize > 0);
@@ -191,6 +193,8 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
 }
 
 void* Box::operator new(size_t size, BoxedClass* cls) {
+    ALLOC_STATS(cls);
+
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_itemsize == 0);
