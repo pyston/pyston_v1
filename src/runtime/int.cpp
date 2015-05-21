@@ -345,16 +345,20 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     }
 
     assert(rhs > 0);
-    while (rhs) {
+    while (true) {
         if (rhs & 1) {
             // TODO: could potentially avoid restarting the entire computation on overflow?
             if (__builtin_smull_overflow(rtn, curpow, &rtn))
                 return longPow(boxLong(lhs), boxLong(orig_rhs));
         }
-        if (__builtin_smull_overflow(curpow, curpow, &curpow))
-            return longPow(boxLong(lhs), boxLong(orig_rhs));
 
         rhs >>= 1;
+
+        if (!rhs)
+            break;
+
+        if (__builtin_smull_overflow(curpow, curpow, &curpow))
+            return longPow(boxLong(lhs), boxLong(orig_rhs));
     }
     return boxInt(rtn);
 }
@@ -1031,11 +1035,6 @@ extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     return new (cls) BoxedInt(n->n);
 }
 
-extern "C" Box* intInit(BoxedInt* self, Box* val, Box* args) {
-    // int.__init__ will actually let you call it with anything
-    return None;
-}
-
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
     assert(BOXED_INT);
@@ -1128,11 +1127,9 @@ void setupInt() {
     int_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)intTrunc, BOXED_INT, 1)));
     int_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)intIndex, BOXED_INT, 1)));
 
-    int_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
-
-    int_cls->giveAttr("__init__",
-                      new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
+    int_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false,
+                                                                 ParamNames({ "", "x", "base" }, "", "")),
+                                                   { boxInt(0), NULL }));
 
     int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));

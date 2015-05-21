@@ -87,3 +87,7 @@ class I(int):
 for i1 in [1, I(2), 3, I(4)]:
     for i2 in [1, I(2), 3, I(4)]:
         print -i1, +i1, ~i1, i1 < i2, i1 <= i2, i1 == i2, i1 > i2, i1 >= i2, i1 != i2, i1 | i2, i1 ^ i2, i1 & i2, i1 * i2, i1 + i2, i1 / i2, i1 - i2, i1 ** i2, i1 // i2
+
+print int("12345", base=16)
+
+print type(2 ** 48)
