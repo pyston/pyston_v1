@@ -450,6 +450,15 @@ extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long valu
     return PyModule_AddObject(_m, name, boxInt(value));
 }
 
+extern "C" PyObject* PyModule_New(const char* name) noexcept {
+    BoxedModule* module = new BoxedModule();
+    module->giveAttr("__name__", boxStrConstant(name));
+    module->giveAttr("__doc__", None);
+    module->giveAttr("__package__", None);
+    return module;
+}
+
+
 extern "C" PyObject* PyEval_CallMethod(PyObject* obj, const char* methodname, const char* format, ...) noexcept {
     va_list vargs;
     PyObject* meth;
