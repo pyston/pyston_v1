@@ -689,6 +689,8 @@ struct FrameInfo {
     // In Pyston, exc is the frame-local value of sys.exc_info.
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
     //
+    // TODO: do we want exceptions to be slower? benchmark this!
+    //
     // exc.type is initialized to NULL at function entry, and exc.value and exc.tb are left
     // uninitialized.  When one wants to access any of the values, you need to check if exc.type
     // is NULL, and if so crawl up the stack looking for the first frame with a non-null exc.type

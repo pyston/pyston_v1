@@ -530,6 +530,36 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
+// To produce a traceback, we:
+//
+// 1. Use libunwind to produce a cursor into our stack.
+//
+// 2. Grab the next frame in the stack and check what function it is from. There are four options:
+//
+//    (a) A JIT-compiled Python function.
+//    (b) ASTInterpreter::execute() in codegen/ast_interpreter.cpp.
+//    (c) generatorEntry() in runtime/generator.cpp.
+//    (d) Something else.
+//
+//    By cases:
+//
+//    (2a, 2b) If the previous frame we visited was an OSR frame (which we know from its CompiledFunction*), then we
+//    skip this frame (it's the frame we replaced on-stack) and keep unwinding. (FIXME: Why are we guaranteed that we
+//    on-stack-replaced at most one frame?) Otherwise, we found a frame for our traceback! Proceed to step 3.
+//
+//    (2c) Continue unwinding in the stack of whatever called the generator. This involves some hairy munging of
+//    undocumented fields in libunwind structs to swap the context.
+//
+//    (2d) Ignore it and keep unwinding. It's some C or C++ function that we don't want in our traceback.
+//
+// 3. We've found a frame for our traceback, along with a CompiledFunction* and some other information about it.
+//
+//    We grab the current statement it is in (as an AST_stmt*) and use it and the CompiledFunction*'s source info to
+//    produce the line information for the traceback. For JIT-compiled functions, getting the statement involves the
+//    CF's location_map.
+//
+// 4. Unless we've hit the end of the stack, go to 2 and keep unwinding.
+//
 static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
     STAT_TIMER(t0, "us_timer_gettraceback");
