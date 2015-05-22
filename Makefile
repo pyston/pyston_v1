@@ -1204,17 +1204,25 @@ sharedmods: $(SHAREDMODS_OBJS)
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_OBJS)
 
+# Makefile hackery: we can build test extensions with any build configuration of pyston,
+# so try to guess one that will end up being built anyway, and use that as the dependency.
+ifneq ($(findstring release,$(MAKECMDGOALS))$(findstring perf,$(MAKECMDGOALS)),)
+BUILD_PY:=pyston_release
+else
+BUILD_PY:=pyston_dbg
+endif
+
 # Hax: we want to generate multiple targets from a single rule, and run the rule only if the
 # dependencies have been updated, and only run it once for all the targets.
 # So just tell make to generate the first extension module, and that the non-first ones just
 # depend on the first one.
-$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | pyston_dbg
-	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg setup.py build
+$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | $(BUILD_PY)
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../$(BUILD_PY) setup.py build
 	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
 	$(VERB) touch -c $(TEST_EXT_MODULE_OBJS)
 $(wordlist 2,9999,$(TEST_EXT_MODULE_OBJS)): $(firstword $(TEST_EXT_MODULE_OBJS))
-$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | pyston_dbg
-	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg ../../from_cpython/setup.py build --build-lib ../../lib_pyston
+$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | $(BUILD_PY)
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../$(BUILD_PY) ../../from_cpython/setup.py build --build-lib ../../lib_pyston
 	$(VERB) touch -c $(SHAREDMODS_OBJS)
 $(wordlist 2,9999,$(SHAREDMODS_OBJS)): $(firstword $(SHAREDMODS_OBJS))
 
