@@ -92,7 +92,7 @@ public:
 
         // If the capacity of the array is huge, and the # elements used is small,
         // shrink the array.
-        if (getNumEntries() * 4 < getNumBuckets() && getNumBuckets() > 64) {
+        if (getNumEntries() * 4 < getNumBuckets() && getNumBuckets() > 32) {
             shrink_and_clear();
             return;
         }
@@ -554,7 +554,7 @@ public:
         unsigned OldNumBuckets = NumBuckets;
         BucketT* OldBuckets = Buckets;
 
-        allocateBuckets(std::max<unsigned>(64, static_cast<unsigned>(llvm::NextPowerOf2(AtLeast - 1))));
+        allocateBuckets(std::max<unsigned>(32, static_cast<unsigned>(llvm::NextPowerOf2(AtLeast - 1))));
         assert(Buckets);
         if (!OldBuckets) {
             this->BaseT::initEmpty();
@@ -574,7 +574,7 @@ public:
         // Reduce the number of buckets.
         unsigned NewNumBuckets = 0;
         if (OldNumEntries)
-            NewNumBuckets = std::max(64, 1 << (llvm::Log2_32_Ceil(OldNumEntries) + 1));
+            NewNumBuckets = std::max(32, 1 << (llvm::Log2_32_Ceil(OldNumEntries) + 1));
         if (NewNumBuckets == NumBuckets) {
             this->BaseT::initEmpty();
             return;
@@ -757,7 +757,7 @@ public:
 
     void grow(unsigned AtLeast) {
         if (AtLeast >= InlineBuckets)
-            AtLeast = std::max<unsigned>(64, llvm::NextPowerOf2(AtLeast - 1));
+            AtLeast = std::max<unsigned>(32, llvm::NextPowerOf2(AtLeast - 1));
 
         if (Small) {
             if (AtLeast < InlineBuckets)
@@ -813,8 +813,8 @@ public:
         unsigned NewNumBuckets = 0;
         if (OldSize) {
             NewNumBuckets = 1 << (llvm::Log2_32_Ceil(OldSize) + 1);
-            if (NewNumBuckets > InlineBuckets && NewNumBuckets < 64u)
-                NewNumBuckets = 64;
+            if (NewNumBuckets > InlineBuckets && NewNumBuckets < 32u)
+                NewNumBuckets = 32;
         }
         if ((Small && NewNumBuckets <= InlineBuckets) || (!Small && NewNumBuckets == getLargeRep()->NumBuckets)) {
             this->BaseT::initEmpty();
