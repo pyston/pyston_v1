@@ -56,16 +56,6 @@ void raiseRaw(const ExcInfo& e) {
     assert(gc::isValidGCObject(e.value));
     assert(gc::isValidGCObject(e.traceback));
 
-    if (VERBOSITY("stacktrace")) {
-        try {
-            std::string st = str(e.type)->s.str();
-            std::string sv = str(e.value)->s.str();
-            printf("---- raiseRaw() called with %s: %s\n", st.c_str(), sv.c_str());
-        } catch (ExcInfo e) {
-            printf("---- raiseRaw() called and WTFed\n");
-        }
-    }
-
     throw e;
 }
 
