@@ -401,7 +401,7 @@ std::string BoxedModule::name() {
         return "?";
     } else {
         BoxedString* sname = static_cast<BoxedString*>(name);
-        return sname->s;
+        return sname->s();
     }
 }
 
@@ -1038,7 +1038,7 @@ Box* sliceRepr(BoxedSlice* self) {
     BoxedString* start = static_cast<BoxedString*>(repr(self->start));
     BoxedString* stop = static_cast<BoxedString*>(repr(self->stop));
     BoxedString* step = static_cast<BoxedString*>(repr(self->step));
-    return boxStringTwine(llvm::Twine("slice(") + start->s + ", " + stop->s + ", " + step->s + ")");
+    return boxStringTwine(llvm::Twine("slice(") + start->s() + ", " + stop->s() + ", " + step->s() + ")");
 }
 
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
@@ -1150,8 +1150,8 @@ Box* typeRepr(BoxedClass* self) {
     Box* m = self->getattr("__module__");
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
-        if (sm->s != "__builtin__")
-            os << sm->s << '.';
+        if (sm->s() != "__builtin__")
+            os << sm->s() << '.';
     }
 
     os << self->tp_name;
@@ -1347,7 +1347,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        self->b->setattr(key->s, value, NULL);
+        self->b->setattr(key->s(), value, NULL);
         return None;
     }
 
@@ -1360,10 +1360,10 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* cur = self->b->getattr(key->s);
+        Box* cur = self->b->getattr(key->s());
         if (cur)
             return cur;
-        self->b->setattr(key->s, value, NULL);
+        self->b->setattr(key->s(), value, NULL);
         return value;
     }
 
@@ -1376,7 +1376,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (!r)
             return def;
         return r;
@@ -1391,7 +1391,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (!r)
             raiseExcHelper(KeyError, "'%s'", key->data());
         return r;
@@ -1405,9 +1405,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (r) {
-            self->b->delattr(key->s, NULL);
+            self->b->delattr(key->s(), NULL);
             return r;
         } else {
             if (default_)
@@ -1425,8 +1425,8 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        if (self->b->getattr(key->s))
-            self->b->delattr(key->s, NULL);
+        if (self->b->getattr(key->s()))
+            self->b->delattr(key->s(), NULL);
         else
             raiseExcHelper(KeyError, "'%s'", key->data());
         return None;
@@ -1450,7 +1450,7 @@ public:
             first = false;
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first().str() << ": " << v->s;
+            os << p.first().str() << ": " << v->s();
         }
         os << "})";
         return boxString(os.str());
@@ -1464,7 +1464,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         return r ? True : False;
     }
 
@@ -1728,7 +1728,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
     }
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
-    setattrGeneric(obj, attr_str->s, value, NULL);
+    setattrGeneric(obj, attr_str->s(), value, NULL);
     return None;
 }
 

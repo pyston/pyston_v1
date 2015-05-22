@@ -215,7 +215,7 @@ Box* tupleRepr(BoxedTuple* t) {
             os << ", ";
 
         BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
-        os << elt_repr->s;
+        os << elt_repr->s();
     }
     if (n == 1)
         os << ",";
@@ -376,7 +376,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             auto const seq = *(kwargs->d.begin());
             auto const kw = static_cast<BoxedString*>(seq.first);
 
-            if (kw->s == "sequence")
+            if (kw->s() == "sequence")
                 elements = seq.second;
             else
                 raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->data());

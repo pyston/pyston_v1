@@ -106,7 +106,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         if (!first) {
             os << ", ";
         }
-        os << static_cast<BoxedString*>(repr(elt))->s;
+        os << static_cast<BoxedString*>(repr(elt))->s();
         first = false;
     }
     os << "])";

@@ -104,7 +104,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
 
     for (auto& p : dict->d) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
-        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s), p.second, NULL);
+        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s()), p.second, NULL);
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
@@ -148,21 +148,21 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             return cls->getAttrWrapper();
 
-        if (attr->s == "__bases__")
+        if (attr->s() == "__bases__")
             return cls->bases;
 
-        if (attr->s == "__name__") {
+        if (attr->s() == "__name__") {
             if (cls->name)
                 return cls->name;
             return None;
         }
     }
 
-    Box* r = classLookup(cls, std::string(attr->s));
+    Box* r = classLookup(cls, std::string(attr->s()));
     if (!r)
         raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
@@ -206,7 +206,7 @@ static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
-    if (attr->s == "__bases__") {
+    if (attr->s() == "__bases__") {
         const char* error_str = set_bases((PyClassObject*)cls, _value);
         if (error_str && error_str[0] != '\0')
             raiseExcHelper(TypeError, "%s", error_str);
@@ -242,7 +242,7 @@ Box* classobjStr(Box* _obj) {
     Box* _mod = cls->getattr("__module__");
     RELEASE_ASSERT(_mod, "");
     RELEASE_ASSERT(_mod->cls == str_cls, "");
-    return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s) + "." + cls->name->s);
+    return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s()) + "." + cls->name->s());
 }
 
 static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
@@ -253,19 +253,19 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             return inst->getAttrWrapper();
 
-        if (attr->s == "__class__")
+        if (attr->s() == "__class__")
             return inst->inst_cls;
     }
 
-    Box* r = inst->getattr(attr->s);
+    Box* r = inst->getattr(attr->s());
     if (r)
         return r;
 
-    r = classLookup(inst->inst_cls, attr->s);
+    r = classLookup(inst->inst_cls, attr->s());
     if (r) {
         return processDescriptor(r, inst, inst->inst_cls);
     }
@@ -308,11 +308,11 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
     assert(value);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             Py_FatalError("unimplemented");
 
-        if (attr->s == "__class__") {
+        if (attr->s() == "__class__") {
             if (value->cls != classobj_cls)
                 raiseExcHelper(TypeError, "__class__ must be set to a class");
 
@@ -329,7 +329,7 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
         return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
     }
 
-    _inst->setattr(attr->s, value, NULL);
+    _inst->setattr(attr->s(), value, NULL);
     return None;
 }
 
@@ -341,11 +341,11 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             raiseExcHelper(TypeError, "__dict__ must be set to a dictionary");
 
-        if (attr->s == "__class__")
+        if (attr->s() == "__class__")
             raiseExcHelper(TypeError, "__class__ must be set to a class");
     }
 
@@ -357,7 +357,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
     }
 
-    _inst->delattr(attr->s, NULL);
+    _inst->delattr(attr->s(), NULL);
     return None;
 }
 

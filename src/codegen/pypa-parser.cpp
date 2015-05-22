@@ -932,7 +932,7 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
             BoxedString* str_utf8 = (BoxedString*)PyUnicode_AsUTF8String(str);
             assert(str_utf8->cls == str_cls);
             checkAndThrowCAPIException();
-            return str_utf8->s.str();
+            return str_utf8->s().str();
         }
 
         bool need_encoding = encoding != "utf-8" && encoding != "iso-8859-1";
@@ -943,7 +943,7 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
                     throwCAPIException();
                 BoxedString* str = (BoxedString*)PyUnicode_AsEncodedString(u, encoding.c_str(), NULL);
                 assert(str->cls == str_cls);
-                return str->s.str();
+                return str->s().str();
             } else {
                 return s;
             }
@@ -954,12 +954,12 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
         if (!decoded)
             throwCAPIException();
         assert(decoded->cls == str_cls);
-        return decoded->s.str();
+        return decoded->s().str();
     } catch (ExcInfo e) {
         error = true;
         BoxedString* error_message = str(e.value);
         if (error_message && error_message->cls == str_cls)
-            return std::string(error_message->s);
+            return std::string(error_message->s());
         return "Encountered an unknown error inside pypaEscapeDecoder";
     }
 }
@@ -1080,7 +1080,7 @@ std::string PystonSourceReader::get_line() {
     if (!line->size())
         is_eof = true;
     ++line_number;
-    return line->s;
+    return line->s();
 }
 
 AST_Module* pypa_parse(char const* file_path) {

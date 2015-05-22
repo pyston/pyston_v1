@@ -59,14 +59,14 @@ bool containsYield(AST* ast) {
 BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     assert(id);
     assert(private_name);
-    int len = id->s.size();
-    if (len < 2 || id->s[0] != '_' || id->s[1] != '_')
+    int len = id->size();
+    if (len < 2 || id->s()[0] != '_' || id->s()[1] != '_')
         return id;
 
-    if ((id->s[len - 2] == '_' && id->s[len - 1] == '_') || id->s.find('.') != llvm::StringRef::npos)
+    if ((id->s()[len - 2] == '_' && id->s()[len - 1] == '_') || id->s().find('.') != llvm::StringRef::npos)
         return id;
 
-    const char* p = private_name->s.data();
+    const char* p = private_name->data();
     while (*p == '_') {
         p++;
         len--;
@@ -74,7 +74,7 @@ BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     if (*p == '\0')
         return id;
 
-    return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s)));
+    return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s())));
 }
 
 static void mangleNameInPlace(InternedString& id, const std::string* private_name,

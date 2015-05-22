@@ -2479,7 +2479,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (source->scoping->areGlobalsFromModule()) {
             Box* module_name = source->parent_module->getattr("__name__", NULL);
             assert(module_name->cls == str_cls);
-            module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+            module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s());
         } else {
             module_assign->value
                 = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);

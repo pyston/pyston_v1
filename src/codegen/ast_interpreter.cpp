@@ -1303,7 +1303,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
-        auto& name = static_cast<BoxedString*>(p.first)->s;
+        auto name = static_cast<BoxedString*>(p.first)->s();
         if (name == PASSED_GENERATOR_NAME) {
             interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {
