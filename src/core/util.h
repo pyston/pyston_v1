@@ -36,7 +36,9 @@ private:
     std::function<void(uint64_t)> exit_callback;
 
 public:
+    // Timers with non-NULL desc will print times longer than min_usec for debugging when VERBOSITY("time") >= 2
     Timer(const char* desc = NULL, long min_usec = -1);
+    Timer(long min_usec); // doesn't start the timer
     ~Timer();
 
     void setExitCallback(std::function<void(uint64_t)> _exit_callback) { exit_callback = _exit_callback; }
