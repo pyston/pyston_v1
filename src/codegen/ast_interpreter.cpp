@@ -31,6 +31,7 @@
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/contiguous_map.h"
+#include "core/SmallVector.h"
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
@@ -878,7 +879,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
         basesTuple->elts[base_idx++] = visit_expr(b).o;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
+    SmallVector<Box*, StlCompatAllocator<Box*>, 8> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
