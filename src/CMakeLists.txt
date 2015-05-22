@@ -68,6 +68,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		core/stats.cpp
 		core/threading.cpp
 		core/util.cpp
+		deadlock_debug_helper.cpp
 		gc/collector.cpp
 		gc/gc_alloc.cpp
 		gc/heap.cpp
@@ -83,6 +84,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/code.cpp
 		runtime/complex.cpp
 		runtime/ctxswitching.S
+		runtime/cxx_unwind.cpp
 		runtime/descr.cpp
 		runtime/dict.cpp
 		runtime/file.cpp

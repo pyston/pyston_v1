@@ -76,7 +76,12 @@ public:
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
-    static Value execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
+
+    // This must not be inlined, because we rely on being able to detect when we're inside of it (by checking whether
+    // %rip is inside its instruction range) during a stack-trace in order to produce tracebacks inside interpreted
+    // code.
+    __attribute__((__no_inline__)) static Value
+        execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -274,6 +279,9 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     }
 }
 
+// Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
+// them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
+// (sys._getframe & co), and for GC scanning.
 static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 

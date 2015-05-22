@@ -1,3 +1,6 @@
+# prints variables for debugging
+print-%: ; @echo $($*)
+
 # Disable builtin rules:
 .SUFFIXES:
 
@@ -955,11 +958,11 @@ CMAKE_SHAREDMODS := sharedmods ext_pyston
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
+	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_DBG)/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
 endif
 CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja

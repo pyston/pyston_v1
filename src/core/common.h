@@ -41,17 +41,6 @@
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-// GCC and clang handle always_inline very differently;
-// we mostly only care about it for the stdlib, so just remove the attributes
-// if we're not in clang
-#ifdef __clang__
-#define ALWAYSINLINE __attribute__((always_inline))
-#define NOINLINE __attribute__((noinline))
-#else
-#define ALWAYSINLINE
-#define NOINLINE
-#endif
-
 #if LLVMREV < 210783
 #define llvm_error_code llvm::error_code
 #else

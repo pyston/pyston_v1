@@ -42,7 +42,7 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
         get_doc = getattrInternal(fget, "__doc__", NULL);
     } catch (ExcInfo e) {
         if (!e.matches(Exception)) {
-            throw;
+            throw e;
         }
         get_doc = NULL;
     }

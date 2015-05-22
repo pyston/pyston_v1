@@ -20,6 +20,7 @@
 #include "codegen/memmgr.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
+#include "codegen/unwinding.h" // registerDynamicEhFrame
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -142,10 +143,12 @@ static const char _eh_frame_template[] =
     "\x00\x00\x00\x00" // terminator
     ;
 #endif
-#define EH_FRAME_SIZE sizeof(_eh_frame_template)
+#define EH_FRAME_SIZE (sizeof(_eh_frame_template) - 1) // omit string-terminating null byte
+
+static_assert(sizeof("") == 1, "strings are null-terminated");
 
 static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t func_size) {
-    memcpy(eh_frame_addr, _eh_frame_template, sizeof(_eh_frame_template));
+    memcpy(eh_frame_addr, _eh_frame_template, EH_FRAME_SIZE);
 
     int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
     int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
@@ -162,6 +165,9 @@ void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
     assert(eh_frame_addr == NULL);
     eh_frame_addr = malloc(EH_FRAME_SIZE);
     writeTrivialEhFrame(eh_frame_addr, func_addr, func_size);
+    // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
+    // TODO: can we omit the terminator in general?
+    registerDynamicEhFrame((uint64_t)func_addr, func_size, (uint64_t)eh_frame_addr, EH_FRAME_SIZE - 4);
     registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
 }
 

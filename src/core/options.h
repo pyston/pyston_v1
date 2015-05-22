@@ -20,7 +20,7 @@ namespace pyston {
 extern "C" {
 
 extern int GLOBAL_VERBOSITY;
-#define VERBOSITY(x) GLOBAL_VERBOSITY
+#define VERBOSITY(x) pyston::GLOBAL_VERBOSITY
 extern int PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR;
 // Version number we're targeting:
 extern int PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO, PYTHON_VERSION_HEX;

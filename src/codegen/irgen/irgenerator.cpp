@@ -1855,6 +1855,7 @@ private:
         static const std::string newline_str("\n");
         static const std::string space_str(" ");
 
+        // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
         int nvals = node->values.size();
         for (int i = 0; i < nvals; i++) {
             CompilerVariable* var = evalExpr(node->values[i], unw_info);

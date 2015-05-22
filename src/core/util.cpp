@@ -41,7 +41,12 @@ uint64_t getCPUTicks() {
     return rdtsc();
 }
 
+#if !DISABLE_TIMERS
+
 int Timer::level = 0;
+
+Timer::Timer(long min_usec) : min_usec(min_usec), ended(true) {
+}
 
 Timer::Timer(const char* desc, long min_usec) : min_usec(min_usec), ended(true) {
     restart(desc);
@@ -100,6 +105,8 @@ Timer::~Timer() {
             exit_callback(t);
     }
 }
+
+#endif // !DISABLE_TIMERS
 
 bool startswith(const std::string& s, const std::string& pattern) {
     if (pattern.size() > s.size())

@@ -90,6 +90,7 @@ private:
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy
     // that it's replacing.
+    // TODO: experiment with different IC eviction strategies.
     int next_slot_to_try;
 
     const StackInfo stack_info;

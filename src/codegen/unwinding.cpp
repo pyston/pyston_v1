@@ -59,14 +59,18 @@ namespace pyston {
 
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
-void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64_t* out_len) {
+// See http://www.airs.com/blog/archives/460 for some useful info.
+void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t func_addr, uint64_t* out_data, uint64_t* out_len) {
+    // NB. according to sully@msully.net, this is not legal C++ b/c type-punning through unions isn't allowed.
+    // But I can't find a compiler flag that warns on it, and it seems to work.
     union {
         uint8_t* u8;
         uint32_t* u32;
     };
     u32 = (uint32_t*)start_addr;
 
-    int cie_length = *u32;
+    int32_t cie_length = *u32;
+    assert(cie_length != 0xffffffff); // 0xffffffff would indicate a 64-bit DWARF format
     u32++;
 
     assert(*u32 == 0); // CIE ID
@@ -80,11 +84,35 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
 
     int nentries = 1;
     uw_table_entry* table_data = new uw_table_entry[nentries];
-    table_data->start_ip_offset = 0;
+    table_data->start_ip_offset = func_addr - start_addr;
     table_data->fde_offset = 4 + cie_length;
 
     *out_data = (uintptr_t)table_data;
     *out_len = nentries;
+}
+
+void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size) {
+    unw_dyn_info_t* dyn_info = new unw_dyn_info_t();
+    dyn_info->start_ip = code_addr;
+    dyn_info->end_ip = code_addr + code_size;
+    // TODO: It's not clear why we use UNW_INFO_FORMAT_REMOTE_TABLE instead of UNW_INFO_FORMAT_TABLE. kmod reports that
+    // he tried FORMAT_TABLE and it didn't work, but it wasn't clear why. However, using FORMAT_REMOTE_TABLE forces
+    // indirection through an access_mem() callback, and indeed, a function named access_mem() shows up in our `perf`
+    // results! So it's possible there's a performance win lurking here.
+    dyn_info->format = UNW_INFO_FORMAT_REMOTE_TABLE;
+
+    dyn_info->u.rti.name_ptr = 0;
+    dyn_info->u.rti.segbase = eh_frame_addr;
+    parseEhFrame(eh_frame_addr, eh_frame_size, code_addr, &dyn_info->u.rti.table_data, &dyn_info->u.rti.table_len);
+
+    if (VERBOSITY() >= 2)
+        printf("dyn_info = %p, table_data = %p\n", dyn_info, (void*)dyn_info->u.rti.table_data);
+    _U_dyn_register(dyn_info);
+
+    // TODO: it looks like libunwind does a linear search over anything dynamically registered,
+    // as opposed to the binary search it can do within a dyn_info.
+    // If we're registering a lot of dyn_info's, it might make sense to coalesce them into a single
+    // dyn_info that contains a binary search table.
 }
 
 class CFRegistry {
@@ -156,55 +184,59 @@ public:
 
         assert(g.cur_cf);
 
-        llvm_error_code ec;
+        uint64_t func_addr = 0; // remains 0 until we find a function
+
+        // Search through the symbols to find the function that got JIT'ed.
+        // (We only JIT one function at a time.)
         for (const auto& sym : Obj.symbols()) {
             llvm::object::SymbolRef::Type SymType;
-            if (sym.getType(SymType))
+            if (sym.getType(SymType) || SymType != llvm::object::SymbolRef::ST_Function)
                 continue;
-            if (SymType == llvm::object::SymbolRef::ST_Function) {
-                llvm::StringRef Name;
-                uint64_t Addr;
-                uint64_t Size;
-                if (sym.getName(Name))
-                    continue;
-                Addr = L.getSymbolLoadAddress(Name);
-                assert(Addr);
-                if (sym.getSize(Size))
-                    continue;
+
+            llvm::StringRef Name;
+            uint64_t Size;
+            if (sym.getName(Name) || sym.getSize(Size))
+                continue;
+
+            // Found a function!
+            assert(!func_addr);
+            func_addr = L.getSymbolLoadAddress(Name);
+            assert(func_addr);
 
 // TODO this should be the Python name, not the C name:
 #if LLVMREV < 208921
-                llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
-                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
-                                    | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+            llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
+                func_addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
+                                     | llvm::DILineInfoSpecifier::AbsoluteFilePath);
 #else
-                llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
-                    Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
-                                                          llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
+            llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
+                func_addr, Size,
+                llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
+                                          llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
 #endif
-                if (VERBOSITY() >= 3) {
-                    for (int i = 0; i < lines.size(); i++) {
-                        printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
-                               lines[i].second.FunctionName.c_str(), lines[i].first);
-                    }
+            if (VERBOSITY() >= 3) {
+                for (int i = 0; i < lines.size(); i++) {
+                    printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
+                           lines[i].second.FunctionName.c_str(), lines[i].first);
                 }
-
-                assert(g.cur_cf->code_start == 0);
-                g.cur_cf->code_start = Addr;
-                g.cur_cf->code_size = Size;
-                cf_registry.registerCF(g.cur_cf);
             }
+
+            assert(g.cur_cf->code_start == 0);
+            g.cur_cf->code_start = func_addr;
+            g.cur_cf->code_size = Size;
+            cf_registry.registerCF(g.cur_cf);
         }
 
-        // Currently-unused libunwind support:
-        llvm_error_code code;
+        assert(func_addr);
+
+        // Libunwind support:
         bool found_text = false, found_eh_frame = false;
         uint64_t text_addr = -1, text_size = -1;
         uint64_t eh_frame_addr = -1, eh_frame_size = -1;
 
         for (const auto& sec : Obj.sections()) {
             llvm::StringRef name;
-            code = sec.getName(name);
+            llvm_error_code code = sec.getName(name);
             assert(!code);
 
             uint64_t addr, size;
@@ -229,24 +261,9 @@ public:
 
         assert(found_text);
         assert(found_eh_frame);
+        assert(text_addr == func_addr);
 
-        unw_dyn_info_t* dyn_info = new unw_dyn_info_t();
-        dyn_info->start_ip = text_addr;
-        dyn_info->end_ip = text_addr + text_size;
-        dyn_info->format = UNW_INFO_FORMAT_REMOTE_TABLE;
-
-        dyn_info->u.rti.name_ptr = 0;
-        dyn_info->u.rti.segbase = eh_frame_addr;
-        parseEhFrame(eh_frame_addr, eh_frame_size, &dyn_info->u.rti.table_data, &dyn_info->u.rti.table_len);
-
-        if (VERBOSITY() >= 2)
-            printf("dyn_info = %p, table_data = %p\n", dyn_info, (void*)dyn_info->u.rti.table_data);
-        _U_dyn_register(dyn_info);
-
-        // TODO: it looks like libunwind does a linear search over anything dynamically registered,
-        // as opposed to the binary search it can do within a dyn_info.
-        // If we're registering a lot of dyn_info's, it might make sense to coalesce them into a single
-        // dyn_info that contains a binary search table.
+        registerDynamicEhFrame(text_addr, text_size, eh_frame_addr, eh_frame_size);
     }
 };
 
@@ -513,6 +530,36 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
+// To produce a traceback, we:
+//
+// 1. Use libunwind to produce a cursor into our stack.
+//
+// 2. Grab the next frame in the stack and check what function it is from. There are four options:
+//
+//    (a) A JIT-compiled Python function.
+//    (b) ASTInterpreter::execute() in codegen/ast_interpreter.cpp.
+//    (c) generatorEntry() in runtime/generator.cpp.
+//    (d) Something else.
+//
+//    By cases:
+//
+//    (2a, 2b) If the previous frame we visited was an OSR frame (which we know from its CompiledFunction*), then we
+//    skip this frame (it's the frame we replaced on-stack) and keep unwinding. (FIXME: Why are we guaranteed that we
+//    on-stack-replaced at most one frame?) Otherwise, we found a frame for our traceback! Proceed to step 3.
+//
+//    (2c) Continue unwinding in the stack of whatever called the generator. This involves some hairy munging of
+//    undocumented fields in libunwind structs to swap the context.
+//
+//    (2d) Ignore it and keep unwinding. It's some C or C++ function that we don't want in our traceback.
+//
+// 3. We've found a frame for our traceback, along with a CompiledFunction* and some other information about it.
+//
+//    We grab the current statement it is in (as an AST_stmt*) and use it and the CompiledFunction*'s source info to
+//    produce the line information for the traceback. For JIT-compiled functions, getting the statement involves the
+//    CF's location_map.
+//
+// 4. Unless we've hit the end of the stack, go to 2 and keep unwinding.
+//
 static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
     STAT_TIMER(t0, "us_timer_gettraceback");

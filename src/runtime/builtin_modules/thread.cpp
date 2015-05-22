@@ -88,6 +88,9 @@ Box* startNewThread(Box* target, Box* args, Box* kw) {
  * codes in the return value of the sem_ calls (like the pthread_ functions).
  * Correct implementations return -1 and put the code in errno. This supports
  * either.
+ *
+ * NOTE (2015-05-14): According to `man pthread_mutex_lock` on my system (Ubuntu
+ * 14.10), returning the error code is expected behavior. - rntz
  */
 static int fix_status(int status) {
     return (status == -1) ? errno : status;
@@ -134,6 +137,7 @@ public:
 
         success = (status == 0) ? 1 : 0;
 
+        RELEASE_ASSERT(status == 0 || !waitflag, "could not lock mutex! error %d", status);
         return boxBool(status == 0);
     }
 
