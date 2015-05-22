@@ -134,6 +134,7 @@ public:
 
         success = (status == 0) ? 1 : 0;
 
+        RELEASE_ASSERT(status == 0 || !waitflag, "could not lock mutex! error %d", status);
         return boxBool(status == 0);
     }
 
