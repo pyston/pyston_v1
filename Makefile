@@ -949,12 +949,16 @@ $(CMAKE_SETUP_RELEASE):
 	@mkdir -p $(CMAKE_DIR_RELEASE)
 	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
 
+# Shared modules (ie extension modules that get built using pyston on setup.py) that we will ask CMake
+# to build.  You can flip this off to allow builds to continue even if self-hosting the sharedmods would fail.
+CMAKE_SHAREDMODS := sharedmods ext_pyston
+
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
