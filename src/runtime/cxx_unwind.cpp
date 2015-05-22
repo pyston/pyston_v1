@@ -646,7 +646,7 @@ namespace __cxxabiv1 {
 
 extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // we should only ever be throwing ExcInfos
-    ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
+    RELEASE_ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
 
     // Instead of allocating memory for this exception, we return a pointer to a pre-allocated thread-local variable.
     //
@@ -694,9 +694,14 @@ extern "C" void __cxa_end_catch() {
     // See comment in __cxa_begin_catch for why we don't clear the exception ferry here.
 }
 
+// This is the mangled symbol for the type info for pyston::ExcInfo.
+#define EXCINFO_TYPE_INFO _ZTIN6pyston7ExcInfoE
+extern "C" std::type_info EXCINFO_TYPE_INFO;
+
 extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
     assert(!pyston::in_cleanup_code);
     assert(exc_obj);
+    RELEASE_ASSERT(tinfo == &EXCINFO_TYPE_INFO, "can't throw a non-ExcInfo value! type info: %p", tinfo);
 
     if (VERBOSITY("cxx_unwind"))
         printf("***** __cxa_throw() *****\n");
