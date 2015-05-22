@@ -26,6 +26,9 @@ namespace pyston {
 
 uint64_t getCPUTicks();
 
+#define DISABLE_TIMERS 0
+
+#if !DISABLE_TIMERS
 class Timer {
 private:
     static int level;
@@ -57,6 +60,23 @@ public:
 
     uint64_t getStartTime() const { return start_time; }
 };
+
+#else // DISABLE_TIMERS
+class Timer {
+public:
+    Timer(const char* desc = NULL, long min_usec = -1) {}
+    Timer(long min_usec) {}
+
+    void setExitCallback(std::function<void(uint64_t)> _exit_callback) {}
+
+    void restart(const char* newdesc, long new_min_usec) {}
+    void restart(const char* newdesc = NULL) {}
+
+    long end() { return 0; }
+    long split(const char* newdesc = NULL) { return 0; }
+};
+
+#endif // #else DISABLE_TIMERS
 
 bool startswith(const std::string& s, const std::string& pattern);
 bool endswith(const std::string& s, const std::string& pattern);
