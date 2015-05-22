@@ -49,7 +49,7 @@ TEST_F(AnalysisTest, augassign) {
             ASSERT_TRUE(liveness->isLiveAtEnd(module->interned_strings->get("a"), block));
     }
 
-    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func), cfg, liveness.get(), scope_info);
+    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
 }
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
@@ -93,7 +93,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
         entry_descriptor->args[iter_str] = NULL;
         phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
     } else {
-        phis = computeRequiredPhis(ParamNames(func), cfg, liveness.get(), scope_info);
+        phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
     }
 
     // First, verify that we require phi nodes for the block we enter into.
