@@ -1647,6 +1647,8 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
 
     assembler::Assembler _a(start_addr, slowpath_start - start_addr);
     //_a.trap();
+    if (slowpath_start - start_addr > 20)
+        _a.jmp(assembler::JumpDestination::fromStart(slowpath_start - start_addr));
     _a.fillWithNops();
 
     assembler::Assembler assem(slowpath_start, end_addr - slowpath_start);
