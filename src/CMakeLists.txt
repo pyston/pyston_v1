@@ -84,6 +84,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/code.cpp
 		runtime/complex.cpp
 		runtime/ctxswitching.S
+		runtime/cxx_unwind.cpp
 		runtime/descr.cpp
 		runtime/dict.cpp
 		runtime/file.cpp

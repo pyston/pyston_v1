@@ -213,7 +213,7 @@ extern "C" Box* next(Box* iterator, Box* _default) {
     } catch (ExcInfo e) {
         if (_default && e.matches(StopIteration))
             return _default;
-        throw;
+        throw e;
     }
 }
 
