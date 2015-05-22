@@ -407,6 +407,8 @@ public:
 
     DEFAULT_CLASS_SIMPLE(float_cls);
 };
+static_assert(sizeof(BoxedFloat) == sizeof(PyFloatObject), "");
+static_assert(offsetof(BoxedFloat, d) == offsetof(PyFloatObject, ob_fval), "");
 
 class BoxedComplex : public Box {
 public:
