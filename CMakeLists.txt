@@ -71,15 +71,22 @@ endif()
 
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-# llvm and clang patches
+# llvm, clang, and libunwind patches
 add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 
+set(LIBUNWIND_PATCHES
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0001-pyston-add-lots-of-comments.patch
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch)
+
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
-                   COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   COMMAND git submodule update --init
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
                    COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
-                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules
+                   DEPENDS ${LIBUNWIND_PATCHES})
 add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 
 # llvm
