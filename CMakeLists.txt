@@ -107,13 +107,17 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   set(LIBUNWIND_DEBUG_CFLAGS "CFLAGS=-O0 -g")
   set(LIBUNWIND_DEBUG "--enable-debug")
   set(LIBUNWIND_DEBUG_FRAME "--enable-debug-frame")
+  set(LIBUNWIND_CONSERVATIVE_CHECKS "--enable-conservative-checks")
+else()
+  set(LIBUNWIND_CONSERVATIVE_CHECKS "--disable-conservative-checks")
 endif()
 ExternalProject_Add(libunwind
                     PREFIX libunwind
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
+                    # TODO: more accurate DEPENDS - should depend on *contents* of libunwind/ source directory
                     DEPENDS gitsubmodules
                     UPDATE_COMMAND autoreconf -i
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
