@@ -949,12 +949,16 @@ $(CMAKE_SETUP_RELEASE):
 	@mkdir -p $(CMAKE_DIR_RELEASE)
 	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
 
+# Shared modules (ie extension modules that get built using pyston on setup.py) that we will ask CMake
+# to build.  You can flip this off to allow builds to continue even if self-hosting the sharedmods would fail.
+CMAKE_SHAREDMODS := sharedmods ext_pyston
+
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
@@ -1016,35 +1020,35 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension ./pyston$1 $$(ARGS)
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} ./pyston$1 $$(ARGS)
 dbg$1: pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
 nosearch_run$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension:$${PYTHONPATH} zsh -c 'ulimit -m $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,run$1_%)
 nosearch_dbg$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension:$${PYTHONPATH} zsh -c 'ulimit -m $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,dbg$1_%)
 
 ifneq ($$(ENABLE_VALGRIND),0)
 nosearch_memcheck$1_%: %.py pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} $$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memcheck$1_%)
 nosearch_memcheck_gdb$1_%: %.py pyston$1 $$(RUN_DEPS)
-	set +e; PYTHONPATH=test/test_extension $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
+	set +e; PYTHONPATH=test/test_extension:$${PYTHONPATH} $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
 	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.10.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
 $$(call make_search,memcheck_gdb$1_%)
 nosearch_memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} $$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memleaks$1_%)
 nosearch_cachegrind$1_%: %.py pyston$1 $$(RUN_DEPS)
-	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} $$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
 $$(call make_search,cachegrind$1_%)
 endif
 
 .PHONY: perf$1_%
 nosearch_perf$1_%: %.py pyston$1
-	PYTHONPATH=test/test_extension perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
+	PYTHONPATH=test/test_extension:$${PYTHONPATH} perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
 	@$(MAKE) perf_report
 $$(call make_search,perf$1_%)
 
@@ -1204,17 +1208,25 @@ sharedmods: $(SHAREDMODS_OBJS)
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_OBJS)
 
+# Makefile hackery: we can build test extensions with any build configuration of pyston,
+# so try to guess one that will end up being built anyway, and use that as the dependency.
+ifneq ($(findstring release,$(MAKECMDGOALS))$(findstring perf,$(MAKECMDGOALS)),)
+BUILD_PY:=pyston_release
+else
+BUILD_PY:=pyston_dbg
+endif
+
 # Hax: we want to generate multiple targets from a single rule, and run the rule only if the
 # dependencies have been updated, and only run it once for all the targets.
 # So just tell make to generate the first extension module, and that the non-first ones just
 # depend on the first one.
-$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | pyston_dbg
-	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg setup.py build
+$(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | $(BUILD_PY)
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../$(BUILD_PY) setup.py build
 	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
 	$(VERB) touch -c $(TEST_EXT_MODULE_OBJS)
 $(wordlist 2,9999,$(TEST_EXT_MODULE_OBJS)): $(firstword $(TEST_EXT_MODULE_OBJS))
-$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | pyston_dbg
-	$(VERB) cd $(TEST_DIR)/test_extension; time ../../pyston_dbg ../../from_cpython/setup.py build --build-lib ../../lib_pyston
+$(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | $(BUILD_PY)
+	$(VERB) cd $(TEST_DIR)/test_extension; time ../../$(BUILD_PY) ../../from_cpython/setup.py build --build-lib ../../lib_pyston
 	$(VERB) touch -c $(SHAREDMODS_OBJS)
 $(wordlist 2,9999,$(SHAREDMODS_OBJS)): $(firstword $(SHAREDMODS_OBJS))
 

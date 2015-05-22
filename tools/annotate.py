@@ -50,7 +50,7 @@ def lookupAsHeapAddr(n):
 
         while True:
             l = _heap_proc.stdout.readline()
-            if l.startswith("Pyston v0.2"):
+            if l.startswith("Pyston v"):
                 break
 
     _heap_proc.stdin.write("dumpAddr(%d)\nprint '!!!!'\n" % n)
@@ -136,11 +136,16 @@ equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
         addr = l.split(':')[0]
         count = counts.pop(addr.strip(), 0)
 
-        m = re.search("movabs \\$0x([0-9a-f]+),", l)
         extra = ""
+
+        m = re.search("movabs \\$0x([0-9a-f]{4,}),", l)
         if m:
             n = int(m.group(1), 16)
+            extra = lookupConstant(n)
 
+        m = re.search("mov    \\$0x([0-9a-f]{4,}),", l)
+        if m:
+            n = int(m.group(1), 16)
             extra = lookupConstant(n)
 
         if args.collapse_nops and l.endswith("\tnop"):

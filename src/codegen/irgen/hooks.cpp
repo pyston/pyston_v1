@@ -213,9 +213,16 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << "\033[34;1mDoing OSR-entry partial compile of " << source->fn << ":" << name
                << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
-        ss << " at effort level " << (int)effort;
+        ss << " at effort level " << (int)effort << '\n';
+
+        if (entry_descriptor && VERBOSITY("irgen") >= 2) {
+            for (const auto& p : entry_descriptor->args) {
+                ss << p.first.str() << ": " << p.second->debugName() << '\n';
+            }
+        }
+
         ss << "\033[0m";
-        printf("%s\n", ss.str().c_str());
+        printf("%s", ss.str().c_str());
     }
 
 #ifndef NDEBUG

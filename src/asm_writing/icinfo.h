@@ -120,6 +120,7 @@ public:
     void clear(ICSlotInfo* entry);
 
     bool shouldAttempt();
+    bool isMegamorphic();
 
     friend class ICSlotRewrite;
 };

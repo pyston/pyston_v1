@@ -518,10 +518,12 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 #if STAT_ALLOCATIONS
 #define ALLOC_STATS(cls)                                                                                               \
-    std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                            \
-    std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                    \
-    Stats::log(Stats::getStatId(per_name_alloc_name));                                                                 \
-    Stats::log(Stats::getStatId(per_name_allocsize_name), size);
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatId(per_name_alloc_name));                                                             \
+        Stats::log(Stats::getStatId(per_name_allocsize_name), size);                                                   \
+    }
 #define ALLOC_STATS_VAR(cls)                                                                                           \
     if (cls->tp_name) {                                                                                                \
         std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
@@ -550,7 +552,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 // asserts in the 1-arg operator new function:
 #define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
-        ALLOC_STATS(cls);                                                                                              \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
@@ -601,7 +602,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }                                                                                                                  \
                                                                                                                        \
     void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
-        ALLOC_STATS_VAR(default_cls)                                                                                   \
         assert(cls->tp_itemsize == itemsize);                                                                          \
         return BoxVar::operator new(size, cls, nitems);                                                                \
     }                                                                                                                  \

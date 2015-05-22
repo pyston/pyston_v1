@@ -111,9 +111,12 @@ static unsigned bytesAllocatedSinceCollection;
 static __thread unsigned thread_bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 10000000
 
+static StatCounter gc_registered_bytes("gc_registered_bytes");
+
 void registerGCManagedBytes(size_t bytes) {
     thread_bytesAllocatedSinceCollection += bytes;
     if (unlikely(thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4)) {
+        gc_registered_bytes.log(thread_bytesAllocatedSinceCollection);
         bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
         thread_bytesAllocatedSinceCollection = 0;
 
