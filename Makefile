@@ -1,3 +1,6 @@
+# prints variables for debugging
+print-%: ; @echo $($*)
+
 # Disable builtin rules:
 .SUFFIXES:
 
