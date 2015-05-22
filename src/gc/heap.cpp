@@ -127,29 +127,15 @@ void _bytesAllocatedTripped() {
 
 // TODO: Compare with gcmodule.c:has_finalizer
 bool hasFinalizer(Box* b) {
-    static BoxedString* _del_str = static_cast<BoxedString*>(PyString_InternFromString("__mydel__"));
-    if (b == NULL)
-        return true;
-
-    Box* del_attr = typeLookup(b->cls, _del_str->s(), NULL);
-    return del_attr || b->cls->simple_destructor || b->cls->tp_dealloc || b->cls->tp_del;
+    return b->cls->simple_destructor || b->cls->tp_dealloc || b->cls->tp_del;
 }
 
 void finalizeIfNeeded(Box* b) {
-    static BoxedString* _del_str = static_cast<BoxedString*>(PyString_InternFromString("__mydel__"));
-    if (b == NULL)
-        return;
-
     GCAllocation* al = GCAllocation::fromUserData(b);
     setFinalized(al);
 
-    // Temporary dummy finalizer for testing.
-    Box* del_attr = typeLookup(b->cls, _del_str->s(), NULL);
-    if (del_attr) {
-        callattr(b, _del_str, {.cls_only = false, .null_on_nonexistent = true }, ArgPassSpec(0, 0, false, false), NULL,
-                 NULL, NULL, NULL, NULL);
-    } else if (b->cls->tp_del) {
-        // b->cls->tp_del(b);
+    if (b->cls->tp_del) {
+        b->cls->tp_del(b);
     } else if (b->cls->simple_destructor) {
         b->cls->simple_destructor(b);
     } else if (b->cls->tp_dealloc) {

@@ -17,8 +17,6 @@ class C(object):
         self.index = index
     def __del__(self):
         print "deleted", self.index
-    def __mydel__(self):
-        print "deleted", self.index
 
 def test():
     c1 = C(1)

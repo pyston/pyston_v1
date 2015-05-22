@@ -544,10 +544,6 @@ void runCollection() {
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_gc_collection");
 
-    // Temporary hack to initialize the boxed strings.
-    hasFinalizer(NULL);
-    finalizeIfNeeded(NULL);
-
     ncollections++;
 
     if (VERBOSITY("gc") >= 2)

@@ -1,4 +1,3 @@
-# expected: fail
 import gc
 
 unordered_finalize = {}
@@ -8,7 +7,7 @@ ordered_finalize_decreasing = []
 class C(object):
     def __init__(self, index):
         self.index = index
-    def __mydel__(self):
+    def __del__(self):
         unordered_finalize[self.index] = True
 
 class D(object):
@@ -16,7 +15,7 @@ class D(object):
         self.index = index
         self.ref = None
         self.append_list = append_list
-    def __mydel__(self):
+    def __del__(self):
         self.append_list.append(self.index)
 
 def foo():

@@ -973,6 +973,21 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     }
 }
 
+static PyObject* slot_tp_del(PyObject* self) noexcept {
+    try {
+        // TODO: runtime ICs?
+        static BoxedString* del_str = static_cast<BoxedString*>(PyString_InternFromString("__del__"));
+        Box* del_attr = typeLookup(self->cls, del_str->s(), NULL);
+        assert(del_attr);
+
+        return callattr(self, del_str, {.cls_only = false, .null_on_nonexistent = true },
+                        ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpinit", SLOT_AVOIDABILITY(self));
 
@@ -1461,6 +1476,7 @@ static slotdef slotdefs[]
                                                                           "see help(type(x)) for signature",
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+        TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
