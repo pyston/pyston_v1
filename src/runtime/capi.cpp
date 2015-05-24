@@ -301,8 +301,13 @@ extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcep
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    try {
+        delitem(o, key);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" long PyObject_Hash(PyObject* o) noexcept {
@@ -322,6 +327,63 @@ extern "C" long PyObject_HashNotImplemented(PyObject* self) noexcept {
 extern "C" PyObject* _PyObject_NextNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "'%.200s' object is not iterable", Py_TYPE(self)->tp_name);
     return NULL;
+}
+
+extern "C" long _Py_HashDouble(double v) noexcept {
+    double intpart, fractpart;
+    int expo;
+    long hipart;
+    long x; /* the final hash value */
+            /* This is designed so that Python numbers of different types
+             * that compare equal hash to the same value; otherwise comparisons
+             * of mapping keys will turn out weird.
+             */
+
+    if (!std::isfinite(v)) {
+        if (Py_IS_INFINITY(v))
+            return v < 0 ? -271828 : 314159;
+        else
+            return 0;
+    }
+    fractpart = modf(v, &intpart);
+    if (fractpart == 0.0) {
+        /* This must return the same hash as an equal int or long. */
+        if (intpart > LONG_MAX / 2 || -intpart > LONG_MAX / 2) {
+            /* Convert to long and use its hash. */
+            PyObject* plong; /* converted to Python long */
+            plong = PyLong_FromDouble(v);
+            if (plong == NULL)
+                return -1;
+            x = PyObject_Hash(plong);
+            Py_DECREF(plong);
+            return x;
+        }
+        /* Fits in a C long == a Python int, so is its own hash. */
+        x = (long)intpart;
+        if (x == -1)
+            x = -2;
+        return x;
+    }
+    /* The fractional part is non-zero, so we don't have to worry about
+     * making this match the hash of some other type.
+     * Use frexp to get at the bits in the double.
+     * Since the VAX D double format has 56 mantissa bits, which is the
+     * most of any double format in use, each of these parts may have as
+     * many as (but no more than) 56 significant bits.
+     * So, assuming sizeof(long) >= 4, each part can be broken into two
+     * longs; frexp and multiplication are used to do that.
+     * Also, since the Cray double format has 15 exponent bits, which is
+     * the most of any double format in use, shifting the exponent field
+     * left by 15 won't overflow a long (again assuming sizeof(long) >= 4).
+     */
+    v = frexp(v, &expo);
+    v *= 2147483648.0;                       /* 2**31 */
+    hipart = (long)v;                        /* take the top 32 bits */
+    v = (v - (double)hipart) * 2147483648.0; /* get the next 32 bits */
+    x = hipart + (long)v + (expo << 15);
+    if (x == -1)
+        x = -2;
+    return x;
 }
 
 extern "C" long _Py_HashPointer(void* p) noexcept {

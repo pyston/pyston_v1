@@ -728,6 +728,14 @@ Box* floatTrunc(BoxedFloat* self) {
     return PyLong_FromDouble(wholepart);
 }
 
+Box* floatHash(BoxedFloat* self) {
+    if (!isSubclass(self->cls, float_cls))
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'float' object but received a '%s'",
+                       getTypeName(self));
+
+    return boxInt(_Py_HashDouble(self->d));
+}
+
 extern "C" void printFloat(double d) {
     std::string s = floatFmt(d, 12, 'g');
     printf("%s", s.c_str());
@@ -1475,6 +1483,7 @@ void setupFloat() {
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
+    float_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)floatHash, BOXED_INT, 1)));
 
     float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
     float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));

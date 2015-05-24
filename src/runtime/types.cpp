@@ -1142,6 +1142,16 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssi
     return 0;
 }
 
+extern "C" PyObject* PySlice_New(PyObject* start, PyObject* stop, PyObject* step) noexcept {
+    if (step == NULL)
+        step = Py_None;
+    if (start == NULL)
+        start = Py_None;
+    if (stop == NULL)
+        stop = Py_None;
+    return createSlice(start, stop, step);
+}
+
 Box* typeRepr(BoxedClass* self) {
     std::string O("");
     llvm::raw_string_ostream os(O);

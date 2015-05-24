@@ -539,6 +539,24 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     return None;
 }
 
+extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) noexcept {
+    try {
+        if (!PyList_Check(op)) {
+            PyErr_BadInternalCall();
+            return -1;
+        }
+        if (newitem == NULL) {
+            PyErr_BadInternalCall();
+            return -1;
+        }
+        listInsert((BoxedList*)op, boxInt(where), newitem);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+}
+
 Box* listMul(BoxedList* self, Box* rhs) {
     STAT_TIMER(t0, "us_timer_listMul");
 

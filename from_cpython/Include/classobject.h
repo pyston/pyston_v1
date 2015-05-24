@@ -79,6 +79,8 @@ PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *) PYSTON_NOEXCEPT;
  */
 PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name) PYSTON_NOEXCEPT;
 
+// Pyston change: no longer macros
+#if 0
 /* Macros for direct access to these values. Type checks are *not*
    done, so use with care. */
 #define PyMethod_GET_FUNCTION(meth) \
@@ -87,6 +89,11 @@ PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name) PYSTO
 	(((PyMethodObject *)meth) -> im_self)
 #define PyMethod_GET_CLASS(meth) \
 	(((PyMethodObject *)meth) -> im_class)
+#else
+#define PyMethod_GET_FUNCTION(meth) PyMethod_Function((PyObject *)(meth))
+#define PyMethod_GET_SELF(meth) PyMethod_Self((PyObject *)(meth))
+#define PyMethod_GET_CLASS(meth) PyMethod_Class((PyObject *)(meth))
+#endif
 
 PyAPI_FUNC(int) PyClass_IsSubclass(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 

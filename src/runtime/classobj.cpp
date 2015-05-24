@@ -636,6 +636,30 @@ extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klas
     }
 }
 
+extern "C" PyObject* PyMethod_Function(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->func;
+}
+
+extern "C" PyObject* PyMethod_Self(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->obj;
+}
+
+extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->im_class;
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
