@@ -1934,17 +1934,6 @@ void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteA
     if (isSubclass(obj->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
-        if (attr == getattr_str || attr == getattribute_str) {
-            if (rewrite_args)
-                REWRITE_ABORTED("");
-            // Will have to embed the clear in the IC, so just disable the patching for now:
-            rewrite_args = NULL;
-
-            // TODO should put this clearing behavior somewhere else, since there are probably more
-            // cases in which we want to do it.
-            self->dependent_icgetattrs.invalidateAll();
-        }
-
         if (attr == "__base__" && self->getattr("__base__"))
             raiseExcHelper(TypeError, "readonly attribute");
 
@@ -3997,17 +3986,6 @@ extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewrite
     if (isSubclass(obj->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
-        if (attr == getattr_str || attr == getattribute_str) {
-            if (rewrite_args)
-                REWRITE_ABORTED("");
-            // Will have to embed the clear in the IC, so just disable the patching for now:
-            rewrite_args = NULL;
-
-            // TODO should put this clearing behavior somewhere else, since there are probably more
-            // cases in which we want to do it.
-            self->dependent_icgetattrs.invalidateAll();
-        }
-
         if (attr == "__base__" && self->getattr("__base__"))
             raiseExcHelper(TypeError, "readonly attribute");
 
@@ -4017,6 +3995,9 @@ extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewrite
             REWRITE_ABORTED("");
         }
     }
+
+    // Extra "use" of rewrite_args to make the compiler happy:
+    (void)rewrite_args;
 }
 
 extern "C" void delattrInternal(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args) {

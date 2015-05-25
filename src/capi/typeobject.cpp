@@ -2964,7 +2964,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     assert(cls->attrs.hcls == NULL);
     new (&cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 #define INITIALIZE(a) new (&(a)) decltype(a)
-    INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
     BoxedClass* base = cls->tp_base;

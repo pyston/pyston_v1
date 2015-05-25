@@ -152,12 +152,6 @@ public:
 
     HCAttrs attrs;
 
-    // If the user sets __getattribute__ or __getattr__, we will have to invalidate
-    // all getattr IC entries that relied on the fact that those functions didn't exist.
-    // Doing this via invalidation means that instance attr lookups don't have
-    // to guard on anything about the class.
-    ICInvalidator dependent_icgetattrs;
-
     // TODO: these don't actually get deallocated right now
     std::unique_ptr<CallattrIC> hasnext_ic, next_ic, repr_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
@@ -268,7 +262,6 @@ static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "
 static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, ob_type), "");
 static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
 static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
-static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(struct _typeobject, _dep_getattrs), "");
 static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
