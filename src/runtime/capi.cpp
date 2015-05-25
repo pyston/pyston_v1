@@ -461,8 +461,14 @@ extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexce
 }
 
 extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    try {
+        // Not sure if this is really the same:
+        delitem(o, boxInt(i));
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {

@@ -168,3 +168,8 @@ it = iter("hello world")
 print list(it)
 
 print "'{0}' '{1}'".format("Hello " * 3, "Hello " * -3)
+
+class C(object):
+    def __str__(self):
+        return "my class"
+print "{0}".format(C())
