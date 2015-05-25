@@ -88,3 +88,29 @@ def G9(**kwargs):
     for a in sorted(kwargs.keys()):
         yield a, kwargs[a]
 print list(G9(a="1", b="2", c="3", d="4", e="5"))
+
+class MyStopIteration(StopIteration):
+    pass
+def G10():
+    yield 1
+    yield 2
+    raise MyStopIteration, "test string"
+print "list(G10()):", list(G10())
+print "for i in G10():",
+for i in G10():
+    print i,
+print
+
+print "explicit t.next():"
+g10 = G10()
+g10.next()
+g10.next()
+try:
+    g10.next()
+except StopIteration as e:
+    print "Cought exc1:", type(e), e
+try:
+    g10.next()
+except StopIteration as e:
+    print "Cought exc2:", type(e), e
+

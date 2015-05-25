@@ -155,12 +155,17 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
 
     // propagate exception to the caller
     if (self->exception.type) {
+        assert(self->entryExited);
         freeGeneratorStack(self);
-        raiseRaw(self->exception);
+        // don't raise StopIteration exceptions because those are handled specially.
+        if (!self->exception.matches(StopIteration))
+            raiseRaw(self->exception);
+        return;
     }
 
     if (self->entryExited) {
         freeGeneratorStack(self);
+        self->exception = excInfoForRaise(StopIteration, None, None);
         return;
     }
 }
@@ -176,7 +181,17 @@ Box* generatorSend(Box* s, Box* v) {
 
     // throw StopIteration if the generator exited
     if (self->entryExited) {
-        raiseExcHelper(StopIteration, "");
+        // But we can't just create a new exc because the generator may have exited because of an explicit
+        // 'raise StopIterationSubClass, "test"' statement and we can't replace it with the generic StopIteration
+        // exception.
+        // That's why we set inside 'generatorSendInternal()' 'self->exception' to the raised StopIteration exception or
+        // create a new one if the generator exited implicit.
+        // CPython raises the custom exception just once, on the next generator 'next' it will we a normal StopIteration
+        // exc.
+        assert(self->exception.matches(StopIteration));
+        ExcInfo old_exc = self->exception;
+        self->exception = excInfoForRaise(StopIteration, None, None);
+        raiseRaw(old_exc);
     }
 
     return self->returnValue;
@@ -189,12 +204,16 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
     if (self->iterated_from__hasnext__)
         Py_FatalError(".throw called on generator last advanced with __hasnext__");
 
-    Box* exc_tb = args ? nullptr : args[0];
-    if (!exc_val)
-        exc_val = None;
-    if (!exc_tb)
-        exc_tb = None;
-    self->exception = excInfoForRaise(exc_cls, exc_val, exc_tb);
+    // don't overwrite self->exception if the generator already exited
+    // because it will contain the StopIteration exception to throw.
+    if (!self->entryExited) {
+        Box* exc_tb = args ? nullptr : args[0];
+        if (!exc_val)
+            exc_val = None;
+        if (!exc_tb)
+            exc_tb = None;
+        self->exception = excInfoForRaise(exc_cls, exc_val, exc_tb);
+    }
     return generatorSend(self, None);
 }
 
