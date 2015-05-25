@@ -536,6 +536,8 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
 
 HiddenClass* HiddenClass::getAttrwrapperChild() {
     assert(type == NORMAL);
+    assert(attrwrapper_offset == -1);
+
     if (!attrwrapper_child) {
         attrwrapper_child = new HiddenClass(this);
         attrwrapper_child->attrwrapper_offset = this->attributeArraySize();

@@ -500,6 +500,8 @@ public:
     bool nonzeroIC();
     Box* hasnextOrNullIC();
     Box* nextIC();
+
+    friend class AttrWrapper;
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 

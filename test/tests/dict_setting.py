@@ -44,6 +44,8 @@ class C(object):
         return 0
 c = C()
 c.attr = "test"
-c.__dict__.clear()
+d1 = c.__dict__
+d1.clear()
 print hasattr(c, "attr")
 print hasattr(c, "foo")
+print c.__dict__ is d1
