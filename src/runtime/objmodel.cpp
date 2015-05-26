@@ -4391,8 +4391,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
                base_heap_cls->nslots() * sizeof(BoxedHeapClass::SlotOffset));
     }
 
-    if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
-        made->giveAttr("__dict__", dict_descr);
+    if (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs())
+        made->setattr("__dict__", dict_descr, NULL);
 
     for (const auto& p : attr_dict->d) {
         auto k = coerceUnicodeToStr(p.first);

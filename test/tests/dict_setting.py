@@ -49,3 +49,14 @@ d1.clear()
 print hasattr(c, "attr")
 print hasattr(c, "foo")
 print c.__dict__ is d1
+
+dictproxy = C.__dict__
+print type(dictproxy)
+print "foo" in dictproxy
+print "foo" in dictproxy.keys()
+print type(dictproxy["foo"])
+print dictproxy == dict(C.__dict__)
+try:
+    dictproxy["test"] = "val"
+except Exception as e:
+    print e
