@@ -24,34 +24,42 @@ namespace {
 class SerializeASTVisitor : public ASTVisitor {
 private:
     FILE* file;
+    uint8_t checksum;
 
 public:
-    static unsigned int write(AST_Module* module, FILE* file) {
+    static std::pair<unsigned int, uint8_t> write(AST_Module* module, FILE* file) {
         SerializeASTVisitor visitor(file);
         unsigned long start_pos = ftell(file);
         visitor.writeASTMisc(module);
-        return ftell(file) - start_pos;
+        return std::make_pair(ftell(file) - start_pos, visitor.checksum);
     }
 
 private:
-    SerializeASTVisitor(FILE* file) : file(file) {}
+    SerializeASTVisitor(FILE* file) : file(file), checksum(0) {}
     virtual ~SerializeASTVisitor() {}
 
-    void writeByte(uint8_t v) { fwrite(&v, 1, sizeof(v), file); }
+    void writeByte(uint8_t v) {
+        fwrite(&v, 1, sizeof(v), file);
+        checksum ^= v;
+    }
 
     void writeShort(uint16_t v) {
-        v = llvm::sys::getSwappedBytes(v); // TODO: assumes little endian machine
-        fwrite(&v, 1, sizeof(v), file);
+        // I guess we use big-endian:
+        for (int i = 1; i >= 0; i--) {
+            writeByte((v >> (i * 8)) & 0xff);
+        }
     }
 
     void writeUInt(uint32_t v) {
-        v = llvm::sys::getSwappedBytes(v); // TODO: assumes little endian machine
-        fwrite(&v, 1, sizeof(v), file);
+        for (int i = 3; i >= 0; i--) {
+            writeByte((v >> (i * 8)) & 0xff);
+        }
     }
 
     void writeULL(uint64_t v) {
-        v = llvm::sys::getSwappedBytes(v); // TODO: assumes little endian machine
-        fwrite(&v, 1, sizeof(v), file);
+        for (int i = 7; i >= 0; i--) {
+            writeByte((v >> (i * 8)) & 0xff);
+        }
     }
 
     void writeDouble(double v) {
@@ -65,6 +73,9 @@ private:
     void writeString(const std::string& v) {
         writeShort(v.size());
         fwrite(v.c_str(), 1, v.size(), file);
+        for (int i = 0; i < v.size(); i++) {
+            checksum ^= v[i];
+        }
     }
 
     void writeString(const InternedString v) { writeString(v.str()); }
@@ -537,7 +548,7 @@ private:
 };
 }
 
-unsigned long serializeAST(AST_Module* module, FILE* file) {
+std::pair<unsigned long, uint8_t> serializeAST(AST_Module* module, FILE* file) {
     return SerializeASTVisitor::write(module, file);
 }
 }

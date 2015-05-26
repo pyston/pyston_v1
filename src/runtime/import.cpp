@@ -43,6 +43,7 @@ Box* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn.c_str());
 
     AST_Module* ast = caching_parse_file(fn.c_str());
+    assert(ast);
     try {
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {
@@ -67,6 +68,7 @@ static Box* createAndRunModule(const std::string& name, const std::string& fn, c
     module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
+    assert(ast);
     try {
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {

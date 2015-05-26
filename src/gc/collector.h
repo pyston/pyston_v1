@@ -61,6 +61,12 @@ void enableGC();
 // These are mostly for debugging:
 bool isValidGCObject(void* p);
 bool isNonheapRoot(void* p);
+
+// Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
+// use these functions to mark that.  This is different from disableGC/enableGC, since it causes an
+// assert rather than delaying of the next GC.
+void startGCUnexpectedRegion();
+void endGCUnexpectedRegion();
 }
 }
 

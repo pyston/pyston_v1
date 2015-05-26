@@ -61,9 +61,14 @@ static bool unbuffered = false;
 static const char* argv0;
 static int pipefds[2];
 static void signal_parent_watcher() {
-    char buf[1];
-    int r = write(pipefds[1], buf, 1);
-    RELEASE_ASSERT(r == 1, "");
+    // Send our current PID to the parent, in case we forked.
+    union {
+        char buf[4];
+        int pid;
+    };
+    pid = getpid();
+    int r = write(pipefds[1], buf, 4);
+    RELEASE_ASSERT(r == 4, "");
 
     while (true) {
         sleep(1);
@@ -109,18 +114,35 @@ static void enableGdbSegfaultWatcher() {
         }
 
         while (true) {
-            char buf[1];
-            int r = read(pipefds[0], buf, 1);
+            union {
+                char buf[4];
+                int died_child_pid;
+            };
+            int r = read(pipefds[0], buf, 4);
 
-            if (r == 1) {
-                fprintf(stderr, "Parent process woken up by child; collecting backtrace and killing child\n");
+            if (r > 0) {
+                RELEASE_ASSERT(r == 4, "%d", r);
+
+                fprintf(stderr, "Parent process woken up by child %d; collecting backtrace and killing child\n",
+                        died_child_pid);
                 char pidbuf[20];
-                snprintf(pidbuf, sizeof(pidbuf), "%d", gdb_child_pid);
+                snprintf(pidbuf, sizeof(pidbuf), "%d", died_child_pid);
 
                 close(STDOUT_FILENO);
                 dup2(STDERR_FILENO, STDOUT_FILENO);
-                r = execlp("gdb", "gdb", "-p", pidbuf, argv0, "-batch", "-ex", "set pagination 0", "-ex",
-                           "thread apply all bt", "-ex", "kill", "-ex", "quit -11", NULL);
+                if (gdb_child_pid != died_child_pid) {
+                    // If the non-direct-child died, we want to backtrace the one that signalled us,
+                    // but we want to make sure to kill the original child.
+                    char origpid_buf[30];
+                    snprintf(origpid_buf, sizeof(origpid_buf), "attach %d", gdb_child_pid);
+
+                    r = execlp("gdb", "gdb", "-p", pidbuf, argv0, "-batch", "-ex", "set pagination 0", "-ex",
+                               "thread apply all bt", "-ex", "kill", "-ex", origpid_buf, "-ex", "kill", "-ex",
+                               "quit -11", NULL);
+                } else {
+                    r = execlp("gdb", "gdb", "-p", pidbuf, argv0, "-batch", "-ex", "set pagination 0", "-ex",
+                               "thread apply all bt", "-ex", "kill", "-ex", "quit -11", NULL);
+                }
                 RELEASE_ASSERT(0, "%d %d %s", r, errno, strerror(errno));
             }
 

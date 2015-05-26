@@ -351,6 +351,17 @@ void disableGC() {
 
 static int ncollections = 0;
 static bool should_not_reenter_gc = false;
+
+void startGCUnexpectedRegion() {
+    RELEASE_ASSERT(!should_not_reenter_gc, "");
+    should_not_reenter_gc = true;
+}
+
+void endGCUnexpectedRegion() {
+    RELEASE_ASSERT(should_not_reenter_gc, "");
+    should_not_reenter_gc = false;
+}
+
 void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
