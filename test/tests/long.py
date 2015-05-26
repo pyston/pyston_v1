@@ -106,3 +106,8 @@ print type(x)
 print type(long(C()))
 
 print repr(int("123456789123456789123456789", 16))
+
+a = 2389134823414823408429384238403228392384028439480234823
+print +a
+print +long.__new__(C, 5L)
+print type(+long.__new__(C, 5L))
