@@ -177,20 +177,29 @@ std::string getInplaceOpName(int op_type) {
 // Maybe better name is "swapped" -- it's what the runtime will try if the normal op
 // name fails, it will switch the order of the lhs/rhs and call the reverse op.
 // Calling it "reverse" because that's what I'm assuming the 'r' stands for in ex __radd__
-std::string getReverseOpName(int op_type) {
+int getReverseCmpOp(int op_type, bool& success) {
+    success = true;
     if (op_type == AST_TYPE::Lt)
-        return getOpName(AST_TYPE::Gt);
+        return AST_TYPE::Gt;
     if (op_type == AST_TYPE::LtE)
-        return getOpName(AST_TYPE::GtE);
+        return AST_TYPE::GtE;
     if (op_type == AST_TYPE::Gt)
-        return getOpName(AST_TYPE::Lt);
+        return AST_TYPE::Lt;
     if (op_type == AST_TYPE::GtE)
-        return getOpName(AST_TYPE::LtE);
+        return AST_TYPE::LtE;
     if (op_type == AST_TYPE::NotEq)
-        return getOpName(AST_TYPE::NotEq);
+        return AST_TYPE::NotEq;
     if (op_type == AST_TYPE::Eq)
-        return getOpName(AST_TYPE::Eq);
+        return AST_TYPE::Eq;
+    success = false;
+    return op_type;
+}
 
+std::string getReverseOpName(int op_type) {
+    bool reversed = false;
+    op_type = getReverseCmpOp(op_type, reversed);
+    if (reversed)
+        return getOpName(op_type);
     const std::string& normal_name = getOpName(op_type);
     return "__r" + normal_name.substr(2);
 }

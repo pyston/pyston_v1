@@ -699,8 +699,7 @@ _PyWeakref_ProxyType = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    // Pyston change:
-    0, //proxy_compare,                      /* tp_compare */
+    proxy_compare,                      /* tp_compare */
     (reprfunc)proxy_repr,               /* tp_repr */
     &proxy_as_number,                   /* tp_as_number */
     &proxy_as_sequence,                 /* tp_as_sequence */
@@ -737,7 +736,7 @@ _PyWeakref_CallableProxyType = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0, //proxy_compare,                      /* tp_compare */
+    proxy_compare,                      /* tp_compare */
     (unaryfunc)proxy_repr,              /* tp_repr */
     &proxy_as_number,                   /* tp_as_number */
     &proxy_as_sequence,                 /* tp_as_sequence */

@@ -59,6 +59,9 @@ class C(object):
     def __ge__(self, rhs):
         print "ge"
         return False
+    def __cmp__(self, rhs):
+        print "cmp"
+        assert False
 
 for i in xrange(2):
     print C("") > 2
@@ -113,3 +116,34 @@ d = {}
 for i in xrange(20):
     d[NonboolEq(i % 10)] = i
 print len(d), sorted(d.values())
+
+class C(object):
+    def __init__(self, n):
+        self.n = n
+    
+    def __eq__(self, rhs):
+        print "eq"
+        if isinstance(rhs, C):
+            return self.n == rhs.n
+        return self.n == int(rhs)
+
+    def __cmp__(self, rhs):
+        print "cmp"
+        v = 0
+        if isinstance(rhs, C):
+            v = rhs.n
+        else:
+            v = int(rhs)
+        if self.n < v:
+            return -2L
+        elif self.n > v:
+            return 2L
+        return 0L
+
+for lhs in (C(0), C(1), 0, 1):
+    for rhs in (C(0), C(1), 0, 1):
+        print lhs < rhs, lhs == rhs, lhs != rhs, lhs > rhs, lhs <= rhs, lhs >= rhs
+del C.__eq__
+for lhs in (C(0), C(1), 0, 1):
+    for rhs in (C(0), C(1), 0, 1):
+        print lhs < rhs, lhs == rhs, lhs != rhs, lhs > rhs, lhs <= rhs, lhs >= rhs
