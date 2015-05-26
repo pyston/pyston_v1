@@ -78,7 +78,8 @@ add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 
 set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0001-pyston-add-lots-of-comments.patch
-  ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch)
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0003-use-a-sorted-array-for-registered-objects-and-do-a-b.patch)
 
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
                    COMMAND git submodule update --init
