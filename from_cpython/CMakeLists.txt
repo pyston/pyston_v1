@@ -78,6 +78,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     bytes_methods.c
     capsule.c
     cobject.c
+    dictproxy.c
     exceptions.c
     floatobject.c
     iterobject.c

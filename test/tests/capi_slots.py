@@ -38,6 +38,8 @@ for i in xrange(3):
     print float(t)
     print hex(t)
     print oct(t)
+print slots_test.SlotsTesterNum(0) == slots_test.SlotsTesterNum(0)
+print slots_test.SlotsTesterNum(0) == slots_test.SlotsTesterNum(1)
 
 for i in slots_test.SlotsTesterSeq(6):
     print i

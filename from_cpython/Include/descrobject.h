@@ -80,6 +80,8 @@ PyAPI_DATA(PyTypeObject) PyWrapperDescr_Type;
 PyAPI_DATA(PyTypeObject) PyDictProxy_Type;
 PyAPI_DATA(PyTypeObject) PyGetSetDescr_Type;
 PyAPI_DATA(PyTypeObject) PyMemberDescr_Type;
+#else
+PyAPI_DATA(PyTypeObject) PyDictProxy_Type;
 #endif
 // (Pyston TODO: add #defines to our names)
 PyAPI_DATA(PyTypeObject*) wrapperdescr_cls;

@@ -467,6 +467,140 @@ Box* instanceDelitem(Box* _inst, Box* key) {
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
+/* Try a 3-way comparison, returning an int; v is an instance.  Return:
+   -2 for an exception;
+   -1 if v < w;
+   0 if v == w;
+   1 if v > w;
+   2 if this particular 3-way comparison is not implemented or undefined.
+*/
+static int half_cmp(PyObject* v, PyObject* w) noexcept {
+    // static PyObject* cmp_obj;
+    PyObject* args;
+    PyObject* cmp_func;
+    PyObject* result;
+    long l;
+
+    assert(PyInstance_Check(v));
+
+// Pyston change:
+#if 0
+        if (cmp_obj == NULL) {
+            cmp_obj = PyString_InternFromString("__cmp__");
+            if (cmp_obj == NULL)
+                return -2;
+        }
+
+        cmp_func = PyObject_GetAttr(v, cmp_obj);
+
+        if (cmp_func == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+                return -2;
+            PyErr_Clear();
+            return 2;
+        }
+#else
+    try {
+        cmp_func = _instanceGetattribute(v, boxStrConstant("__cmp__"), false);
+        if (!cmp_func)
+            return 2;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -2;
+    }
+#endif
+
+    args = PyTuple_Pack(1, w);
+    if (args == NULL) {
+        Py_DECREF(cmp_func);
+        return -2;
+    }
+
+    result = PyEval_CallObject(cmp_func, args);
+    Py_DECREF(args);
+    Py_DECREF(cmp_func);
+
+    if (result == NULL)
+        return -2;
+
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return 2;
+    }
+
+    l = PyInt_AsLong(result);
+    Py_DECREF(result);
+    if (l == -1 && PyErr_Occurred()) {
+        PyErr_SetString(PyExc_TypeError, "comparison did not return an int");
+        return -2;
+    }
+
+    return l < 0 ? -1 : l > 0 ? 1 : 0;
+}
+
+/* Try a 3-way comparison, returning an int; either v or w is an instance.
+   We first try a coercion.  Return:
+   -2 for an exception;
+   -1 if v < w;
+   0 if v == w;
+   1 if v > w;
+   2 if this particular 3-way comparison is not implemented or undefined.
+*/
+static int instance_compare(PyObject* v, PyObject* w) noexcept {
+    int c;
+
+    c = PyNumber_CoerceEx(&v, &w);
+    if (c < 0)
+        return -2;
+    if (c == 0) {
+        /* If neither is now an instance, use regular comparison */
+        if (!PyInstance_Check(v) && !PyInstance_Check(w)) {
+            c = PyObject_Compare(v, w);
+            Py_DECREF(v);
+            Py_DECREF(w);
+            if (PyErr_Occurred())
+                return -2;
+            return c < 0 ? -1 : c > 0 ? 1 : 0;
+        }
+    } else {
+        /* The coercion didn't do anything.
+           Treat this the same as returning v and w unchanged. */
+        Py_INCREF(v);
+        Py_INCREF(w);
+    }
+
+    if (PyInstance_Check(v)) {
+        c = half_cmp(v, w);
+        if (c <= 1) {
+            Py_DECREF(v);
+            Py_DECREF(w);
+            return c;
+        }
+    }
+    if (PyInstance_Check(w)) {
+        c = half_cmp(w, v);
+        if (c <= 1) {
+            Py_DECREF(v);
+            Py_DECREF(w);
+            if (c >= -1)
+                c = -c;
+            return c;
+        }
+    }
+    Py_DECREF(v);
+    Py_DECREF(w);
+    return 2;
+}
+
+Box* instanceCompare(Box* _inst, Box* other) {
+    int rtn = instance_compare(_inst, other);
+    if (rtn == 2)
+        return NotImplemented;
+    if (rtn == -2)
+        throwCAPIException();
+    return boxInt(rtn);
+}
+
 Box* instanceContains(Box* _inst, Box* key) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -695,6 +829,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__cmp__", new BoxedFunction(boxRTFunction((void*)instanceCompare, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
     instance_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)instanceIter, UNKNOWN, 1)));

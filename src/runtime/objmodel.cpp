@@ -3620,6 +3620,28 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     return rtn;
 }
 
+static bool convert3wayCompareResultToBool(Box* v, int op_type) {
+    long result = PyInt_AsLong(v);
+    if (result == -1 && PyErr_Occurred())
+        throwCAPIException();
+    switch (op_type) {
+        case AST_TYPE::Eq:
+            return result == 0;
+        case AST_TYPE::NotEq:
+            return result != 0;
+        case AST_TYPE::Lt:
+            return result < 0;
+        case AST_TYPE::Gt:
+            return result > 0;
+        case AST_TYPE::LtE:
+            return result < 0 || result == 0;
+        case AST_TYPE::GtE:
+            return result > 0 || result == 0;
+        default:
+            RELEASE_ASSERT(0, "op type %d not implemented", op_type);
+    };
+}
+
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args) {
     if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
         bool neg = (op_type == AST_TYPE::IsNot);
@@ -3704,6 +3726,18 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (rrtn != NULL && rrtn != NotImplemented)
         return rrtn;
 
+    std::string cmp_name = "__cmp__";
+    lrtn = callattrInternal1(lhs, &cmp_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
+    if (lrtn && lrtn != NotImplemented) {
+        return boxBool(convert3wayCompareResultToBool(lrtn, op_type));
+    }
+    rrtn = callattrInternal1(rhs, &cmp_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+    if (rrtn && rrtn != NotImplemented) {
+        bool success = false;
+        int reversed_op = getReverseCmpOp(op_type, success);
+        assert(success);
+        return boxBool(convert3wayCompareResultToBool(rrtn, reversed_op));
+    }
 
     if (op_type == AST_TYPE::Eq)
         return boxBool(lhs == rhs);
@@ -4357,8 +4391,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
                base_heap_cls->nslots() * sizeof(BoxedHeapClass::SlotOffset));
     }
 
-    if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
-        made->giveAttr("__dict__", dict_descr);
+    if (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs())
+        made->setattr("__dict__", dict_descr, NULL);
 
     for (const auto& p : attr_dict->d) {
         auto k = coerceUnicodeToStr(p.first);

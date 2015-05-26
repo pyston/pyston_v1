@@ -496,13 +496,19 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
+        return PyDictProxy_New(obj->getAttrWrapper());
+    abort();
+}
+
+static Box* typeSubDict(Box* obj, void* context) {
+    if (obj->cls->instancesHaveHCAttrs())
         return obj->getAttrWrapper();
     if (obj->cls->instancesHaveDictAttrs())
         return obj->getDict();
     abort();
 }
 
-static void typeSetDict(Box* obj, Box* val, void* context) {
+static void typeSubSetDict(Box* obj, Box* val, void* context) {
     if (obj->cls->instancesHaveDictAttrs()) {
         RELEASE_ASSERT(val->cls == dict_cls, "");
         obj->setDict(static_cast<BoxedDict*>(val));
@@ -1635,6 +1641,20 @@ public:
         return new AttrWrapperIter(self);
     }
 
+    static Box* eq(Box* _self, Box* _other) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
+        BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
+        assert(dict->cls == dict_cls);
+        const std::string eq_str = "__eq__";
+        return callattrInternal(dict, &eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
+                                NULL);
+    }
+
+    static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
+
     friend class AttrWrapperIter;
 };
 
@@ -2437,9 +2457,9 @@ void setupRuntime() {
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, typeSetDict, NULL);
+    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeSubDict, typeSubSetDict, NULL);
     gc::registerPermanentRoot(dict_descr);
-    type_cls->giveAttr("__dict__", dict_descr);
+    type_cls->giveAttr("__dict__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, NULL, NULL));
 
 
     instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &instancemethodGCHandler, 0,
@@ -2619,6 +2639,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::eq, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::ne, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
@@ -2652,6 +2674,7 @@ void setupRuntime() {
     PyCallIter_AddHasNext();
     PyType_Ready(&PyCallIter_Type);
     PyType_Ready(&PyCObject_Type);
+    PyType_Ready(&PyDictProxy_Type);
 
     initerrno();
     init_sha();

@@ -439,8 +439,17 @@ Box* dictContains(BoxedDict* self, Box* k) {
 
 /* Return 1 if `key` is in dict `op`, 0 if not, and -1 on error. */
 extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
-    BoxedDict* mp = (BoxedDict*)op;
+
     try {
+        if (op->cls == attrwrapper_cls) {
+            Box* rtn = PyObject_CallMethod(op, "__contains__", "O", key);
+            if (!rtn)
+                return -1;
+            return rtn == True;
+        }
+
+        BoxedDict* mp = (BoxedDict*)op;
+        assert(isSubclass(mp->cls, dict_cls));
         return mp->getOrNull(key) ? 1 : 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
