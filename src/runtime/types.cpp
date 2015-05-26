@@ -144,8 +144,8 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
-    const size_t size = _PyObject_VAR_SIZE(type, nitems);
-    /* note that we need to add one, for the sentinel */
+    const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
+    /* note that we need to add one, for the sentinel [CPython comment] */
 
     if (PyType_IS_GC(type))
         obj = _PyObject_GC_Malloc(size);
@@ -2215,6 +2215,8 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
 
     assert(gc::isValidGCObject(op));
     assert(gc::isValidGCObject(tp));
+
+    gc::setIsPythonObject(op);
 
     Py_TYPE(op) = tp;
 

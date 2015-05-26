@@ -390,6 +390,7 @@ enum class GCKind : uint8_t {
     PRECISE = 3,
     UNTRACKED = 4,
     HIDDEN_CLASS = 5,
+    CONSERVATIVE_PYTHON = 6,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);

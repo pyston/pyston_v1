@@ -91,8 +91,12 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
 
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
+
+    gc::setIsPythonObject(op);
+
     Py_TYPE(op) = tp;
     op->ob_size = size;
+
     return op;
 }
 

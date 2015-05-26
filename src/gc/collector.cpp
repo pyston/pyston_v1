@@ -183,6 +183,16 @@ bool isValidGCObject(void* p) {
     return isNonheapRoot(p) || (global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
 }
 
+void setIsPythonObject(Box* b) {
+    auto al = global_heap.getAllocationFromInteriorPointer(b);
+    assert(al->user_data == (char*)b);
+    if (al->kind_id == GCKind::CONSERVATIVE) {
+        al->kind_id = GCKind::CONSERVATIVE_PYTHON;
+    } else {
+        assert(al->kind_id == GCKind::PYTHON);
+    }
+}
+
 static std::unordered_set<GCRootHandle*>* getRootHandles() {
     static std::unordered_set<GCRootHandle*> root_handles;
     return &root_handles;
@@ -289,7 +299,7 @@ void markPhase() {
         GCKind kind_id = al->kind_id;
         if (kind_id == GCKind::UNTRACKED) {
             continue;
-        } else if (kind_id == GCKind::CONSERVATIVE) {
+        } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
             uint32_t bytes = al->kind_data;
             if (DEBUG >= 2) {
                 if (global_heap.small_arena.contains(p)) {
