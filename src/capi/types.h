@@ -52,6 +52,8 @@ public:
 
     DEFAULT_CLASS(capifunc_cls);
 
+    PyCFunction getFunction() { return func; }
+
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
         return boxStrConstant(self->name);

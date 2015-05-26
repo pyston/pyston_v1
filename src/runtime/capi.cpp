@@ -1273,7 +1273,7 @@ extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
         PyErr_BadInternalCall();
         return NULL;
     }
-    return ((PyCFunctionObject*)op)->m_ml->ml_meth;
+    return static_cast<BoxedCApiFunction*>(op)->getFunction();
 }
 
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {

@@ -14,8 +14,8 @@ extern "C" {
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyCFunction_Type;
-PyAPI_DATA(PyTypeObject*) builtin_function_or_method_cls;
-#define PyCFunction_Type (*builtin_function_or_method_cls)
+PyAPI_DATA(PyTypeObject*) capifunc_cls;
+#define PyCFunction_Type (*capifunc_cls)
 
 #define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 
@@ -28,6 +28,8 @@ PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 
+// Pyston change: changed to function calls
+#if 0
 /* Macros for direct access to these values. Type checks are *not*
    done, so use with care. */
 #define PyCFunction_GET_FUNCTION(func) \
@@ -36,6 +38,13 @@ PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 	(((PyCFunctionObject *)func) -> m_self)
 #define PyCFunction_GET_FLAGS(func) \
 	(((PyCFunctionObject *)func) -> m_ml -> ml_flags)
+#endif
+#define PyCFunction_GET_FUNCTION(func) \
+        PyCFunction_GetFunction((PyObject*)(func))
+#define PyCFunction_GET_SELF(func) \
+        PyCFunction_GetSelf((PyObject*)(func))
+#define PyCFunction_GET_FLAGS(func) \
+        PyCFunction_GetFlags((PyObject*)(func))
 PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 struct PyMethodDef {
@@ -82,12 +91,15 @@ typedef struct PyMethodChain {
 PyAPI_FUNC(PyObject *) Py_FindMethodInChain(PyMethodChain *, PyObject *,
                                             const char *) PYSTON_NOEXCEPT;
 
+// Pyston change: not our format
+#if 0
 typedef struct {
     PyObject_HEAD
     PyMethodDef *m_ml; /* Description of the C function to call */
     PyObject    *m_self; /* Passed as 'self' arg to the C func, can be NULL */
     PyObject    *m_module; /* The __module__ attribute, can be anything */
 } PyCFunctionObject;
+#endif
 
 PyAPI_FUNC(int) PyCFunction_ClearFreeList(void) PYSTON_NOEXCEPT;
 
