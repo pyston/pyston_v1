@@ -1995,7 +1995,8 @@ float_getzero(PyObject *v, void *closure)
     return PyFloat_FromDouble(0.0);
 }
 
-static PyObject *
+// pyston change: make not static
+PyObject *
 float__format__(PyObject *self, PyObject *args)
 {
     PyObject *format_spec;

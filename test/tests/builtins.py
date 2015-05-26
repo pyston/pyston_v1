@@ -117,3 +117,7 @@ print bytearray(xrange(256))
 l = [2, 1, 3]
 print apply(sorted, [l])
 print apply(sorted, [l], { "reverse" : True })
+
+print format(5.0, '+')
+print format(5.011111111111, '+.6')
+print format("abc", '')
