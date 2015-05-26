@@ -89,7 +89,9 @@ struct ExcData {
         assert(this);
         assert(canary == CANARY_VALUE);
         assert(exc.type && exc.value && exc.traceback);
-        assert(gc::isValidGCObject(exc.type) && gc::isValidGCObject(exc.value) && gc::isValidGCObject(exc.traceback));
+        ASSERT(gc::isValidGCObject(exc.type), "%p", exc.type);
+        ASSERT(gc::isValidGCObject(exc.value), "%p", exc.value);
+        ASSERT(gc::isValidGCObject(exc.traceback), "%p", exc.traceback);
         assert(this == &exception_ferry);
     }
 };
@@ -601,9 +603,6 @@ static inline void unwind_loop(const ExcData* exc_data) {
 // The unwinder entry-point.
 static void unwind(const ExcData* exc) {
     exc->check();
-    if (exc->exc.value->hasattr("magic_break")) {
-        (void)(0 == 0);
-    }
     unwind_loop(exc);
     // unwind_loop returned, couldn't find any handler. ruh-roh.
     panic();
@@ -677,6 +676,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our
 // case, these are the same, and should always be &pyston::exception_ferry.
 extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
+    pyston::gc::endGCUnexpectedRegion();
     assert(exc_obj_in);
     pyston::us_unwind_resume_catch.log(pyston::per_thread_resume_catch_timer.end());
 
@@ -699,6 +699,7 @@ extern "C" void __cxa_end_catch() {
 extern "C" std::type_info EXCINFO_TYPE_INFO;
 
 extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
+    pyston::gc::startGCUnexpectedRegion();
     assert(!pyston::in_cleanup_code);
     assert(exc_obj);
     RELEASE_ASSERT(tinfo == &EXCINFO_TYPE_INFO, "can't throw a non-ExcInfo value! type info: %p", tinfo);
@@ -706,7 +707,9 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     if (VERBOSITY("cxx_unwind"))
         printf("***** __cxa_throw() *****\n");
 
-    pyston::unwind((const pyston::ExcData*)exc_obj);
+    const pyston::ExcData* exc_data = (const pyston::ExcData*)exc_obj;
+    exc_data->check();
+    pyston::unwind(exc_data);
 }
 
 extern "C" void* __cxa_get_exception_ptr(void* exc_obj_in) noexcept {
