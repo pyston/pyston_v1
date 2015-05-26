@@ -2018,6 +2018,14 @@ static int compareStringRefs(llvm::StringRef a, size_t a_pos, size_t len, llvm::
     return llvm::StringRef(a.data() + a_pos, len).compare(str);
 }
 
+extern "C" int _PyString_Eq(PyObject* o1, PyObject* o2) noexcept {
+    assert(PyString_Check(o1));
+    assert(PyString_Check(o2));
+    BoxedString* a = (BoxedString*)o1;
+    BoxedString* b = (BoxedString*)o2;
+    return a->s() == b->s();
+}
+
 Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     Box* end = _args[0];
 

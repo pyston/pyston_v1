@@ -226,7 +226,7 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
 }
 
 #ifdef Py_USING_UNICODE
-PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
+extern "C" PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
     PyObject* result;
     char* buffer = (char*)PyMem_MALLOC(length + 1);
 

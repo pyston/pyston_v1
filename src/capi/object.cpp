@@ -478,6 +478,16 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexc
     }
 }
 
+extern "C" int PyObject_HasAttr(PyObject* v, PyObject* name) noexcept {
+    PyObject* res = PyObject_GetAttr(v, name);
+    if (res != NULL) {
+        Py_DECREF(res);
+        return 1;
+    }
+    PyErr_Clear();
+    return 0;
+}
+
 extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) noexcept {
     PyObject* res = PyObject_GetAttrString(v, name);
     if (res != NULL) {

@@ -249,6 +249,15 @@ Box* setClear(BoxedSet* self, Box* v) {
     return None;
 }
 
+extern "C" int PySet_Clear(PyObject* set) noexcept {
+    if (!PySet_Check(set)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    ((BoxedSet*)set)->s.clear();
+    return 0;
+}
+
 Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");
 

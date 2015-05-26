@@ -127,6 +127,12 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'd':
                 return PyFloat_FromDouble(va_arg(*p_va, double));
 
+            case 'c': {
+                char p[1];
+                p[0] = (char)va_arg(*p_va, int);
+                return PyString_FromStringAndSize(p, 1);
+            }
+
             case 'N':
             case 'S':
             case 'O':

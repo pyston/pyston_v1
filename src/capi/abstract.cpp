@@ -1808,6 +1808,22 @@ non_integral_error:
     return NULL;
 }
 
+/* Add a check for embedded NULL-bytes in the argument. */
+static PyObject* int_from_string(const char* s, Py_ssize_t len) noexcept {
+    char* end;
+    PyObject* x;
+
+    x = PyInt_FromString(s, &end, 10);
+    if (x == NULL)
+        return NULL;
+    if (end != s + len) {
+        PyErr_SetString(PyExc_ValueError, "null byte in argument for int()");
+        Py_DECREF(x);
+        return NULL;
+    }
+    return x;
+}
+
 extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     PyNumberMethods* m;
     const char* buffer;
@@ -1837,7 +1853,7 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
         return PyInt_FromLong(io->n);
     }
 
-    PyObject* trunc_func = getattr(o, "__trunc__");
+    PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
     if (trunc_func) {
         PyObject* truncated = PyEval_CallObject(trunc_func, NULL);
         Py_DECREF(trunc_func);
@@ -1848,26 +1864,18 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     }
     PyErr_Clear(); /* It's not an error if  o.__trunc__ doesn't exist. */
 
-    // the remainder of PyNumber_Int deals with converting from unicode/string to int
-    fatalOrError(PyExc_NotImplementedError, "unimplemented string -> int conversion");
-    return nullptr;
-
-#if 0
     if (PyString_Check(o))
-      return int_from_string(PyString_AS_STRING(o),
-                 PyString_GET_SIZE(o));
+        return int_from_string(PyString_AS_STRING(o), PyString_GET_SIZE(o));
 #ifdef Py_USING_UNICODE
     if (PyUnicode_Check(o))
-      return PyInt_FromUnicode(PyUnicode_AS_UNICODE(o),
-                   PyUnicode_GET_SIZE(o),
-                   10);
+        return PyInt_FromUnicode(PyUnicode_AS_UNICODE(o), PyUnicode_GET_SIZE(o), 10);
 #endif
     if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
-      return int_from_string((char*)buffer, buffer_len);
+        return int_from_string(buffer, buffer_len);
 
     return type_error("int() argument must be a string or a "
-              "number, not '%.200s'", o);
-#endif
+                      "number, not '%.200s'",
+                      o);
 }
 
 extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
