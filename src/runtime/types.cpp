@@ -1563,12 +1563,12 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
 
-        while (true) {
-            const auto& attrMap = attrs->hcls->getStrAttrOffsets();
-            if (attrMap.size() == 0)
-                break;
-            self->b->delattr(attrMap.begin()->first(), NULL);
-        }
+        // Clear the attrs array:
+        new ((void*)attrs) HCAttrs(root_hcls);
+        // Add the existing attrwrapper object (ie self) back as the attrwrapper:
+        self->b->appendNewHCAttr(self, NULL);
+        attrs->hcls = attrs->hcls->getAttrwrapperChild();
+
         return None;
     }
 
