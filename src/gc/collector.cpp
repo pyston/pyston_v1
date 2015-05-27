@@ -445,7 +445,7 @@ void finalizationOrderingSecondPass(Box* obj) {
 void finalizationOrderingPhase(std::vector<Box*>& to_be_finalized, std::vector<Box*>& to_be_finalized_weak) {
     // TODO: Replace with iterator or something that takes a lambda for memory efficiency?.
     std::vector<Box*> objects_with_finalizers;
-    global_heap.getObjectsWithFinalizers(objects_with_finalizers);
+    global_heap.getOrderedFinalizers(objects_with_finalizers);
 
     std::vector<Box*> finalizer_marked;
 
@@ -455,6 +455,8 @@ void finalizationOrderingPhase(std::vector<Box*>& to_be_finalized, std::vector<B
         // We are only interested in object with finalizers that need to be
         // garbage-collected.
         if (orderingState(al) == FinalizationState::UNREACHABLE) {
+            // Unordered finalizers don't block the objects they reference from being finalized.
+            assert(hasOrderedFinalizer(obj));
             finalizer_marked.push_back(obj);
             finalizationOrderingFirstPass(obj);
             finalizationOrderingSecondPass(obj);
@@ -483,7 +485,7 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
     global_heap.freeUnmarked(weakly_referenced);
 }
 
-static void callFinalizersPhase(std::vector<Box*>& to_be_finalized, std::vector<Box*>& to_be_finalized_weak) {
+static void callOrderedFinalizersPhase(std::vector<Box*>& to_be_finalized, std::vector<Box*>& to_be_finalized_weak) {
     // Callbacks for weakly-referenced objects with finalizers, followed by call to finalizers.
     // Since these objects have finalizers, do not free yet - they will be freed in another GC pass.
     for (Box* box : to_be_finalized_weak) {
@@ -502,7 +504,7 @@ static void callFinalizersPhase(std::vector<Box*>& to_be_finalized, std::vector<
                 }
             }
         }
-        finalizeIfNeeded(box);
+        finalize(box);
     }
 
     // An object can be resurrected during the finalizer. So when we call a finalizer, we
@@ -511,7 +513,7 @@ static void callFinalizersPhase(std::vector<Box*>& to_be_finalized, std::vector<
     // without finalizers).
     for (Box* box : to_be_finalized) {
         assert(isValidGCObject(box));
-        finalizeIfNeeded(box);
+        finalize(box);
     }
 }
 
@@ -619,7 +621,7 @@ void runCollection() {
         }
     }
 
-    callFinalizersPhase(to_be_finalized, to_be_finalized_weak);
+    callOrderedFinalizersPhase(to_be_finalized, to_be_finalized_weak);
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);

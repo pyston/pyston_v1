@@ -161,13 +161,6 @@ public:
 
     gcvisit_func gc_visit;
 
-    // A "simple" destructor -- one that is allowed to be called at any point after the object is dead.
-    // In particular, this means that it can't touch any Python objects or other gc-managed memory,
-    // since it will be in an undefined state.
-    // (Context: in Python destructors are supposed to be called in topological order, due to reference counting.
-    // We don't support that yet, but still want some simple ability to run code when an object gets freed.)
-    void (*simple_destructor)(Box*);
-
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Negative offset is from the end of the class (useful for variable-size objects with the attrs at the end)
     // Analogous to tp_dictoffset
@@ -177,6 +170,19 @@ public:
 
     bool instancesHaveHCAttrs() { return attrs_offset != 0; }
     bool instancesHaveDictAttrs() { return tp_dictoffset != 0; }
+
+    // A "safe" tp_dealloc destructor/finalizer is one we believe:
+    //  1) Can be called at any point after the object is dead.
+    //      (implies it's references could be finalized already)
+    //  2) Won't take a lot of time to run.
+    //  3) Won't take up a lot of memory (requiring another GC run).
+    //  4) Won't resurrect itself.
+    //
+    // We specify that such destructors are safe for optimization purposes (in our GC, we try to
+    // emulate the order of destructor calls and support resurrection by calling them in topological
+    // order through multiple GC passes, which is potentially quite expensive). We call the tp_dealloc
+    // as the object gets freed.
+    bool has_safe_tp_dealloc;
 
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
@@ -206,6 +212,9 @@ public:
     pyston_call tpp_call;
 
     bool hasGenericGetattr() { return tp_getattr == NULL; }
+
+    // Checks if this class or one of its parents has a non-default tp_dealloc
+    bool hasNativeDestructor();
 
     void freeze();
 

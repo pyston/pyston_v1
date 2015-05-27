@@ -124,23 +124,29 @@ void _bytesAllocatedTripped() {
 
 //////
 /// Finalizers
-
-// TODO: Compare with gcmodule.c:has_finalizer
+//
 bool hasFinalizer(Box* b) {
-    return b->cls->simple_destructor || b->cls->tp_dealloc || b->cls->tp_del;
+    return b->cls->tp_del || b->cls->hasNativeDestructor();
 }
 
-void finalizeIfNeeded(Box* b) {
-    GCAllocation* al = GCAllocation::fromUserData(b);
-    setFinalized(al);
+bool hasOrderedFinalizer(Box* b) {
+    return b->cls->tp_del || (!b->cls->has_safe_tp_dealloc && b->cls->hasNativeDestructor());
+}
 
-    if (b->cls->tp_del) {
-        b->cls->tp_del(b);
-    } else if (b->cls->simple_destructor) {
-        b->cls->simple_destructor(b);
-    } else if (b->cls->tp_dealloc) {
-        // b->cls->tp_dealloc(b);
-    } else {
+void finalize(Box* b) {
+    GCAllocation* al = GCAllocation::fromUserData(b);
+    assert(!hasFinalized(al));
+    setFinalized(al);
+    b->cls->tp_dealloc(b);
+}
+
+
+void finalizeIfUnordered(Box* b) {
+    if (!hasOrderedFinalizer(b)) {
+        GCAllocation* al = GCAllocation::fromUserData(b);
+        if (!hasFinalized(al)) {
+            finalize(b);
+        }
     }
 }
 
@@ -158,7 +164,7 @@ bool isWeakReference(Box* b) {
 bool heapObjectHasCallableFinalizer(GCAllocation* al) {
     if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON) {
         Box* b = (Box*)al->user_data;
-        if (hasFinalizer(b) && !hasFinalized(al)) {
+        if (hasOrderedFinalizer(b) && !hasFinalized(al)) {
             return true;
         }
     }
@@ -191,8 +197,9 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
             return false;
         }
 
-        // ASSERT(!hasFinalizer(b) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
-        // getTypeName(b));
+        ASSERT(!hasOrderedFinalizer(b) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
+               getTypeName(b));
+        finalizeIfUnordered(b);
     }
     return true;
 }
@@ -448,7 +455,7 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     }
 }
 
-void SmallArena::_getObjectsWithFinalizersFromBlock(std::vector<Box*>& objs, Block** head) {
+void SmallArena::_getOrderedFinalizersFromBlock(std::vector<Box*>& objs, Block** head) {
     while (Block* b = *head) {
         int num_objects = b->numObjects();
         int first_obj = b->minObjIndex();
@@ -472,17 +479,17 @@ void SmallArena::_getObjectsWithFinalizersFromBlock(std::vector<Box*>& objs, Blo
     }
 }
 
-void SmallArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+void SmallArena::getOrderedFinalizers(std::vector<Box*>& objs) {
     thread_caches.forEachValue([this, &objs](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            _getObjectsWithFinalizersFromBlock(objs, &cache->cache_free_heads[bidx]);
-            _getObjectsWithFinalizersFromBlock(objs, &cache->cache_full_heads[bidx]);
+            _getOrderedFinalizersFromBlock(objs, &cache->cache_free_heads[bidx]);
+            _getOrderedFinalizersFromBlock(objs, &cache->cache_full_heads[bidx]);
         }
     });
 
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        _getObjectsWithFinalizersFromBlock(objs, &heads[bidx]);
-        _getObjectsWithFinalizersFromBlock(objs, &full_heads[bidx]);
+        _getOrderedFinalizersFromBlock(objs, &heads[bidx]);
+        _getOrderedFinalizersFromBlock(objs, &full_heads[bidx]);
     }
 }
 
@@ -744,7 +751,7 @@ void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     sweepList(head, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
-void LargeArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+void LargeArena::getOrderedFinalizers(std::vector<Box*>& objs) {
     forEach(head, [&objs](LargeObj* obj) {
         GCAllocation* al = obj->data;
         if (heapObjectHasCallableFinalizer(al)) {
@@ -946,7 +953,7 @@ void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     sweepList(head, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
 }
 
-void HugeArena::getObjectsWithFinalizers(std::vector<Box*>& objs) {
+void HugeArena::getOrderedFinalizers(std::vector<Box*>& objs) {
     forEach(head, [&objs](HugeObj* obj) {
         GCAllocation* al = obj->data;
         if (heapObjectHasCallableFinalizer(al)) {

@@ -170,8 +170,8 @@ inline void clearOrderingState(GCAllocation* header) {
 #undef FINALIZER_HAS_RUN_BIT
 #undef ORDERING_BITS
 
-bool hasFinalizer(Box* b);
-void finalizeIfNeeded(Box* b);
+bool hasOrderedFinalizer(Box* b);
+void finalize(Box* b);
 bool isWeakReference(Box* b);
 
 #define PAGE_SIZE 4096
@@ -268,7 +268,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getObjectsWithFinalizers(std::vector<Box*>& objs);
+    void getOrderedFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -401,7 +401,7 @@ private:
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
     Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
-    void _getObjectsWithFinalizersFromBlock(std::vector<Box*>& objs, Block** head);
+    void _getOrderedFinalizersFromBlock(std::vector<Box*>& objs, Block** head);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -475,7 +475,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getObjectsWithFinalizers(std::vector<Box*>& objs);
+    void getOrderedFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -494,7 +494,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getObjectsWithFinalizers(std::vector<Box*>& objs);
+    void getOrderedFinalizers(std::vector<Box*>& objs);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -612,10 +612,10 @@ public:
         huge_arena.freeUnmarked(weakly_referenced);
     }
 
-    void getObjectsWithFinalizers(std::vector<Box*>& objs) {
-        small_arena.getObjectsWithFinalizers(objs);
-        large_arena.getObjectsWithFinalizers(objs);
-        huge_arena.getObjectsWithFinalizers(objs);
+    void getOrderedFinalizers(std::vector<Box*>& objs) {
+        small_arena.getOrderedFinalizers(objs);
+        large_arena.getOrderedFinalizers(objs);
+        huge_arena.getOrderedFinalizers(objs);
     }
 
     void dumpHeapStatistics(int level);

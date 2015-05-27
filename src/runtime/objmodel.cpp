@@ -320,6 +320,63 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
+static void dealloc_null(Box* box) {
+    assert(box->cls->tp_del == NULL);
+}
+
+// Analoguous to CPython's implementation of subtype_dealloc, but having a GC
+// saves us from complications involving "trashcan macros".
+//
+// This is the default destructor assigned to the tp_dealloc slot, the C/C++
+// implementation of a Python object destructor. It may call the Python-implemented
+// destructor __del__ stored in tp_del, if any.
+//
+// For now, we treat tp_del and tp_dealloc as one unit. In theory, we will only
+// have both if we have a Python class with a __del__ method that subclasses from
+// a C extension with a non-trivial tp_dealloc. We assert on that case for now
+// until we run into actual code with this fairly rare situation.
+//
+// This case (having both tp_del and tp_dealloc) shouldn't be a problem if we
+// remove the assert, except in the exceptional case where the __del__ method
+// does object resurrection. The fix for this would be to spread out tp_del,
+// tp_dealloc and sweeping over 3 GC passes. This would slightly impact the
+// performance of Pyston as a whole for a case that may not exist in any
+// production code, so we decide not to handle that edge case for now.
+static void subtype_dealloc(Box* self) {
+    BoxedClass* type = self->cls;
+
+    if (type->tp_del) {
+        type->tp_del(self);
+    }
+
+    // Find nearest base with a different tp_dealloc.
+    BoxedClass* base = type;
+    while (base && base->tp_dealloc == subtype_dealloc) {
+        base = base->tp_base;
+    }
+
+    if (base && base->tp_dealloc && base->tp_dealloc != dealloc_null) {
+        assert(!type->tp_del);
+        base->tp_dealloc(self);
+    }
+}
+
+// We don't need CPython's version of tp_free since we have GC.
+// We still need to set tp_free to something and not a NULL pointer,
+// because C extensions might still call tp_free from tp_dealloc.
+static void default_free(void*) {
+}
+
+bool BoxedClass::hasNativeDestructor() {
+    // Find nearest base with a different tp_dealloc.
+    BoxedClass* base = this;
+    while (base && base->tp_dealloc == subtype_dealloc) {
+        base = base->tp_base;
+    }
+
+    return base && base->tp_dealloc && base->tp_dealloc != dealloc_null;
+}
+
 void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
@@ -338,7 +395,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
                        int instance_size, bool is_user_defined)
     : attrs(HiddenClass::makeSingleton()),
       gc_visit(gc_visit),
-      simple_destructor(NULL),
       attrs_offset(attrs_offset),
       is_constant(false),
       is_user_defined(is_user_defined),
@@ -376,7 +432,21 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(cls == type_cls || isSubclass(cls, type_cls));
     }
 
-    assert(tp_dealloc == NULL);
+    if (is_user_defined) {
+        tp_dealloc = subtype_dealloc;
+    } else {
+        // We don't want default types like dict to have subtype_dealloc as a destructor.
+        // In CPython, they would have their custom tp_dealloc, except that we don't
+        // need them in Pyston due to GC.
+        //
+        // What's the problem with having subtype_dealloc? In some cases like defdict_dealloc,
+        // the destructor calls another destructor thinking it's the parent, but ends up in the
+        // same destructor again (since child destructors are found first by subtype_dealloc)
+        // causing an infinite recursion loop.
+        tp_dealloc = dealloc_null;
+        has_safe_tp_dealloc = true;
+    }
+    tp_free = default_free;
 
     if (gc_visit == NULL) {
         assert(base);
@@ -4822,17 +4892,6 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->tp_alloc = PystonType_GenericAlloc;
     else
         made->tp_alloc = PyType_GenericAlloc;
-
-    assert(!made->simple_destructor);
-    for (auto b : *bases) {
-        if (!isSubclass(b->cls, type_cls))
-            continue;
-        BoxedClass* b_cls = static_cast<BoxedClass*>(b);
-        RELEASE_ASSERT(made->simple_destructor == base->simple_destructor || made->simple_destructor == NULL
-                           || base->simple_destructor == NULL,
-                       "Conflicting simple destructors!");
-        made->simple_destructor = base->simple_destructor;
-    }
 
     return made;
 }

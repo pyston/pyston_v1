@@ -2951,8 +2951,7 @@ void setupRuntime() {
         BoxedHeapClass(object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
                        sizeof(BoxedBuiltinFunctionOrMethod), false,
                        static_cast<BoxedString*>(boxString("builtin_function_or_method")));
-    function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
-
+    function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
 
     module_cls = new (0) BoxedHeapClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,
                                         sizeof(BoxedModule), false, static_cast<BoxedString*>(boxString("module")));
@@ -3329,23 +3328,23 @@ void setupRuntime() {
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
     weakref_ref_cls->tp_alloc = PystonType_GenericAlloc;
-    weakref_ref_cls->tp_dealloc = NULL;
     weakref_ref_cls->gc_visit = proxy_to_tp_traverse;
-    weakref_ref_cls->simple_destructor = proxy_to_tp_clear;
+    weakref_ref_cls->tp_dealloc = proxy_to_tp_clear;
+    weakref_ref_cls->has_safe_tp_dealloc = true;
     weakref_ref_cls->is_pyston_class = true;
 
     BoxedClass* weakref_proxy_cls = &_PyWeakref_ProxyType;
     weakref_proxy_cls->tp_alloc = PystonType_GenericAlloc;
-    weakref_proxy_cls->tp_dealloc = NULL;
     weakref_proxy_cls->gc_visit = proxy_to_tp_traverse;
-    weakref_proxy_cls->simple_destructor = proxy_to_tp_clear;
+    weakref_proxy_cls->tp_dealloc = proxy_to_tp_clear;
+    weakref_proxy_cls->has_safe_tp_dealloc = true;
     weakref_proxy_cls->is_pyston_class = true;
 
     BoxedClass* weakref_callableproxy = &_PyWeakref_CallableProxyType;
     weakref_callableproxy->tp_alloc = PystonType_GenericAlloc;
-    weakref_callableproxy->tp_dealloc = NULL;
     weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
-    weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
+    weakref_callableproxy->tp_dealloc = proxy_to_tp_clear;
+    weakref_callableproxy->has_safe_tp_dealloc = true;
     weakref_callableproxy->is_pyston_class = true;
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
