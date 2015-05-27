@@ -64,6 +64,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     stringio.c
     stropmodule.c
     textio.c
+    threadmodule.c
     timemodule.c
     unicodedata.c
     util.c

@@ -27,6 +27,8 @@
 
 using namespace pyston::threading;
 
+extern "C" void initthread();
+
 
 static int initialized;
 static void PyThread__init_thread(void); /* Forward */
@@ -56,8 +58,6 @@ static size_t _pythread_stacksize = 0;
 #include "thread_pthread.h"
 
 namespace pyston {
-
-BoxedModule* thread_module;
 
 static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
     assert(target);
@@ -156,73 +156,6 @@ Box* allocateLock() {
     return new BoxedThreadLock();
 }
 
-static BoxedClass* thread_local_cls;
-class BoxedThreadLocal : public Box {
-public:
-    BoxedThreadLocal() {}
-
-    static Box* getThreadLocalObject(Box* obj) {
-        BoxedDict* dict = static_cast<BoxedDict*>(PyThreadState_GetDict());
-        Box* tls_obj = dict->getOrNull(obj);
-        if (tls_obj == NULL) {
-            tls_obj = new BoxedDict();
-            setitem(dict, obj, tls_obj);
-        }
-        return tls_obj;
-    }
-
-    static Box* setattrPyston(Box* obj, Box* name, Box* val) noexcept {
-        if (isSubclass(name->cls, str_cls) && static_cast<BoxedString*>(name)->s() == "__dict__") {
-            raiseExcHelper(AttributeError, "'%.50s' object attribute '__dict__' is read-only", Py_TYPE(obj)->tp_name);
-        }
-
-        Box* tls_obj = getThreadLocalObject(obj);
-        setitem(tls_obj, name, val);
-        return None;
-    }
-
-    static int setattro(Box* obj, Box* name, Box* val) noexcept {
-        try {
-            setattrPyston(obj, name, val);
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return -1;
-        }
-        return 0;
-    }
-
-    static Box* getattro(Box* obj, Box* name) noexcept {
-        assert(name->cls == str_cls);
-        llvm::StringRef s = static_cast<BoxedString*>(name)->s();
-
-        Box* tls_obj = getThreadLocalObject(obj);
-        if (s == "__dict__")
-            return tls_obj;
-
-        try {
-            return getitem(tls_obj, name);
-        } catch (ExcInfo e) {
-        }
-
-        try {
-            Box* r = getattrInternalGeneric(obj, s, NULL, false, false, NULL, NULL);
-            if (r)
-                return r;
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return NULL;
-        }
-
-        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", Py_TYPE(obj)->tp_name, s.data());
-        return NULL;
-    }
-
-    static Box* hash(Box* obj) { return boxInt(PyThread_get_thread_ident()); }
-
-
-    DEFAULT_CLASS(thread_local_cls);
-};
-
 Box* getIdent() {
     return boxInt(pthread_self());
 }
@@ -232,7 +165,14 @@ Box* stackSize() {
 }
 
 void setupThread() {
-    thread_module = createModule("thread");
+    // Hacky: we want to use some of CPython's implementation of the thread module (the threading local stuff),
+    // and some of ours (thread handling).  Start off by calling a cut-down version of initthread, and then
+    // add our own attributes to the module it creates.
+    initthread();
+    RELEASE_ASSERT(!PyErr_Occurred(), "");
+
+    Box* thread_module = getSysModulesDict()->getOrNull(boxString("thread"));
+    assert(thread_module);
 
     thread_module->giveAttr("start_new_thread", new BoxedBuiltinFunctionOrMethod(
                                                     boxRTFunction((void*)startNewThread, BOXED_INT, 3, 1, false, false),
@@ -255,21 +195,6 @@ void setupThread() {
     thread_lock_cls->giveAttr("__enter__", thread_lock_cls->getattr("acquire"));
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
-
-    thread_local_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedThreadLocal), false,
-                                              static_cast<BoxedString*>(boxString("_local")));
-    thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
-    thread_local_cls->giveAttr("__hash__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::hash, BOXED_INT, 1)));
-    thread_local_cls->giveAttr("__setattr__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::setattrPyston, UNKNOWN, 3)));
-    thread_module->giveAttr("_local", thread_local_cls);
-
-    thread_local_cls->tp_setattro = BoxedThreadLocal::setattro;
-    thread_local_cls->tp_getattro = BoxedThreadLocal::getattro;
-    add_operators(thread_local_cls);
-    thread_local_cls->finishInitialization();
-    thread_local_cls->freeze();
 
     BoxedClass* ThreadError
         = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,

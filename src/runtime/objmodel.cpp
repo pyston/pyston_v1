@@ -901,6 +901,16 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     abort();
 }
 
+extern "C" PyObject* _PyType_Lookup(PyTypeObject* type, PyObject* name) noexcept {
+    RELEASE_ASSERT(name->cls == str_cls, "");
+    try {
+        return typeLookup(type, static_cast<BoxedString*>(name)->s(), NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     Box* val;
 
