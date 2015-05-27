@@ -2930,7 +2930,7 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
-    gc::registerNonheapRootObject(cls);
+    gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES

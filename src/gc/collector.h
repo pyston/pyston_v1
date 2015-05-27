@@ -31,7 +31,8 @@ void deregisterPermanentRoot(void* root_obj);
 // Register an object that was not allocated through this collector, as a root for this collector.
 // The motivating usecase is statically-allocated PyTypeObject objects, which are full Python objects
 // even if they are not heap allocated.
-void registerNonheapRootObject(void* obj);
+// This memory will be scanned conservatively.
+void registerNonheapRootObject(void* obj, int size);
 
 void registerPotentialRootRange(void* start, void* end);
 

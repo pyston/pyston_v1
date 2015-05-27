@@ -95,7 +95,8 @@ bool IN_SHUTDOWN = false;
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
 
-    const size_t size = _PyObject_VAR_SIZE(cls, nitems);
+    // See PyType_GenericAlloc for note about the +1 here:
+    const size_t size = _PyObject_VAR_SIZE(cls, nitems + 1);
 
 #ifndef NDEBUG
 #if 0
@@ -145,7 +146,10 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
     const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
-    /* note that we need to add one, for the sentinel [CPython comment] */
+    // I don't understand why there is a +1 in this method; _PyObject_NewVar doesn't do that.
+    // CPython has the following comment:
+    /* note that we need to add one, for the sentinel */
+    // I think that regardless of the reasoning behind them having it, we should do what they do?
 
     if (PyType_IS_GC(type))
         obj = _PyObject_GC_Malloc(size);
@@ -2227,6 +2231,21 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
 }
 
 extern "C" void PyCallIter_AddHasNext();
+
+extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
+    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCObject(tp));
+
+    RELEASE_ASSERT(op, "");
+    RELEASE_ASSERT(tp, "");
+
+    gc::setIsPythonObject(op);
+
+    Py_TYPE(op) = tp;
+    op->ob_size = size;
+
+    return op;
+}
 
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(op);

@@ -470,7 +470,9 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             } else {
                 if (_doFree(al, &weakly_referenced)) {
                     b->isfree.set(atom_idx);
-                    // memset(al->user_data, 0, b->size - sizeof(GCAllocation));
+#ifndef NDEBUG
+                    memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+#endif
                 }
             }
         }

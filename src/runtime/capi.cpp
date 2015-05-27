@@ -85,21 +85,6 @@ extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcep
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
-    assert(gc::isValidGCObject(op));
-    assert(gc::isValidGCObject(tp));
-
-    RELEASE_ASSERT(op, "");
-    RELEASE_ASSERT(tp, "");
-
-    gc::setIsPythonObject(op);
-
-    Py_TYPE(op) = tp;
-    op->ob_size = size;
-
-    return op;
-}
-
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
     PyObject* empty = NULL;
     PyObject* result = NULL;

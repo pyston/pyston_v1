@@ -162,12 +162,13 @@ static std::unordered_set<void*> nonheap_roots;
 // way to verify it's not a nonheap root (the full check requires a hashtable lookup).
 static void* max_nonheap_root = 0;
 static void* min_nonheap_root = (void*)~0;
-void registerNonheapRootObject(void* obj) {
+void registerNonheapRootObject(void* obj, int size) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
     assert(nonheap_roots.count(obj) == 0);
 
     nonheap_roots.insert(obj);
+    registerPotentialRootRange(obj, ((uint8_t*)obj) + size);
 
     max_nonheap_root = std::max(obj, max_nonheap_root);
     min_nonheap_root = std::min(obj, min_nonheap_root);
@@ -268,16 +269,6 @@ void markPhase() {
 
     threading::visitAllStacks(&visitor);
     gatherInterpreterRoots(&visitor);
-
-    for (void* p : nonheap_roots) {
-        Box* b = reinterpret_cast<Box*>(p);
-        BoxedClass* cls = b->cls;
-
-        if (cls) {
-            ASSERT(cls->gc_visit, "%s", getTypeName(b));
-            cls->gc_visit(&visitor, b);
-        }
-    }
 
     for (auto h : *getRootHandles()) {
         visitor.visit(h->value);
