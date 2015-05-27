@@ -178,3 +178,6 @@ print z
 """
 exec s in import_target.__dict__, {}
 exec s in globals(), {}
+
+exec "import builtins_getitem"
+exec "import builtins_getitem" in {}, {}

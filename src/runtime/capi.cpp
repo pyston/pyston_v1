@@ -24,6 +24,7 @@
 #include "llvm/Support/Path.h"
 
 #include "capi/types.h"
+#include "codegen/unwinding.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
@@ -233,8 +234,14 @@ done:
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept {
     if (!isSubclass(attr_name->cls, str_cls)) {
-        PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
-        return NULL;
+        if (PyUnicode_Check(attr_name)) {
+            attr_name = _PyUnicode_AsDefaultEncodedString(attr_name, NULL);
+            if (attr_name == NULL)
+                return NULL;
+        } else {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
+            return NULL;
+        }
     }
 
     try {
@@ -956,6 +963,20 @@ extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceba
 
 extern "C" void PyErr_Clear() noexcept {
     PyErr_Restore(NULL, NULL, NULL);
+}
+
+extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
+    ExcInfo* exc = getFrameExcInfo();
+    *ptype = exc->type;
+    *pvalue = exc->value;
+    *ptraceback = exc->traceback;
+}
+
+extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
+    ExcInfo* exc = getFrameExcInfo();
+    exc->type = type;
+    exc->value = value;
+    exc->traceback = traceback;
 }
 
 extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
@@ -1692,6 +1713,10 @@ extern "C" void _Py_FatalError(const char* fmt, const char* function, const char
     fprintf(stderr, fmt, function, message);
     fflush(stderr); /* it helps in Windows debug build */
     abort();
+}
+
+extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
+    return new BoxedClassmethod(callable);
 }
 
 void setupCAPI() {

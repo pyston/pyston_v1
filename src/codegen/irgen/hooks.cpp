@@ -313,6 +313,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body, fn));
         bm->setattr("__doc__", si->getDocString(), NULL);
+        if (!bm->hasattr("__builtins__"))
+            bm->giveAttr("__builtins__", PyModule_GetDict(builtins_module));
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
