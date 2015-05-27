@@ -498,7 +498,7 @@ void setupSys() {
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(md.ml_flags, sys_module, md.ml_name, md.ml_meth));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
     }
 
     sys_module->giveAttr("flags", new BoxedSysFlags());

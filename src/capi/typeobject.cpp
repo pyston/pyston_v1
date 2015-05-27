@@ -1744,12 +1744,16 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     return self->tp_new(subtype, new_args, kwds);
 }
 
+static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
+                                                   PyDoc_STR("T.__new__(S, ...) -> "
+                                                             "a new object with type S, a subtype of T") },
+                                                 { 0, 0, 0, 0 } };
+
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr("__new__"))
         return;
 
-    type->giveAttr("__new__",
-                   new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
+    type->giveAttr("__new__", new BoxedCApiFunction(tp_new_methoddef, type));
 }
 
 void add_operators(BoxedClass* cls) noexcept {

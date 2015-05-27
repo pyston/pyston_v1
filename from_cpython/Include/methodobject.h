@@ -91,15 +91,12 @@ typedef struct PyMethodChain {
 PyAPI_FUNC(PyObject *) Py_FindMethodInChain(PyMethodChain *, PyObject *,
                                             const char *) PYSTON_NOEXCEPT;
 
-// Pyston change: not our format
-#if 0
 typedef struct {
     PyObject_HEAD
     PyMethodDef *m_ml; /* Description of the C function to call */
     PyObject    *m_self; /* Passed as 'self' arg to the C func, can be NULL */
     PyObject    *m_module; /* The __module__ attribute, can be anything */
 } PyCFunctionObject;
-#endif
 
 PyAPI_FUNC(int) PyCFunction_ClearFreeList(void) PYSTON_NOEXCEPT;
 

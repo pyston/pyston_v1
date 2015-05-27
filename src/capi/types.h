@@ -37,26 +37,22 @@ struct wrapper_def {
 extern "C" BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
 
 class BoxedCApiFunction : public Box {
-private:
-    int ml_flags;
-    Box* passthrough;
-    const char* name;
-    PyCFunction func;
-
 public:
+    PyMethodDef* method_def;
+    PyObject* passthrough;
     Box* module;
 
 public:
-    BoxedCApiFunction(int ml_flags, Box* passthrough, const char* name, PyCFunction func, Box* module = NULL)
-        : ml_flags(ml_flags), passthrough(passthrough), name(name), func(func), module(module) {}
+    BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module = NULL)
+        : method_def(method_def), passthrough(passthrough), module(module) {}
 
     DEFAULT_CLASS(capifunc_cls);
 
-    PyCFunction getFunction() { return func; }
+    PyCFunction getFunction() { return method_def->ml_meth; }
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
-        return boxStrConstant(self->name);
+        return boxStrConstant(self->method_def->ml_name);
     }
 
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
@@ -68,24 +64,28 @@ public:
         threading::GLPromoteRegion _gil_lock;
 
         Box* rtn;
-        if (self->ml_flags == METH_VARARGS) {
+
+        int flags = self->method_def->ml_flags;
+        auto func = self->method_def->ml_meth;
+        if (flags == METH_VARARGS) {
             assert(kwargs->d.size() == 0);
-            rtn = (Box*)self->func(self->passthrough, varargs);
-        } else if (self->ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
-            rtn = (Box*)((PyCFunctionWithKeywords)self->func)(self->passthrough, varargs, kwargs);
-        } else if (self->ml_flags == METH_NOARGS) {
+            rtn = (Box*)func(self->passthrough, varargs);
+        } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
+            rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, varargs, kwargs);
+        } else if (flags == METH_NOARGS) {
             assert(kwargs->d.size() == 0);
             assert(varargs->size() == 0);
-            rtn = (Box*)self->func(self->passthrough, NULL);
-        } else if (self->ml_flags == METH_O) {
+            rtn = (Box*)func(self->passthrough, NULL);
+        } else if (flags == METH_O) {
             if (kwargs->d.size() != 0) {
-                raiseExcHelper(TypeError, "%s() takes no keyword arguments", self->name);
+                raiseExcHelper(TypeError, "%s() takes no keyword arguments", self->method_def->ml_name);
             }
             if (varargs->size() != 1) {
-                raiseExcHelper(TypeError, "%s() takes exactly one argument (%d given)", self->name, varargs->size());
+                raiseExcHelper(TypeError, "%s() takes exactly one argument (%d given)", self->method_def->ml_name,
+                               varargs->size());
             }
-            rtn = (Box*)self->func(self->passthrough, varargs->elts[0]);
-        } else if (self->ml_flags == METH_OLDARGS) {
+            rtn = (Box*)func(self->passthrough, varargs->elts[0]);
+        } else if (flags == METH_OLDARGS) {
             /* the really old style */
             if (kwargs == NULL || PyDict_Size(kwargs) == 0) {
                 int size = PyTuple_GET_SIZE(varargs);
@@ -94,12 +94,12 @@ public:
                     arg = PyTuple_GET_ITEM(varargs, 0);
                 else if (size == 0)
                     arg = NULL;
-                rtn = self->func(self->passthrough, arg);
+                rtn = func(self->passthrough, arg);
             } else {
-                raiseExcHelper(TypeError, "%.200s() takes no keyword arguments", self->name);
+                raiseExcHelper(TypeError, "%.200s() takes no keyword arguments", self->method_def->ml_name);
             }
         } else {
-            RELEASE_ASSERT(0, "0x%x", self->ml_flags);
+            RELEASE_ASSERT(0, "0x%x", flags);
         }
 
         checkAndThrowCAPIException();
@@ -109,7 +109,7 @@ public:
 
     static Box* getname(Box* b, void*) {
         RELEASE_ASSERT(b->cls == capifunc_cls, "");
-        const char* s = static_cast<BoxedCApiFunction*>(b)->name;
+        const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
             return boxStrConstant(s);
         return None;
@@ -127,6 +127,10 @@ public:
         v->visit(o->module);
     }
 };
+static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");
+static_assert(offsetof(BoxedCApiFunction, method_def) == offsetof(PyCFunctionObject, m_ml), "");
+static_assert(offsetof(BoxedCApiFunction, passthrough) == offsetof(PyCFunctionObject, m_self), "");
+static_assert(offsetof(BoxedCApiFunction, module) == offsetof(PyCFunctionObject, m_module), "");
 
 class BoxedWrapperDescriptor : public Box {
 public:

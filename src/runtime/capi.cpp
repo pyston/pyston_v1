@@ -1454,7 +1454,7 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
     assert((ml->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
 
-    return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth, module);
+    return new BoxedCApiFunction(ml, self, module);
 }
 
 extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
@@ -1463,6 +1463,14 @@ extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
         return NULL;
     }
     return static_cast<BoxedCApiFunction*>(op)->getFunction();
+}
+
+extern "C" PyObject* PyCFunction_GetSelf(PyObject* op) noexcept {
+    if (!PyCFunction_Check(op)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return static_cast<BoxedCApiFunction*>(op)->passthrough;
 }
 
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
@@ -1602,18 +1610,18 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
 
     assert(arg1->cls == capifunc_cls);
     BoxedCApiFunction* capifunc = static_cast<BoxedCApiFunction*>(arg1);
-    if (capifunc->ml_flags != METH_O)
+    if (capifunc->method_def->ml_flags != METH_O)
         return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
     if (rewrite_args) {
         rewrite_args->arg1->addGuard((intptr_t)arg1);
         RewriterVar* r_passthrough = rewrite_args->arg1->getAttr(offsetof(BoxedCApiFunction, passthrough));
-        rewrite_args->out_rtn
-            = rewrite_args->rewriter->call(true, (void*)capifunc->func, r_passthrough, rewrite_args->arg2);
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)capifunc->method_def->ml_meth, r_passthrough,
+                                                             rewrite_args->arg2);
         rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
         rewrite_args->out_success = true;
     }
-    Box* r = capifunc->func(capifunc->passthrough, arg2);
+    Box* r = capifunc->method_def->ml_meth(capifunc->passthrough, arg2);
     checkAndThrowCAPIException();
     assert(r);
     return r;
