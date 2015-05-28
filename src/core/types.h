@@ -666,7 +666,7 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
 
 struct LineInfo {
 public:
-    const int line, column;
+    int line, column;
     std::string file, func;
 
     LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)

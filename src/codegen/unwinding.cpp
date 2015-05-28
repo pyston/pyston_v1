@@ -277,6 +277,10 @@ struct PythonFrameId {
     uint64_t ip;
     uint64_t bp;
 
+    PythonFrameId() {}
+
+    PythonFrameId(FrameType type, uint64_t ip, uint64_t bp) : type(type), ip(ip), bp(bp) {}
+
     bool operator==(const PythonFrameId& rhs) const { return (this->type == rhs.type) && (this->ip == rhs.ip); }
 };
 
@@ -289,12 +293,15 @@ public:
     intptr_t regs[16];
     uint16_t regs_valid;
 
-    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&) = delete;
-    void operator=(const PythonFrameIteratorImpl&) = delete;
-    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&&) = delete;
-    void operator=(const PythonFrameIteratorImpl&&) = delete;
+    // PythonFrameIteratorImpl(const PythonFrameIteratorImpl&) = delete;
+    // void operator=(const PythonFrameIteratorImpl&) = delete;
+    // PythonFrameIteratorImpl(const PythonFrameIteratorImpl&&) = delete;
+    // void operator=(const PythonFrameIteratorImpl&&) = delete;
 
     PythonFrameIteratorImpl() : regs_valid(0) {}
+
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CompiledFunction* cf)
+        : id(PythonFrameId(type, ip, bp)), cf(cf), regs_valid(0) {}
 
     CompiledFunction* getCF() const {
         assert(cf);
@@ -411,22 +418,89 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
     return pip.end_ip;
 }
 
+static bool inASTInterpreterExecuteInner(unw_word_t ip) {
+    static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
+    return ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end);
+}
+
+static bool inGeneratorEntry(unw_word_t ip) {
+    static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
+    return ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end);
+}
+
+
+static inline unw_word_t get_cursor_reg(unw_cursor_t* cursor, int reg) {
+    unw_word_t v;
+    unw_get_reg(cursor, reg, &v);
+    return v;
+}
+static inline unw_word_t get_cursor_ip(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_REG_IP) - 1;
+}
+static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_TDEP_BP);
+}
+
+template <typename FrameFunc>
+bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, FrameFunc func) {
+    CompiledFunction* cf = getCFForAddress(ip);
+    if (cf) {
+        PythonFrameIteratorImpl info(PythonFrameId::COMPILED, ip, bp, cf);
+
+        // Try getting all the callee-save registers, and save the ones we were able to get.
+        // Some of them may be inaccessible, I think because they weren't defined by that
+        // stack frame, which can show up as a -UNW_EBADREG return code.
+        for (int i = 0; i < 16; i++) {
+            if (!assembler::Register::fromDwarf(i).isCalleeSave())
+                continue;
+            unw_word_t r;
+            int code = unw_get_reg(cursor, i, &r);
+            ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
+            if (code == 0) {
+                info.regs[i] = r;
+                info.regs_valid |= (1 << i);
+            }
+        }
+
+        if (cur_thread_state.unwind_why == UNWIND_WHY_NORMAL) {
+            bool stop = func(&info);
+            if (stop)
+                return true;
+        }
+
+        cur_thread_state.unwind_why = (bool)cf->entry_descriptor ? UNWIND_WHY_OSR : UNWIND_WHY_NORMAL;
+        return false;
+    }
+
+    if (inASTInterpreterExecuteInner(ip)) {
+        cf = getCFForInterpretedFrame((void*)bp);
+        assert(cf);
+
+        PythonFrameIteratorImpl info(PythonFrameId::INTERPRETED, ip, bp, cf);
+
+        if (cur_thread_state.unwind_why == UNWIND_WHY_NORMAL) {
+            bool stop = func(&info);
+            if (stop)
+                return true;
+        }
+
+        cur_thread_state.unwind_why = (bool)cf->entry_descriptor ? UNWIND_WHY_OSR : UNWIND_WHY_NORMAL;
+        return false;
+    }
+
+    return false;
+}
+
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
 // the stack frame that they were created in, so we need to use this approach (as opposed to
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
-void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImpl>)> func) {
-    static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
-    static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
-
+template <typename Func> void unwindPythonStack(Func func) {
+    cur_thread_state.unwind_why = UNWIND_WHY_NORMAL; // ensure we won't be skipping any python frames at the start
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
     unw_init_local(&cursor, &ctx);
-
-    // If the previous (lower, ie newer) frame was a frame that got OSR'd into,
-    // we skip the previous frame, its OSR parent.
-    bool was_osr = false;
 
     while (true) {
         int r = unw_step(&cursor);
@@ -435,63 +509,13 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
         if (r == 0)
             break;
 
+        unw_word_t ip = get_cursor_ip(&cursor);
+        unw_word_t bp = get_cursor_bp(&cursor);
 
-        unw_word_t ip;
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_word_t bp;
-        unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
+        if (unwindProcessFrame(ip, bp, &cursor, func))
+            break;
 
-        CompiledFunction* cf = getCFForAddress(ip);
-        if (cf) {
-            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
-            info->id.type = PythonFrameId::COMPILED;
-            info->id.ip = ip;
-            info->id.bp = bp;
-            info->cf = cf;
-
-            if (!was_osr) {
-                // Try getting all the callee-save registers, and save the ones we were able to get.
-                // Some of them may be inaccessible, I think because they weren't defined by that
-                // stack frame, which can show up as a -UNW_EBADREG return code.
-                for (int i = 0; i < 16; i++) {
-                    if (!assembler::Register::fromDwarf(i).isCalleeSave())
-                        continue;
-                    unw_word_t r;
-                    int code = unw_get_reg(&cursor, i, &r);
-                    ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
-                    if (code == 0) {
-                        info->regs[i] = r;
-                        info->regs_valid |= (1 << i);
-                    }
-                }
-
-                bool stop = func(std::move(info));
-                if (stop)
-                    break;
-            }
-            was_osr = (bool)cf->entry_descriptor;
-            continue;
-        }
-
-        if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
-            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
-            info->id.type = PythonFrameId::INTERPRETED;
-            info->id.ip = ip;
-            info->id.bp = bp;
-            cf = info->cf = getCFForInterpretedFrame((void*)bp);
-            assert(cf);
-
-            if (!was_osr) {
-                bool stop = func(std::move(info));
-                if (stop)
-                    break;
-            }
-
-            was_osr = (bool)cf->entry_descriptor;
-            continue;
-        }
-
-        if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
+        if (inGeneratorEntry(ip)) {
             // for generators continue unwinding in the context in which the generator got called
             Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
             // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
@@ -514,21 +538,33 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
     STAT_TIMER(t0, "us_timer_getTopPythonFrame");
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> iter) {
-        rtn = std::move(iter);
+    unwindPythonStack([&](PythonFrameIteratorImpl* iter) {
+        rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*iter));
         return true;
     });
     return rtn;
 }
 
-static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
-    AST_stmt* current_stmt = frame_it.getCurrentStatement();
-    auto* cf = frame_it.getCF();
+static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
+    AST_stmt* current_stmt = frame_it->getCurrentStatement();
+    auto* cf = frame_it->getCF();
     assert(cf);
 
     auto source = cf->clfunc->source.get();
 
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+}
+
+void maybeTracebackHere(void* unw_cursor, BoxedTraceback** tb) {
+    unw_cursor_t* cursor = (unw_cursor_t*)unw_cursor;
+
+    unw_word_t ip = get_cursor_ip(cursor);
+    unw_word_t bp = get_cursor_bp(cursor);
+
+    unwindProcessFrame(ip, bp, cursor, [&](PythonFrameIteratorImpl* frame_iter) {
+        BoxedTraceback::Here(lineInfoForFrame(frame_iter), tb);
+        return false;
+    });
 }
 
 // To produce a traceback, we:
@@ -584,11 +620,9 @@ BoxedTraceback* getTraceback() {
 
     Timer _t("getTraceback", 1000);
 
-    std::vector<const LineInfo*> entries;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
-        const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
-        if (line_info)
-            entries.push_back(line_info);
+    BoxedTraceback::LinesVector entries;
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
+        entries.push_back(lineInfoForFrame(frame_iter));
         return false;
     });
 
@@ -605,7 +639,7 @@ ExcInfo* getFrameExcInfo() {
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
 
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         FrameInfo* frame_info = frame_iter->getFrameInfo();
 
         copy_from_exc = &frame_info->exc;
@@ -665,9 +699,9 @@ BoxedModule* getCurrentModule() {
 
 PythonFrameIterator getPythonFrame(int depth) {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (depth == 0) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
         depth--;
@@ -697,7 +731,7 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
 FrameStackState getFrameStackState() {
     FrameStackState rtn(NULL, NULL);
     bool found = false;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
@@ -957,9 +991,9 @@ FrameInfo* PythonFrameIterator::getFrameInfo() {
 PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     auto& impl = this->impl;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (frame_iter->pointsToTheSameAs(*impl.get())) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
         return false;
@@ -975,9 +1009,9 @@ PythonFrameIterator PythonFrameIterator::back() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     auto& impl = this->impl;
     bool found = false;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (found) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
 

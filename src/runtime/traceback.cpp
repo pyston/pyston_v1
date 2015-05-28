@@ -24,6 +24,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -40,6 +41,8 @@ void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
 
     if (self->py_lines)
         v->visit(self->py_lines);
+    if (self->tb_next)
+        v->visit(self->tb_next);
 
     boxGCHandler(v, b);
 }
@@ -53,41 +56,47 @@ void printTraceback(Box* b) {
 
     fprintf(stderr, "Traceback (most recent call last):\n");
 
-    for (auto line : tb->lines) {
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
+    for (; tb && tb != None; tb = static_cast<BoxedTraceback*>(tb->tb_next)) {
+        for (auto line : tb->lines) {
+            fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line.file.c_str(), line.line, line.func.c_str());
 
-        if (line->line < 0)
-            continue;
+            if (line.line < 0)
+                continue;
 
-        FILE* f = fopen(line->file.c_str(), "r");
-        if (f) {
-            assert(line->line < 10000000 && "Refusing to try to seek that many lines forward");
-            for (int i = 1; i < line->line; i++) {
+            FILE* f = fopen(line.file.c_str(), "r");
+            if (f) {
+                assert(line.line < 10000000 && "Refusing to try to seek that many lines forward");
+                for (int i = 1; i < line.line; i++) {
+                    char* buf = NULL;
+                    size_t size;
+                    size_t r = getline(&buf, &size, f);
+                    if (r != -1)
+                        free(buf);
+                }
                 char* buf = NULL;
                 size_t size;
                 size_t r = getline(&buf, &size, f);
-                if (r != -1)
+                if (r != -1) {
+                    while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
+                        r--;
+
+                    char* ptr = buf;
+                    while (*ptr == ' ' || *ptr == '\t') {
+                        ptr++;
+                        r--;
+                    }
+
+                    fprintf(stderr, "    %.*s\n", (int)r, ptr);
                     free(buf);
-            }
-            char* buf = NULL;
-            size_t size;
-            size_t r = getline(&buf, &size, f);
-            if (r != -1) {
-                while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
-                    r--;
-
-                char* ptr = buf;
-                while (*ptr == ' ' || *ptr == '\t') {
-                    ptr++;
-                    r--;
                 }
-
-                fprintf(stderr, "    %.*s\n", (int)r, ptr);
-                free(buf);
+                fclose(f);
             }
-            fclose(f);
         }
     }
+}
+
+void BoxedTraceback::addLine(const LineInfo line) {
+    lines.insert(lines.begin(), line);
 }
 
 Box* BoxedTraceback::getLines(Box* b) {
@@ -97,15 +106,22 @@ Box* BoxedTraceback::getLines(Box* b) {
 
     if (!tb->py_lines) {
         BoxedList* lines = new BoxedList();
-        lines->ensure(tb->lines.size());
-        for (auto line : tb->lines) {
-            auto l = BoxedTuple::create({ boxString(line->file), boxString(line->func), boxInt(line->line) });
-            listAppendInternal(lines, l);
+        for (BoxedTraceback* wtb = tb; wtb && wtb != None; wtb = static_cast<BoxedTraceback*>(wtb->tb_next)) {
+            lines->ensure(wtb->lines.size());
+            for (auto& line : wtb->lines) {
+                auto l = BoxedTuple::create({ boxString(line.file), boxString(line.func), boxInt(line.line) });
+                listAppendInternal(lines, l);
+            }
         }
         tb->py_lines = lines;
     }
 
     return tb->py_lines;
+}
+
+void BoxedTraceback::Here(LineInfo lineInfo, BoxedTraceback** tb) {
+    *tb = new BoxedTraceback(*tb);
+    (*tb)->addLine(lineInfo);
 }
 
 void setupTraceback() {

@@ -76,7 +76,7 @@ void raiseRaw(const ExcInfo& e) {
 }
 
 void raiseExc(Box* exc_obj) {
-    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, getTraceback()));
+    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback()));
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -84,10 +84,9 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    auto tb = getTraceback();
-    std::vector<const LineInfo*> entries = tb->lines;
-    entries.push_back(new LineInfo(lineno, col_offset, file, func));
-    raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
+    auto tb = new BoxedTraceback();
+    tb->addLine(LineInfo(lineno, col_offset, file, func));
+    raiseRaw(ExcInfo(exc->cls, exc, tb));
 }
 
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
@@ -205,6 +204,7 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
+    cur_thread_state.unwind_why = UNWIND_WHY_RERAISE;
     raiseRaw(*exc_info);
 }
 
@@ -229,8 +229,12 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     assert(type && value && tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
-    if (tb == None)
-        tb = getTraceback();
+    if (tb == None) {
+        tb = NULL;
+    } else if (tb != NULL && !PyTraceBack_Check(tb)) {
+        raiseExcHelper(TypeError, "raise: arg 3 must be a traceback or None");
+    }
+
 
     /* Next, repeatedly, replace a tuple exception with its first item */
     while (PyTuple_Check(type) && PyTuple_Size(type) > 0) {
@@ -242,6 +246,7 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 
     if (PyExceptionClass_Check(type)) {
         PyErr_NormalizeException(&type, &value, &tb);
+
         if (!PyExceptionInstance_Check(value)) {
             raiseExcHelper(TypeError, "calling %s() should have returned an instance of "
                                       "BaseException, not '%s'",
@@ -268,11 +273,18 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 
     assert(PyExceptionClass_Check(type));
 
+    if (tb == NULL) {
+        tb = new BoxedTraceback();
+    }
+
     return ExcInfo(type, value, tb);
 }
 
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
-    raiseRaw(excInfoForRaise(arg0, arg1, arg2));
+    bool reraise = arg2 != NULL && arg2 != None;
+    auto exc_info = excInfoForRaise(arg0, arg1, arg2);
+    cur_thread_state.unwind_why = reraise ? UNWIND_WHY_RERAISE : UNWIND_WHY_NORMAL;
+    raiseRaw(exc_info);
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {

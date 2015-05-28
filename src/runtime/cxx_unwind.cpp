@@ -20,13 +20,15 @@
 
 #include "llvm/Support/LEB128.h" // for {U,S}LEB128 decoding
 
+#include "asm_writing/assembler.h"   // assembler
 #include "codegen/ast_interpreter.h" // interpreter_instr_addr
 #include "codegen/unwinding.h"       // getCFForAddress
 #include "core/ast.h"
-#include "core/stats.h"        // StatCounter
-#include "core/types.h"        // for ExcInfo
-#include "core/util.h"         // Timer
-#include "runtime/generator.h" // generatorEntry
+#include "core/stats.h"              // StatCounter
+#include "core/types.h"              // for ExcInfo
+#include "core/util.h"               // Timer
+#include "runtime/generator.h"       // generatorEntry
+#include "runtime/traceback.h"       // BoxedTraceback::addLine
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -100,15 +102,6 @@ struct ExcData {
 thread_local ExcData exception_ferry;
 
 static_assert(offsetof(ExcData, exc) == 0, "wrong offset");
-
-// Timer that auto-logs.
-struct LogTimer {
-    StatCounter& counter;
-    Timer timer;
-
-    LogTimer(const char* desc, StatCounter& ctr, long min_usec = -1) : counter(ctr), timer(desc, min_usec) {}
-    ~LogTimer() { counter.log(timer.end()); }
-};
 
 static StatCounter us_unwind_loop("us_unwind_loop");
 static StatCounter us_unwind_resume_catch("us_unwind_resume_catch");
@@ -508,16 +501,8 @@ static inline int64_t determine_action(const lsda_info_t* info, const call_site_
     RELEASE_ASSERT(0, "action chain exhausted and no cleanup indicated");
 }
 
-static inline int step(unw_cursor_t* cp) {
-    LogTimer t("unw_step", us_unwind_step, 5);
-    return unw_step(cp);
-}
-
 // The stack-unwinding loop.
-// TODO: integrate incremental traceback generation into this function
-static inline void unwind_loop(const ExcData* exc_data) {
-    Timer t("unwind_loop", 50);
-
+static inline void unwind_loop(ExcData* exc_data) {
     // NB. https://monoinfinito.wordpress.com/series/exception-handling-in-c/ is a very useful resource
     // as are http://www.airs.com/blog/archives/460 and http://www.airs.com/blog/archives/464
     unw_cursor_t cursor;
@@ -530,11 +515,10 @@ static inline void unwind_loop(const ExcData* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    while (step(&cursor) > 0) {
+    while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
         {
             // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
-            LogTimer t_procinfo("get_proc_info", us_unwind_get_proc_info, 10);
             check(unw_get_proc_info(&cursor, &pip));
         }
         assert((pip.lsda == 0) == (pip.handler == 0));
@@ -543,6 +527,8 @@ static inline void unwind_loop(const ExcData* exc_data) {
         if (VERBOSITY("cxx_unwind") >= 4) {
             print_frame(&cursor, &pip);
         }
+
+        maybeTracebackHere(&cursor, reinterpret_cast<BoxedTraceback**>(&exc_data->exc.traceback));
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -560,8 +546,6 @@ static inline void unwind_loop(const ExcData* exc_data) {
 
         call_site_entry_t entry;
         {
-            LogTimer t_call_site("find_call_site_entry", us_unwind_find_call_site_entry, 10);
-
             // 2. Find our current IP in the call site table.
             unw_word_t ip;
             unw_get_reg(&cursor, UNW_REG_IP, &ip);
@@ -592,17 +576,15 @@ static inline void unwind_loop(const ExcData* exc_data) {
         }
 
         int64_t switch_value = determine_action(&info, &entry);
-        us_unwind_loop.log(t.end());
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
 
-    us_unwind_loop.log(t.end());
     // Hit end of stack! return & let unwindException determine what to do.
 }
 
 
 // The unwinder entry-point.
-static void unwind(const ExcData* exc) {
+static void unwind(ExcData* exc) {
     exc->check();
     unwind_loop(exc);
     // unwind_loop returned, couldn't find any handler. ruh-roh.
@@ -637,7 +619,7 @@ extern "C" void _Unwind_Resume(struct _Unwind_Exception* _exc) {
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** _Unwind_Resume() *****\n");
     // we give `_exc' type `struct _Unwind_Exception*' because unwind.h demands it; it's not actually accurate
-    const pyston::ExcData* data = (const pyston::ExcData*)_exc;
+    pyston::ExcData* data = (pyston::ExcData*)_exc;
     pyston::unwind(data);
 }
 
@@ -708,7 +690,7 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_throw() *****\n");
 
-    const pyston::ExcData* exc_data = (const pyston::ExcData*)exc_obj;
+    pyston::ExcData* exc_data = (pyston::ExcData*)exc_obj;
     exc_data->check();
     pyston::unwind(exc_data);
 }
