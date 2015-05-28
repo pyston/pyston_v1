@@ -412,6 +412,8 @@ float_str(PyFloatObject *v)
  * coercion to double.  So this part is painful too.
  */
 
+// Pyston change: don't need this for now
+#if 0
 static PyObject*
 float_richcompare(PyObject *v, PyObject *w, int op)
 {
@@ -625,6 +627,7 @@ float_richcompare(PyObject *v, PyObject *w, int op)
     Py_INCREF(Py_NotImplemented);
     return Py_NotImplemented;
 }
+#endif
 
 static long
 float_hash(PyFloatObject *v)
@@ -687,6 +690,8 @@ float_div(PyObject *v, PyObject *w)
     return PyFloat_FromDouble(a);
 }
 
+// Pyston change: don't need this for now
+#if 0
 static PyObject *
 float_classic_div(PyObject *v, PyObject *w)
 {
@@ -708,6 +713,7 @@ float_classic_div(PyObject *v, PyObject *w)
     PyFPE_END_PROTECT(a)
     return PyFloat_FromDouble(a);
 }
+#endif
 
 static PyObject *
 float_rem(PyObject *v, PyObject *w)
@@ -2081,6 +2087,8 @@ PyDoc_STRVAR(float_doc,
 Convert a string or number to a floating point number, if possible.");
 
 
+// Pyston change: don't need this for now
+#if 0
 static PyNumberMethods float_as_number = {
     float_add,          /*nb_add*/
     float_sub,          /*nb_subtract*/
@@ -2121,6 +2129,7 @@ static PyNumberMethods float_as_number = {
     0,                  /* nb_inplace_floor_divide */
     0,                  /* nb_inplace_true_divide */
 };
+#endif
 
 // pyston change: don't need this
 #if 0

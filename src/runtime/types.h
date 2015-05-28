@@ -239,8 +239,7 @@ public:
                                   int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                   BoxedTuple* bases, size_t nslots);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int weaklist_offset, int instance_size, bool is_user_defined,
-                                  const std::string& name);
+                                  int weaklist_offset, int instance_size, bool is_user_defined, llvm::StringRef name);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
@@ -354,10 +353,10 @@ public:
     }
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* getOrMakeChild(const std::string& attr);
+    HiddenClass* getOrMakeChild(llvm::StringRef attr);
 
     // Only valid for NORMAL or SINGLETON hidden classes:
-    int getOffset(const std::string& attr) {
+    int getOffset(llvm::StringRef attr) {
         assert(type == NORMAL || type == SINGLETON);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
@@ -380,7 +379,7 @@ public:
     HiddenClass* getAttrwrapperChild();
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* delAttrToMakeHC(const std::string& attr);
+    HiddenClass* delAttrToMakeHC(llvm::StringRef attr);
 };
 
 class BoxedInt : public Box {

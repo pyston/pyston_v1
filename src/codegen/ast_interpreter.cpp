@@ -959,15 +959,15 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
         // begin code for handling of softspace
         bool new_softspace = (i < nvals - 1) || (!node->nl);
         if (softspace(dest, new_softspace)) {
-            callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(space_str), 0, 0, 0, 0);
+            callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(space_str), 0, 0, 0, 0);
         }
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
-        callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
     }
 
     if (node->nl) {
-        callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(newline_str), 0, 0, 0, 0);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(newline_str), 0, 0, 0, 0);
         if (nvals == 0) {
             softspace(dest, false);
         }

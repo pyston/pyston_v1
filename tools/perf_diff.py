@@ -6,7 +6,7 @@ def tally(fn):
     for l in open(fn):
         samples = int(l.split()[3])
         func = l.split()[-1]
-        counts[func] = samples
+        counts[func] = counts.get(func, 0) + samples
 
     return counts
 
