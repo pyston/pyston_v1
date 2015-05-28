@@ -348,6 +348,10 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     // results (since sometimes eval or exec might be called on constant strings).
     EffortLevel effort = EffortLevel::INTERPRETED;
 
+    Box* doc_string = cl->source->getDocString();
+    if (doc_string != None)
+        setGlobal(boxedLocals, "__doc__", doc_string);
+
     CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
     assert(cf->clfunc->versions.size());
 
