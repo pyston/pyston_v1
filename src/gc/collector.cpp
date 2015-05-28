@@ -48,6 +48,27 @@ namespace gc {
 FILE* trace_fp;
 #endif
 
+static std::unordered_set<void*> roots;
+static std::vector<std::pair<void*, void*>> potential_root_ranges;
+
+static std::unordered_set<void*> nonheap_roots;
+
+// Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
+// typically all have lower addresses than the heap roots, so this can serve as a cheap
+// way to verify it's not a nonheap root (the full check requires a hashtable lookup).
+static void* max_nonheap_root = 0;
+static void* min_nonheap_root = (void*)~0;
+
+static std::unordered_set<GCRootHandle*>* getRootHandles() {
+    static std::unordered_set<GCRootHandle*> root_handles;
+    return &root_handles;
+}
+
+static bool gc_enabled = true;
+
+static int ncollections = 0;
+static bool should_not_reenter_gc = false;
+
 class TraceStack {
 protected:
     const int CHUNK_SIZE = 256;
@@ -134,7 +155,6 @@ public:
 };
 std::vector<void**> TraceStack::free_chunks;
 
-static std::unordered_set<void*> roots;
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
 
@@ -151,7 +171,6 @@ void deregisterPermanentRoot(void* obj) {
     roots.erase(obj);
 }
 
-static std::vector<std::pair<void*, void*>> potential_root_ranges;
 void registerPotentialRootRange(void* start, void* end) {
     potential_root_ranges.push_back(std::make_pair(start, end));
 }
@@ -165,12 +184,6 @@ extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     return obj;
 }
 
-static std::unordered_set<void*> nonheap_roots;
-// Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
-// typically all have lower addresses than the heap roots, so this can serve as a cheap
-// way to verify it's not a nonheap root (the full check requires a hashtable lookup).
-static void* max_nonheap_root = 0;
-static void* min_nonheap_root = (void*)~0;
 void registerNonheapRootObject(void* obj, int size) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
@@ -213,19 +226,12 @@ void setIsPythonObject(Box* b) {
     }
 }
 
-static std::unordered_set<GCRootHandle*>* getRootHandles() {
-    static std::unordered_set<GCRootHandle*> root_handles;
-    return &root_handles;
-}
-
 GCRootHandle::GCRootHandle() {
     getRootHandles()->insert(this);
 }
 GCRootHandle::~GCRootHandle() {
     getRootHandles()->erase(this);
 }
-
-
 
 bool GCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p) != NULL;
@@ -286,8 +292,6 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
         start++;
     }
 }
-
-static int ncollections = 0;
 
 void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
@@ -517,18 +521,17 @@ static void callOrderedFinalizersPhase(std::vector<Box*>& to_be_finalized, std::
     }
 }
 
-static bool gc_enabled = true;
 bool gcIsEnabled() {
     return gc_enabled;
 }
+
 void enableGC() {
     gc_enabled = true;
 }
+
 void disableGC() {
     gc_enabled = false;
 }
-
-static bool should_not_reenter_gc = false;
 
 void startGCUnexpectedRegion() {
     RELEASE_ASSERT(!should_not_reenter_gc, "");
