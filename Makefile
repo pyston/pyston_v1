@@ -344,6 +344,7 @@ STDMODULE_SRCS := \
 	signalmodule.c \
 	selectmodule.c \
 	fcntlmodule.c \
+	threadmodule.c \
 	timemodule.c \
 	arraymodule.c \
 	zlibmodule.c \

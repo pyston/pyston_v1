@@ -4822,14 +4822,6 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
         static StatCounter stat_builtins("getglobal_builtins");
         stat_builtins.log();
 
-        if ((*name) == "__builtins__") {
-            if (rewriter.get()) {
-                RewriterVar* r_rtn = rewriter->loadConst((intptr_t)builtins_module, rewriter->getReturnDestination());
-                rewriter->commitReturning(r_rtn);
-            }
-            return builtins_module;
-        }
-
         Box* rtn;
         if (rewriter.get()) {
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());

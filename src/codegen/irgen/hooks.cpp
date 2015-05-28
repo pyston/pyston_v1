@@ -313,6 +313,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body, fn));
         bm->setattr("__doc__", si->getDocString(), NULL);
+        if (!bm->hasattr("__builtins__"))
+            bm->giveAttr("__builtins__", PyModule_GetDict(builtins_module));
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
@@ -345,6 +347,10 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     // INTERPRETED. This could actually be useful if we actually cache the parse
     // results (since sometimes eval or exec might be called on constant strings).
     EffortLevel effort = EffortLevel::INTERPRETED;
+
+    Box* doc_string = cl->source->getDocString();
+    if (doc_string != None)
+        setGlobal(boxedLocals, "__doc__", doc_string);
 
     CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
     assert(cf->clfunc->versions.size());

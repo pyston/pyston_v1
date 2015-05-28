@@ -2803,6 +2803,8 @@ BoxedModule* createModule(const std::string& name, const char* fn, const char* d
         module->giveAttr("__file__", boxString(fn));
 
     d->d[b_name] = module;
+    if (name == "__main__")
+        module->giveAttr("__builtins__", builtins_module);
     return module;
 }
 

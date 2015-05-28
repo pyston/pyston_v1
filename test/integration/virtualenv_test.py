@@ -21,11 +21,13 @@ set -e
 set -ux
 python -c 'import __future__'
 python -c 'import sys; print sys.executable'
-pip install bcrypt==1.1.0 python-gflags==2.0 sqlalchemy==1.0.0 Pillow==2.8.1
+pip install bcrypt==1.1.0 python-gflags==2.0 sqlalchemy==1.0.0 Pillow==2.8.1 decorator oauth2client
 python -c 'import bcrypt; assert bcrypt.__version__ == "1.1.0"; assert bcrypt.hashpw("password1", "$2a$12$0123456789012345678901").endswith("I1hdtg4K"); print "bcrypt seems to work"'
 python -c 'import gflags; print "gflags imports"'
 python -c 'import sqlalchemy; print "sqlalchemy imports"'
 python -c 'from PIL import Image; print "Pillow imports"'
+python -c 'import decorator; print "decorator imports"'
+python -c 'import oauth2client; print "oauth2client imports"'
 """.strip()
 
 # print sh_script

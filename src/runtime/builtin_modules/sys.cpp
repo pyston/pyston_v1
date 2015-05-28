@@ -249,6 +249,11 @@ static std::string generateVersionString() {
     return oss.str();
 }
 
+extern "C" const char* Py_GetVersion(void) noexcept {
+    static std::string version = generateVersionString();
+    return version.c_str();
+}
+
 static bool isLittleEndian() {
     unsigned long number = 1;
     char* s = (char*)&number;
