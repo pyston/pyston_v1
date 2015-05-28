@@ -60,7 +60,8 @@ void disableGC();
 void enableGC();
 
 // These are mostly for debugging:
-bool isValidGCObject(void* p);
+bool isValidGCMemory(void* p); // if p is a valid gc-allocated pointer (or a non-heap root)
+bool isValidGCObject(void* p); // whether p is valid gc memory and is set to have Python destructor semantics applied
 bool isNonheapRoot(void* p);
 void setIsPythonObject(Box* b);
 

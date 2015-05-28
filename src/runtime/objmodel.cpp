@@ -2338,7 +2338,7 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    bool is_gc = gc::isValidGCObject(p);
+    bool is_gc = gc::isValidGCMemory(p);
     if (!is_gc) {
         printf("non-gc memory\n");
         return;

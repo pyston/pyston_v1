@@ -180,8 +180,17 @@ bool isNonheapRoot(void* p) {
     return nonheap_roots.count(p) != 0;
 }
 
-bool isValidGCObject(void* p) {
+bool isValidGCMemory(void* p) {
     return isNonheapRoot(p) || (global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+}
+
+bool isValidGCObject(void* p) {
+    if (isNonheapRoot(p))
+        return true;
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    if (!al)
+        return false;
+    return al->user_data == p && (al->kind_id == GCKind::CONSERVATIVE_PYTHON || al->kind_id == GCKind::PYTHON);
 }
 
 void setIsPythonObject(Box* b) {

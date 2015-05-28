@@ -2233,11 +2233,11 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
 extern "C" void PyCallIter_AddHasNext();
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
-    assert(gc::isValidGCObject(op));
-    assert(gc::isValidGCObject(tp));
+    assert(op);
+    assert(tp);
 
-    RELEASE_ASSERT(op, "");
-    RELEASE_ASSERT(tp, "");
+    assert(gc::isValidGCMemory(op));
+    assert(gc::isValidGCObject(tp));
 
     gc::setIsPythonObject(op);
 
@@ -2251,7 +2251,7 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(op);
     assert(tp);
 
-    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
 
     gc::setIsPythonObject(op);

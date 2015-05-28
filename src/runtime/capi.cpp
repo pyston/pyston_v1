@@ -1645,7 +1645,7 @@ static Box* methodGetDoc(Box* b, void*) {
 
 extern "C" PyObject* _PyObject_GC_Malloc(size_t basicsize) noexcept {
     Box* r = ((PyObject*)PyObject_MALLOC(basicsize));
-    RELEASE_ASSERT(gc::isValidGCObject(r), "");
+    RELEASE_ASSERT(gc::isValidGCMemory(r), "");
     return r;
 }
 
