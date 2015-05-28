@@ -1653,7 +1653,7 @@ public:
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
         const std::string eq_str = "__eq__";
-        return callattrInternal(dict, &eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
+        return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
                                 NULL);
     }
 

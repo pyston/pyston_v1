@@ -480,18 +480,18 @@ public:
     BoxedDict* getDict();
 
 
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
-    void giveAttr(const std::string& attr, Box* val) {
+    void setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    void giveAttr(llvm::StringRef attr, Box* val) {
         assert(!this->hasattr(attr));
         this->setattr(attr, val, NULL);
     }
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
-    Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
-    bool hasattr(const std::string& attr) { return getattr(attr) != NULL; }
-    void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
+    Box* getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
+    Box* getattr(llvm::StringRef attr) { return getattr(attr, NULL); }
+    bool hasattr(llvm::StringRef attr) { return getattr(attr) != NULL; }
+    void delattr(llvm::StringRef attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
     Box* getAttrWrapper();
