@@ -901,6 +901,16 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     abort();
 }
 
+extern "C" PyObject* _PyType_Lookup(PyTypeObject* type, PyObject* name) noexcept {
+    RELEASE_ASSERT(name->cls == str_cls, "");
+    try {
+        return typeLookup(type, static_cast<BoxedString*>(name)->s(), NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     Box* val;
 
@@ -2328,7 +2338,7 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    bool is_gc = gc::isValidGCObject(p);
+    bool is_gc = gc::isValidGCMemory(p);
     if (!is_gc) {
         printf("non-gc memory\n");
         return;
@@ -4513,23 +4523,10 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     // Notably, "type" itself does not.  For instance, assuming M is a subclass of
     // type, type.__new__(M, 1) will return the int class, which is not an instance of M.
 
-    static Box* object_new = NULL;
-    static Box* object_init = NULL;
     // this is ok with not using StlCompatAllocator since we will manually register these objects with the GC
     static std::vector<Box*> allowable_news;
-    if (!object_new) {
-        object_new = typeLookup(object_cls, new_str, NULL);
-        assert(object_new);
-        // I think this is unnecessary, but good form:
-        gc::registerPermanentRoot(object_new);
-
-        object_init = typeLookup(object_cls, init_str, NULL);
-        assert(object_init);
-        gc::registerPermanentRoot(object_init);
-
-        allowable_news.push_back(object_new);
-
-        for (BoxedClass* allowed_cls : { enumerate_cls, xrange_cls }) {
+    if (allowable_news.empty()) {
+        for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls }) {
             auto new_obj = typeLookup(allowed_cls, new_str, NULL);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
@@ -4585,16 +4582,9 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     RewriterVar* r_made = NULL;
 
     ArgPassSpec new_argspec = argspec;
-    if (npassed_args > 1 && new_attr == object_new) {
-        if (init_attr == object_init) {
-            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
-        } else {
-            new_argspec = ArgPassSpec(1);
-        }
-    }
 
     if (rewrite_args) {
-        if (new_attr == object_new && init_attr != object_init) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
             // Fast case: if we are calling object_new, we normally doesn't look at the arguments at all.
             // (Except in the case when init_attr != object_init, in which case object_new looks at the number
             // of arguments and throws an exception.)
@@ -4660,7 +4650,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
         }
     }
 
-    if (init_attr && init_attr != object_init) {
+    if (init_attr && made->cls->tp_init != object_cls->tp_init) {
         // TODO apply the same descriptor special-casing as in callattr?
 
         Box* initrtn;
@@ -4722,8 +4712,10 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
 Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     assert(vararg->cls == tuple_cls);
 
+    bool pass_kwargs = (kwargs && kwargs->d.size());
+
     int n = vararg->size();
-    int args_to_pass = n + 2; // 1 for obj, 1 for kwargs
+    int args_to_pass = n + 1 + (pass_kwargs ? 1 : 0); // 1 for obj, 1 for kwargs
 
     Box** args = NULL;
     if (args_to_pass > 3)
@@ -4734,9 +4726,11 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     for (int i = 0; i < n; i++) {
         getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
     }
-    getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
 
-    return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, true), arg1, arg2, arg3, args, NULL);
+    if (pass_kwargs)
+        getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
+
+    return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
 }
 
 extern "C" void delGlobal(Box* globals, const std::string* name) {

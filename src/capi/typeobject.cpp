@@ -27,6 +27,8 @@ static const std::string _getattr_str("__getattr__");
 static const std::string _getattribute_str("__getattribute__");
 typedef int (*update_callback)(PyTypeObject*, void*);
 
+static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
+
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
@@ -1591,8 +1593,6 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                 else
                     use_generic = 1;
             }
-// TODO Pyston doesn't support PyCFunction_Type yet I think?
-#if 0
         } else if (Py_TYPE(descr) == &PyCFunction_Type && PyCFunction_GET_FUNCTION(descr) == (PyCFunction)tp_new_wrapper
                    && ptr == (void**)&type->tp_new) {
             /* The __new__ wrapper is not a wrapper descriptor,
@@ -1611,7 +1611,6 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                in this reasoning that requires additional
                sanity checks.  I'll buy the first person to
                point out a bug in this reasoning a beer. */
-#endif
         } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
                    && static_cast<BoxedFunction*>(descr)->f->always_use_version) {
             type->tpp_descr_get = (descrgetfunc) static_cast<BoxedFunction*>(descr)->f->always_use_version->code;
@@ -1745,12 +1744,16 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     return self->tp_new(subtype, new_args, kwds);
 }
 
+static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
+                                                   PyDoc_STR("T.__new__(S, ...) -> "
+                                                             "a new object with type S, a subtype of T") },
+                                                 { 0, 0, 0, 0 } };
+
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr("__new__"))
         return;
 
-    type->giveAttr("__new__",
-                   new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
+    type->giveAttr("__new__", new BoxedCApiFunction(tp_new_methoddef, type));
 }
 
 void add_operators(BoxedClass* cls) noexcept {
@@ -2931,7 +2934,7 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
-    gc::registerNonheapRootObject(cls);
+    gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES

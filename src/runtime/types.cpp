@@ -95,7 +95,8 @@ bool IN_SHUTDOWN = false;
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
 
-    const size_t size = _PyObject_VAR_SIZE(cls, nitems);
+    // See PyType_GenericAlloc for note about the +1 here:
+    const size_t size = _PyObject_VAR_SIZE(cls, nitems + 1);
 
 #ifndef NDEBUG
 #if 0
@@ -144,8 +145,11 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
-    const size_t size = _PyObject_VAR_SIZE(type, nitems);
+    const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
+    // I don't understand why there is a +1 in this method; _PyObject_NewVar doesn't do that.
+    // CPython has the following comment:
     /* note that we need to add one, for the sentinel */
+    // I think that regardless of the reasoning behind them having it, we should do what they do?
 
     if (PyType_IS_GC(type))
         obj = _PyObject_GC_Malloc(size);
@@ -1731,26 +1735,45 @@ Box* objectNewNoArgs(BoxedClass* cls) {
     return new (cls) Box();
 }
 
-Box* objectNew(BoxedClass* cls, BoxedTuple* args, BoxedDict* kwargs) {
-    assert(isSubclass(cls->cls, type_cls));
-    assert(args->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
-
-    // We use a different strategy from CPython: we let object.__new__ take extra
-    // arguments, but raise an error if they wouldn't be handled by the corresponding init.
-    // TODO switch to the CPython approach?
-    if (args->size() != 0 || kwargs->d.size() != 0) {
-        // TODO slow (We already cache these in typeCall -- should use that here too?)
-        if (typeLookup(cls, "__new__", NULL) != typeLookup(object_cls, "__new__", NULL)
-            || typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
-            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
-    }
-
-    return new (cls) Box();
+static int excess_args(PyObject* args, PyObject* kwds) noexcept {
+    return PyTuple_GET_SIZE(args) || (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
 
-Box* objectInit(Box* b, BoxedTuple* args) {
-    return None;
+static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept;
+
+static int object_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    int err = 0;
+    if (excess_args(args, kwds)) {
+        PyTypeObject* type = Py_TYPE(self);
+        if (type->tp_init != object_init && type->tp_new != object_new) {
+            err = PyErr_WarnEx(PyExc_DeprecationWarning, "object.__init__() takes no parameters", 1);
+        } else if (type->tp_init != object_init || type->tp_new == object_new) {
+            PyErr_SetString(PyExc_TypeError, "object.__init__() takes no parameters");
+            err = -1;
+        }
+    }
+    return err;
+}
+
+static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
+    int err = 0;
+    if (excess_args(args, kwds)) {
+        if (type->tp_new != object_new && type->tp_init != object_init) {
+            err = PyErr_WarnEx(PyExc_DeprecationWarning, "object() takes no parameters", 1);
+        } else if (type->tp_new != object_new || type->tp_init == object_init) {
+            PyErr_SetString(PyExc_TypeError, "object() takes no parameters");
+            err = -1;
+        }
+    }
+    if (err < 0)
+        return NULL;
+
+    if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
+        // I don't know what this is or when it happens, but
+        // CPython does something special with it
+        Py_FatalError("unimplemented");
+    }
+    return type->tp_alloc(type, 0);
 }
 
 Box* objectRepr(Box* obj) {
@@ -2209,12 +2232,29 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
 
 extern "C" void PyCallIter_AddHasNext();
 
+extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
+    assert(op);
+    assert(tp);
+
+    assert(gc::isValidGCMemory(op));
+    assert(gc::isValidGCObject(tp));
+
+    gc::setIsPythonObject(op);
+
+    Py_TYPE(op) = tp;
+    op->ob_size = size;
+
+    return op;
+}
+
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(op);
     assert(tp);
 
-    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
+
+    gc::setIsPythonObject(op);
 
     Py_TYPE(op) = tp;
 
@@ -2428,6 +2468,8 @@ void setupRuntime() {
 
     object_cls->tp_getattro = PyObject_GenericGetAttr;
     object_cls->tp_setattro = PyObject_GenericSetAttr;
+    object_cls->tp_init = object_init;
+    object_cls->tp_new = object_new;
     add_operators(object_cls);
 
     object_cls->finishInitialization();
@@ -2492,8 +2534,6 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, true)));
-    object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__hash__",
@@ -2546,6 +2586,8 @@ void setupRuntime() {
     }
     object_cls->giveAttr("__class__", new (pyston_getset_cls) BoxedGetsetDescriptor(objectClass, objectSetClass, NULL));
     object_cls->freeze();
+    assert(object_cls->tp_init == object_init);
+    assert(object_cls->tp_new == object_new);
 
     setupBool();
     setupLong();

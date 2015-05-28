@@ -31,7 +31,8 @@ void deregisterPermanentRoot(void* root_obj);
 // Register an object that was not allocated through this collector, as a root for this collector.
 // The motivating usecase is statically-allocated PyTypeObject objects, which are full Python objects
 // even if they are not heap allocated.
-void registerNonheapRootObject(void* obj);
+// This memory will be scanned conservatively.
+void registerNonheapRootObject(void* obj, int size);
 
 void registerPotentialRootRange(void* start, void* end);
 
@@ -59,8 +60,10 @@ void disableGC();
 void enableGC();
 
 // These are mostly for debugging:
-bool isValidGCObject(void* p);
+bool isValidGCMemory(void* p); // if p is a valid gc-allocated pointer (or a non-heap root)
+bool isValidGCObject(void* p); // whether p is valid gc memory and is set to have Python destructor semantics applied
 bool isNonheapRoot(void* p);
+void setIsPythonObject(Box* b);
 
 // Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
 // use these functions to mark that.  This is different from disableGC/enableGC, since it causes an

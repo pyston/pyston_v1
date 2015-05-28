@@ -152,7 +152,7 @@ bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
-    if (alloc_kind == GCKind::PYTHON) {
+    if (alloc_kind == GCKind::PYTHON || alloc_kind == GCKind::CONSERVATIVE_PYTHON) {
 #ifndef NVALGRIND
         VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -170,7 +170,11 @@ bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
             }
         }
 
-        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
+        // XXX: we are currently ignoring destructors (tp_dealloc) for extension objects, since we have
+        // historically done that (whoops) and there are too many to be worth changing for now as long
+        // as we can get real destructor support soon.
+        ASSERT(b->cls->tp_dealloc == NULL || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s", getTypeName(b));
+
         if (b->cls->simple_destructor)
             b->cls->simple_destructor(b);
     }
@@ -208,7 +212,7 @@ struct HeapStatistics {
     int num_hcls_by_attrs[HCLS_ATTRS_STAT_MAX + 1];
     int num_hcls_by_attrs_exceed;
 
-    TypeStats python, conservative, untracked, hcls, precise;
+    TypeStats python, conservative, conservative_python, untracked, hcls, precise;
     TypeStats total;
 
     HeapStatistics(bool collect_cls_stats, bool collect_hcls_stats)
@@ -247,6 +251,17 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     } else if (al->kind_id == GCKind::CONSERVATIVE) {
         stats->conservative.nallocs++;
         stats->conservative.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::CONSERVATIVE_PYTHON) {
+        stats->conservative_python.nallocs++;
+        stats->conservative_python.nbytes += nbytes;
+
+        if (stats->collect_cls_stats) {
+            Box* b = (Box*)al->user_data;
+            auto& t = stats->by_cls[b->cls];
+
+            t.nallocs++;
+            t.nbytes += nbytes;
+        }
     } else if (al->kind_id == GCKind::UNTRACKED) {
         stats->untracked.nallocs++;
         stats->untracked.nbytes += nbytes;
@@ -288,6 +303,7 @@ void Heap::dumpHeapStatistics(int level) {
 
     stats.python.print("python");
     stats.conservative.print("conservative");
+    stats.conservative_python.print("conservative_python");
     stats.untracked.print("untracked");
     stats.hcls.print("hcls");
     stats.precise.print("precise");
@@ -454,7 +470,9 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             } else {
                 if (_doFree(al, &weakly_referenced)) {
                     b->isfree.set(atom_idx);
-                    // memset(al->user_data, 0, b->size - sizeof(GCAllocation));
+#ifndef NDEBUG
+                    memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+#endif
                 }
             }
         }

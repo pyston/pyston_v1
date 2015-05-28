@@ -244,14 +244,14 @@
 #define HAVE_SYS_WAIT_H 1
 #define HAVE_TCGETPGRP 1
 #define HAVE_TCSETPGRP 1
-#define HAVE_TEMPNAM 1
+//#define HAVE_TEMPNAM 1 // pyston change: we have them but I dislike the compiler warnings they generate
 #define HAVE_TERM_H 1
 #define HAVE_TERMIOS_H 1
 #define HAVE_TGAMMA 1
 #define HAVE_TIMEGM 1
 #define HAVE_TIMES 1
 #define HAVE_TMPFILE 1
-#define HAVE_TMPNAM 1
+//#define HAVE_TMPNAM 1 // pyston change: we have them but I dislike the compiler warnings they generate
 #define HAVE_TMPNAM_R 1
 #define HAVE_TM_ZONE 1
 #define HAVE_TRUNCATE 1

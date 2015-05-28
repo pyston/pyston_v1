@@ -12,12 +12,14 @@ class CustomThreadingLocal(threading.local):
         self.n += 1
         print self.a, self.n
 print CustomThreadingLocal().a
-print CustomThreadingLocal().a
+c = CustomThreadingLocal()
+print c.a
 
 def f():
+    print
     a.x = "goodbye world"
     print a.x
-    print CustomThreadingLocal().a
+    print c.a
     print CustomThreadingLocal().a
 
 def test():
@@ -35,4 +37,7 @@ for i in xrange(10):
 print a.x
 a.__setattr__('x', 5)
 print a.x
+print sorted(a.__dict__.items())
+
+del a.x
 print sorted(a.__dict__.items())
