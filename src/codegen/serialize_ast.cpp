@@ -38,19 +38,24 @@ private:
     SerializeASTVisitor(FILE* file) : file(file), checksum(0) {}
     virtual ~SerializeASTVisitor() {}
 
-    void writeByte(uint8_t v) {
-        fwrite(&v, 1, sizeof(v), file);
-        checksum ^= v;
+    void writeByte(uint64_t v) {
+        assert(v < 256);
+
+        uint8_t b = (uint8_t)v;
+        fwrite(&b, 1, 1, file);
+        checksum ^= b;
     }
 
-    void writeShort(uint16_t v) {
+    void writeShort(uint64_t v) {
+        RELEASE_ASSERT(v < (1 << 16), "");
         // I guess we use big-endian:
         for (int i = 1; i >= 0; i--) {
             writeByte((v >> (i * 8)) & 0xff);
         }
     }
 
-    void writeUInt(uint32_t v) {
+    void writeUInt(uint64_t v) {
+        RELEASE_ASSERT(v < (1L << 32), "");
         for (int i = 3; i >= 0; i--) {
             writeByte((v >> (i * 8)) & 0xff);
         }
@@ -71,7 +76,7 @@ private:
     }
 
     void writeString(const std::string& v) {
-        writeShort(v.size());
+        writeUInt(v.size());
         fwrite(v.c_str(), 1, v.size(), file);
         for (int i = 0; i < v.size(); i++) {
             checksum ^= v[i];
