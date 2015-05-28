@@ -974,16 +974,18 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
 }
 
 static PyObject* slot_tp_del(PyObject* self) noexcept {
+    static BoxedString* del_str = static_cast<BoxedString*>(PyString_InternFromString("__del__"));
     try {
         // TODO: runtime ICs?
-        static BoxedString* del_str = static_cast<BoxedString*>(PyString_InternFromString("__del__"));
         Box* del_attr = typeLookup(self->cls, del_str->s(), NULL);
         assert(del_attr);
 
         return callattr(self, del_str, {.cls_only = false, .null_on_nonexistent = true },
                         ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
-        setCAPIException(e);
+        // Python does not support exceptions thrown inside finalizers. Instead, it just
+        // prints a warning that an exception was throw to stderr but ignores it.
+        fprintf(stderr, "Warning: exception thrown in %s of %s ignored\n", del_str->data(), self->cls->tp_name);
         return NULL;
     }
 }
