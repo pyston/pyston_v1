@@ -345,7 +345,7 @@ public:
                     return reinterpret_cast<AST_stmt*>(readLocation(e.locations[0]));
                 }
             }
-            abort();
+            RELEASE_ASSERT(0, "no frame info found at offset 0x%x / ip 0x%lx!", offset, ip);
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getCurrentStatementForInterpretedFrame((void*)id.bp);
         }

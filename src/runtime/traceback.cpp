@@ -85,6 +85,7 @@ void printTraceback(Box* b) {
                 fprintf(stderr, "    %.*s\n", (int)r, ptr);
                 free(buf);
             }
+            fclose(f);
         }
     }
 }

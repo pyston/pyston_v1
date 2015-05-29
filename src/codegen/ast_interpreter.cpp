@@ -300,8 +300,6 @@ public:
 };
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    threading::allowGLReadPreemption();
-
     STAT_TIMER(t0, "us_timer_astinterpreter_execute");
 
     void* frame_addr = __builtin_frame_address(0);
@@ -314,6 +312,11 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
     }
+
+    // Important that this happens after RegisterHelper:
+    interpreter.current_inst = start_at;
+    threading::allowGLReadPreemption();
+    interpreter.current_inst = NULL;
 
     interpreter.current_block = start_block;
     bool started = false;
@@ -692,6 +695,10 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
 }
 
 Value ASTInterpreter::visit_stmt(AST_stmt* node) {
+#if ENABLE_SAMPLING_PROFILER
+    threading::allowGLReadPreemption();
+#endif
+
     if (0) {
         printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
         print_ast(node);

@@ -101,7 +101,16 @@ void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AS
 }
 
 void _printStacktrace() {
+    static bool recursive = false;
+
+    if (recursive) {
+        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
+        return;
+    }
+
+    recursive = true;
     printTraceback(getTraceback());
+    recursive = false;
 }
 
 // where should this go...
