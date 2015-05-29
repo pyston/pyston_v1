@@ -685,6 +685,9 @@ static PyObject* slot_tp_str(PyObject* self) noexcept {
 }
 
 static long slot_tp_hash(PyObject* self) noexcept {
+    static StatCounter slowpath_hash("slowpath_hash");
+    slowpath_hash.log();
+
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
     long h;

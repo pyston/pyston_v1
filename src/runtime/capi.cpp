@@ -506,15 +506,6 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
     }
 }
 
-extern "C" long PyObject_Hash(PyObject* o) noexcept {
-    try {
-        return hash(o)->n;
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return -1;
-    }
-}
-
 extern "C" long PyObject_HashNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'", Py_TYPE(self)->tp_name);
     return -1;

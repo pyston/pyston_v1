@@ -131,10 +131,7 @@ size_t PyHasher::operator()(Box* b) const {
         return H(s->data(), s->size());
     }
 
-    BoxedInt* i = hash(b);
-    assert(sizeof(size_t) == sizeof(i->n));
-    size_t rtn = i->n;
-    return rtn;
+    return hashUnboxed(b);
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
@@ -2224,30 +2221,43 @@ extern "C" bool exceptionMatches(Box* obj, Box* cls) {
     return rtn;
 }
 
+/* Macro to get the tp_richcompare field of a type if defined */
+#define RICHCOMPARE(t) (PyType_HasFeature((t), Py_TPFLAGS_HAVE_RICHCOMPARE) ? (t)->tp_richcompare : NULL)
+
+extern "C" long PyObject_Hash(PyObject* v) noexcept {
+    PyTypeObject* tp = v->cls;
+    if (tp->tp_hash != NULL)
+        return (*tp->tp_hash)(v);
+#if 0 // pyston change
+    /* To keep to the general practice that inheriting
+     * solely from object in C code should work without
+     * an explicit call to PyType_Ready, we implicitly call
+     * PyType_Ready here and then check the tp_hash slot again
+     */
+    if (tp->tp_dict == NULL) {
+        if (PyType_Ready(tp) < 0)
+            return -1;
+        if (tp->tp_hash != NULL)
+            return (*tp->tp_hash)(v);
+    }
+#endif
+    if (tp->tp_compare == NULL && RICHCOMPARE(tp) == NULL) {
+        return _Py_HashPointer(v); /* Use address as hash value */
+    }
+    /* If there's a cmp but no hash defined, the object can't be hashed */
+    return PyObject_HashNotImplemented(v);
+}
+
+int64_t hashUnboxed(Box* obj) {
+    auto r = PyObject_Hash(obj);
+    if (r == -1)
+        throwCAPIException();
+    return r;
+}
+
 extern "C" BoxedInt* hash(Box* obj) {
-    static StatCounter slowpath_hash("slowpath_hash");
-    slowpath_hash.log();
-
-    // goes through descriptor logic
-    Box* hash = getclsattrInternal(obj, "__hash__", NULL);
-
-    if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
-                   || obj->cls == module_cls || obj->cls == capifunc_cls || obj->cls == instancemethod_cls,
-               "%s.__hash__", getTypeName(obj));
-        // TODO not the best way to handle this...
-        return static_cast<BoxedInt*>(boxInt((i64)obj));
-    }
-
-    if (hash == None) {
-        raiseExcHelper(TypeError, "unhashable type: '%s'", obj->cls->tp_name);
-    }
-
-    Box* rtn = runtimeCallInternal(hash, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    if (rtn->cls != int_cls) {
-        raiseExcHelper(TypeError, "an integer is required");
-    }
-    return static_cast<BoxedInt*>(rtn);
+    int64_t r = hashUnboxed(obj);
+    return new BoxedInt(r);
 }
 
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
@@ -2373,8 +2383,11 @@ extern "C" void dumpEx(void* p, int levels) {
         return;
     }
 
-    if (al->kind_id == gc::GCKind::PYTHON) {
-        printf("Python object\n");
+    if (al->kind_id == gc::GCKind::PYTHON || al->kind_id == gc::GCKind::CONSERVATIVE_PYTHON) {
+        if (al->kind_id == gc::GCKind::PYTHON)
+            printf("Python object (precisely scanned)\n");
+        else
+            printf("Python object (conservatively scanned)\n");
         Box* b = (Box*)p;
 
         printf("Class: %s", getFullTypeName(b).c_str());

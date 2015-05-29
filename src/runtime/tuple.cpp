@@ -18,6 +18,7 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include "capi/typeobject.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
@@ -337,20 +338,6 @@ Box* tupleIndex(BoxedTuple* self, Box* elt) {
     raiseExcHelper(ValueError, "tuple.index(x): x not in tuple");
 }
 
-Box* tupleHash(BoxedTuple* self) {
-    STAT_TIMER(t0, "us_timer_tupleHash");
-    assert(isSubclass(self->cls, tuple_cls));
-
-    int64_t rtn = 3527539;
-    for (auto e : *self) {
-        BoxedInt* h = hash(e);
-        assert(isSubclass(h->cls, int_cls));
-        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
-    }
-
-    return boxInt(rtn);
-}
-
 extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "tuple.__new__(X): X is not a type object (%s)", getTypeName(_cls));
@@ -434,6 +421,26 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
     v->visit(it->t);
 }
 
+static int64_t tuple_hash(BoxedTuple* v) noexcept {
+    long x, y;
+    Py_ssize_t len = Py_SIZE(v);
+    PyObject** p;
+    long mult = 1000003L;
+    x = 0x345678L;
+    p = v->elts;
+    while (--len >= 0) {
+        y = PyObject_Hash(*p++);
+        if (y == -1)
+            return -1;
+        x = (x ^ y) * mult;
+        /* the cast might truncate len; that doesn't change hash stability */
+        mult += (long)(82520L + len + len);
+    }
+    x += 97531L;
+    if (x == -1)
+        x = -2;
+    return x;
+}
 
 void setupTuple() {
     tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
@@ -462,12 +469,14 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)tupleNonzero, BOXED_BOOL, 1)));
 
-    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
     tuple_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)tupleAdd, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
+
+    tuple_cls->tp_hash = (hashfunc)tuple_hash;
+    add_operators(tuple_cls);
 
     tuple_cls->freeze();
 
