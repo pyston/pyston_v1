@@ -393,6 +393,9 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     sliceIndex(slice->stop, &stop);
     sliceIndex(slice->step, &step);
 
+    if (self == v) // handle self assignment by creating a copy
+        v = _listSlice(self, 0, self->size, 1, self->size);
+
     if (step != 1) {
         int r = list_ass_ext_slice(self, slice, v);
         if (r)

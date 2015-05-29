@@ -5,6 +5,7 @@ l[0] = 1
 print l
 print l[2]
 print l[2L]
+l[:] = l
 
 l = range(5)
 while l:
