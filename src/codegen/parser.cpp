@@ -50,14 +50,14 @@ private:
     InternedStringPool* intern_pool;
 
     void ensure(int num) {
-        if (end - start < num) {
+        if (unlikely(fp) && end - start < num) {
             fill();
         }
     }
 
 public:
     void fill() {
-        if (fp) {
+        if (unlikely(fp)) {
             memmove(buf, buf + start, end - start);
             end -= start;
             start = 0;
@@ -77,7 +77,7 @@ public:
         ensure(1);
         RELEASE_ASSERT(end > start, "premature eof");
 
-        if (fp) {
+        if (unlikely(fp)) {
             return buf[start++];
         } else {
             return data[start++];
