@@ -11,6 +11,9 @@ if __name__ == "__main__":
                 if cur_traceback:
                     tracebacks.append(''.join(cur_traceback).strip())
                 cur_traceback = []
+            elif not (l.startswith("  File") or l.startswith("    ")):
+                print "non-traceback line?  ", l.strip()
+                continue
             else:
                 cur_traceback.append(l)
     if cur_traceback:
@@ -22,6 +25,7 @@ if __name__ == "__main__":
         # dedupe on:
         # key = t # full traceback
         # key = '\n'.join(t.split('\n')[-8:]) # last 4 stack frames
+        # key = '\n'.join(t.split('\n')[-4:]) # last 2 stack frames
         # key = '\n'.join(t.split('\n')[-2:]) # last stack frame
         key = t.split('  File "')[-1].split()[0][:-2] # filename of last stack trace
         counts[key] = counts.get(key, 0) + 1
@@ -46,4 +50,5 @@ if __name__ == "__main__":
         print "Occurs %d (%.1f%%) times:" % (v, 100.0 * v / n)
         print k
 
+    print
     print "Total tracebacks:", n

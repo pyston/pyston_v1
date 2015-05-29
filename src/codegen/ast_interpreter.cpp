@@ -695,6 +695,10 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
 }
 
 Value ASTInterpreter::visit_stmt(AST_stmt* node) {
+#if ENABLE_SAMPLING_PROFILER
+    threading::allowGLReadPreemption();
+#endif
+
     if (0) {
         printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
         print_ast(node);

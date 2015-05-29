@@ -2608,6 +2608,13 @@ public:
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
+
+#if ENABLE_SAMPLING_PROFILER
+            auto stmt = block->body[i];
+            if (stmt->type != AST_TYPE::Assign) // could be a landingpad
+                doSafePoint(block->body[i]);
+#endif
+
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
