@@ -4,8 +4,8 @@ import sys
 from types import NoneType
 
 def _print_str(s, f):
-    assert len(s) < 2**16
-    f.write(struct.pack(">H", len(s)))
+    assert len(s) < 2**32
+    f.write(struct.pack(">L", len(s)))
     f.write(s)
 
 TYPE_MAP = {

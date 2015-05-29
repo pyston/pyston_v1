@@ -111,7 +111,7 @@ AST_expr* readASTExpr(BufferedReader* reader);
 AST_stmt* readASTStmt(BufferedReader* reader);
 
 static std::string readString(BufferedReader* reader) {
-    int strlen = reader->readShort();
+    int strlen = reader->readUInt();
     llvm::SmallString<32> chars;
     for (int i = 0; i < strlen; i++) {
         chars.push_back(reader->readByte());
@@ -120,7 +120,7 @@ static std::string readString(BufferedReader* reader) {
 }
 
 InternedString BufferedReader::readAndInternString() {
-    int strlen = readShort();
+    int strlen = readUInt();
     llvm::SmallString<32> chars;
     for (int i = 0; i < strlen; i++) {
         chars.push_back(readByte());
@@ -1026,9 +1026,9 @@ AST_Module* parse_file(const char* fn) {
 
 const char* getMagic() {
     if (ENABLE_PYPA_PARSER)
-        return "a\ncL";
+        return "a\ncM";
     else
-        return "a\ncl";
+        return "a\ncm";
 }
 
 #define MAGIC_STRING_LENGTH 4
