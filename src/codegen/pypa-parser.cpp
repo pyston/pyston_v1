@@ -1064,6 +1064,12 @@ std::string PystonSourceReader::get_line() {
                 break;
             line.push_back(c);
         } while (c != '\n' && c != '\x0c');
+
+        // check for UTF8 BOM
+        if (line_number == 0 && line[0] == '\xEF' && line[1] == '\xBB' && line[2] == '\xBF') {
+            set_encoding("utf-8");
+            line.erase(0, 3);
+        }
         ++line_number;
         return line;
     }

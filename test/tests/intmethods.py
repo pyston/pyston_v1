@@ -12,13 +12,14 @@ for i in xrange(1, 12):
 
 print 1 ** 0
 print 0 ** 0
-print -1 ** 0
+print -1 ** 0, (-1) ** 0, (-5) ** 0
 print (11).__pow__(5, 50)
 print (11).__pow__(32, 50)
 print (11).__index__()
 
 for i in (-10, 10, 0, -15):
     print i, i.__hex__(), i.__oct__()
+    print i.bit_length()
 
 # Testing int.__new__:
 class C(int):

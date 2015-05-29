@@ -338,11 +338,8 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     if (rhs < 0)
         return boxFloat(pow_float_float(lhs, rhs));
 
-    if (rhs == 0) {
-        if (lhs < 0)
-            return boxInt(-1);
+    if (rhs == 0)
         return boxInt(1);
-    }
 
     assert(rhs > 0);
     while (true) {
@@ -1035,6 +1032,34 @@ extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     return new (cls) BoxedInt(n->n);
 }
 
+static const unsigned char BitLengthTable[32]
+    = { 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 };
+
+static int bits_in_ulong(unsigned long d) noexcept {
+    int d_bits = 0;
+    while (d >= 32) {
+        d_bits += 6;
+        d >>= 6;
+    }
+    d_bits += (int)BitLengthTable[d];
+    return d_bits;
+}
+
+extern "C" Box* intBitLength(BoxedInt* v) {
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor 'bit_length' requires a 'int' object but received a '%s'",
+                       getTypeName(v));
+
+    unsigned long n;
+    if (v->n < 0)
+        /* avoid undefined behaviour when v->n == -LONG_MAX-1 */
+        n = 0U - (unsigned long)v->n;
+    else
+        n = (unsigned long)v->n;
+
+    return PyInt_FromLong(bits_in_ulong(n));
+}
+
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
     assert(BOXED_INT);
@@ -1130,6 +1155,8 @@ void setupInt() {
     int_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false,
                                                                  ParamNames({ "", "x", "base" }, "", "")),
                                                    { boxInt(0), NULL }));
+
+    int_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)intBitLength, BOXED_INT, 1)));
 
     int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
