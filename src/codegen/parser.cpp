@@ -1000,7 +1000,7 @@ AST_Module* parse_file(const char* fn) {
 
     if (ENABLE_PYPA_PARSER) {
         AST_Module* rtn = pypa_parse(fn);
-        RELEASE_ASSERT(rtn, "unknown parse error");
+        RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
         return rtn;
     }
 

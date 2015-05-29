@@ -127,7 +127,7 @@ public:
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0; // primary entry point
     virtual EndingState getEndingSymbolTable() = 0;
-    virtual void doSafePoint() = 0;
+    virtual void doSafePoint(AST_stmt* next_statement) = 0;
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
                                       std::vector<llvm::Value*>& stackmap_args) = 0;
 };

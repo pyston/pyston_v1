@@ -300,8 +300,6 @@ public:
 };
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    threading::allowGLReadPreemption();
-
     STAT_TIMER(t0, "us_timer_astinterpreter_execute");
 
     void* frame_addr = __builtin_frame_address(0);
@@ -314,6 +312,11 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
     }
+
+    // Important that this happens after RegisterHelper:
+    interpreter.current_inst = start_at;
+    threading::allowGLReadPreemption();
+    interpreter.current_inst = NULL;
 
     interpreter.current_block = start_block;
     bool started = false;

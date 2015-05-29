@@ -47,6 +47,8 @@ extern bool ENABLE_ICS, ENABLE_ICGENERICS, ENABLE_ICGETITEMS, ENABLE_ICSETITEMS,
 
 // Due to a temporary LLVM limitation, represent bools as i64's instead of i1's.
 extern bool BOOLS_AS_I64;
+
+#define ENABLE_SAMPLING_PROFILER 0
 }
 }
 
