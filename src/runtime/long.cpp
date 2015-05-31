@@ -687,7 +687,8 @@ Box* longInt(Box* v) {
 
 Box* longFloat(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'", getTypeName(v));
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
     float f = mpz_get_d(v->n);
     return new BoxedFloat(f);
 }
