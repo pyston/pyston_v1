@@ -259,8 +259,8 @@ static void sliceIndex(Box* b, int64_t* out) {
     }
 
     static const std::string index_str("__index__");
-    Box* r = callattr(b, &index_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                      ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    Box* r = callattr(b, &index_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                      NULL, NULL, NULL, NULL, NULL);
 
     if (!r) {
         raiseExcHelper(TypeError, "TypeError: slice indices must be integers or None or have an __index__ method");
