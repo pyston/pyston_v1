@@ -2440,6 +2440,8 @@ void setupRuntime() {
     wrapperobject_cls->tp_mro = BoxedTuple::create({ wrapperobject_cls, object_cls });
     wrapperdescr_cls->tp_mro = BoxedTuple::create({ wrapperdescr_cls, object_cls });
 
+    object_cls->tp_hash = (hashfunc)_Py_HashPointer;
+
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
     BOXED_FLOAT = typeFromClass(float_cls);
@@ -2536,8 +2538,6 @@ void setupRuntime() {
 
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr("__hash__",
-                         new BoxedFunction(boxRTFunction((void*)objectHash, BOXED_INT, 1, 0, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -2557,7 +2557,7 @@ void setupRuntime() {
     type_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
-    type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
+    type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
     type_cls->giveAttr("__mro__",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
@@ -2566,8 +2566,8 @@ void setupRuntime() {
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
-    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
+    none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
 
     module_cls->giveAttr("__init__",
@@ -2779,6 +2779,10 @@ void setupRuntime() {
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
+
+    assert(object_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(none_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(type_cls->tp_hash == (hashfunc)_Py_HashPointer);
 
     setupSysEnd();
 

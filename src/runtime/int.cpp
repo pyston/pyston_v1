@@ -17,6 +17,7 @@
 #include <cmath>
 #include <sstream>
 
+#include "capi/typeobject.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -1109,6 +1110,13 @@ static Box* int1(Box*, void*) {
     return boxInt(1);
 }
 
+static int64_t int_hash(BoxedInt* o) noexcept {
+    int64_t n = o->n;
+    if (n == -1)
+        return -2;
+    return n;
+}
+
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
@@ -1143,7 +1151,7 @@ void setupInt() {
     int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, UNKNOWN, 1)));
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
+    int_cls->tp_hash = (hashfunc)int_hash;
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, UNKNOWN, 2)));
 
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
@@ -1164,6 +1172,7 @@ void setupInt() {
     int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
 
+    add_operators(int_cls);
     int_cls->freeze();
 }
 

@@ -719,7 +719,15 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
-        abort();
+        // PyErr_NewException isn't supposed to fail, and callers sometimes take advantage of that
+        // by not checking the return value.  Since failing probably indicates a bug anyway,
+        // to be safe just print the traceback and die.
+        e.printExcAndTraceback();
+        RELEASE_ASSERT(0, "PyErr_NewException failed");
+
+        // The proper way of handling it:
+        setCAPIException(e);
+        return NULL;
     }
 }
 
