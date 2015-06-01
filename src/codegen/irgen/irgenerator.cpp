@@ -2611,7 +2611,7 @@ public:
 
 #if ENABLE_SAMPLING_PROFILER
             auto stmt = block->body[i];
-            if (stmt->type != AST_TYPE::Assign) // could be a landingpad
+            if (!(i == 0 && stmt->type == AST_TYPE::Assign) && stmt->lineno > 0) // could be a landingpad
                 doSafePoint(block->body[i]);
 #endif
 

@@ -790,7 +790,7 @@ public:
             }
         }
 
-        if (VERBOSITY("types")) {
+        if (VERBOSITY("types") >= 2) {
             printf("Type analysis: %d BBs, %d evaluations = %.1f evaluations/block\n", starting_types.size(),
                    num_evaluations, 1.0 * num_evaluations / starting_types.size());
         }
