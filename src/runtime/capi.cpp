@@ -1650,6 +1650,13 @@ static Box* methodGetDoc(Box* b, void*) {
     return None;
 }
 
+static Box* wrapperdescrGetDoc(Box* b, void*) {
+    assert(b->cls == wrapperdescr_cls);
+    auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
+    assert(s.size());
+    return boxString(s);
+}
+
 /* extension modules might be compiled with GC support so these
    functions must always be available */
 
@@ -1738,6 +1745,8 @@ void setupCAPI() {
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
                                                                            UNKNOWN, 2, 0, true, true)));
+    wrapperdescr_cls->giveAttr("__doc__",
+                               new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->freeze();
 
     wrapperobject_cls->giveAttr(
