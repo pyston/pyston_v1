@@ -58,6 +58,7 @@ public:
     Box* operator->() { return value; }
 };
 
+void callPendingFinalizers();
 void runCollection();
 
 // Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,

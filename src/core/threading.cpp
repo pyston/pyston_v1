@@ -566,6 +566,9 @@ void allowGLReadPreemption() {
         threads_waiting_on_gil--;
         pthread_cond_signal(&gil_acquired);
     }
+
+    // We need to call the finalizers on dead objects at some point. This is a safe place to do so.
+    gc::callPendingFinalizers();
 }
 #elif THREADING_USE_GRWL
 static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;

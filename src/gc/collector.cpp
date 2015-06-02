@@ -53,6 +53,8 @@ static std::vector<std::pair<void*, void*>> potential_root_ranges;
 
 static std::unordered_set<void*> nonheap_roots;
 
+static std::list<Box*> pending_finalization_list;
+
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap
 // way to verify it's not a nonheap root (the full check requires a hashtable lookup).
@@ -446,7 +448,7 @@ void finalizationOrderingSecondPass(Box* obj) {
 
 // Implementation of PyPy's finalization ordering algorithm:
 // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
-void finalizationOrderingPhase(std::vector<Box*>& to_be_finalized, std::vector<Box*>& to_be_finalized_weak) {
+void finalizationOrderingPhase() {
     // TODO: Replace with iterator or something that takes a lambda for memory efficiency?.
     std::vector<Box*> objects_with_finalizers;
     global_heap.getOrderedFinalizers(objects_with_finalizers);
@@ -474,11 +476,9 @@ void finalizationOrderingPhase(std::vector<Box*>& to_be_finalized, std::vector<B
         assert(state == FinalizationState::REACHABLE_FROM_FINALIZER || state == FinalizationState::ALIVE);
 
         if (state == FinalizationState::REACHABLE_FROM_FINALIZER) {
-            if (isWeakReference(marked)) {
-                to_be_finalized_weak.push_back(marked);
-            } else {
-                to_be_finalized.push_back(marked);
-            }
+            assert(roots.count(marked) == 0);
+            registerPermanentRoot(marked);
+            pending_finalization_list.push_back(marked);
         }
     }
 }
@@ -489,36 +489,42 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
     global_heap.freeUnmarked(weakly_referenced);
 }
 
-static void callOrderedFinalizersPhase(std::vector<Box*>& to_be_finalized, std::vector<Box*>& to_be_finalized_weak) {
-    // Callbacks for weakly-referenced objects with finalizers, followed by call to finalizers.
-    // Since these objects have finalizers, do not free yet - they will be freed in another GC pass.
-    for (Box* box : to_be_finalized_weak) {
-        assert(isValidGCObject(box));
-        PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(box);
-        while (PyWeakReference* head = *list) {
-            assert(isValidGCObject(head));
-            if (head->wr_object != Py_None) {
-                assert(head->wr_object == box);
-                _PyWeakref_ClearRef(head);
-
-                if (head->wr_callback) {
-                    runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL,
-                                NULL);
-                    head->wr_callback = NULL;
-                }
-            }
-        }
-        finalize(box);
-    }
-
-    // An object can be resurrected during the finalizer. So when we call a finalizer, we
+void callPendingFinalizers() {
+    // An object can be resurrected in the finalizer code. So when we call a finalizer, we
     // mark the finalizer as having been called, but the object is only freed in another
     // GC pass (objects whose finalizers have been called are treated the same as objects
     // without finalizers).
-    for (Box* box : to_be_finalized) {
+    while (!pending_finalization_list.empty()) {
+        Box* box = pending_finalization_list.front();
+        pending_finalization_list.pop_front();
+
         assert(isValidGCObject(box));
+
+        if (isWeakReference(box)) {
+            // Callbacks for weakly-referenced objects with finalizers (if any), followed by call to finalizers.
+            PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(box);
+            while (PyWeakReference* head = *list) {
+                assert(isValidGCObject(head));
+                if (head->wr_object != Py_None) {
+                    assert(head->wr_object == box);
+                    _PyWeakref_ClearRef(head);
+
+                    if (head->wr_callback) {
+                        runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL,
+                                    NULL);
+                        head->wr_callback = NULL;
+                    }
+                }
+            }
+        }
+
+        deregisterPermanentRoot(box);
+        assert(roots.count(box) == 0);
+
         finalize(box);
     }
+
+    assert(pending_finalization_list.empty());
 }
 
 bool gcIsEnabled() {
@@ -569,12 +575,9 @@ void runCollection() {
 
     // Objects with finalizers cannot be freed in any order. During the call to a finalizer
     // of an object, the finalizer expects the object's references to still point to valid
-    // memory. So we list of objects whose finalizers need to be called in this GC pass.
-    //
-    // There's a separate list for weakly-referenced objects because there's potentially
-    // a callback that needs to be called before the destructor.
-    std::vector<Box*> to_be_finalized, to_be_finalized_weak;
-    finalizationOrderingPhase(to_be_finalized, to_be_finalized_weak);
+    // memory. So we root objects whose finalizers need to be called by placing them in a
+    // pending finalization list.
+    finalizationOrderingPhase();
 
     // The sweep phase will not free weakly-referenced objects, so that we can inspect their
     // weakrefs_list.  We want to defer looking at those lists until the end of the sweep phase,
@@ -623,8 +626,6 @@ void runCollection() {
             head->wr_callback = NULL;
         }
     }
-
-    callOrderedFinalizersPhase(to_be_finalized, to_be_finalized_weak);
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
