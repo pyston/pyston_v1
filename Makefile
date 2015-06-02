@@ -844,6 +844,8 @@ $(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -D
 else
 %.o: %.cpp $(CMAKE_SETUP_DBG)
 	$(NINJA) -C $(HOME)/pyston-build-dbg src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.o,%.cpp.o,$@) $(NINJAFLAGS)
+%.release.o: %.cpp $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(HOME)/pyston-build-release src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.release.o,%.cpp.o,$@) $(NINJAFLAGS)
 endif
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
