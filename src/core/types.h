@@ -46,8 +46,8 @@ private:
     bool isValid(void* p);
 
 public:
-    TraceStack* stack;
-    GCVisitor(TraceStack* stack) : stack(stack) {}
+    std::shared_ptr<TraceStack> stack;
+    GCVisitor(std::shared_ptr<TraceStack> stack) : stack(stack) {}
 
     // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
     void visitIf(void* p) {

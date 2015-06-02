@@ -83,11 +83,6 @@ protected:
     void** start;
     void** end;
 
-    // Returns false if we should skip visiting the children.
-    // true otherwise.
-    typedef std::function<bool(GCAllocation*)> VisitFunc;
-    VisitFunc visit_action;
-
     void get_chunk() {
         if (free_chunks.size()) {
             start = free_chunks.back();
@@ -113,14 +108,12 @@ protected:
     }
 
 public:
-    TraceStack(VisitFunc func) : visit_action(func) { get_chunk(); }
-    TraceStack(VisitFunc func, const std::unordered_set<void*>& rhs) : visit_action(func) {
-        get_chunk();
-        for (void* p : rhs) {
-            assert(!isMarked(GCAllocation::fromUserData(p)));
-            push(p);
-        }
-    }
+    TraceStack() { get_chunk(); }
+    virtual ~TraceStack() {}
+
+    // Returns false if we should skip visiting the children.
+    // true otherwise.
+    virtual bool visit_action(GCAllocation* al) = 0;
 
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
@@ -156,6 +149,56 @@ public:
     }
 };
 std::vector<void**> TraceStack::free_chunks;
+
+class MarkStack : public TraceStack {
+public:
+    MarkStack(const std::unordered_set<void*>& root_handles) : TraceStack() {
+        for (void* p : root_handles) {
+            assert(!isMarked(GCAllocation::fromUserData(p)));
+            push(p);
+        }
+    }
+
+    virtual bool visit_action(GCAllocation* al) {
+        if (isMarked(al)) {
+            return false;
+        } else {
+            setMark(al);
+            return true;
+        }
+    }
+};
+
+class FirstPhaseStack : public TraceStack {
+public:
+    FirstPhaseStack() : TraceStack() {}
+
+    virtual bool visit_action(GCAllocation* al) {
+        if (orderingState(al) == FinalizationState::UNREACHABLE) {
+            setOrderingState(al, FinalizationState::TEMPORARY);
+            return true;
+        } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
+            setOrderingState(al, FinalizationState::ALIVE);
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
+
+class SecondPhaseStack : public TraceStack {
+public:
+    SecondPhaseStack() : TraceStack() {}
+
+    virtual bool visit_action(GCAllocation* al) {
+        if (orderingState(al) == FinalizationState::TEMPORARY) {
+            setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -353,17 +396,9 @@ void markPhase() {
     GC_TRACE_LOG("Starting collection %d\n", ncollections);
 
     GC_TRACE_LOG("Looking at roots\n");
-    auto visit_action = [](GCAllocation* al) {
-        if (isMarked(al)) {
-            return false;
-        } else {
-            setMark(al);
-            return true;
-        }
-    };
 
-    TraceStack stack(visit_action, roots);
-    GCVisitor visitor(&stack);
+    std::shared_ptr<MarkStack> stack = std::make_shared<MarkStack>(roots);
+    GCVisitor visitor(stack);
 
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
@@ -378,8 +413,7 @@ void markPhase() {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
-    while (void* p = stack.pop()) {
-        assert(((intptr_t)p) % 8 == 0);
+    while (void* p = stack->pop()) {
         GCAllocation* al = GCAllocation::fromUserData(p);
 
 #if TRACE_GC_MARKING
@@ -404,42 +438,21 @@ void markPhase() {
 }
 
 void finalizationOrderingFirstPass(Box* obj) {
-    static auto visit_action = [](GCAllocation* al) {
-        if (orderingState(al) == FinalizationState::UNREACHABLE) {
-            setOrderingState(al, FinalizationState::TEMPORARY);
-            return true;
-        } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
-            setOrderingState(al, FinalizationState::ALIVE);
-            return true;
-        } else {
-            return false;
-        }
-    };
+    std::shared_ptr<FirstPhaseStack> stack = std::make_shared<FirstPhaseStack>();
+    GCVisitor visitor(stack);
 
-    TraceStack stack(visit_action);
-    GCVisitor visitor(&stack);
-
-    stack.push(obj);
-    while (void* p = stack.pop()) {
+    stack->push(obj);
+    while (void* p = stack->pop()) {
         visitByGCKind(p, visitor);
     }
 }
 
 void finalizationOrderingSecondPass(Box* obj) {
-    static auto visit_action = [](GCAllocation* al) {
-        if (orderingState(al) == FinalizationState::TEMPORARY) {
-            setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
-            return true;
-        } else {
-            return false;
-        }
-    };
+    std::shared_ptr<SecondPhaseStack> stack = std::make_shared<SecondPhaseStack>();
+    GCVisitor visitor(stack);
 
-    TraceStack stack(visit_action);
-    GCVisitor visitor(&stack);
-
-    stack.push(obj);
-    while (void* p = stack.pop()) {
+    stack->push(obj);
+    while (void* p = stack->pop()) {
         GCAllocation* al = GCAllocation::fromUserData(p);
         assert(orderingState(al) != FinalizationState::UNREACHABLE);
         visitByGCKind(p, visitor);
@@ -500,7 +513,7 @@ void callPendingFinalizers() {
 
         assert(isValidGCObject(box));
 
-        if (isWeakReference(box)) {
+        if (isWeaklyReferenced(box)) {
             // Callbacks for weakly-referenced objects with finalizers (if any), followed by call to finalizers.
             PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(box);
             while (PyWeakReference* head = *list) {

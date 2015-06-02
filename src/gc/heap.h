@@ -172,7 +172,7 @@ inline void clearOrderingState(GCAllocation* header) {
 
 bool hasOrderedFinalizer(Box* b);
 void finalize(Box* b);
-bool isWeakReference(Box* b);
+bool isWeaklyReferenced(Box* b);
 
 #define PAGE_SIZE 4096
 

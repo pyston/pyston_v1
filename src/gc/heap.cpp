@@ -162,7 +162,7 @@ void finalizeIfUnordered(Box* b) {
     }
 }
 
-bool isWeakReference(Box* b) {
+bool isWeaklyReferenced(Box* b) {
     if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
         if (list && *list) {
@@ -203,7 +203,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
-        if (isWeakReference(b)) {
+        if (isWeaklyReferenced(b)) {
             assert(weakly_referenced && "attempting to free a weakly referenced object manually");
             weakly_referenced->push_back(b);
             return false;
