@@ -126,11 +126,23 @@ void _bytesAllocatedTripped() {
 /// Finalizers
 //
 bool hasFinalizer(Box* b) {
-    return b->cls->tp_del || b->cls->hasNativeDestructor();
+    if (b->cls == instance_cls) {
+        // For old-style classes, pretend that there is always a finalizer. We do this
+        // because old-style classes don't use tp_del, so looking for the finalizer is
+        // always an attribute lookup.
+        // TODO: Check if doing the attribute lookup would give performance gains.
+        return true;
+    } else {
+        return b->cls->tp_del || b->cls->hasNativeDestructor();
+    }
 }
 
 bool hasOrderedFinalizer(Box* b) {
-    return b->cls->tp_del || (!b->cls->has_safe_tp_dealloc && b->cls->hasNativeDestructor());
+    if (b->cls == instance_cls) {
+        return true;
+    } else {
+        return b->cls->tp_del || (!b->cls->has_safe_tp_dealloc && b->cls->hasNativeDestructor());
+    }
 }
 
 void finalize(Box* b) {
