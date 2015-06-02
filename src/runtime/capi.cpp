@@ -586,8 +586,11 @@ extern "C" long _Py_HashPointer(void* p) noexcept {
 }
 
 extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
+    if (o->cls == bool_cls)
+        return o == True;
+
     try {
-        return nonzero(o);
+        return o->nonzeroIC();
     } catch (ExcInfo e) {
         fatalOrError(PyExc_NotImplementedError, "unimplemented");
         return -1;

@@ -237,6 +237,9 @@ public:
     }
 };
 
+PyObject* convert_3way_to_object(int op, int c) noexcept;
+int default_3way_compare(PyObject* v, PyObject* w);
+
 } // namespace pyston
 
 #endif

@@ -162,10 +162,11 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args) {
         if (!minElement) {
             minElement = e;
         } else {
-            Box* comp_result = compareInternal(minElement, e, AST_TYPE::Gt, NULL);
-            if (nonzero(comp_result)) {
+            int r = PyObject_RichCompareBool(minElement, e, Py_GT);
+            if (r == -1)
+                throwCAPIException();
+            if (r)
                 minElement = e;
-            }
         }
     }
 
@@ -192,10 +193,11 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
         if (!maxElement) {
             maxElement = e;
         } else {
-            Box* comp_result = compareInternal(maxElement, e, AST_TYPE::Lt, NULL);
-            if (nonzero(comp_result)) {
+            int r = PyObject_RichCompareBool(maxElement, e, Py_LT);
+            if (r == -1)
+                throwCAPIException();
+            if (r)
                 maxElement = e;
-            }
         }
     }
 
