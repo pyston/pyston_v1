@@ -45,8 +45,10 @@ if(ENABLE_GOLD)
     message(STATUS "found the gold linker ${GOLD_LINKER}")
     set(CMAKE_LINKER "${GOLD_LINKER}")
     set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -B${CMAKE_SOURCE_DIR}/tools/build_system")
+    set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--section-ordering-file,${CMAKE_CURRENT_SOURCE_DIR}/section_ordering.txt")
   endif()
 endif()
+
 
 # pyston self host mode
 if(ENABLE_SELF_HOST)
@@ -215,7 +217,11 @@ add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
 add_subdirectory(tools)
 
-add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
+# There are supposed to be better ways [1] to add link dependencies, but none of them worked for me.
+# [1] http://www.cmake.org/pipermail/cmake/2010-May/037206.html
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/linkdeps_dummy.c DEPENDS ${CMAKE_SOURCE_DIR}/section_ordering.txt)
+
+add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
 
