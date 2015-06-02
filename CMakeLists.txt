@@ -79,16 +79,24 @@ add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0001-pyston-add-lots-of-comments.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch
-  ${CMAKE_SOURCE_DIR}/libunwind_patches/0003-use-a-sorted-array-for-registered-objects-and-do-a-b.patch)
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0003-use-a-sorted-array-for-registered-objects-and-do-a-b.patch
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/9999-is-patched-marker.patch
+)
 
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
                    COMMAND git submodule update --init
-                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
                    COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules
-                   DEPENDS ${LIBUNWIND_PATCHES})
+                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
 add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
+
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+                   COMMAND git submodule update libunwind
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   DEPENDS ${LIBUNWIND_PATCHES}
+                   DEPENDS gitsubmodules)
+add_custom_target(libunwind_patched DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched)
 
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
@@ -115,14 +123,25 @@ endif()
 ExternalProject_Add(libunwind
                     PREFIX libunwind
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
-                    # TODO: more accurate DEPENDS - should depend on *contents* of libunwind/ source directory
-                    DEPENDS gitsubmodules
+                    DEPENDS libunwind_patched
                     UPDATE_COMMAND autoreconf -i
                     CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
                     LOG_INSTALL ON)
+# Tell CMake that patching libunwind means that we need to rebuild it:
+ExternalProject_Add_Step(libunwind forcebuild
+    DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+    DEPENDERS build
+)
+# Tell CMake that rebuilding libunwind will touch the build files (why doesn't it know this??)
+# Otherwise, if you do something that triggers a rebuild (not a fresh build) of libunwind,
+# it will take another build to realize that any source files that #include libunwind.h
+# need to get rebuilt.
+SET_SOURCE_FILES_PROPERTIES(
+    ${CMAKE_BINARY_DIR}/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+)
 
 # libpypa
 add_subdirectory(libpypa)
