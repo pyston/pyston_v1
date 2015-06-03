@@ -119,7 +119,7 @@ diff --git a/src/mi/dyn-register.c b/src/mi/dyn-register.c
 index c28954a..c4f88b1 100644
 --- a/src/mi/dyn-register.c
 +++ b/src/mi/dyn-register.c
-@@ -32,13 +32,28 @@ _U_dyn_register (unw_dyn_info_t *di)
+@@ -32,13 +32,27 @@ _U_dyn_register (unw_dyn_info_t *di)
  {
    mutex_lock (&_U_dyn_info_list_lock);
    {
@@ -148,8 +148,7 @@ index c28954a..c4f88b1 100644
 +          break;
 +      }
 +
-+      if (_U_dyn_info_list_size > 1)
-+          memmove(&_U_dyn_info_list[i+1], &_U_dyn_info_list[i], (_U_dyn_info_list_size - i) * sizeof(unw_dyn_info_t*));
++      memmove(&_U_dyn_info_list[i+1], &_U_dyn_info_list[i], (_U_dyn_info_list_size - i) * sizeof(unw_dyn_info_t*));
 +      _U_dyn_info_list[i] = di;
 +      _U_dyn_info_list_size ++;
    }
