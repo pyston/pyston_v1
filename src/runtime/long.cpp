@@ -625,8 +625,9 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
-            const std::string& s = static_cast<BoxedString*>(val)->s();
-            int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
+            llvm::StringRef s = static_cast<BoxedString*>(val)->s();
+            assert(s.data()[s.size()] == '\0');
+            int r = mpz_init_set_str(rtn->n, s.data(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else if (val->cls == float_cls) {
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);

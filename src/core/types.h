@@ -650,8 +650,8 @@ BoxedModule* createModule(const std::string& name, const char* fn = NULL, const 
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this
-void appendToSysPath(const std::string& path);
-void prependToSysPath(const std::string& path);
+void appendToSysPath(llvm::StringRef path);
+void prependToSysPath(llvm::StringRef path);
 void addToSysArgv(const char* str);
 
 // Raise a SyntaxError that occurs at a specific location.

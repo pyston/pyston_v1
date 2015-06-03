@@ -197,16 +197,16 @@ void addToSysArgv(const char* str) {
     listAppendInternal(sys_argv, boxStrConstant(str));
 }
 
-void appendToSysPath(const std::string& path) {
+void appendToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    listAppendInternal(sys_path, boxStringPtr(&path));
+    listAppendInternal(sys_path, boxStringRef(path));
 }
 
-void prependToSysPath(const std::string& path) {
+void prependToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
     static std::string attr = "insert";
     callattr(sys_path, &attr, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
-             boxInt(0), boxString(path), NULL, NULL, NULL);
+             boxInt(0), boxStringRef(path), NULL, NULL, NULL);
 }
 
 static BoxedClass* sys_flags_cls;

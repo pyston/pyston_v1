@@ -413,12 +413,12 @@ std::string BoxedModule::name() {
     }
 }
 
-Box* BoxedModule::getStringConstant(const std::string& ast_str) {
+Box* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
     auto idx_iter = str_const_index.find(ast_str);
     if (idx_iter != str_const_index.end())
         return str_constants[idx_iter->second];
 
-    Box* box = boxString(ast_str);
+    Box* box = boxStringRef(ast_str);
     str_const_index[ast_str] = str_constants.size();
     str_constants.push_back(box);
     return box;
@@ -1724,8 +1724,8 @@ Box* attrwrapperKeys(Box* b) {
     return AttrWrapper::keys(b);
 }
 
-void attrwrapperDel(Box* b, const std::string& attr) {
-    AttrWrapper::delitem(b, boxString(attr));
+void attrwrapperDel(Box* b, llvm::StringRef attr) {
+    AttrWrapper::delitem(b, boxStringRef(attr));
 }
 
 Box* objectNewNoArgs(BoxedClass* cls) {
