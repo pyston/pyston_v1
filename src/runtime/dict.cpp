@@ -38,10 +38,10 @@ Box* dictRepr(BoxedDict* self) {
 
         BoxedString* k = static_cast<BoxedString*>(repr(p.first));
         BoxedString* v = static_cast<BoxedString*>(repr(p.second));
-        chars.insert(chars.end(), k->s.begin(), k->s.end());
+        chars.insert(chars.end(), k->s().begin(), k->s().end());
         chars.push_back(':');
         chars.push_back(' ');
-        chars.insert(chars.end(), v->s.begin(), v->s.end());
+        chars.insert(chars.end(), v->s().begin(), v->s().end());
     }
     chars.push_back('}');
     return boxString(llvm::StringRef(&chars[0], chars.size()));
@@ -227,10 +227,14 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
     Box* key = static_cast<Box*>(_key);
     Box* item = static_cast<Box*>(_item);
 
+    assert(key);
+    assert(item);
+
     try {
         setitem(b, key, item);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return -1;
     }
     return 0;
 }
@@ -439,8 +443,17 @@ Box* dictContains(BoxedDict* self, Box* k) {
 
 /* Return 1 if `key` is in dict `op`, 0 if not, and -1 on error. */
 extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
-    BoxedDict* mp = (BoxedDict*)op;
+
     try {
+        if (op->cls == attrwrapper_cls) {
+            Box* rtn = PyObject_CallMethod(op, "__contains__", "O", key);
+            if (!rtn)
+                return -1;
+            return rtn == True;
+        }
+
+        BoxedDict* mp = (BoxedDict*)op;
+        assert(isSubclass(mp->cls, dict_cls));
         return mp->getOrNull(key) ? 1 : 0;
     } catch (ExcInfo e) {
         setCAPIException(e);

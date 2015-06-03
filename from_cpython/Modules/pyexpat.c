@@ -1,7 +1,10 @@
 #include "Python.h"
 #include <ctype.h>
 
-#include "frameobject.h"
+// Pyston change:
+//#include "frameobject.h"
+#include "code.h" // CPython includes this from compile.h which gets included by Python.h
+
 #include "expat.h"
 
 #include "pyexpat.h"
@@ -28,6 +31,9 @@
 #else
 #define FIX_TRACE
 #endif
+
+// Pyston change: Disable tracing for now until we support it
+#undef FIX_TRACE
 
 enum HandlerTypes {
     StartElement,
@@ -153,7 +159,7 @@ get_handler_name(struct HandlerInfo *hinfo)
 {
     PyObject *name = hinfo->nameobj;
     if (name == NULL) {
-        name = PyString_FromString(hinfo->name);
+        name = PyGC_AddRoot(PyString_FromString(hinfo->name));
         hinfo->nameobj = name;
     }
     Py_XINCREF(name);
@@ -261,11 +267,16 @@ flag_error(xmlparseobject *self)
 static PyCodeObject*
 getcode(enum HandlerTypes slot, char* func_name, int lineno)
 {
+    // Pyston change: Disable this until we support custom code objects
+#if 0
     if (handler_info[slot].tb_code == NULL) {
         handler_info[slot].tb_code =
             PyCode_NewEmpty(__FILE__, func_name, lineno);
     }
     return handler_info[slot].tb_code;
+#else
+    return NULL;
+#endif
 }
 
 #ifdef FIX_TRACE
@@ -336,6 +347,8 @@ static PyObject*
 call_with_frame(PyCodeObject *c, PyObject* func, PyObject* args,
                 xmlparseobject *self)
 {
+// Pyston change: Disable this until we support custom tracebacks
+#if 0
     PyThreadState *tstate = PyThreadState_GET();
     PyFrameObject *f;
     PyObject *res;
@@ -374,6 +387,14 @@ call_with_frame(PyCodeObject *c, PyObject* func, PyObject* args,
     tstate->frame = f->f_back;
     Py_DECREF(f);
     return res;
+#else
+    PyObject *res;
+    res = PyEval_CallObject(func, args);
+    if (res == NULL) {
+        XML_StopParser(self->itself, XML_FALSE);
+    }
+    return res;
+#endif
 }
 
 #ifndef Py_USING_UNICODE
@@ -1122,7 +1143,9 @@ xmlparse_ExternalEntityParserCreate(xmlparseobject *self, PyObject *args)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    new_parser->handlers = malloc(sizeof(PyObject *) * i);
+    // Pyston change: use GC alloc routine because those contain Python objects
+    // new_parser->handlers = malloc(sizeof(PyObject *) * i);
+    new_parser->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
     if (!new_parser->handlers) {
         Py_DECREF(new_parser);
         return PyErr_NoMemory();
@@ -1341,7 +1364,9 @@ newxmlparseobject(char *encoding, char *namespace_separator, PyObject *intern)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    self->handlers = malloc(sizeof(PyObject *) * i);
+    // Pyston change: use GC alloc routine because those contain Python objects
+    // self->handlers = malloc(sizeof(PyObject *) * i);
+    self->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
     if (!self->handlers) {
         Py_DECREF(self);
         return PyErr_NoMemory();
@@ -1372,7 +1397,8 @@ xmlparse_dealloc(xmlparseobject *self)
             self->handlers[i] = NULL;
             Py_XDECREF(temp);
         }
-        free(self->handlers);
+        // Pyston change: object are allocated using the GC not malloc
+        // free(self->handlers);
         self->handlers = NULL;
     }
     if (self->buffer != NULL) {
@@ -1853,6 +1879,10 @@ MODULE_INITFUNC(void)
 
     Py_TYPE(&Xmlparsetype) = &PyType_Type;
 
+    // Pyston change:
+    if (PyType_Ready(&Xmlparsetype) < 0)
+        return;
+
     /* Create the module and add the functions */
     m = Py_InitModule3(MODULE_NAME, pyexpat_methods,
                        pyexpat_module_documentation);
@@ -1861,8 +1891,8 @@ MODULE_INITFUNC(void)
 
     /* Add some symbolic constants to the module */
     if (ErrorObject == NULL) {
-        ErrorObject = PyErr_NewException("xml.parsers.expat.ExpatError",
-                                         NULL, NULL);
+        ErrorObject = PyGC_AddRoot(PyErr_NewException("xml.parsers.expat.ExpatError",
+                                         NULL, NULL));
         if (ErrorObject == NULL)
             return;
     }

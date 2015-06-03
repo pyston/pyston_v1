@@ -53,7 +53,7 @@ extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
-extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args);
+extern "C" void delattrGeneric(Box* obj, llvm::StringRef attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, const std::string*, CallattrFlags, ArgPassSpec, Box*, Box*, Box*, Box**,
@@ -65,6 +65,7 @@ extern "C" BoxedString* strOrNull(Box* obj);  // similar to str, but returns NUL
 extern "C" Box* strOrUnicode(Box* obj);
 extern "C" bool exceptionMatches(Box* obj, Box* cls);
 extern "C" BoxedInt* hash(Box* obj);
+extern "C" int64_t hashUnboxed(Box* obj);
 extern "C" Box* abs_(Box* obj);
 // extern "C" Box* chr(Box* arg);
 extern "C" Box* compare(Box*, Box*, int);
@@ -97,7 +98,7 @@ extern "C" void dump(void* p);
 extern "C" void dumpEx(void* p, int levels = 0);
 
 struct SetattrRewriteArgs;
-void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
+void setattrGeneric(Box* obj, llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
 struct BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
@@ -119,27 +120,26 @@ enum LookupScope {
     INST_ONLY = 2,
     CLASS_OR_INST = 3,
 };
-extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
+extern "C" Box* callattrInternal(Box* obj, llvm::StringRef attr, LookupScope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names);
-extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
-                                 DelattrRewriteArgs* rewrite_args);
+extern "C" void delattr_internal(Box* obj, llvm::StringRef attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 
 // This is the equivalent of PyObject_GetAttr. Unlike getattrInternalGeneric, it checks for custom __getattr__ or
 // __getattribute__ methods.
-Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
+Box* getattrInternal(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
 
 // This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
 // data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
 // __getattribute__.
-Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
+Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 // This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
 // appropriate order. It does not do any descriptor logic.
-Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
+Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));

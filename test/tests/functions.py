@@ -1,13 +1,18 @@
 
 def f():
+    """very nice function"""
     print "f"
     return 2
 
 print f.__call__()
+print f.__doc__
+print f.func_doc
 
 def g():
     print "g"
     return 3
+
+print g.__doc__
 
 print type(f).__call__(f)
 print type(f).__call__(g)

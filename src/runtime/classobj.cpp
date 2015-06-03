@@ -104,7 +104,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
 
     for (auto& p : dict->d) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
-        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s), p.second, NULL);
+        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s()), p.second, NULL);
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
@@ -148,21 +148,21 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             return cls->getAttrWrapper();
 
-        if (attr->s == "__bases__")
+        if (attr->s() == "__bases__")
             return cls->bases;
 
-        if (attr->s == "__name__") {
+        if (attr->s() == "__name__") {
             if (cls->name)
                 return cls->name;
             return None;
         }
     }
 
-    Box* r = classLookup(cls, std::string(attr->s));
+    Box* r = classLookup(cls, std::string(attr->s()));
     if (!r)
         raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
@@ -206,7 +206,7 @@ static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
-    if (attr->s == "__bases__") {
+    if (attr->s() == "__bases__") {
         const char* error_str = set_bases((PyClassObject*)cls, _value);
         if (error_str && error_str[0] != '\0')
             raiseExcHelper(TypeError, "%s", error_str);
@@ -242,7 +242,7 @@ Box* classobjStr(Box* _obj) {
     Box* _mod = cls->getattr("__module__");
     RELEASE_ASSERT(_mod, "");
     RELEASE_ASSERT(_mod->cls == str_cls, "");
-    return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s) + "." + cls->name->s);
+    return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s()) + "." + cls->name->s());
 }
 
 static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
@@ -253,19 +253,19 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             return inst->getAttrWrapper();
 
-        if (attr->s == "__class__")
+        if (attr->s() == "__class__")
             return inst->inst_cls;
     }
 
-    Box* r = inst->getattr(attr->s);
+    Box* r = inst->getattr(attr->s());
     if (r)
         return r;
 
-    r = classLookup(inst->inst_cls, attr->s);
+    r = classLookup(inst->inst_cls, attr->s());
     if (r) {
         return processDescriptor(r, inst, inst->inst_cls);
     }
@@ -308,11 +308,11 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
     assert(value);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             Py_FatalError("unimplemented");
 
-        if (attr->s == "__class__") {
+        if (attr->s() == "__class__") {
             if (value->cls != classobj_cls)
                 raiseExcHelper(TypeError, "__class__ must be set to a class");
 
@@ -329,7 +329,7 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
         return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
     }
 
-    _inst->setattr(attr->s, value, NULL);
+    _inst->setattr(attr->s(), value, NULL);
     return None;
 }
 
@@ -341,11 +341,11 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s[0] == '_' && attr->s[1] == '_') {
-        if (attr->s == "__dict__")
+    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+        if (attr->s() == "__dict__")
             raiseExcHelper(TypeError, "__dict__ must be set to a dictionary");
 
-        if (attr->s == "__class__")
+        if (attr->s() == "__class__")
             raiseExcHelper(TypeError, "__class__ must be set to a class");
     }
 
@@ -357,7 +357,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
     }
 
-    _inst->delattr(attr->s, NULL);
+    _inst->delattr(attr->s(), NULL);
     return None;
 }
 
@@ -465,6 +465,140 @@ Box* instanceDelitem(Box* _inst, Box* key) {
 
     Box* delitem_func = _instanceGetattribute(inst, boxStrConstant("__delitem__"), true);
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
+/* Try a 3-way comparison, returning an int; v is an instance.  Return:
+   -2 for an exception;
+   -1 if v < w;
+   0 if v == w;
+   1 if v > w;
+   2 if this particular 3-way comparison is not implemented or undefined.
+*/
+static int half_cmp(PyObject* v, PyObject* w) noexcept {
+    // static PyObject* cmp_obj;
+    PyObject* args;
+    PyObject* cmp_func;
+    PyObject* result;
+    long l;
+
+    assert(PyInstance_Check(v));
+
+// Pyston change:
+#if 0
+        if (cmp_obj == NULL) {
+            cmp_obj = PyString_InternFromString("__cmp__");
+            if (cmp_obj == NULL)
+                return -2;
+        }
+
+        cmp_func = PyObject_GetAttr(v, cmp_obj);
+
+        if (cmp_func == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+                return -2;
+            PyErr_Clear();
+            return 2;
+        }
+#else
+    try {
+        cmp_func = _instanceGetattribute(v, boxStrConstant("__cmp__"), false);
+        if (!cmp_func)
+            return 2;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -2;
+    }
+#endif
+
+    args = PyTuple_Pack(1, w);
+    if (args == NULL) {
+        Py_DECREF(cmp_func);
+        return -2;
+    }
+
+    result = PyEval_CallObject(cmp_func, args);
+    Py_DECREF(args);
+    Py_DECREF(cmp_func);
+
+    if (result == NULL)
+        return -2;
+
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return 2;
+    }
+
+    l = PyInt_AsLong(result);
+    Py_DECREF(result);
+    if (l == -1 && PyErr_Occurred()) {
+        PyErr_SetString(PyExc_TypeError, "comparison did not return an int");
+        return -2;
+    }
+
+    return l < 0 ? -1 : l > 0 ? 1 : 0;
+}
+
+/* Try a 3-way comparison, returning an int; either v or w is an instance.
+   We first try a coercion.  Return:
+   -2 for an exception;
+   -1 if v < w;
+   0 if v == w;
+   1 if v > w;
+   2 if this particular 3-way comparison is not implemented or undefined.
+*/
+static int instance_compare(PyObject* v, PyObject* w) noexcept {
+    int c;
+
+    c = PyNumber_CoerceEx(&v, &w);
+    if (c < 0)
+        return -2;
+    if (c == 0) {
+        /* If neither is now an instance, use regular comparison */
+        if (!PyInstance_Check(v) && !PyInstance_Check(w)) {
+            c = PyObject_Compare(v, w);
+            Py_DECREF(v);
+            Py_DECREF(w);
+            if (PyErr_Occurred())
+                return -2;
+            return c < 0 ? -1 : c > 0 ? 1 : 0;
+        }
+    } else {
+        /* The coercion didn't do anything.
+           Treat this the same as returning v and w unchanged. */
+        Py_INCREF(v);
+        Py_INCREF(w);
+    }
+
+    if (PyInstance_Check(v)) {
+        c = half_cmp(v, w);
+        if (c <= 1) {
+            Py_DECREF(v);
+            Py_DECREF(w);
+            return c;
+        }
+    }
+    if (PyInstance_Check(w)) {
+        c = half_cmp(w, v);
+        if (c <= 1) {
+            Py_DECREF(v);
+            Py_DECREF(w);
+            if (c >= -1)
+                c = -c;
+            return c;
+        }
+    }
+    Py_DECREF(v);
+    Py_DECREF(w);
+    return 2;
+}
+
+Box* instanceCompare(Box* _inst, Box* other) {
+    int rtn = instance_compare(_inst, other);
+    if (rtn == 2)
+        return NotImplemented;
+    if (rtn == -2)
+        throwCAPIException();
+    return boxInt(rtn);
 }
 
 Box* instanceContains(Box* _inst, Box* key) {
@@ -636,6 +770,30 @@ extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klas
     }
 }
 
+extern "C" PyObject* PyMethod_Function(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->func;
+}
+
+extern "C" PyObject* PyMethod_Self(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->obj;
+}
+
+extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return ((BoxedInstanceMethod*)im)->im_class;
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
@@ -671,6 +829,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__cmp__", new BoxedFunction(boxRTFunction((void*)instanceCompare, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
     instance_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)instanceIter, UNKNOWN, 1)));

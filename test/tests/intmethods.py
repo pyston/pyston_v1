@@ -12,13 +12,14 @@ for i in xrange(1, 12):
 
 print 1 ** 0
 print 0 ** 0
-print -1 ** 0
+print -1 ** 0, (-1) ** 0, (-5) ** 0
 print (11).__pow__(5, 50)
 print (11).__pow__(32, 50)
 print (11).__index__()
 
 for i in (-10, 10, 0, -15):
     print i, i.__hex__(), i.__oct__()
+    print i.bit_length()
 
 # Testing int.__new__:
 class C(int):
@@ -67,6 +68,7 @@ print type(int(L()))
 
 print int(u'123')
 print int("9223372036854775808", 0)
+print int("0b101", 2), int("0b101", 0)
 print 1 << 63, 1 << 64, -1 << 63, -1 << 64, 2 << 63
 print type(1 << 63), type(1 << 64), type(-1 << 63), type(-1 << 64), type(2 << 63)
 
@@ -87,3 +89,7 @@ class I(int):
 for i1 in [1, I(2), 3, I(4)]:
     for i2 in [1, I(2), 3, I(4)]:
         print -i1, +i1, ~i1, i1 < i2, i1 <= i2, i1 == i2, i1 > i2, i1 >= i2, i1 != i2, i1 | i2, i1 ^ i2, i1 & i2, i1 * i2, i1 + i2, i1 / i2, i1 - i2, i1 ** i2, i1 // i2
+
+print int("12345", base=16)
+
+print type(2 ** 48)

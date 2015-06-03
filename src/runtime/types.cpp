@@ -95,7 +95,8 @@ bool IN_SHUTDOWN = false;
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
 
-    const size_t size = _PyObject_VAR_SIZE(cls, nitems);
+    // See PyType_GenericAlloc for note about the +1 here:
+    const size_t size = _PyObject_VAR_SIZE(cls, nitems + 1);
 
 #ifndef NDEBUG
 #if 0
@@ -144,8 +145,11 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
-    const size_t size = _PyObject_VAR_SIZE(type, nitems);
+    const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
+    // I don't understand why there is a +1 in this method; _PyObject_NewVar doesn't do that.
+    // CPython has the following comment:
     /* note that we need to add one, for the sentinel */
+    // I think that regardless of the reasoning behind them having it, we should do what they do?
 
     if (PyType_IS_GC(type))
         obj = _PyObject_GC_Malloc(size);
@@ -180,6 +184,8 @@ extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
 
 // Analogue of PyType_GenericNew
 void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
+    ALLOC_STATS_VAR(cls);
+
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_itemsize > 0);
@@ -191,6 +197,8 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
 }
 
 void* Box::operator new(size_t size, BoxedClass* cls) {
+    ALLOC_STATS(cls);
+
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_itemsize == 0);
@@ -401,7 +409,7 @@ std::string BoxedModule::name() {
         return "?";
     } else {
         BoxedString* sname = static_cast<BoxedString*>(name);
-        return sname->s;
+        return sname->s();
     }
 }
 
@@ -492,13 +500,19 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
+        return PyDictProxy_New(obj->getAttrWrapper());
+    abort();
+}
+
+static Box* typeSubDict(Box* obj, void* context) {
+    if (obj->cls->instancesHaveHCAttrs())
         return obj->getAttrWrapper();
     if (obj->cls->instancesHaveDictAttrs())
         return obj->getDict();
     abort();
 }
 
-static void typeSetDict(Box* obj, Box* val, void* context) {
+static void typeSubSetDict(Box* obj, Box* val, void* context) {
     if (obj->cls->instancesHaveDictAttrs()) {
         RELEASE_ASSERT(val->cls == dict_cls, "");
         obj->setDict(static_cast<BoxedDict*>(val));
@@ -1038,7 +1052,7 @@ Box* sliceRepr(BoxedSlice* self) {
     BoxedString* start = static_cast<BoxedString*>(repr(self->start));
     BoxedString* stop = static_cast<BoxedString*>(repr(self->stop));
     BoxedString* step = static_cast<BoxedString*>(repr(self->step));
-    return boxStringTwine(llvm::Twine("slice(") + start->s + ", " + stop->s + ", " + step->s + ")");
+    return boxStringTwine(llvm::Twine("slice(") + start->s() + ", " + stop->s() + ", " + step->s() + ")");
 }
 
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
@@ -1138,6 +1152,16 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssi
     return 0;
 }
 
+extern "C" PyObject* PySlice_New(PyObject* start, PyObject* stop, PyObject* step) noexcept {
+    if (step == NULL)
+        step = Py_None;
+    if (start == NULL)
+        start = Py_None;
+    if (stop == NULL)
+        stop = Py_None;
+    return createSlice(start, stop, step);
+}
+
 Box* typeRepr(BoxedClass* self) {
     std::string O("");
     llvm::raw_string_ostream os(O);
@@ -1150,8 +1174,8 @@ Box* typeRepr(BoxedClass* self) {
     Box* m = self->getattr("__module__");
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
-        if (sm->s != "__builtin__")
-            os << sm->s << '.';
+        if (sm->s() != "__builtin__")
+            os << sm->s() << '.';
     }
 
     os << self->tp_name;
@@ -1347,7 +1371,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        self->b->setattr(key->s, value, NULL);
+        self->b->setattr(key->s(), value, NULL);
         return None;
     }
 
@@ -1360,10 +1384,10 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* cur = self->b->getattr(key->s);
+        Box* cur = self->b->getattr(key->s());
         if (cur)
             return cur;
-        self->b->setattr(key->s, value, NULL);
+        self->b->setattr(key->s(), value, NULL);
         return value;
     }
 
@@ -1376,7 +1400,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (!r)
             return def;
         return r;
@@ -1391,7 +1415,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (!r)
             raiseExcHelper(KeyError, "'%s'", key->data());
         return r;
@@ -1405,9 +1429,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         if (r) {
-            self->b->delattr(key->s, NULL);
+            self->b->delattr(key->s(), NULL);
             return r;
         } else {
             if (default_)
@@ -1425,8 +1449,8 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        if (self->b->getattr(key->s))
-            self->b->delattr(key->s, NULL);
+        if (self->b->getattr(key->s()))
+            self->b->delattr(key->s(), NULL);
         else
             raiseExcHelper(KeyError, "'%s'", key->data());
         return None;
@@ -1450,7 +1474,7 @@ public:
             first = false;
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first().str() << ": " << v->s;
+            os << p.first().str() << ": " << v->s();
         }
         os << "})";
         return boxString(os.str());
@@ -1464,7 +1488,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s);
+        Box* r = self->b->getattr(key->s());
         return r ? True : False;
     }
 
@@ -1542,6 +1566,22 @@ public:
         return rtn;
     }
 
+    static Box* clear(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
+
+        // Clear the attrs array:
+        new ((void*)attrs) HCAttrs(root_hcls);
+        // Add the existing attrwrapper object (ie self) back as the attrwrapper:
+        self->b->appendNewHCAttr(self, NULL);
+        attrs->hcls = attrs->hcls->getAttrwrapperChild();
+
+        return None;
+    }
+
     static Box* len(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1604,6 +1644,20 @@ public:
 
         return new AttrWrapperIter(self);
     }
+
+    static Box* eq(Box* _self, Box* _other) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
+        BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
+        assert(dict->cls == dict_cls);
+        const std::string eq_str = "__eq__";
+        return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
+                                NULL);
+    }
+
+    static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
 
     friend class AttrWrapperIter;
 };
@@ -1681,26 +1735,45 @@ Box* objectNewNoArgs(BoxedClass* cls) {
     return new (cls) Box();
 }
 
-Box* objectNew(BoxedClass* cls, BoxedTuple* args, BoxedDict* kwargs) {
-    assert(isSubclass(cls->cls, type_cls));
-    assert(args->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
-
-    // We use a different strategy from CPython: we let object.__new__ take extra
-    // arguments, but raise an error if they wouldn't be handled by the corresponding init.
-    // TODO switch to the CPython approach?
-    if (args->size() != 0 || kwargs->d.size() != 0) {
-        // TODO slow (We already cache these in typeCall -- should use that here too?)
-        if (typeLookup(cls, "__new__", NULL) != typeLookup(object_cls, "__new__", NULL)
-            || typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
-            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
-    }
-
-    return new (cls) Box();
+static int excess_args(PyObject* args, PyObject* kwds) noexcept {
+    return PyTuple_GET_SIZE(args) || (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
 
-Box* objectInit(Box* b, BoxedTuple* args) {
-    return None;
+static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept;
+
+static int object_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    int err = 0;
+    if (excess_args(args, kwds)) {
+        PyTypeObject* type = Py_TYPE(self);
+        if (type->tp_init != object_init && type->tp_new != object_new) {
+            err = PyErr_WarnEx(PyExc_DeprecationWarning, "object.__init__() takes no parameters", 1);
+        } else if (type->tp_init != object_init || type->tp_new == object_new) {
+            PyErr_SetString(PyExc_TypeError, "object.__init__() takes no parameters");
+            err = -1;
+        }
+    }
+    return err;
+}
+
+static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
+    int err = 0;
+    if (excess_args(args, kwds)) {
+        if (type->tp_new != object_new && type->tp_init != object_init) {
+            err = PyErr_WarnEx(PyExc_DeprecationWarning, "object() takes no parameters", 1);
+        } else if (type->tp_new != object_new || type->tp_init == object_init) {
+            PyErr_SetString(PyExc_TypeError, "object() takes no parameters");
+            err = -1;
+        }
+    }
+    if (err < 0)
+        return NULL;
+
+    if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
+        // I don't know what this is or when it happens, but
+        // CPython does something special with it
+        Py_FatalError("unimplemented");
+    }
+    return type->tp_alloc(type, 0);
 }
 
 Box* objectRepr(Box* obj) {
@@ -1728,7 +1801,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
     }
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
-    setattrGeneric(obj, attr_str->s, value, NULL);
+    setattrGeneric(obj, attr_str->s(), value, NULL);
     return None;
 }
 
@@ -1981,6 +2054,63 @@ static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
     return _common_reduce(self, proto);
 }
 
+/*
+   from PEP 3101, this code implements:
+
+   class object:
+       def __format__(self, format_spec):
+       if isinstance(format_spec, str):
+           return format(str(self), format_spec)
+       elif isinstance(format_spec, unicode):
+           return format(unicode(self), format_spec)
+*/
+static PyObject* object_format(PyObject* self, PyObject* args) noexcept {
+    PyObject* format_spec;
+    PyObject* self_as_str = NULL;
+    PyObject* result = NULL;
+    Py_ssize_t format_len;
+
+    if (!PyArg_ParseTuple(args, "O:__format__", &format_spec))
+        return NULL;
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(format_spec)) {
+        format_len = PyUnicode_GET_SIZE(format_spec);
+        self_as_str = PyObject_Unicode(self);
+    } else if (PyString_Check(format_spec)) {
+#else
+    if (PyString_Check(format_spec)) {
+#endif
+        format_len = PyString_GET_SIZE(format_spec);
+        self_as_str = PyObject_Str(self);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "argument to __format__ must be unicode or str");
+        return NULL;
+    }
+
+    if (self_as_str != NULL) {
+        /* Issue 7994: If we're converting to a string, we
+           should reject format specifications */
+        if (format_len > 0) {
+            if (PyErr_WarnEx(PyExc_PendingDeprecationWarning, "object.__format__ with a non-empty format "
+                                                              "string is deprecated",
+                             1) < 0) {
+                goto done;
+            }
+            /* Eventually this will become an error:
+            PyErr_Format(PyExc_TypeError,
+               "non-empty format string passed to object.__format__");
+            goto done;
+            */
+        }
+        result = PyObject_Format(self_as_str, format_spec);
+    }
+
+done:
+    Py_XDECREF(self_as_str);
+
+    return result;
+}
+
 static Box* objectClass(Box* obj, void* context) {
     assert(obj->cls != instance_cls); // should override __class__ in classobj
     return obj->cls;
@@ -2025,6 +2155,7 @@ static void objectSetClass(Box* obj, Box* val, void* context) {
 static PyMethodDef object_methods[] = {
     { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
     { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
+    { "__format__", object_format, METH_VARARGS, PyDoc_STR("default object formatter") },
 };
 
 static Box* typeName(Box* b, void*) {
@@ -2082,8 +2213,11 @@ static Box* typeBases(Box* b, void*) {
     return type->tp_bases;
 }
 
-static void typeSetBases(Box* b, Box* v, void*) {
-    Py_FatalError("unimplemented");
+static void typeSetBases(Box* b, Box* v, void* c) {
+    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+    if (type_set_bases(type, v, c) == -1)
+        throwCAPIException();
 }
 
 // cls should be obj->cls.
@@ -2098,12 +2232,29 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
 
 extern "C" void PyCallIter_AddHasNext();
 
+extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
+    assert(op);
+    assert(tp);
+
+    assert(gc::isValidGCMemory(op));
+    assert(gc::isValidGCObject(tp));
+
+    gc::setIsPythonObject(op);
+
+    Py_TYPE(op) = tp;
+    op->ob_size = size;
+
+    return op;
+}
+
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(op);
     assert(tp);
 
-    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
+
+    gc::setIsPythonObject(op);
 
     Py_TYPE(op) = tp;
 
@@ -2289,6 +2440,8 @@ void setupRuntime() {
     wrapperobject_cls->tp_mro = BoxedTuple::create({ wrapperobject_cls, object_cls });
     wrapperdescr_cls->tp_mro = BoxedTuple::create({ wrapperdescr_cls, object_cls });
 
+    object_cls->tp_hash = (hashfunc)_Py_HashPointer;
+
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
     BOXED_FLOAT = typeFromClass(float_cls);
@@ -2317,6 +2470,8 @@ void setupRuntime() {
 
     object_cls->tp_getattro = PyObject_GenericGetAttr;
     object_cls->tp_setattro = PyObject_GenericSetAttr;
+    object_cls->tp_init = object_init;
+    object_cls->tp_new = object_new;
     add_operators(object_cls);
 
     object_cls->finishInitialization();
@@ -2346,9 +2501,9 @@ void setupRuntime() {
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, typeSetDict, NULL);
+    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeSubDict, typeSubSetDict, NULL);
     gc::registerPermanentRoot(dict_descr);
-    type_cls->giveAttr("__dict__", dict_descr);
+    type_cls->giveAttr("__dict__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, NULL, NULL));
 
 
     instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &instancemethodGCHandler, 0,
@@ -2381,12 +2536,8 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, true)));
-    object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr("__hash__",
-                         new BoxedFunction(boxRTFunction((void*)objectHash, BOXED_INT, 1, 0, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -2406,7 +2557,7 @@ void setupRuntime() {
     type_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
-    type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
+    type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
     type_cls->giveAttr("__mro__",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
@@ -2415,8 +2566,8 @@ void setupRuntime() {
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
-    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
+    none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
 
     module_cls->giveAttr("__init__",
@@ -2435,6 +2586,8 @@ void setupRuntime() {
     }
     object_cls->giveAttr("__class__", new (pyston_getset_cls) BoxedGetsetDescriptor(objectClass, objectSetClass, NULL));
     object_cls->freeze();
+    assert(object_cls->tp_init == object_init);
+    assert(object_cls->tp_new == object_new);
 
     setupBool();
     setupLong();
@@ -2463,6 +2616,7 @@ void setupRuntime() {
                                                                    offsetof(BoxedFunction, modname), false));
     function_cls->giveAttr(
         "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
+    function_cls->giveAttr("func_doc", function_cls->getattr("__doc__"));
     function_cls->giveAttr("__globals__", new (pyston_getset_cls) BoxedGetsetDescriptor(functionGlobals, NULL, NULL));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
@@ -2528,6 +2682,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::eq, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::ne, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
@@ -2536,6 +2692,7 @@ void setupRuntime() {
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::itervalues, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iteritems, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)AttrWrapper::clear, NONE, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("update",
@@ -2560,6 +2717,7 @@ void setupRuntime() {
     PyCallIter_AddHasNext();
     PyType_Ready(&PyCallIter_Type);
     PyType_Ready(&PyCObject_Type);
+    PyType_Ready(&PyDictProxy_Type);
 
     initerrno();
     init_sha();
@@ -2622,6 +2780,10 @@ void setupRuntime() {
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
 
+    assert(object_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(none_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(type_cls->tp_hash == (hashfunc)_Py_HashPointer);
+
     setupSysEnd();
 
     TRACK_ALLOCATIONS = true;
@@ -2646,6 +2808,8 @@ BoxedModule* createModule(const std::string& name, const char* fn, const char* d
         module->giveAttr("__file__", boxString(fn));
 
     d->d[b_name] = module;
+    if (name == "__main__")
+        module->giveAttr("__builtins__", builtins_module);
     return module;
 }
 

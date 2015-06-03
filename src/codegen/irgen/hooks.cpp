@@ -45,7 +45,7 @@
 namespace pyston {
 
 // TODO terrible place for these!
-ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
+ParamNames::ParamNames(AST* ast, InternedStringPool& pool) : takes_param_names(true) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
         || ast->type == AST_TYPE::Suite) {
         kwarg = "";
@@ -58,7 +58,8 @@ ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
             if (arg->type == AST_TYPE::Name) {
                 args.push_back(ast_cast<AST_Name>(arg)->id.str());
             } else {
-                args.push_back("." + std::to_string(i + 1));
+                InternedString dot_arg_name = pool.get("." + std::to_string(i));
+                args.push_back(dot_arg_name.str());
             }
         }
 
@@ -134,12 +135,6 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
     assert(cf);
     assert(cf->func);
 
-    // g.engine->finalizeOBject();
-    if (VERBOSITY("irgen") >= 1) {
-        printf("Compiling...\n");
-        // g.cur_module->dump();
-    }
-
     void* compiled = NULL;
     cf->code = NULL;
     if (effort > EffortLevel::INTERPRETED) {
@@ -194,12 +189,20 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2 || (VERBOSITY("irgen") == 1 && effort > EffortLevel::INTERPRETED)) {
         std::string s;
         llvm::raw_string_ostream ss(s);
 
+        const char* colors[] = {
+            "30",    // grey/black
+            "34",    // blue
+            "31",    // red
+            "31;40", // red-on-black/grey
+        };
+        RELEASE_ASSERT((int)effort < sizeof(colors) / sizeof(colors[0]), "");
+
         if (spec) {
-            ss << "\033[34;1mJIT'ing " << source->fn << ":" << name << " with signature (";
+            ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << source->fn << ":" << name << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";
@@ -209,12 +212,19 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->fn << ":" << name
-               << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
+            ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << source->fn << ":"
+               << name << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
-        ss << " at effort level " << (int)effort;
+        ss << " at effort level " << (int)effort << '\n';
+
+        if (entry_descriptor && VERBOSITY("irgen") >= 2) {
+            for (const auto& p : entry_descriptor->args) {
+                ss << p.first.str() << ": " << p.second->debugName() << '\n';
+            }
+        }
+
         ss << "\033[0m";
-        printf("%s\n", ss.str().c_str());
+        printf("%s", ss.str().c_str());
     }
 
 #ifndef NDEBUG
@@ -247,7 +257,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     static StatCounter us_compiling("us_compiling");
     us_compiling.log(us);
     if (VERBOSITY() >= 1 && us > 100000) {
-        printf("Took %ldms to compile %s::%s!\n", us / 1000, source->fn.c_str(), name.c_str());
+        printf("Took %ldms to compile %s::%s (effort %d)!\n", us / 1000, source->fn.c_str(), name.c_str(), (int)effort);
     }
 
     static StatCounter num_compiles("num_compiles");
@@ -305,6 +315,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body, fn));
         bm->setattr("__doc__", si->getDocString(), NULL);
+        if (!bm->hasattr("__builtins__"))
+            bm->giveAttr("__builtins__", PyModule_GetDict(builtins_module));
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
@@ -337,6 +349,10 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     // INTERPRETED. This could actually be useful if we actually cache the parse
     // results (since sometimes eval or exec might be called on constant strings).
     EffortLevel effort = EffortLevel::INTERPRETED;
+
+    Box* doc_string = cl->source->getDocString();
+    if (doc_string != None)
+        setGlobal(boxedLocals, "__doc__", doc_string);
 
     CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
     assert(cf->clfunc->versions.size());
@@ -456,8 +472,8 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     }
     RELEASE_ASSERT(isSubclass(type->cls, str_cls), "");
 
-    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s;
-    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s;
+    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s();
+    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s();
 
     if (iflags & ~(/*PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
         raiseExcHelper(ValueError, "compile(): unrecognised flags");
@@ -473,7 +489,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         parsed = unboxAst(source);
     } else {
         RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
-        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
+        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
 
         if (type_str == "exec") {
             parsed = parseExec(source_str);
@@ -542,7 +558,7 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s);
+        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s());
         cl = compileEval(parsed, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
@@ -609,7 +625,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s);
+        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
         cl = compileExec(parsed, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);

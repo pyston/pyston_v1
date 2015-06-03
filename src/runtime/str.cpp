@@ -44,6 +44,7 @@ extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 // from cpython's stringobject.c:
 #define LEFTSTRIP 0
@@ -52,7 +53,7 @@ extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noe
 
 namespace pyston {
 
-BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n), interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     if (s) {
         memmove(data(), s, n);
@@ -62,21 +63,20 @@ BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n), interned_st
     }
 }
 
-BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs)
-    : s(storage(), lhs.size() + rhs.size()), interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(lhs.size() + rhs.size() != llvm::StringRef::npos, "");
     memmove(data(), lhs.data(), lhs.size());
     memmove(data() + lhs.size(), rhs.data(), rhs.size());
     data()[lhs.size() + rhs.size()] = 0;
 }
 
-BoxedString::BoxedString(llvm::StringRef s) : s(storage(), s.size()), interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(llvm::StringRef s) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(s.size() != llvm::StringRef::npos, "");
     memmove(data(), s.data(), s.size());
     data()[s.size()] = 0;
 }
 
-BoxedString::BoxedString(size_t n, char c) : s(storage(), n), interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(size_t n, char c) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
     data()[n] = 0;
@@ -84,7 +84,7 @@ BoxedString::BoxedString(size_t n, char c) : s(storage(), n), interned_state(SST
 
 extern "C" char PyString_GetItem(PyObject* op, ssize_t n) noexcept {
     RELEASE_ASSERT(PyString_Check(op), "");
-    return static_cast<const BoxedString*>(op)->s[n];
+    return static_cast<const BoxedString*>(op)->s()[n];
 }
 
 extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) noexcept {
@@ -342,7 +342,7 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     }
 
     BoxedString* rhs = static_cast<BoxedString*>(_rhs);
-    return new (lhs->size() + rhs->size()) BoxedString(lhs->s, rhs->s);
+    return new (lhs->size() + rhs->size()) BoxedString(lhs->s(), rhs->s());
 }
 
 static llvm::StringMap<Box*> interned_strings;
@@ -369,7 +369,7 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
     if (PyString_CHECK_INTERNED(s))
         return;
 
-    auto& entry = interned_strings[s->s];
+    auto& entry = interned_strings[s->s()];
     if (entry)
         *p = entry;
     else {
@@ -1161,7 +1161,7 @@ extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s < srhs->s);
+    return boxBool(lhs->s() < srhs->s());
 }
 
 extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
@@ -1171,7 +1171,7 @@ extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s <= srhs->s);
+    return boxBool(lhs->s() <= srhs->s());
 }
 
 extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
@@ -1181,7 +1181,7 @@ extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s > srhs->s);
+    return boxBool(lhs->s() > srhs->s());
 }
 
 extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
@@ -1191,7 +1191,7 @@ extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s >= srhs->s);
+    return boxBool(lhs->s() >= srhs->s());
 }
 
 extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
@@ -1201,7 +1201,7 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s == srhs->s);
+    return boxBool(lhs->s() == srhs->s());
 }
 
 extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
@@ -1211,7 +1211,7 @@ extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s != srhs->s);
+    return boxBool(lhs->s() != srhs->s());
 }
 
 #define JUST_LEFT 0
@@ -1229,11 +1229,11 @@ static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
             return self;
         } else {
             // If self isn't a string but a subclass of str, then make a new string to return
-            return boxString(self->s);
+            return boxString(self->s());
         }
     }
 
-    char c = static_cast<BoxedString*>(fillchar)->s[0];
+    char c = static_cast<BoxedString*>(fillchar)->s()[0];
 
     int padLeft, padRight;
     int nNeeded = targetWidth - curWidth;
@@ -1255,7 +1255,7 @@ static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
     }
 
     // TODO this is probably slow
-    return boxStringTwine(llvm::Twine(std::string(padLeft, c)) + self->s + std::string(padRight, c));
+    return boxStringTwine(llvm::Twine(std::string(padLeft, c)) + self->s() + std::string(padRight, c));
 }
 extern "C" Box* strLjust(BoxedString* lhs, Box* width, Box* fillchar) {
     return pad(lhs, width, fillchar, JUST_LEFT);
@@ -1279,7 +1279,7 @@ extern "C" Box* strStr(BoxedString* self) {
     if (self->cls == str_cls)
         return self;
 
-    return boxString(self->s);
+    return boxString(self->s());
 }
 
 static bool _needs_escaping[256]
@@ -1307,7 +1307,7 @@ extern "C" PyObject* PyString_Repr(PyObject* obj, int smartquotes) noexcept {
 
     std::ostringstream os("");
 
-    llvm::StringRef s(self->s);
+    llvm::StringRef s(self->s());
     char quote = '\'';
     if (smartquotes && s.find('\'', 0) != std::string::npos && s.find('\"', 0) == std::string::npos) {
         quote = '\"';
@@ -1572,7 +1572,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
 
     BoxedString* _rtn = static_cast<BoxedString*>(rtn);
 
-    return new (cls, _rtn->size()) BoxedString(_rtn->s);
+    return new (cls, _rtn->size()) BoxedString(_rtn->s());
 }
 
 extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
@@ -1582,7 +1582,7 @@ extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
 Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef s = self->s;
+    llvm::StringRef s = self->s();
 
     assert(step != 0);
     if (step > 0) {
@@ -1604,7 +1604,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
 Box* strIsAlpha(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
     if (str.empty())
         return False;
 
@@ -1619,7 +1619,7 @@ Box* strIsAlpha(BoxedString* self) {
 Box* strIsDigit(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
     if (str.empty())
         return False;
 
@@ -1634,7 +1634,7 @@ Box* strIsDigit(BoxedString* self) {
 Box* strIsAlnum(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
     if (str.empty())
         return False;
 
@@ -1649,7 +1649,7 @@ Box* strIsAlnum(BoxedString* self) {
 Box* strIsLower(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
     bool lowered = false;
 
     if (str.empty())
@@ -1671,7 +1671,7 @@ Box* strIsLower(BoxedString* self) {
 Box* strIsUpper(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
 
     if (str.empty())
         return False;
@@ -1690,7 +1690,7 @@ Box* strIsUpper(BoxedString* self) {
 Box* strIsSpace(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
     if (str.empty())
         return False;
 
@@ -1705,7 +1705,7 @@ Box* strIsSpace(BoxedString* self) {
 Box* strIsTitle(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    llvm::StringRef str(self->s);
+    llvm::StringRef str(self->s());
 
     if (str.empty())
         return False;
@@ -1767,12 +1767,12 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
 
     int max_replaces = static_cast<BoxedInt*>(_maxreplace)->n;
     size_t start_pos = 0;
-    std::string s = self->s;
+    std::string s = self->s();
     for (int num_replaced = 0; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
-        start_pos = s.find(old->s, start_pos);
+        start_pos = s.find(old->s(), start_pos);
         if (start_pos == std::string::npos)
             break;
-        s.replace(start_pos, old->size(), new_->s);
+        s.replace(start_pos, old->size(), new_->s());
         start_pos += new_->size(); // Handles case where 'to' is a substring of 'from'
     }
     return boxString(s);
@@ -1782,7 +1782,7 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
     RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
     RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
 
-    size_t found_idx = self->s.find(sep->s);
+    size_t found_idx = self->s().find(sep->s());
     if (found_idx == std::string::npos)
         return BoxedTuple::create({ self, EmptyString, EmptyString });
 
@@ -1796,7 +1796,7 @@ Box* strRpartition(BoxedString* self, BoxedString* sep) {
     RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
     RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
 
-    size_t found_idx = self->s.rfind(sep->s);
+    size_t found_idx = self->s().rfind(sep->s());
     if (found_idx == std::string::npos)
         return BoxedTuple::create({ EmptyString, EmptyString, self });
 
@@ -1819,10 +1819,10 @@ Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
 
 Box* strStrip(BoxedString* self, Box* chars) {
     assert(isSubclass(self->cls, str_cls));
-    auto str = self->s;
+    auto str = self->s();
 
     if (isSubclass(chars->cls, str_cls)) {
-        auto chars_str = static_cast<BoxedString*>(chars)->s;
+        auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxStringRef(str.trim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.trim(" \t\n\r\f\v"));
@@ -1843,10 +1843,10 @@ Box* strStrip(BoxedString* self, Box* chars) {
 
 Box* strLStrip(BoxedString* self, Box* chars) {
     assert(isSubclass(self->cls, str_cls));
-    auto str = self->s;
+    auto str = self->s();
 
     if (isSubclass(chars->cls, str_cls)) {
-        auto chars_str = static_cast<BoxedString*>(chars)->s;
+        auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxStringRef(str.ltrim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.ltrim(" \t\n\r\f\v"));
@@ -1867,10 +1867,10 @@ Box* strLStrip(BoxedString* self, Box* chars) {
 
 Box* strRStrip(BoxedString* self, Box* chars) {
     assert(isSubclass(self->cls, str_cls));
-    auto str = self->s;
+    auto str = self->s();
 
     if (isSubclass(chars->cls, str_cls)) {
-        auto chars_str = static_cast<BoxedString*>(chars)->s;
+        auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxStringRef(str.rtrim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.rtrim(" \t\n\r\f\v"));
@@ -1892,7 +1892,7 @@ Box* strRStrip(BoxedString* self, Box* chars) {
 Box* strCapitalize(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    std::string s(self->s);
+    std::string s(self->s());
 
     for (auto& i : s) {
         i = std::tolower(i);
@@ -1908,7 +1908,7 @@ Box* strCapitalize(BoxedString* self) {
 Box* strTitle(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    std::string s(self->s);
+    std::string s(self->s());
     bool start_of_word = false;
 
     for (auto& i : s) {
@@ -1938,7 +1938,7 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
     if (delete_chars) {
         if (!isSubclass(delete_chars->cls, str_cls))
             raiseExcHelper(TypeError, "expected a character buffer object");
-        delete_set.insert(delete_chars->s.begin(), delete_chars->s.end());
+        delete_set.insert(delete_chars->s().begin(), delete_chars->s().end());
     }
 
     bool have_table = table != None;
@@ -1950,9 +1950,9 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
     }
 
     std::string str;
-    for (const char c : self->s) {
+    for (const char c : self->s()) {
         if (!delete_set.count(c))
-            str.append(1, have_table ? table->s[(unsigned char)c] : c);
+            str.append(1, have_table ? table->s()[(unsigned char)c] : c);
     }
     return boxString(str);
 }
@@ -1960,7 +1960,7 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
 Box* strLower(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s));
+    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::tolower(rtn->data()[i]);
     return rtn;
@@ -1968,7 +1968,7 @@ Box* strLower(BoxedString* self) {
 
 Box* strUpper(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s));
+    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::toupper(rtn->data()[i]);
     return rtn;
@@ -1976,7 +1976,7 @@ Box* strUpper(BoxedString* self) {
 
 Box* strSwapcase(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s));
+    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
     for (int i = 0; i < rtn->size(); i++) {
         char c = rtn->data()[i];
         if (std::islower(c))
@@ -2002,7 +2002,7 @@ Box* strContains(BoxedString* self, Box* elt) {
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
-    size_t found_idx = self->s.find(sub->s);
+    size_t found_idx = self->s().find(sub->s());
     if (found_idx == std::string::npos)
         return False;
     return True;
@@ -2016,6 +2016,14 @@ static int compareStringRefs(llvm::StringRef a, size_t a_pos, size_t len, llvm::
     if (a_pos + len > a.size())
         throw std::out_of_range("pos+len out of range");
     return llvm::StringRef(a.data() + a_pos, len).compare(str);
+}
+
+extern "C" int _PyString_Eq(PyObject* o1, PyObject* o2) noexcept {
+    assert(PyString_Check(o1));
+    assert(PyString_Check(o2));
+    BoxedString* a = (BoxedString*)o1;
+    BoxedString* b = (BoxedString*)o2;
+    return a->s() == b->s();
 }
 
 Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
@@ -2078,7 +2086,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return False;
     if (sub->size() > compare_len)
         return False;
-    return boxBool(compareStringRefs(self->s, istart, sub->size(), sub->s) == 0);
+    return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);
 }
 
 Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
@@ -2143,7 +2151,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return False;
     // XXX: this line is the only difference between startswith and endswith:
     istart += compare_len - sub->size();
-    return boxBool(compareStringRefs(self->s, istart, sub->size(), sub->s) == 0);
+    return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);
 }
 
 Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
@@ -2211,7 +2219,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
             raiseExcHelper(IndexError, "string index out of range");
         }
 
-        char c = self->s[n];
+        char c = self->s()[n];
         return boxStringRef(llvm::StringRef(&c, 1));
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
@@ -2236,7 +2244,7 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : s(s), it(s->s.begin()), end(s->s.end()) {}
+    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) {}
 
     DEFAULT_CLASS(str_iterator_cls);
 
@@ -2371,7 +2379,7 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 
     if (newsize < s->size()) {
         // XXX resize the box (by reallocating) smaller if it makes sense
-        s->s = llvm::StringRef(s->data(), newsize);
+        s->ob_size = newsize;
         s->data()[newsize] = 0;
         return 0;
     }
@@ -2583,7 +2591,7 @@ static int string_print(PyObject* _op, FILE* fp, int flags) noexcept {
         with the GIL released. */
         // Pyston change:
         // c = op->ob_sval[i];
-        c = op->s[i];
+        c = op->s()[i];
         if (c == quote || c == '\\')
             fprintf(fp, "\\%c", c);
         else if (c == '\t')
@@ -2653,6 +2661,7 @@ static PyMethodDef string_methods[] = {
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
+    { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
 };
 
 void setupStr() {

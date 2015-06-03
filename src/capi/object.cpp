@@ -421,9 +421,9 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
     try {
         if (value == NULL)
-            delattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s), NULL);
+            delattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s()), NULL);
         else
-            setattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s), value, NULL);
+            setattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s()), value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -445,9 +445,9 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
 
     try {
         if (value == NULL)
-            delattr(obj, static_cast<BoxedString*>(name)->s.data());
+            delattr(obj, static_cast<BoxedString*>(name)->data());
         else
-            setattr(obj, static_cast<BoxedString*>(name)->s.data(), value);
+            setattr(obj, static_cast<BoxedString*>(name)->data(), value);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -476,6 +476,16 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexc
         setCAPIException(e);
         return NULL;
     }
+}
+
+extern "C" int PyObject_HasAttr(PyObject* v, PyObject* name) noexcept {
+    PyObject* res = PyObject_GetAttr(v, name);
+    if (res != NULL) {
+        Py_DECREF(res);
+        return 1;
+    }
+    PyErr_Clear();
+    return 0;
 }
 
 extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) noexcept {

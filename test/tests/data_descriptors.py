@@ -31,9 +31,8 @@ print 'C.dd is %s' % str(C.dd)
 print 'C.ndd is %s' % str(C.ndd)
 C.dd = 6
 C.ndd = 7
-#TODO it would be nice to print these out (once __dict__ is implemented)
-#print C.__dict__['dd']
-#print C.__dict__['ndd']
+print C.__dict__['dd']
+print C.__dict__['ndd']
 print C.dd
 print C.ndd
 
@@ -62,8 +61,8 @@ print 'D.dd is %s' % str(D.dd)
 print 'D.ndd is %s' % str(D.ndd)
 D.dd = 6
 D.ndd = 7
-#print D.__dict__['dd']
-#print D.__dict__['ndd']
+print D.__dict__['dd']
+print D.__dict__['ndd']
 
 class DataDescriptor(object):
     def __get__(self, obj, type): return 1
@@ -82,7 +81,7 @@ print d1.a
 
 print 'D1.a is %s' % str(D1.a)
 D1.a = 6
-#print D1.__dict__['a']
+print D1.__dict__['a']
 
 class C2(object):
     a = 4
@@ -93,7 +92,7 @@ print d2.a
 
 print 'D2.a is %s' % str(D2.a)
 D2.a = 6
-#print D2.__dict__['a']
+print D2.__dict__['a']
 
 class C3(object):
     a = NonDataDescriptor()
@@ -104,15 +103,15 @@ print d3.a
 
 print 'D3.a is %s' % str(D3.a)
 D3.a = 6
-#print D3.__dict__['a']
+print D3.__dict__['a']
 
 class C4(object):
     a = 6
 class D4(C4):
     a = NonDataDescriptor()
 d4 = D4()
-#print d4.a
+print d4.a
 
 print 'D4.a is %s' % str(D4.a)
 D4.a = 6
-#print D4.__dict__['a']
+print D4.__dict__['a']

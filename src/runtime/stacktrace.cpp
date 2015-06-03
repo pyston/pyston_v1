@@ -45,59 +45,10 @@ void showBacktrace() {
     }
 }
 
-// Currently-unused libunwind-based unwinding:
-void unwindExc(Box* exc_obj) __attribute__((noreturn));
-void unwindExc(Box* exc_obj) {
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, sp;
-
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
-
-    int code;
-    unw_proc_info_t pip;
-
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_get_reg(&cursor, UNW_REG_SP, &sp);
-        printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-
-        code = unw_get_proc_info(&cursor, &pip);
-        RELEASE_ASSERT(code == 0, "");
-
-        // printf("%lx %lx %lx %lx %lx %lx %d %d %p\n", pip.start_ip, pip.end_ip, pip.lsda, pip.handler, pip.gp,
-        // pip.flags, pip.format, pip.unwind_info_size, pip.unwind_info);
-
-        assert((pip.lsda == 0) == (pip.handler == 0));
-        assert(pip.flags == 0);
-
-        if (pip.handler == 0) {
-            if (VERBOSITY())
-                printf("Skipping frame without handler\n");
-
-            continue;
-        }
-
-        printf("%lx %lx %lx\n", pip.lsda, pip.handler, pip.flags);
-        // assert(pip.handler == (uintptr_t)__gxx_personality_v0 || pip.handler == (uintptr_t)__py_personality_v0);
-
-        // auto handler_fn = (int (*)(int, int, uint64_t, void*, void*))pip.handler;
-        ////handler_fn(1, 1 /* _UA_SEARCH_PHASE */, 0 /* exc_class */, NULL, NULL);
-        // handler_fn(2, 2 /* _UA_SEARCH_PHASE */, 0 /* exc_class */, NULL, NULL);
-        unw_set_reg(&cursor, UNW_REG_IP, 1);
-
-        // TODO testing:
-        // unw_resume(&cursor);
-    }
-
-    abort();
-}
-
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) {
     STAT_TIMER(t0, "us_timer_raiseraw");
-    // Should set these to None before getting here:
+    // Should set these to None rather than null before getting here:
     assert(e.type);
     assert(e.value);
     assert(e.traceback);
@@ -105,11 +56,7 @@ void raiseRaw(const ExcInfo& e) {
     assert(gc::isValidGCObject(e.value));
     assert(gc::isValidGCObject(e.traceback));
 
-    // Using libgcc:
     throw e;
-
-    // Using libunwind
-    // unwindExc(exc_obj);
 }
 
 void raiseExc(Box* exc_obj) {
@@ -154,7 +101,16 @@ void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AS
 }
 
 void _printStacktrace() {
+    static bool recursive = false;
+
+    if (recursive) {
+        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
+        return;
+    }
+
+    recursive = true;
     printTraceback(getTraceback());
+    recursive = false;
 }
 
 // where should this go...

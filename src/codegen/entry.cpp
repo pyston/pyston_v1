@@ -55,6 +55,8 @@
 
 namespace pyston {
 
+int sigprof_pending = 0;
+
 GlobalState g;
 
 extern "C" {
@@ -356,6 +358,10 @@ static void handle_sigusr1(int signum) {
     _printStacktrace();
 }
 
+static void handle_sigprof(int signum) {
+    sigprof_pending++;
+}
+
 static void handle_sigint(int signum) {
     assert(signum == SIGINT);
     // TODO: this should set a flag saying a KeyboardInterrupt is pending.
@@ -461,6 +467,13 @@ void initCodegen() {
     signal(SIGUSR1, &handle_sigusr1);
     signal(SIGINT, &handle_sigint);
 
+#if ENABLE_SAMPLING_PROFILER
+    struct itimerval prof_timer;
+    prof_timer.it_value.tv_sec = prof_timer.it_interval.tv_sec = 0;
+    prof_timer.it_value.tv_usec = prof_timer.it_interval.tv_usec = 1000;
+    signal(SIGPROF, handle_sigprof);
+    setitimer(ITIMER_PROF, &prof_timer, NULL);
+#endif
 
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:

@@ -454,7 +454,6 @@ struct _typeobject {
 
     void* _hcls;
     void* _hcattrs;
-    char _dep_getattrs[SIZEOF_UNORDEREDMAP + sizeof(void *)];
     char _ics[32];
     void* _gcvisit_func;
     void* _dtor;

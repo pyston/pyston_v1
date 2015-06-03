@@ -594,7 +594,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
-            generator->doSafePoint();
+            generator->doSafePoint(block->body[0]);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -763,7 +763,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (predecessor->idx > block->idx) {
                 // Loop safepoint:
                 // TODO does it matter which side of the backedge these are on?
-                generator->doSafePoint();
+                generator->doSafePoint(block->body[0]);
                 break;
             }
         }

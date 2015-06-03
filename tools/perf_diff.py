@@ -5,8 +5,8 @@ def tally(fn):
 
     for l in open(fn):
         samples = int(l.split()[3])
-        func = l.split()[-1]
-        counts[func] = samples
+        func = l.rsplit(']', 1)[1].strip()
+        counts[func] = counts.get(func, 0) + samples
 
     return counts
 
@@ -23,12 +23,11 @@ def main():
 
     diff_thresh = (total1 + total2) / 2 / 100
 
-    names.sort(key=lambda n: counts1.get(n, 0) + counts2.get(n, 0), reverse=True)
-    for n in names:
+    names.sort(key=lambda n: abs(counts1.get(n, 0) - counts2.get(n, 0)), reverse=True)
+    for n in names[:10]:
         c1 = counts1.get(n, 0)
         c2 = counts2.get(n, 0)
-        if abs(c1 - c2) >= diff_thresh:
-            print n, counts1.get(n, 0), counts2.get(n, 0)
+        print n, counts1.get(n, 0), counts2.get(n, 0)
 
 if __name__ == "__main__":
     main()

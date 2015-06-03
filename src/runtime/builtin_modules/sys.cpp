@@ -249,6 +249,11 @@ static std::string generateVersionString() {
     return oss.str();
 }
 
+extern "C" const char* Py_GetVersion(void) noexcept {
+    static std::string version = generateVersionString();
+    return version.c_str();
+}
+
 static bool isLittleEndian() {
     unsigned long number = 1;
     char* s = (char*)&number;
@@ -498,7 +503,7 @@ void setupSys() {
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(md.ml_flags, sys_module, md.ml_name, md.ml_meth));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
     }
 
     sys_module->giveAttr("flags", new BoxedSysFlags());

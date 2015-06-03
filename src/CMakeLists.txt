@@ -68,6 +68,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		core/stats.cpp
 		core/threading.cpp
 		core/util.cpp
+		deadlock_debug_helper.cpp
 		gc/collector.cpp
 		gc/gc_alloc.cpp
 		gc/heap.cpp
@@ -83,6 +84,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/code.cpp
 		runtime/complex.cpp
 		runtime/ctxswitching.S
+		runtime/cxx_unwind.cpp
 		runtime/descr.cpp
 		runtime/dict.cpp
 		runtime/file.cpp
@@ -107,10 +109,10 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/util.cpp
 		)
 
-add_dependencies(PYSTON_OBJECTS FROM_CPYTHON libunwind pypa ${LLVM_LIBS})
+add_dependencies(PYSTON_OBJECTS FROM_CPYTHON libunwind_patched libunwind pypa ${LLVM_LIBS})
 
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
-add_dependencies(PYSTON_MAIN_OBJECT libunwind pypa liblz4 ${LLVM_LIBS})
+add_dependencies(PYSTON_MAIN_OBJECT libunwind_patched libunwind pypa liblz4 ${LLVM_LIBS})
 
 # build stdlib
 add_subdirectory(runtime/inline)

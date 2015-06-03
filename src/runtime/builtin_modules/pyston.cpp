@@ -30,7 +30,7 @@ static Box* setOption(Box* option, Box* value) {
     int n = ((BoxedInt*)value)->n;
 
 #define CHECK(_s)                                                                                                      \
-    if (option_string->s == STRINGIFY(_s))                                                                             \
+    if (option_string->s() == STRINGIFY(_s))                                                                           \
     _s = n
 
     // :)
@@ -43,7 +43,7 @@ static Box* setOption(Box* option, Box* value) {
     else CHECK(REOPT_THRESHOLD_BASELINE);
     else CHECK(OSR_THRESHOLD_BASELINE);
     else CHECK(SPECULATION_THRESHOLD);
-    else raiseExcHelper(ValueError, "unknown option name '%s", option_string->s.data());
+    else raiseExcHelper(ValueError, "unknown option name '%s", option_string->data());
 
     return None;
 }

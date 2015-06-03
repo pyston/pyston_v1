@@ -1,7 +1,3 @@
-# should_error
-# skip-if: sys.version_info < (2, 7, 4)
-# - Error message changed in 2.7.4
-
 # Regression test:
 # If the init function doesn't exist, shouldn't just silently ignore any args
 # that got passed
@@ -16,5 +12,8 @@ print "This should have worked"
 class D(object):
     pass
 
-d = D(1)
-print "This should have failed"
+try:
+    d = D(1)
+    print "This should have failed"
+except TypeError as e:
+    print "expected exception" # the message got changed in 2.7.4

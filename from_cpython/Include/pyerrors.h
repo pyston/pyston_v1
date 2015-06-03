@@ -83,6 +83,10 @@ PyAPI_FUNC(void) PyErr_Clear(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_Fetch(PyObject **, PyObject **, PyObject **) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
+// Pyton change: This functions are normally only available in CPython >= 3.3 and PyPy but Cython can use them.
+PyAPI_FUNC(void) PyErr_GetExcInfo(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_SetExcInfo(PyObject *type, PyObject *value, PyObject *traceback) PYSTON_NOEXCEPT;
+
 #ifdef Py_DEBUG
 #define _PyErr_OCCURRED() PyErr_Occurred()
 #else

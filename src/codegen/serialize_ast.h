@@ -15,11 +15,13 @@
 #ifndef PYSTON_CODEGEN_SERIALIZEAST_H
 #define PYSTON_CODEGEN_SERIALIZEAST_H
 
+#include <cstdint>
 #include <cstdio>
+#include <utility>
 
 namespace pyston {
 class AST_Module;
-unsigned long serializeAST(AST_Module* module, FILE* file);
+std::pair<unsigned long, uint8_t> serializeAST(AST_Module* module, FILE* file);
 }
 
 #endif // PYSTON_CODEGEN_SERIALIZEAST_H

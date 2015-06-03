@@ -13,8 +13,10 @@
 
 #include "pythread.h"
 
-static PyObject *ThreadError;
+// Pyston change: we're only using part of this file
 static PyObject *str_dict;
+#if 0
+static PyObject *ThreadError;
 static long nb_threads = 0;
 
 /* Lock objects */
@@ -173,6 +175,7 @@ newlockobject(void)
     }
     return self;
 }
+#endif
 
 /* Thread-local objects */
 
@@ -236,7 +239,7 @@ static PyTypeObject localdummytype = {
     /* tp_name           */ "_thread._localdummy",
     /* tp_basicsize      */ sizeof(localdummyobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)localdummy_dealloc,
+    /* tp_dealloc        */ (destructor)/*localdummy_dealloc*/ NULL,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,
@@ -389,6 +392,10 @@ local_traverse(localobject *self, visitproc visit, void *arg)
 static int
 local_clear(localobject *self)
 {
+    // Pyston change:
+    Py_FatalError("unexpected call to local_clear()");
+    abort();
+#if 0
     PyThreadState *tstate;
     Py_CLEAR(self->args);
     Py_CLEAR(self->kw);
@@ -406,6 +413,7 @@ local_clear(localobject *self)
                 PyDict_DelItem(tstate->dict, self->key);
     }
     return 0;
+#endif
 }
 
 static void
@@ -490,7 +498,7 @@ static PyTypeObject localtype = {
     /* tp_name           */ "thread._local",
     /* tp_basicsize      */ sizeof(localobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)local_dealloc,
+    /* tp_dealloc        */ (destructor)/*local_dealloc*/ NULL,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,
@@ -589,6 +597,8 @@ _localdummy_destroyed(PyObject *localweakref, PyObject *dummyweakref)
     Py_RETURN_NONE;
 }
 
+// Pyston change:
+#if 0
 /* Module functions */
 
 struct bootstate {
@@ -846,8 +856,11 @@ requiring allocation in multiples of the system memory page size\n\
 - platform documentation should be referred to for more information\n\
 (4kB pages are common; using multiples of 4096 for the stack size is\n\
 the suggested approach in the absence of more specific information).");
+#endif
 
 static PyMethodDef thread_methods[] = {
+// Pyston change:
+#if 0
     {"start_new_thread",        (PyCFunction)thread_PyThread_start_new_thread,
                             METH_VARARGS,
                             start_new_doc},
@@ -871,6 +884,7 @@ static PyMethodDef thread_methods[] = {
     {"stack_size",              (PyCFunction)thread_stack_size,
                             METH_VARARGS,
                             stack_size_doc},
+#endif
     {NULL,                      NULL}           /* sentinel */
 };
 
@@ -909,6 +923,8 @@ initthread(void)
     if (m == NULL)
         return;
 
+    // Pyston change:
+#if 0
     /* Add a symbolic constant */
     d = PyModule_GetDict(m);
     ThreadError = PyGC_AddRoot(PyErr_NewException("thread.error", NULL, NULL));
@@ -918,17 +934,18 @@ initthread(void)
         return;
     Py_INCREF(&Locktype);
     PyDict_SetItemString(d, "LockType", (PyObject *)&Locktype);
+#endif
 
     Py_INCREF(&localtype);
     if (PyModule_AddObject(m, "_local", (PyObject *)&localtype) < 0)
         return;
 
-    nb_threads = 0;
+    //nb_threads = 0; // pyston change
 
     str_dict = PyGC_AddRoot(PyString_InternFromString("__dict__"));
     if (str_dict == NULL)
         return;
 
     /* Initialize the C thread library */
-    PyThread_init_thread();
+    //PyThread_init_thread(); // pyston change
 }

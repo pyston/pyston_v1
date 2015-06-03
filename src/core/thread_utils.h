@@ -52,11 +52,20 @@ public:
 
 class PthreadFastMutex {
 private:
+    // NB. I tried using error-checking mutexes (PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP) here in debug-mode but got
+    // some funky errors. I think we might be deliberately locking/unlocking mutexes on different threads in some
+    // circumstances. - rntz
     pthread_mutex_t mutex = PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP;
 
 public:
-    void lock() { pthread_mutex_lock(&mutex); }
-    void unlock() { pthread_mutex_unlock(&mutex); }
+    void lock() {
+        int err = pthread_mutex_lock(&mutex);
+        ASSERT(!err, "pthread_mutex_lock failed, error code %d", err);
+    }
+    void unlock() {
+        int err = pthread_mutex_unlock(&mutex);
+        ASSERT(!err, "pthread_mutex_unlock failed, error code %d", err);
+    }
 
     PthreadFastMutex* asRead() { return this; }
     PthreadFastMutex* asWrite() { return this; }
@@ -64,11 +73,18 @@ public:
 
 class PthreadMutex {
 private:
+    // Ditto comment in PthreadFastMutex re error-checking mutexes. - rntz
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 public:
-    void lock() { pthread_mutex_lock(&mutex); }
-    void unlock() { pthread_mutex_unlock(&mutex); }
+    void lock() {
+        int err = pthread_mutex_lock(&mutex);
+        ASSERT(!err, "pthread_mutex_lock failed, error code %d", err);
+    }
+    void unlock() {
+        int err = pthread_mutex_unlock(&mutex);
+        ASSERT(!err, "pthread_mutex_unlock failed, error code %d", err);
+    }
 
     PthreadMutex* asRead() { return this; }
     PthreadMutex* asWrite() { return this; }

@@ -17,12 +17,19 @@
 #include <cstring>
 #include <gmp.h>
 
+#include "capi/types.h"
 #include "core/types.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* float_hex(PyObject* v) noexcept;
+extern "C" PyObject* float_fromhex(PyObject* cls, PyObject* arg) noexcept;
+extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexcept;
+extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
+extern "C" PyObject* float__format__(PyObject* v) noexcept;
 
 namespace pyston {
 
@@ -627,7 +634,7 @@ BoxedFloat* _floatNew(Box* a) {
     } else if (isSubclass(a->cls, int_cls)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(a)->s;
+        const std::string& s = static_cast<BoxedString*>(a)->s();
         if (s == "nan")
             return new BoxedFloat(NAN);
         if (s == "-nan")
@@ -720,6 +727,14 @@ Box* floatTrunc(BoxedFloat* self) {
         return PyInt_FromLong(aslong);
     }
     return PyLong_FromDouble(wholepart);
+}
+
+Box* floatHash(BoxedFloat* self) {
+    if (!isSubclass(self->cls, float_cls))
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'float' object but received a '%s'",
+                       getTypeName(self));
+
+    return boxInt(_Py_HashDouble(self->d));
 }
 
 extern "C" void printFloat(double d) {
@@ -1424,6 +1439,13 @@ exit:
     return result;
 }
 
+static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOARGS, NULL },
+                                       { "fromhex", (PyCFunction)float_fromhex, METH_O | METH_CLASS, NULL },
+                                       { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL },
+
+                                       { "is_integer", (PyCFunction)float_is_integer, METH_NOARGS, NULL },
+                                       { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL } };
+
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
@@ -1463,6 +1485,7 @@ void setupFloat() {
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
+    float_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)floatHash, BOXED_INT, 1)));
 
     float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
     float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
@@ -1471,6 +1494,10 @@ void setupFloat() {
     float_cls->giveAttr("__getformat__",
                         new BoxedClassmethod(new BoxedBuiltinFunctionOrMethod(
                             boxRTFunction((void*)floatGetFormat, STR, 2), "__getformat__", floatGetFormatDoc)));
+
+    for (auto& md : float_methods) {
+        float_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, float_cls));
+    }
 
     float_cls->freeze();
 

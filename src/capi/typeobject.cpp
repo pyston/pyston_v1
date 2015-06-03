@@ -27,6 +27,8 @@ static const std::string _getattr_str("__getattr__");
 static const std::string _getattribute_str("__getattribute__");
 typedef int (*update_callback)(PyTypeObject*, void*);
 
+static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
+
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
@@ -683,6 +685,9 @@ static PyObject* slot_tp_str(PyObject* self) noexcept {
 }
 
 static long slot_tp_hash(PyObject* self) noexcept {
+    static StatCounter slowpath_hash("slowpath_hash");
+    slowpath_hash.log();
+
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
     long h;
@@ -1480,7 +1485,7 @@ static slotdef slotdefs[]
         SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
         SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
         SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
-        { NULL, 0, NULL, NULL, NULL, 0 } };
+        { "", 0, NULL, NULL, "", 0 } };
 
 static void init_slotdefs() noexcept {
     static bool initialized = false;
@@ -1489,21 +1494,21 @@ static void init_slotdefs() noexcept {
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
         if (i > 0) {
-            if (!slotdefs[i].name)
+            if (!slotdefs[i].name.size())
                 continue;
 
 #ifndef NDEBUG
             if (slotdefs[i - 1].offset > slotdefs[i].offset) {
-                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name);
+                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name.data());
                 for (int j = i; j < sizeof(slotdefs) / sizeof(slotdefs[0]); j++) {
                     if (slotdefs[i - 1].offset <= slotdefs[j].offset) {
-                        printf("Should go before %s\n", slotdefs[j].name);
+                        printf("Should go before %s\n", slotdefs[j].name.data());
                         break;
                     }
                 }
             }
 #endif
-            ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name);
+            ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name.data());
             // CPython interns the name here
         }
     }
@@ -1532,7 +1537,7 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noex
         /* Collect all slotdefs that match name into ptrs. */
         pname = name;
         pp = ptrs;
-        for (p = slotdefs; p->name; p++) {
+        for (p = slotdefs; p->name.size() != 0; p++) {
             if (p->name == name)
                 *pp++ = p;
         }
@@ -1554,7 +1559,7 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noex
 }
 
 static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexcept {
-    assert(p->name);
+    assert(p->name.size() != 0);
 
     PyObject* descr;
     BoxedWrapperDescriptor* d;
@@ -1591,8 +1596,6 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                 else
                     use_generic = 1;
             }
-// TODO Pyston doesn't support PyCFunction_Type yet I think?
-#if 0
         } else if (Py_TYPE(descr) == &PyCFunction_Type && PyCFunction_GET_FUNCTION(descr) == (PyCFunction)tp_new_wrapper
                    && ptr == (void**)&type->tp_new) {
             /* The __new__ wrapper is not a wrapper descriptor,
@@ -1611,7 +1614,6 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                in this reasoning that requires additional
                sanity checks.  I'll buy the first person to
                point out a bug in this reasoning a beer. */
-#endif
         } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
                    && static_cast<BoxedFunction*>(descr)->f->always_use_version) {
             type->tpp_descr_get = (descrgetfunc) static_cast<BoxedFunction*>(descr)->f->always_use_version->code;
@@ -1647,7 +1649,7 @@ static int update_slots_callback(PyTypeObject* type, void* data) noexcept {
 static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
 static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
 
-bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
+bool update_slot(BoxedClass* type, llvm::StringRef attr) noexcept {
     slotdef* ptrs[MAX_EQUIV];
     slotdef* p;
     slotdef** pp;
@@ -1662,7 +1664,7 @@ bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
 
     init_slotdefs();
     pp = ptrs;
-    for (p = slotdefs; p->name; p++) {
+    for (p = slotdefs; p->name.size() != 0; p++) {
         /* XXX assume name is interned! */
         if (p->name == attr)
             *pp++ = p;
@@ -1689,7 +1691,7 @@ void fixup_slot_dispatchers(BoxedClass* self) noexcept {
     init_slotdefs();
 
     const slotdef* p = slotdefs;
-    while (p->name)
+    while (p->name.size() != 0)
         p = update_one_slot(self, p);
 }
 
@@ -1745,12 +1747,16 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     return self->tp_new(subtype, new_args, kwds);
 }
 
+static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
+                                                   PyDoc_STR("T.__new__(S, ...) -> "
+                                                             "a new object with type S, a subtype of T") },
+                                                 { 0, 0, 0, 0 } };
+
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr("__new__"))
         return;
 
-    type->giveAttr("__new__",
-                   new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
+    type->giveAttr("__new__", new BoxedCApiFunction(tp_new_methoddef, type));
 }
 
 void add_operators(BoxedClass* cls) noexcept {
@@ -2647,6 +2653,246 @@ static void remove_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
     }
 }
 
+static int equiv_structs(PyTypeObject* a, PyTypeObject* b) noexcept {
+    // Pyston change: added attrs_offset equality check
+    // return a == b || (a != NULL && b != NULL && a->tp_basicsize == b->tp_basicsize
+    //                   && a->tp_itemsize == b->tp_itemsize
+    //                   && a->tp_dictoffset == b->tp_dictoffset && a->tp_weaklistoffset == b->tp_weaklistoffset
+    //                   && ((a->tp_flags & Py_TPFLAGS_HAVE_GC) == (b->tp_flags & Py_TPFLAGS_HAVE_GC)));
+    return a == b || (a != NULL && b != NULL && a->tp_basicsize == b->tp_basicsize && a->tp_itemsize == b->tp_itemsize
+                      && a->tp_dictoffset == b->tp_dictoffset && a->tp_weaklistoffset == b->tp_weaklistoffset
+                      && a->attrs_offset == b->attrs_offset
+                      && ((a->tp_flags & Py_TPFLAGS_HAVE_GC) == (b->tp_flags & Py_TPFLAGS_HAVE_GC)));
+}
+
+static void update_all_slots(PyTypeObject* type) noexcept {
+    slotdef* p;
+
+    init_slotdefs();
+    for (p = slotdefs; p->name.size() > 0; p++) {
+        /* update_slot returns int but can't actually fail */
+        update_slot(type, p->name);
+    }
+}
+
+static int same_slots_added(PyTypeObject* a, PyTypeObject* b) noexcept {
+    PyTypeObject* base = a->tp_base;
+    Py_ssize_t size;
+    PyObject* slots_a, *slots_b;
+
+    assert(base == b->tp_base);
+    size = base->tp_basicsize;
+    if (a->tp_dictoffset == size && b->tp_dictoffset == size)
+        size += sizeof(PyObject*);
+    // Pyston change: have to check attrs_offset
+    if (a->attrs_offset == size && b->attrs_offset == size)
+        size += sizeof(HCAttrs);
+    if (a->tp_weaklistoffset == size && b->tp_weaklistoffset == size)
+        size += sizeof(PyObject*);
+
+    /* Check slots compliance */
+    slots_a = ((PyHeapTypeObject*)a)->ht_slots;
+    slots_b = ((PyHeapTypeObject*)b)->ht_slots;
+    if (slots_a && slots_b) {
+        if (PyObject_Compare(slots_a, slots_b) != 0)
+            return 0;
+        size += sizeof(PyObject*) * PyTuple_GET_SIZE(slots_a);
+    }
+    return size == a->tp_basicsize && size == b->tp_basicsize;
+}
+
+static int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
+    PyTypeObject* newbase, *oldbase;
+
+    if (newto->tp_dealloc != oldto->tp_dealloc || newto->tp_free != oldto->tp_free) {
+        PyErr_Format(PyExc_TypeError, "%s assignment: "
+                                      "'%s' deallocator differs from '%s'",
+                     attr, newto->tp_name, oldto->tp_name);
+        return 0;
+    }
+    newbase = newto;
+    oldbase = oldto;
+    while (equiv_structs(newbase, newbase->tp_base))
+        newbase = newbase->tp_base;
+    while (equiv_structs(oldbase, oldbase->tp_base))
+        oldbase = oldbase->tp_base;
+    if (newbase != oldbase && (newbase->tp_base != oldbase->tp_base || !same_slots_added(newbase, oldbase))) {
+        PyErr_Format(PyExc_TypeError, "%s assignment: "
+                                      "'%s' object layout differs from '%s'",
+                     attr, newto->tp_name, oldto->tp_name);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int mro_subclasses(PyTypeObject* type, PyObject* temp) noexcept {
+    PyTypeObject* subclass;
+    PyObject* ref, *subclasses, *old_mro;
+    Py_ssize_t i, n;
+
+    subclasses = type->tp_subclasses;
+    if (subclasses == NULL)
+        return 0;
+    assert(PyList_Check(subclasses));
+    n = PyList_GET_SIZE(subclasses);
+    for (i = 0; i < n; i++) {
+        ref = PyList_GET_ITEM(subclasses, i);
+        assert(PyWeakref_CheckRef(ref));
+        subclass = (PyTypeObject*)PyWeakref_GET_OBJECT(ref);
+        assert(subclass != NULL);
+        if ((PyObject*)subclass == Py_None)
+            continue;
+        assert(PyType_Check(subclass));
+        old_mro = subclass->tp_mro;
+        if (mro_internal(subclass) < 0) {
+            subclass->tp_mro = old_mro;
+            return -1;
+        } else {
+            PyObject* tuple;
+            tuple = PyTuple_Pack(2, subclass, old_mro);
+            Py_DECREF(old_mro);
+            if (!tuple)
+                return -1;
+            if (PyList_Append(temp, tuple) < 0)
+                return -1;
+            Py_DECREF(tuple);
+        }
+        if (mro_subclasses(subclass, temp) < 0)
+            return -1;
+    }
+    return 0;
+}
+
+int type_set_bases(PyTypeObject* type, PyObject* value, void* context) noexcept {
+    Py_ssize_t i;
+    int r = 0;
+    PyObject* ob, *temp;
+    PyTypeObject* new_base, *old_base;
+    PyObject* old_bases, *old_mro;
+
+    if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        PyErr_Format(PyExc_TypeError, "can't set %s.__bases__", type->tp_name);
+        return -1;
+    }
+    if (!value) {
+        PyErr_Format(PyExc_TypeError, "can't delete %s.__bases__", type->tp_name);
+        return -1;
+    }
+    if (!PyTuple_Check(value)) {
+        PyErr_Format(PyExc_TypeError, "can only assign tuple to %s.__bases__, not %s", type->tp_name,
+                     Py_TYPE(value)->tp_name);
+        return -1;
+    }
+    if (PyTuple_GET_SIZE(value) == 0) {
+        PyErr_Format(PyExc_TypeError, "can only assign non-empty tuple to %s.__bases__, not ()", type->tp_name);
+        return -1;
+    }
+    for (i = 0; i < PyTuple_GET_SIZE(value); i++) {
+        ob = PyTuple_GET_ITEM(value, i);
+        if (!PyClass_Check(ob) && !PyType_Check(ob)) {
+            PyErr_Format(PyExc_TypeError, "%s.__bases__ must be tuple of old- or new-style classes, not '%s'",
+                         type->tp_name, Py_TYPE(ob)->tp_name);
+            return -1;
+        }
+        if (PyType_Check(ob)) {
+            if (PyType_IsSubtype((PyTypeObject*)ob, type)) {
+                PyErr_SetString(PyExc_TypeError, "a __bases__ item causes an inheritance cycle");
+                return -1;
+            }
+        }
+    }
+
+    new_base = best_base(value);
+
+    if (!new_base) {
+        return -1;
+    }
+
+    if (!compatible_for_assignment(type->tp_base, new_base, "__bases__"))
+        return -1;
+
+    Py_INCREF(new_base);
+    Py_INCREF(value);
+
+    old_bases = type->tp_bases;
+    old_base = type->tp_base;
+    old_mro = type->tp_mro;
+
+    type->tp_bases = value;
+    type->tp_base = new_base;
+
+    if (mro_internal(type) < 0) {
+        goto bail;
+    }
+
+    temp = PyList_New(0);
+    if (!temp)
+        goto bail;
+
+    r = mro_subclasses(type, temp);
+
+    if (r < 0) {
+        for (i = 0; i < PyList_Size(temp); i++) {
+            PyTypeObject* cls;
+            PyObject* mro;
+            PyArg_UnpackTuple(PyList_GET_ITEM(temp, i), "", 2, 2, &cls, &mro);
+            Py_INCREF(mro);
+            ob = cls->tp_mro;
+            cls->tp_mro = mro;
+            Py_DECREF(ob);
+        }
+        Py_DECREF(temp);
+        goto bail;
+    }
+
+    Py_DECREF(temp);
+
+    /* any base that was in __bases__ but now isn't, we
+       need to remove |type| from its tp_subclasses.
+       conversely, any class now in __bases__ that wasn't
+       needs to have |type| added to its subclasses. */
+
+    /* for now, sod that: just remove from all old_bases,
+       add to all new_bases */
+
+    for (i = PyTuple_GET_SIZE(old_bases) - 1; i >= 0; i--) {
+        ob = PyTuple_GET_ITEM(old_bases, i);
+        if (PyType_Check(ob)) {
+            remove_subclass((PyTypeObject*)ob, type);
+        }
+    }
+
+    for (i = PyTuple_GET_SIZE(value) - 1; i >= 0; i--) {
+        ob = PyTuple_GET_ITEM(value, i);
+        if (PyType_Check(ob)) {
+            if (add_subclass((PyTypeObject*)ob, type) < 0)
+                r = -1;
+        }
+    }
+
+    update_all_slots(type);
+
+    Py_DECREF(old_bases);
+    Py_DECREF(old_base);
+    Py_DECREF(old_mro);
+
+    return r;
+
+bail:
+    Py_DECREF(type->tp_bases);
+    Py_DECREF(type->tp_base);
+    if (type->tp_mro != old_mro) {
+        Py_DECREF(type->tp_mro);
+    }
+
+    type->tp_bases = old_bases;
+    type->tp_base = old_base;
+    type->tp_mro = old_mro;
+
+    return -1;
+}
+
 // commonClassSetup is for the common code between PyType_Ready (which is just for extension classes)
 // and our internal type-creation endpoints (BoxedClass::BoxedClass()).
 // TODO: Move more of the duplicated logic into here.
@@ -2691,11 +2937,9 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
-    gc::registerNonheapRootObject(cls);
+    gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
 
     // unhandled fields:
-    RELEASE_ASSERT(cls->tp_compare == NULL, "");
-
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
                           | Py_TPFLAGS_HAVE_NEWBUFFER;
     ALLOWABLE_FLAGS |= Py_TPFLAGS_INT_SUBCLASS | Py_TPFLAGS_LONG_SUBCLASS | Py_TPFLAGS_LIST_SUBCLASS
@@ -2724,7 +2968,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     assert(cls->attrs.hcls == NULL);
     new (&cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 #define INITIALIZE(a) new (&(a)) decltype(a)
-    INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
     BoxedClass* base = cls->tp_base;

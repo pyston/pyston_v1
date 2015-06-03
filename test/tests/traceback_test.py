@@ -1,4 +1,4 @@
-# A test of both the tracebacks we generate and the tracebacks module
+# A test of both the tracebacks we generate and the traceback module
 #
 # (We keep fixing tracebacks in one case to break them in another, so it's time for a test.)
 #
@@ -102,6 +102,15 @@ except:
         raise a, b, None
     except:
         traceback.print_exc(file=sys.stdout)
+
+def f(n):
+    if n:
+        return f(n - 1)
+    traceback.print_stack(file=sys.stdout)
+    print
+    return traceback.format_stack()
+print
+print ''.join(f(5))
 
 
 # Output some extra stuff at the end so that it doesn't look like the script crashed with an exception:

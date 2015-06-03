@@ -152,12 +152,6 @@ public:
 
     HCAttrs attrs;
 
-    // If the user sets __getattribute__ or __getattr__, we will have to invalidate
-    // all getattr IC entries that relied on the fact that those functions didn't exist.
-    // Doing this via invalidation means that instance attr lookups don't have
-    // to guard on anything about the class.
-    ICInvalidator dependent_icgetattrs;
-
     // TODO: these don't actually get deallocated right now
     std::unique_ptr<CallattrIC> hasnext_ic, next_ic, repr_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
@@ -245,8 +239,7 @@ public:
                                   int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                   BoxedTuple* bases, size_t nslots);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int weaklist_offset, int instance_size, bool is_user_defined,
-                                  const std::string& name);
+                                  int weaklist_offset, int instance_size, bool is_user_defined, llvm::StringRef name);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
@@ -268,7 +261,6 @@ static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "
 static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, ob_type), "");
 static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
 static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
-static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(struct _typeobject, _dep_getattrs), "");
 static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
@@ -361,10 +353,10 @@ public:
     }
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* getOrMakeChild(const std::string& attr);
+    HiddenClass* getOrMakeChild(llvm::StringRef attr);
 
     // Only valid for NORMAL or SINGLETON hidden classes:
-    int getOffset(const std::string& attr) {
+    int getOffset(llvm::StringRef attr) {
         assert(type == NORMAL || type == SINGLETON);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
@@ -387,7 +379,7 @@ public:
     HiddenClass* getAttrwrapperChild();
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* delAttrToMakeHC(const std::string& attr);
+    HiddenClass* delAttrToMakeHC(llvm::StringRef attr);
 };
 
 class BoxedInt : public Box {
@@ -407,6 +399,8 @@ public:
 
     DEFAULT_CLASS_SIMPLE(float_cls);
 };
+static_assert(sizeof(BoxedFloat) == sizeof(PyFloatObject), "");
+static_assert(offsetof(BoxedFloat, d) == offsetof(PyFloatObject, ob_fval), "");
 
 class BoxedComplex : public Box {
 public:
@@ -427,11 +421,14 @@ public:
 
 class BoxedString : public BoxVar {
 public:
-    llvm::StringRef s;
+    // llvm::StringRef is basically just a pointer and a length, so with proper compiler
+    // optimizations and inlining, creating a new one each time shouldn't have any cost.
+    llvm::StringRef s() const { return llvm::StringRef(s_data, ob_size); };
+
     char interned_state;
 
-    char* data() { return const_cast<char*>(s.data()); }
-    size_t size() { return s.size(); }
+    char* data() { return s_data; }
+    size_t size() { return this->ob_size; }
 
     // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
     void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
@@ -465,11 +462,9 @@ public:
     explicit BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) __attribute__((visibility("default")));
 
 private:
-    // used only in ctors to give our llvm::StringRef the proper pointer
-    // Note: sizeof(BoxedString) = str_cls->tp_basicsize - 1
-    char* storage() { return (char*)this + sizeof(BoxedString); }
-
     void* operator new(size_t size) = delete;
+
+    char s_data[0];
 };
 
 template <typename T> struct StringHash {

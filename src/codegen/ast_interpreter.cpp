@@ -76,7 +76,12 @@ public:
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
-    static Value execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
+
+    // This must not be inlined, because we rely on being able to detect when we're inside of it (by checking whether
+    // %rip is inside its instruction range) during a stack-trace in order to produce tracebacks inside interpreted
+    // code.
+    __attribute__((__no_inline__)) static Value
+        execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -274,6 +279,9 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     }
 }
 
+// Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
+// them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
+// (sys._getframe & co), and for GC scanning.
 static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 
@@ -292,8 +300,6 @@ public:
 };
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    threading::allowGLReadPreemption();
-
     STAT_TIMER(t0, "us_timer_astinterpreter_execute");
 
     void* frame_addr = __builtin_frame_address(0);
@@ -306,6 +312,11 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
     }
+
+    // Important that this happens after RegisterHelper:
+    interpreter.current_inst = start_at;
+    threading::allowGLReadPreemption();
+    interpreter.current_inst = NULL;
 
     interpreter.current_block = start_block;
     bool started = false;
@@ -684,6 +695,10 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
 }
 
 Value ASTInterpreter::visit_stmt(AST_stmt* node) {
+#if ENABLE_SAMPLING_PROFILER
+    threading::allowGLReadPreemption();
+#endif
+
     if (0) {
         printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
         print_ast(node);
@@ -951,15 +966,15 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
         // begin code for handling of softspace
         bool new_softspace = (i < nvals - 1) || (!node->nl);
         if (softspace(dest, new_softspace)) {
-            callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(space_str), 0, 0, 0, 0);
+            callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(space_str), 0, 0, 0, 0);
         }
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
-        callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
     }
 
     if (node->nl) {
-        callattrInternal(dest, &write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(newline_str), 0, 0, 0, 0);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(newline_str), 0, 0, 0, 0);
         if (nvals == 0) {
             softspace(dest, false);
         }
@@ -1303,7 +1318,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
-        auto& name = static_cast<BoxedString*>(p.first)->s;
+        auto name = static_cast<BoxedString*>(p.first)->s();
         if (name == PASSED_GENERATOR_NAME) {
             interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {

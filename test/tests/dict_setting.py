@@ -38,3 +38,25 @@ p()
 c1.__dict__ = d = {}
 d['i'] = 5
 p()
+
+class C(object):
+    def foo(self):
+        return 0
+c = C()
+c.attr = "test"
+d1 = c.__dict__
+d1.clear()
+print hasattr(c, "attr")
+print hasattr(c, "foo")
+print c.__dict__ is d1
+
+dictproxy = C.__dict__
+print type(dictproxy)
+print "foo" in dictproxy
+print "foo" in dictproxy.keys()
+print type(dictproxy["foo"])
+print dictproxy == dict(C.__dict__)
+try:
+    dictproxy["test"] = "val"
+except Exception as e:
+    print e

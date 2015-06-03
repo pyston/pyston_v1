@@ -848,9 +848,7 @@ PyTypeObject PyBuffer_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    // Pyston change:
-    //(cmpfunc)buffer_compare,                    /* tp_compare */
-    NULL,                                       /* tp_compare */
+    (cmpfunc)buffer_compare,                    /* tp_compare */
     (reprfunc)buffer_repr,                      /* tp_repr */
     0,                                          /* tp_as_number */
     &buffer_as_sequence,                        /* tp_as_sequence */

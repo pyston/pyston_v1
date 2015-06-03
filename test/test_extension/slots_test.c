@@ -391,6 +391,17 @@ CREATE_UN(s_hex, PyString_FromString("hex"));
 
 #undef CREATE_BIN
 
+static int
+slots_tester_compare(PyObject* x, PyObject* y)
+{
+    printf("inside slots_tester_compare\n");
+    if (x < y)
+        return -1;
+    else if (x == y)
+        return 0;
+    return 1;
+}
+
 static PyNumberMethods slots_tester_as_number = {
     (binaryfunc)s_add,                                  /* nb_add */
     (binaryfunc)s_subtract,                             /* nb_subtract */
@@ -442,7 +453,7 @@ static PyTypeObject slots_tester_num = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_compare */
+    slots_tester_compare,               /* tp_compare */
     0,        /* tp_repr */
     &slots_tester_as_number,                                  /* tp_as_number */
     0,          /* tp_as_sequence */

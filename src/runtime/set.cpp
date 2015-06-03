@@ -106,7 +106,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         if (!first) {
             os << ", ";
         }
-        os << static_cast<BoxedString*>(repr(elt))->s;
+        os << static_cast<BoxedString*>(repr(elt))->s();
         first = false;
     }
     os << "])";
@@ -247,6 +247,15 @@ Box* setClear(BoxedSet* self, Box* v) {
 
     self->s.clear();
     return None;
+}
+
+extern "C" int PySet_Clear(PyObject* set) noexcept {
+    if (!PySet_Check(set)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    ((BoxedSet*)set)->s.clear();
+    return 0;
 }
 
 Box* setUpdate(BoxedSet* self, BoxedTuple* args) {

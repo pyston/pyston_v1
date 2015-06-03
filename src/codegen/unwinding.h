@@ -27,9 +27,12 @@ class BoxedModule;
 class BoxedTraceback;
 struct FrameInfo;
 
+void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
+
 BoxedModule* getCurrentModule();
 Box* getGlobals();     // returns either the module or a globals dict
 Box* getGlobalsDict(); // always returns a dict-like object
+CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
 

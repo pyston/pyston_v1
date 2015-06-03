@@ -24,12 +24,14 @@
 
 #include "Python.h"
 
+#include "codegen/codegen.h" // sigprof_pending
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
 #include "gc/collector.h"
+#include "runtime/objmodel.h" // _printStacktrace
 
 namespace pyston {
 namespace threading {
@@ -489,6 +491,13 @@ extern "C" void PyEval_ReInitThreads() noexcept {
         }
     }
 
+    // We need to make sure the threading lock is released, so we unconditionally unlock it. After a fork, we are the
+    // only thread, so this won't race; and since it's a "fast" mutex (see `man pthread_mutex_lock`), this works even
+    // if it isn't locked. If we needed to avoid unlocking a non-locked mutex, though, we could trylock it first:
+    //
+    //     int err = pthread_mutex_trylock(&threading_lock.mutex);
+    //     ASSERT(!err || err == EBUSY, "pthread_mutex_trylock failed, but not with EBUSY");
+    //
     threading_lock.unlock();
 
     num_starting_threads = 0;
@@ -521,6 +530,18 @@ int gil_check_count = 0;
 // We could enforce fairness by having a FIFO of events (implementd with mutexes?)
 // and make sure to always wake up the longest-waiting one.
 void allowGLReadPreemption() {
+#if ENABLE_SAMPLING_PROFILER
+    if (unlikely(sigprof_pending)) {
+        // Output multiple stacktraces if we received multiple signals
+        // between being able to handle it (such as being in LLVM or the GC),
+        // to try to fully account for that time.
+        while (sigprof_pending) {
+            _printStacktrace();
+            sigprof_pending--;
+        }
+    }
+#endif
+
     // Double-checked locking: first read with no ordering constraint:
     if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
         return;

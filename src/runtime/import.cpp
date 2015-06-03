@@ -43,6 +43,7 @@ Box* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn.c_str());
 
     AST_Module* ast = caching_parse_file(fn.c_str());
+    assert(ast);
     try {
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {
@@ -67,6 +68,7 @@ static Box* createAndRunModule(const std::string& name, const std::string& fn, c
     module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
+    assert(ast);
     try {
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {
@@ -220,7 +222,7 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         BoxedString* p = static_cast<BoxedString*>(_p);
 
         joined_path.clear();
-        llvm::sys::path::append(joined_path, std::string(p->s), name);
+        llvm::sys::path::append(joined_path, std::string(p->s()), name);
         std::string dn(joined_path.str());
 
         llvm::sys::path::append(joined_path, "__init__.py");
@@ -242,14 +244,14 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
             return SearchResult(std::move(dn), SearchResult::PKG_DIRECTORY);
 
         joined_path.clear();
-        llvm::sys::path::append(joined_path, std::string(p->s), name + ".py");
+        llvm::sys::path::append(joined_path, std::string(p->s()), name + ".py");
         fn = joined_path.str();
 
         if (pathExists(fn))
             return SearchResult(std::move(fn), SearchResult::PY_SOURCE);
 
         joined_path.clear();
-        llvm::sys::path::append(joined_path, p->s, name + ".pyston.so");
+        llvm::sys::path::append(joined_path, p->s(), name + ".pyston.so");
         fn = joined_path.str();
 
         if (pathExists(fn))
@@ -291,7 +293,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
         if (len > PATH_MAX) {
             raiseExcHelper(ValueError, "Package name too long");
         }
-        buf += pkgname->s;
+        buf += pkgname->s();
     } else {
         /* __package__ not set, so figure it out and set it */
         BoxedString* modname = static_cast<BoxedString*>(getFromGlobals(globals, name_str));
@@ -305,11 +307,11 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
             if (modname->size() > PATH_MAX) {
                 raiseExcHelper(ValueError, "Module name too long");
             }
-            buf += modname->s;
+            buf += modname->s();
             setGlobal(globals, package_str, modname);
         } else {
             /* Normal module, so work out the package name if any */
-            size_t lastdot = modname->s.rfind('.');
+            size_t lastdot = modname->s().rfind('.');
             if (lastdot == std::string::npos && level > 0) {
                 raiseExcHelper(ValueError, "Attempted relative import in non-package");
             }
@@ -321,7 +323,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
                 raiseExcHelper(ValueError, "Module name too long");
             }
 
-            buf = std::string(modname->s, 0, lastdot);
+            buf = std::string(modname->s(), 0, lastdot);
             setGlobal(globals, package_str, boxStringPtr(&buf));
         }
     }
@@ -562,7 +564,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
         assert(_s->cls == str_cls);
         BoxedString* s = static_cast<BoxedString*>(_s);
 
-        if (s->s[0] == '*') {
+        if (s->s()[0] == '*') {
             // If __all__ contains a '*', just skip it:
             if (recursive)
                 continue;
@@ -574,12 +576,12 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
             continue;
         }
 
-        Box* attr = getattrInternal(module, s->s, NULL);
+        Box* attr = getattrInternal(module, s->s(), NULL);
         if (attr != NULL)
             continue;
 
         // Just want to import it and add it to the modules list for now:
-        importSub(s->s, (llvm::Twine(buf) + "." + s->s).str(), module);
+        importSub(s->s(), (llvm::Twine(buf) + "." + s->s()).str(), module);
     }
 }
 
@@ -651,7 +653,7 @@ Box* nullImporterInit(Box* self, Box* _path) {
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_path));
 
     BoxedString* path = (BoxedString*)_path;
-    if (path->s.empty())
+    if (path->s().empty())
         raiseExcHelper(ImportError, "empty pathname");
 
     if (isdir(path->data()))
@@ -676,7 +678,7 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     BoxedString* name = static_cast<BoxedString*>(_name);
     BoxedList* path_list = path && path != None ? path : getSysPath();
 
-    SearchResult sr = findModule(name->s, name->s, path_list);
+    SearchResult sr = findModule(name->s(), name->s(), path_list);
     if (sr.type == SearchResult::SEARCH_ERROR)
         raiseExcHelper(ImportError, "%s", name->data());
 
@@ -726,13 +728,13 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
 
     if (type->n == SearchResult::PKG_DIRECTORY) {
         RELEASE_ASSERT(suffix->cls == str_cls, "");
-        RELEASE_ASSERT(suffix->s.empty(), "");
-        RELEASE_ASSERT(mode->s.empty(), "");
+        RELEASE_ASSERT(suffix->s().empty(), "");
+        RELEASE_ASSERT(mode->s().empty(), "");
         RELEASE_ASSERT(_file == None, "");
-        return createAndRunModule(name->s, (llvm::Twine(pathname->s) + "/__init__.py").str(), pathname->s);
+        return createAndRunModule(name->s(), (llvm::Twine(pathname->s()) + "/__init__.py").str(), pathname->s());
     } else if (type->n == SearchResult::PY_SOURCE) {
         RELEASE_ASSERT(_file->cls == file_cls, "");
-        return createAndRunModule(name->s, pathname->s);
+        return createAndRunModule(name->s(), pathname->s());
     }
 
     Py_FatalError("unimplemented");
@@ -744,7 +746,7 @@ Box* impLoadSource(Box* _name, Box* _pathname, Box* _file) {
     RELEASE_ASSERT(_name->cls == str_cls, "");
     RELEASE_ASSERT(_pathname->cls == str_cls, "");
 
-    return createAndRunModule(static_cast<BoxedString*>(_name)->s, static_cast<BoxedString*>(_pathname)->s);
+    return createAndRunModule(static_cast<BoxedString*>(_name)->s(), static_cast<BoxedString*>(_pathname)->s());
 }
 
 Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
@@ -755,16 +757,16 @@ Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
     BoxedString* name = (BoxedString*)_name;
     BoxedString* pathname = (BoxedString*)_pathname;
 
-    const char* lastdot = strrchr(name->s.data(), '.');
+    const char* lastdot = strrchr(name->s().data(), '.');
 
     const char* shortname;
     if (lastdot == NULL) {
-        shortname = name->s.data();
+        shortname = name->s().data();
     } else {
         shortname = lastdot + 1;
     }
 
-    return importCExtension(name->s, shortname, pathname->s);
+    return importCExtension(name->s(), shortname, pathname->s());
 }
 
 Box* impGetSuffixes() {

@@ -12,6 +12,8 @@ print __builtins__
 __builtins__ = 2
 print __builtins__
 
+import builtins_getitem
+
 print all([]), all([True]), all([False]), all([None]), all([True, False, None])
 print any([]), any([True]), any([False]), any([None]), any([True, False, None])
 
@@ -117,3 +119,7 @@ print bytearray(xrange(256))
 l = [2, 1, 3]
 print apply(sorted, [l])
 print apply(sorted, [l], { "reverse" : True })
+
+print format(5.0, '+')
+print format(5.011111111111, '+.6')
+print format("abc", '')

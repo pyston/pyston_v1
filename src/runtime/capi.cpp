@@ -24,6 +24,7 @@
 #include "llvm/Support/Path.h"
 
 #include "capi/types.h"
+#include "codegen/unwinding.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
@@ -83,17 +84,6 @@ Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* s
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
     Py_FatalError("unimplemented");
-}
-
-extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
-    assert(gc::isValidGCObject(op));
-    assert(gc::isValidGCObject(tp));
-
-    RELEASE_ASSERT(op, "");
-    RELEASE_ASSERT(tp, "");
-    Py_TYPE(op) = tp;
-    op->ob_size = size;
-    return op;
 }
 
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
@@ -244,8 +234,14 @@ done:
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept {
     if (!isSubclass(attr_name->cls, str_cls)) {
-        PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
-        return NULL;
+        if (PyUnicode_Check(attr_name)) {
+            attr_name = _PyUnicode_AsDefaultEncodedString(attr_name, NULL);
+            if (attr_name == NULL)
+                return NULL;
+        } else {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
+            return NULL;
+        }
     }
 
     try {
@@ -258,7 +254,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
     try {
-        Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->s.data(), NULL, false, false, NULL, NULL);
+        Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->data(), NULL, false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                          PyString_AS_STRING(name));
@@ -269,15 +265,215 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
     }
 }
 
+// Note (kmod): I don't feel great about including an alternate code-path for lookups.  I also, however, don't feel
+// great about modifying our code paths to take a custom dict, and since this code is just copied from CPython
+// I feel like the risk is pretty low.
 extern "C" PyObject* _PyObject_GenericGetAttrWithDict(PyObject* obj, PyObject* name, PyObject* dict) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PyTypeObject* tp = Py_TYPE(obj);
+    PyObject* descr = NULL;
+    PyObject* res = NULL;
+    descrgetfunc f;
+    Py_ssize_t dictoffset;
+    PyObject** dictptr;
+
+    if (!PyString_Check(name)) {
+#ifdef Py_USING_UNICODE
+        /* The Unicode to string conversion is done here because the
+           existing tp_setattro slots expect a string object as name
+           and we wouldn't want to break those. */
+        if (PyUnicode_Check(name)) {
+            name = PyUnicode_AsEncodedString(name, NULL, NULL);
+            if (name == NULL)
+                return NULL;
+        } else
+#endif
+        {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
+            return NULL;
+        }
+    } else
+        Py_INCREF(name);
+
+    if (tp->tp_dict == NULL) {
+        if (PyType_Ready(tp) < 0)
+            goto done;
+    }
+
+#if 0 /* XXX this is not quite _PyType_Lookup anymore */
+    /* Inline _PyType_Lookup */
+    {
+        Py_ssize_t i, n;
+        PyObject *mro, *base, *dict;
+
+        /* Look in tp_dict of types in MRO */
+        mro = tp->tp_mro;
+        assert(mro != NULL);
+        assert(PyTuple_Check(mro));
+        n = PyTuple_GET_SIZE(mro);
+        for (i = 0; i < n; i++) {
+            base = PyTuple_GET_ITEM(mro, i);
+            if (PyClass_Check(base))
+                dict = ((PyClassObject *)base)->cl_dict;
+            else {
+                assert(PyType_Check(base));
+                dict = ((PyTypeObject *)base)->tp_dict;
+            }
+            assert(dict && PyDict_Check(dict));
+            descr = PyDict_GetItem(dict, name);
+            if (descr != NULL)
+                break;
+        }
+    }
+#else
+    descr = _PyType_Lookup(tp, name);
+#endif
+
+    Py_XINCREF(descr);
+
+    f = NULL;
+    if (descr != NULL && PyType_HasFeature(descr->cls, Py_TPFLAGS_HAVE_CLASS)) {
+        f = descr->cls->tp_descr_get;
+        if (f != NULL && PyDescr_IsData(descr)) {
+            res = f(descr, obj, (PyObject*)obj->cls);
+            Py_DECREF(descr);
+            goto done;
+        }
+    }
+
+    if (dict == NULL) {
+        /* Inline _PyObject_GetDictPtr */
+        dictoffset = tp->tp_dictoffset;
+        if (dictoffset != 0) {
+            if (dictoffset < 0) {
+                Py_ssize_t tsize;
+                size_t size;
+
+                tsize = ((PyVarObject*)obj)->ob_size;
+                if (tsize < 0)
+                    tsize = -tsize;
+                size = _PyObject_VAR_SIZE(tp, tsize);
+
+                dictoffset += (long)size;
+                assert(dictoffset > 0);
+                assert(dictoffset % SIZEOF_VOID_P == 0);
+            }
+            dictptr = (PyObject**)((char*)obj + dictoffset);
+            dict = *dictptr;
+        }
+    }
+    if (dict != NULL) {
+        Py_INCREF(dict);
+        res = PyDict_GetItem(dict, name);
+        if (res != NULL) {
+            Py_INCREF(res);
+            Py_XDECREF(descr);
+            Py_DECREF(dict);
+            goto done;
+        }
+        Py_DECREF(dict);
+    }
+
+    if (f != NULL) {
+        res = f(descr, obj, (PyObject*)Py_TYPE(obj));
+        Py_DECREF(descr);
+        goto done;
+    }
+
+    if (descr != NULL) {
+        res = descr;
+        /* descr was already increfed above */
+        goto done;
+    }
+
+    PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", tp->tp_name,
+                 PyString_AS_STRING(name));
+done:
+    Py_DECREF(name);
+    return res;
 }
 
+// (see note for _PyObject_GenericGetAttrWithDict)
 extern "C" int _PyObject_GenericSetAttrWithDict(PyObject* obj, PyObject* name, PyObject* value,
                                                 PyObject* dict) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    PyTypeObject* tp = Py_TYPE(obj);
+    PyObject* descr;
+    descrsetfunc f;
+    PyObject** dictptr;
+    int res = -1;
+
+    if (!PyString_Check(name)) {
+#ifdef Py_USING_UNICODE
+        /* The Unicode to string conversion is done here because the
+           existing tp_setattro slots expect a string object as name
+           and we wouldn't want to break those. */
+        if (PyUnicode_Check(name)) {
+            name = PyUnicode_AsEncodedString(name, NULL, NULL);
+            if (name == NULL)
+                return -1;
+        } else
+#endif
+        {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
+            return -1;
+        }
+    } else
+        Py_INCREF(name);
+
+    if (tp->tp_dict == NULL) {
+        if (PyType_Ready(tp) < 0)
+            goto done;
+    }
+
+    descr = _PyType_Lookup(tp, name);
+    f = NULL;
+    if (descr != NULL && PyType_HasFeature(descr->cls, Py_TPFLAGS_HAVE_CLASS)) {
+        f = descr->cls->tp_descr_set;
+        if (f != NULL && PyDescr_IsData(descr)) {
+            res = f(descr, obj, value);
+            goto done;
+        }
+    }
+
+    if (dict == NULL) {
+        dictptr = _PyObject_GetDictPtr(obj);
+        if (dictptr != NULL) {
+            dict = *dictptr;
+            if (dict == NULL && value != NULL) {
+                dict = PyDict_New();
+                if (dict == NULL)
+                    goto done;
+                *dictptr = dict;
+            }
+        }
+    }
+    if (dict != NULL) {
+        Py_INCREF(dict);
+        if (value == NULL)
+            res = PyDict_DelItem(dict, name);
+        else
+            res = PyDict_SetItem(dict, name, value);
+        if (res < 0 && PyErr_ExceptionMatches(PyExc_KeyError))
+            PyErr_SetObject(PyExc_AttributeError, name);
+        Py_DECREF(dict);
+        goto done;
+    }
+
+    if (f != NULL) {
+        res = f(descr, obj, value);
+        goto done;
+    }
+
+    if (descr == NULL) {
+        PyErr_Format(PyExc_AttributeError, "'%.100s' object has no attribute '%.200s'", tp->tp_name,
+                     PyString_AS_STRING(name));
+        goto done;
+    }
+
+    PyErr_Format(PyExc_AttributeError, "'%.50s' object attribute '%.400s' is read-only", tp->tp_name,
+                 PyString_AS_STRING(name));
+done:
+    Py_DECREF(name);
+    return res;
 }
 
 
@@ -301,15 +497,11 @@ extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcep
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
-
-extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
-        return hash(o)->n;
+        delitem(o, key);
+        return 0;
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return -1;
     }
 }
@@ -322,6 +514,63 @@ extern "C" long PyObject_HashNotImplemented(PyObject* self) noexcept {
 extern "C" PyObject* _PyObject_NextNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "'%.200s' object is not iterable", Py_TYPE(self)->tp_name);
     return NULL;
+}
+
+extern "C" long _Py_HashDouble(double v) noexcept {
+    double intpart, fractpart;
+    int expo;
+    long hipart;
+    long x; /* the final hash value */
+            /* This is designed so that Python numbers of different types
+             * that compare equal hash to the same value; otherwise comparisons
+             * of mapping keys will turn out weird.
+             */
+
+    if (!std::isfinite(v)) {
+        if (Py_IS_INFINITY(v))
+            return v < 0 ? -271828 : 314159;
+        else
+            return 0;
+    }
+    fractpart = modf(v, &intpart);
+    if (fractpart == 0.0) {
+        /* This must return the same hash as an equal int or long. */
+        if (intpart > LONG_MAX / 2 || -intpart > LONG_MAX / 2) {
+            /* Convert to long and use its hash. */
+            PyObject* plong; /* converted to Python long */
+            plong = PyLong_FromDouble(v);
+            if (plong == NULL)
+                return -1;
+            x = PyObject_Hash(plong);
+            Py_DECREF(plong);
+            return x;
+        }
+        /* Fits in a C long == a Python int, so is its own hash. */
+        x = (long)intpart;
+        if (x == -1)
+            x = -2;
+        return x;
+    }
+    /* The fractional part is non-zero, so we don't have to worry about
+     * making this match the hash of some other type.
+     * Use frexp to get at the bits in the double.
+     * Since the VAX D double format has 56 mantissa bits, which is the
+     * most of any double format in use, each of these parts may have as
+     * many as (but no more than) 56 significant bits.
+     * So, assuming sizeof(long) >= 4, each part can be broken into two
+     * longs; frexp and multiplication are used to do that.
+     * Also, since the Cray double format has 15 exponent bits, which is
+     * the most of any double format in use, shifting the exponent field
+     * left by 15 won't overflow a long (again assuming sizeof(long) >= 4).
+     */
+    v = frexp(v, &expo);
+    v *= 2147483648.0;                       /* 2**31 */
+    hipart = (long)v;                        /* take the top 32 bits */
+    v = (v - (double)hipart) * 2147483648.0; /* get the next 32 bits */
+    x = hipart + (long)v + (expo << 15);
+    if (x == -1)
+        x = -2;
+    return x;
 }
 
 extern "C" long _Py_HashPointer(void* p) noexcept {
@@ -461,8 +710,14 @@ extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexce
 }
 
 extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    try {
+        // Not sure if this is really the same:
+        delitem(o, boxInt(i));
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {
@@ -701,6 +956,20 @@ extern "C" void PyErr_Clear() noexcept {
     PyErr_Restore(NULL, NULL, NULL);
 }
 
+extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
+    ExcInfo* exc = getFrameExcInfo();
+    *ptype = exc->type;
+    *pvalue = exc->value;
+    *ptraceback = exc->traceback;
+}
+
+extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
+    ExcInfo* exc = getFrameExcInfo();
+    exc->type = type;
+    exc->value = value;
+    exc->traceback = traceback;
+}
+
 extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
     PyErr_SetObject(exception, boxStrConstant(string));
 }
@@ -868,7 +1137,7 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
-        std::string _module_name = static_cast<BoxedString*>(module_name)->s;
+        std::string _module_name = static_cast<BoxedString*>(module_name)->s();
         return importModuleLevel(_module_name, None, None, -1);
     } catch (ExcInfo e) {
         fatalOrError(PyExc_NotImplementedError, "unimplemented");
@@ -1197,7 +1466,7 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
     assert((ml->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
 
-    return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth, module);
+    return new BoxedCApiFunction(ml, self, module);
 }
 
 extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
@@ -1205,7 +1474,15 @@ extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
         PyErr_BadInternalCall();
         return NULL;
     }
-    return ((PyCFunctionObject*)op)->m_ml->ml_meth;
+    return static_cast<BoxedCApiFunction*>(op)->getFunction();
+}
+
+extern "C" PyObject* PyCFunction_GetSelf(PyObject* op) noexcept {
+    if (!PyCFunction_Check(op)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return static_cast<BoxedCApiFunction*>(op)->passthrough;
 }
 
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
@@ -1345,18 +1622,18 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
 
     assert(arg1->cls == capifunc_cls);
     BoxedCApiFunction* capifunc = static_cast<BoxedCApiFunction*>(arg1);
-    if (capifunc->ml_flags != METH_O)
+    if (capifunc->method_def->ml_flags != METH_O)
         return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
     if (rewrite_args) {
         rewrite_args->arg1->addGuard((intptr_t)arg1);
         RewriterVar* r_passthrough = rewrite_args->arg1->getAttr(offsetof(BoxedCApiFunction, passthrough));
-        rewrite_args->out_rtn
-            = rewrite_args->rewriter->call(true, (void*)capifunc->func, r_passthrough, rewrite_args->arg2);
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)capifunc->method_def->ml_meth, r_passthrough,
+                                                             rewrite_args->arg2);
         rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
         rewrite_args->out_success = true;
     }
-    Box* r = capifunc->func(capifunc->passthrough, arg2);
+    Box* r = capifunc->method_def->ml_meth(capifunc->passthrough, arg2);
     checkAndThrowCAPIException();
     assert(r);
     return r;
@@ -1380,7 +1657,7 @@ static Box* methodGetDoc(Box* b, void*) {
 
 extern "C" PyObject* _PyObject_GC_Malloc(size_t basicsize) noexcept {
     Box* r = ((PyObject*)PyObject_MALLOC(basicsize));
-    RELEASE_ASSERT(gc::isValidGCObject(r), "");
+    RELEASE_ASSERT(gc::isValidGCMemory(r), "");
     return r;
 }
 
@@ -1427,6 +1704,10 @@ extern "C" void _Py_FatalError(const char* fmt, const char* function, const char
     fprintf(stderr, fmt, function, message);
     fflush(stderr); /* it helps in Windows debug build */
     abort();
+}
+
+extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
+    return new BoxedClassmethod(callable);
 }
 
 void setupCAPI() {

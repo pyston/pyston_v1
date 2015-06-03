@@ -127,6 +127,12 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'd':
                 return PyFloat_FromDouble(va_arg(*p_va, double));
 
+            case 'c': {
+                char p[1];
+                p[0] = (char)va_arg(*p_va, int);
+                return PyString_FromStringAndSize(p, 1);
+            }
+
             case 'N':
             case 'S':
             case 'O':
@@ -184,6 +190,13 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
                 }
                 return v;
             }
+#ifdef HAVE_LONG_LONG
+            case 'L':
+                return PyLong_FromLongLong((PY_LONG_LONG)va_arg(*p_va, PY_LONG_LONG));
+
+            case 'K':
+                return PyLong_FromUnsignedLongLong((PY_LONG_LONG)va_arg(*p_va, unsigned PY_LONG_LONG));
+#endif
 #ifdef Py_USING_UNICODE
             case 'u': {
                 PyObject* v;
@@ -412,8 +425,7 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     while (methods && methods->ml_name) {
         RELEASE_ASSERT((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0, "%d",
                        methods->ml_flags);
-        module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name,
-                                                                 methods->ml_meth, boxString(name)));
+        module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods, passthrough, boxString(name)));
 
         methods++;
     }
@@ -449,6 +461,15 @@ extern "C" int PyModule_AddStringConstant(PyObject* m, const char* name, const c
 extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) noexcept {
     return PyModule_AddObject(_m, name, boxInt(value));
 }
+
+extern "C" PyObject* PyModule_New(const char* name) noexcept {
+    BoxedModule* module = new BoxedModule();
+    module->giveAttr("__name__", boxStrConstant(name));
+    module->giveAttr("__doc__", None);
+    module->giveAttr("__package__", None);
+    return module;
+}
+
 
 extern "C" PyObject* PyEval_CallMethod(PyObject* obj, const char* methodname, const char* format, ...) noexcept {
     va_list vargs;

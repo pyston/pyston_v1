@@ -230,7 +230,7 @@ struct ParamNames {
     std::vector<llvm::StringRef> args;
     llvm::StringRef vararg, kwarg;
 
-    explicit ParamNames(AST* ast);
+    explicit ParamNames(AST* ast, InternedStringPool& pool);
     ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
     static ParamNames empty() { return ParamNames(); }
 
@@ -305,7 +305,7 @@ public:
           takes_varargs(takes_varargs),
           takes_kwargs(takes_kwargs),
           source(std::move(source)),
-          param_names(this->source->ast),
+          param_names(this->source->ast, this->source->getInternedStrings()),
           always_use_version(NULL),
           code_obj(NULL) {
         assert(num_args >= num_defaults);
@@ -390,6 +390,7 @@ enum class GCKind : uint8_t {
     PRECISE = 3,
     UNTRACKED = 4,
     HIDDEN_CLASS = 5,
+    CONSERVATIVE_PYTHON = 6,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
@@ -479,18 +480,18 @@ public:
     BoxedDict* getDict();
 
 
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
-    void giveAttr(const std::string& attr, Box* val) {
+    void setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    void giveAttr(llvm::StringRef attr, Box* val) {
         assert(!this->hasattr(attr));
         this->setattr(attr, val, NULL);
     }
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
-    Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
-    bool hasattr(const std::string& attr) { return getattr(attr) != NULL; }
-    void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
+    Box* getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
+    Box* getattr(llvm::StringRef attr) { return getattr(attr, NULL); }
+    bool hasattr(llvm::StringRef attr) { return getattr(attr) != NULL; }
+    void delattr(llvm::StringRef attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
     Box* getAttrWrapper();
@@ -500,6 +501,8 @@ public:
     bool nonzeroIC();
     Box* hasnextOrNullIC();
     Box* nextIC();
+
+    friend class AttrWrapper;
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
@@ -518,10 +521,12 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 #if STAT_ALLOCATIONS
 #define ALLOC_STATS(cls)                                                                                               \
-    std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                            \
-    std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                    \
-    Stats::log(Stats::getStatId(per_name_alloc_name));                                                                 \
-    Stats::log(Stats::getStatId(per_name_allocsize_name), size);
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatId(per_name_alloc_name));                                                             \
+        Stats::log(Stats::getStatId(per_name_allocsize_name), size);                                                   \
+    }
 #define ALLOC_STATS_VAR(cls)                                                                                           \
     if (cls->tp_name) {                                                                                                \
         std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
@@ -550,7 +555,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 // asserts in the 1-arg operator new function:
 #define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
-        ALLOC_STATS(cls);                                                                                              \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
@@ -601,7 +605,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }                                                                                                                  \
                                                                                                                        \
     void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
-        ALLOC_STATS_VAR(default_cls)                                                                                   \
         assert(cls->tp_itemsize == itemsize);                                                                          \
         return BoxVar::operator new(size, cls, nitems);                                                                \
     }                                                                                                                  \
@@ -688,6 +691,8 @@ struct FrameInfo {
     // In CPython, f_exc is the saved exc_info from the previous frame.
     // In Pyston, exc is the frame-local value of sys.exc_info.
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
+    //
+    // TODO: do we want exceptions to be slower? benchmark this!
     //
     // exc.type is initialized to NULL at function entry, and exc.value and exc.tb are left
     // uninitialized.  When one wants to access any of the values, you need to check if exc.type

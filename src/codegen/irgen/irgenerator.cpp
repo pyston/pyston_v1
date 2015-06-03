@@ -1855,6 +1855,7 @@ private:
         static const std::string newline_str("\n");
         static const std::string space_str(" ");
 
+        // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
         int nvals = node->values.size();
         for (int i = 0; i < nvals; i++) {
             CompilerVariable* var = evalExpr(node->values[i], unw_info);
@@ -2607,6 +2608,13 @@ public:
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
+
+#if ENABLE_SAMPLING_PROFILER
+            auto stmt = block->body[i];
+            if (!(i == 0 && stmt->type == AST_TYPE::Assign) && stmt->lineno > 0) // could be a landingpad
+                doSafePoint(block->body[i]);
+#endif
+
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
@@ -2617,7 +2625,15 @@ public:
         }
     }
 
-    void doSafePoint() override { emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption); }
+    void doSafePoint(AST_stmt* next_statement) override {
+// If the sampling profiler is turned on (and eventually, destructors), we need frame-introspection
+// support while in allowGLReadPreemption:
+#if ENABLE_SAMPLING_PROFILER
+        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
+#else
+        emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption);
+#endif
+    }
 };
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,

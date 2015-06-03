@@ -174,7 +174,7 @@ public:
                     continue;
                 llvm::Function* f = g.func_addr_registry.getLLVMFuncAtAddress((void*)addr);
                 if (f == NULL) {
-                    if (VERBOSITY()) {
+                    if (VERBOSITY() >= 3) {
                         printf("Giving up on inlining %s:\n",
                                g.func_addr_registry.getFuncNameAtAddress((void*)addr, true).c_str());
                         call->dump();
@@ -233,16 +233,16 @@ public:
                 llvm::InlineCost IC = cost_analysis->getInlineCost(cs, threshold);
                 bool do_inline = false;
                 if (IC.isAlways()) {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "always inline\n";
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "always inline\n";
                     do_inline = true;
                 } else if (IC.isNever()) {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "never inline\n";
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "never inline\n";
                     do_inline = false;
                 } else {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "Inline cost: " << IC.getCost() << '\n';
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "Inline cost: " << IC.getCost() << '\n';
                     do_inline = (bool)IC;
                 }
 

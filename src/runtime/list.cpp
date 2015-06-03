@@ -76,7 +76,7 @@ extern "C" Box* listRepr(BoxedList* self) {
 
         assert(r->cls == str_cls);
         BoxedString* s = static_cast<BoxedString*>(r);
-        os << s->s;
+        os << s->s();
     }
     os << ']';
     return boxString(os.str());
@@ -393,6 +393,9 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     sliceIndex(slice->stop, &stop);
     sliceIndex(slice->step, &step);
 
+    if (self == v) // handle self assignment by creating a copy
+        v = _listSlice(self, 0, self->size, 1, self->size);
+
     if (step != 1) {
         int r = list_ass_ext_slice(self, slice, v);
         if (r)
@@ -537,6 +540,24 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     }
 
     return None;
+}
+
+extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) noexcept {
+    try {
+        if (!PyList_Check(op)) {
+            PyErr_BadInternalCall();
+            return -1;
+        }
+        if (newitem == NULL) {
+            PyErr_BadInternalCall();
+            return -1;
+        }
+        listInsert((BoxedList*)op, boxInt(where), newitem);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {

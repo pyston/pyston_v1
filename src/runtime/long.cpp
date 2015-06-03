@@ -232,11 +232,11 @@ static int64_t asSignedLong(BoxedLong* self) {
 static uint64_t asUnsignedLong(BoxedLong* self) {
     assert(self->cls == long_cls);
 
-    // if this is ever true, we should raise a Python error, but I don't think we should hit it?
-    assert(mpz_cmp_si(self->n, 0) >= 0);
+    if (mpz_sgn(self->n) == -1)
+        raiseExcHelper(OverflowError, "can't convert negative value to unsigned long");
 
     if (!mpz_fits_ulong_p(self->n))
-        raiseExcHelper(OverflowError, "long int too large to convert to int");
+        raiseExcHelper(OverflowError, "long int too large to convert");
     return mpz_get_ui(self->n);
 }
 
@@ -259,7 +259,8 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
     try {
         return asUnsignedLong(l);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return -1;
     }
 }
 
@@ -483,11 +484,56 @@ extern "C" void* PyLong_AsVoidPtr(PyObject* vv) noexcept {
 
 extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian,
                                    int is_signed) noexcept {
-    RELEASE_ASSERT(little_endian == 1, "not implemented");
-    RELEASE_ASSERT(n == 8, "did not yet check if the behaviour is correct for sizes other than 8");
+    const mpz_t* op = &((BoxedLong*)v)->n;
+    mpz_t modified;
+
+    int sign = mpz_sgn(*op);
+    // If the value is zero, then mpz_export won't touch any of the memory, so handle that here:
+    if (sign == 0) {
+        memset(bytes, 0, n);
+        return 0;
+    }
+
+    size_t max_bits = n * 8;
+    if (is_signed)
+        max_bits--;
+    size_t bits;
+
+    if (sign == -1) {
+        if (!is_signed) {
+            PyErr_SetString(PyExc_OverflowError, "can't convert negative long to unsigned");
+            return -1;
+        }
+
+        // GMP uses sign-magnitude representation, and mpz_export just returns the magnitude.
+        // This is the easiest way I could think of to convert to two's complement.
+        // Note: the common case for this function is n in 1/2/4/8, where we could potentially
+        // just extract the value and then do the two's complement conversion ourselves.  But
+        // then we would have to worry about endianness, which we don't right now.
+        mpz_init(modified);
+        mpz_com(modified, *op);
+        bits = mpz_sizeinbase(modified, 2);
+        for (int i = 0; i < 8 * n; i++) {
+            mpz_combit(modified, i);
+        }
+        op = &modified;
+    } else {
+        bits = mpz_sizeinbase(*op, 2);
+    }
+
+    if (bits > max_bits) {
+        if (sign == -1)
+            mpz_clear(modified);
+        PyErr_SetString(PyExc_OverflowError, "long too big to convert");
+        return -1;
+    }
+
     size_t count = 0;
-    mpz_export(bytes, &count, -1, n, 0, 0, ((BoxedLong*)v)->n);
-    RELEASE_ASSERT(count <= n, "overflow handling is not yet implemented");
+    mpz_export(bytes, &count, 1, n, little_endian ? -1 : 1, 0, *op);
+    ASSERT(count == 1, "overflow? (%ld %ld)", count, n);
+
+    if (sign == -1)
+        mpz_clear(modified);
     return 0;
 }
 
@@ -566,7 +612,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        rtn = (BoxedLong*)PyLong_FromString(s->s.str().c_str(), NULL, base);
+        rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
         checkAndThrowCAPIException();
     } else {
         if (isSubclass(val->cls, long_cls)) {
@@ -579,7 +625,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
-            const std::string& s = static_cast<BoxedString*>(val)->s;
+            const std::string& s = static_cast<BoxedString*>(val)->s();
             int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else if (val->cls == float_cls) {
@@ -671,6 +717,19 @@ Box* longNeg(BoxedLong* v1) {
     mpz_init(r->n);
     mpz_neg(r->n, v1->n);
     return r;
+}
+
+Box* longPos(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'long' object but received a '%s'", getTypeName(v));
+
+    if (v->cls == long_cls) {
+        return v;
+    } else {
+        BoxedLong* r = new BoxedLong();
+        mpz_init_set(r->n, v->n);
+        return r;
+    }
 }
 
 Box* longAbs(BoxedLong* v1) {
@@ -897,7 +956,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        if (mpz_cmp_si(v2->n, 0) < 0)
+        if (mpz_sgn(v2->n) < 0)
             raiseExcHelper(ValueError, "negative shift count");
 
         uint64_t n = asUnsignedLong(v2);
@@ -927,7 +986,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        if (mpz_cmp_si(v2->n, 0) < 0)
+        if (mpz_sgn(v2->n) < 0)
             raiseExcHelper(ValueError, "negative shift count");
 
         uint64_t n = asUnsignedLong(v2);
@@ -1013,7 +1072,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        if (mpz_cmp_si(v2->n, 0) == 0)
+        if (mpz_sgn(v2->n) == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
         BoxedLong* r = new BoxedLong();
@@ -1049,7 +1108,7 @@ Box* longMod(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        if (mpz_cmp_si(v2->n, 0) == 0)
+        if (mpz_sgn(v2->n) == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
         BoxedLong* r = new BoxedLong();
@@ -1095,7 +1154,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
     if (isSubclass(_rhs->cls, long_cls)) {
         BoxedLong* rhs = static_cast<BoxedLong*>(_rhs);
 
-        if (mpz_cmp_si(rhs->n, 0) == 0)
+        if (mpz_sgn(rhs->n) == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
         BoxedLong* q = new BoxedLong();
@@ -1126,7 +1185,7 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
         raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    if (mpz_cmp_si(v1->n, 0) == 0)
+    if (mpz_sgn(v1->n) == 0)
         raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
     if (isSubclass(_v2->cls, long_cls)) {
@@ -1255,7 +1314,7 @@ Box* longNonzero(BoxedLong* self) {
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
-    if (mpz_cmp_si(self->n, 0) == 0)
+    if (mpz_sgn(self->n) == 0)
         return False;
     return True;
 }
@@ -1415,6 +1474,7 @@ void setupLong() {
 
     long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
     long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
+    long_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)longPos, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
 

@@ -213,7 +213,7 @@ extern "C" Box* next(Box* iterator, Box* _default) {
     } catch (ExcInfo e) {
         if (_default && e.matches(StopIteration))
             return _default;
-        throw;
+        throw e;
     }
 }
 
@@ -402,7 +402,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    std::string _name = static_cast<BoxedString*>(name)->s;
+    std::string _name = static_cast<BoxedString*>(name)->s();
     return importModuleLevel(_name, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
@@ -412,7 +412,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
-    delattr(obj, str->s.data());
+    delattr(obj, str->data());
     return None;
 }
 
@@ -427,7 +427,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattr(obj, str->s.data());
+        rtn = getattr(obj, str->data());
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -437,7 +437,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.data());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->data());
     }
 
     return rtn;
@@ -451,7 +451,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattr(obj, str->s.data(), value);
+    setattr(obj, str->data(), value);
     return None;
 }
 
@@ -465,7 +465,7 @@ Box* hasattr(Box* obj, Box* _str) {
     BoxedString* str = static_cast<BoxedString*>(_str);
     Box* attr;
     try {
-        attr = getattrInternal(obj, str->s, NULL);
+        attr = getattrInternal(obj, str->s(), NULL);
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;
@@ -672,7 +672,7 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s + ",)");
+    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s() + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
@@ -719,7 +719,15 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
-        abort();
+        // PyErr_NewException isn't supposed to fail, and callers sometimes take advantage of that
+        // by not checking the return value.  Since failing probably indicates a bug anyway,
+        // to be safe just print the traceback and die.
+        e.printExcAndTraceback();
+        RELEASE_ASSERT(0, "PyErr_NewException failed");
+
+        // The proper way of handling it:
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -833,14 +841,14 @@ Box* execfile(Box* _fn) {
 #endif
 
 #else
-    bool exists = llvm::sys::fs::exists(std::string(fn->s));
+    bool exists = llvm::sys::fs::exists(std::string(fn->s()));
 #endif
 
     if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.data());
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->data());
 
     // Run directly inside the current module:
-    AST_Module* ast = caching_parse_file(fn->s.data());
+    AST_Module* ast = caching_parse_file(fn->data());
 
     ASSERT(getExecutionPoint().cf->clfunc->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
     compileAndRunModule(ast, getCurrentModule());
@@ -877,6 +885,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     Box* space_box = boxStrConstant(" ");
 
     // TODO softspace handling?
+    // TODO: duplicates code with ASTInterpreter::visit_print()
     bool first = true;
     for (auto e : *args) {
         BoxedString* s = str(e);
@@ -1093,6 +1102,14 @@ Box* builtinApply(Box* func, Box* args, Box* keywords) {
     if (keywords && !PyDict_Check(keywords))
         raiseExcHelper(TypeError, "apply() arg 3 expected dictionary, found %s", getTypeName(keywords));
     return runtimeCall(func, ArgPassSpec(0, 0, true, keywords != NULL), args, keywords, NULL, NULL, NULL);
+}
+
+Box* builtinFormat(Box* value, Box* format_spec) {
+    Box* res = PyObject_Format(value, format_spec);
+    if (!res) {
+        throwCAPIException();
+    }
+    return res;
 }
 
 void setupBuiltins() {
@@ -1330,5 +1347,7 @@ void setupBuiltins() {
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, 1, false, false), "input", { NULL }));
     builtins_module->giveAttr("cmp",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp"));
+    builtins_module->giveAttr(
+        "format", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinFormat, UNKNOWN, 2), "format"));
 }
 }

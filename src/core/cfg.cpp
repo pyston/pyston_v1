@@ -2479,7 +2479,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (source->scoping->areGlobalsFromModule()) {
             Box* module_name = source->parent_module->getattr("__name__", NULL);
             assert(module_name->cls == str_cls);
-            module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+            module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s());
         } else {
             module_assign->value
                 = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);
@@ -2499,6 +2499,34 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 visitor.push_back(doc_assign);
                 skip_first = true;
             }
+        }
+    }
+
+    if (source->ast->type == AST_TYPE::FunctionDef || source->ast->type == AST_TYPE::Lambda) {
+        // Unpack tuple arguments
+        // Tuple arguments get assigned names ".0", ".1" etc. So this
+        // def f(a, (b,c), (d,e)):
+        // would expand to:
+        // def f(a, .1, .2):
+        //     (b, c) = .1
+        //     (d, e) = .2
+        AST_arguments* args;
+        if (source->ast->type == AST_TYPE::FunctionDef) {
+            args = ast_cast<AST_FunctionDef>(source->ast)->args;
+        } else {
+            args = ast_cast<AST_Lambda>(source->ast)->args;
+        }
+        int counter = 0;
+        for (AST_expr* arg_expr : args->args) {
+            if (arg_expr->type == AST_TYPE::Tuple) {
+                InternedString arg_name = source->getInternedStrings().get("." + std::to_string(counter));
+                AST_Name* arg_name_expr
+                    = new AST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno, arg_expr->col_offset);
+                visitor.pushAssign(arg_expr, arg_name_expr);
+            } else {
+                assert(arg_expr->type == AST_TYPE::Name);
+            }
+            counter++;
         }
     }
 

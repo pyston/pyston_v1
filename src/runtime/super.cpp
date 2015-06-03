@@ -64,7 +64,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
 
     if (!skip) {
         // Looks like __class__ is supposed to be "super", not the class of the the proxied object.
-        skip = (attr->s == class_str);
+        skip = (attr->s() == class_str);
     }
 
     if (!skip) {
@@ -101,7 +101,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
                 continue;
             res = PyDict_GetItem(dict, name);
 #endif
-            res = tmp->getattr(std::string(attr->s));
+            res = tmp->getattr(std::string(attr->s()));
 
             if (res != NULL) {
 // Pyston change:
@@ -128,7 +128,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, std::string(attr->s), NULL);
+    Box* r = typeLookup(s->cls, std::string(attr->s()), NULL);
     // TODO implement this
     RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
     return processDescriptor(r, s, s->cls);

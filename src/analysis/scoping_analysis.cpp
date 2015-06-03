@@ -59,14 +59,14 @@ bool containsYield(AST* ast) {
 BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     assert(id);
     assert(private_name);
-    int len = id->s.size();
-    if (len < 2 || id->s[0] != '_' || id->s[1] != '_')
+    int len = id->size();
+    if (len < 2 || id->s()[0] != '_' || id->s()[1] != '_')
         return id;
 
-    if ((id->s[len - 2] == '_' && id->s[len - 1] == '_') || id->s.find('.') != llvm::StringRef::npos)
+    if ((id->s()[len - 2] == '_' && id->s()[len - 1] == '_') || id->s().find('.') != llvm::StringRef::npos)
         return id;
 
-    const char* p = private_name->s.data();
+    const char* p = private_name->data();
     while (*p == '_') {
         p++;
         len--;
@@ -74,7 +74,7 @@ BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     if (*p == '\0')
         return id;
 
-    return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s)));
+    return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s())));
 }
 
 static void mangleNameInPlace(InternedString& id, const std::string* private_name,
@@ -218,6 +218,7 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet read;
     StrSet written;
     StrSet forced_globals;
+    StrSet params;
     std::vector<AST_Name*> del_name_nodes;
 
     // Properties determined by looking at other scopes as well:
@@ -439,14 +440,24 @@ private:
     };
 };
 
+static void raiseGlobalAndLocalException(InternedString name, AST* node) {
+    assert(node->type == AST_TYPE::FunctionDef);
+    AST_FunctionDef* funcNode = ast_cast<AST_FunctionDef>(node);
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "name '%s' is local and global", name.c_str());
+    raiseSyntaxError(buf, funcNode->lineno, funcNode->col_offset, "" /* file?? */, funcNode->name.str());
+}
+
 class NameCollectorVisitor : public ASTVisitor {
 private:
     AST* orig_node;
     ScopingAnalysis::NameUsageMap* map;
     ScopingAnalysis::ScopeNameUsage* cur;
     ScopingAnalysis* scoping;
+    bool currently_visiting_functiondef_args;
+
     NameCollectorVisitor(AST* node, ScopingAnalysis::NameUsageMap* map, ScopingAnalysis* scoping)
-        : orig_node(node), map(map), scoping(scoping) {
+        : orig_node(node), map(map), scoping(scoping), currently_visiting_functiondef_args(false) {
         assert(map);
         cur = (*map)[node];
         assert(cur);
@@ -457,6 +468,9 @@ public:
         assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
         cur->read.insert(name);
         cur->written.insert(name);
+        if (this->currently_visiting_functiondef_args) {
+            cur->params.insert(name);
+        }
     }
 
     void doRead(InternedString name) {
@@ -549,6 +563,10 @@ public:
     bool visit_global(AST_Global* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             mangleNameInPlace(node->names[i], cur->private_name, scoping->getInternedStrings());
+            if (cur->params.find(node->names[i]) != cur->params.end()) {
+                // Throw an exception if a name is both declared global and a parameter
+                raiseGlobalAndLocalException(node->names[i], this->orig_node);
+            }
             cur->forced_globals.insert(node->names[i]);
         }
         return true;
@@ -577,8 +595,17 @@ public:
 
     bool visit_functiondef(AST_FunctionDef* node) override {
         if (node == orig_node) {
-            for (AST_expr* e : node->args->args)
+            this->currently_visiting_functiondef_args = true;
+
+            int counter = 0;
+            for (AST_expr* e : node->args->args) {
+                if (e->type == AST_TYPE::Tuple) {
+                    doWrite(scoping->getInternedStrings().get("." + std::to_string(counter)));
+                }
+                counter++;
                 e->accept(this);
+            }
+
             if (node->args->vararg.str().size()) {
                 mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);
@@ -587,6 +614,9 @@ public:
                 mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->kwarg);
             }
+
+            this->currently_visiting_functiondef_args = false;
+
             for (AST_stmt* s : node->body)
                 s->accept(this);
             return true;

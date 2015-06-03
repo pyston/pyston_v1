@@ -17,6 +17,7 @@
 #include <cmath>
 #include <sstream>
 
+#include "capi/typeobject.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -196,11 +197,11 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
         s++;
     errno = 0;
     if (base == 0 && s[0] == '0') {
-        x = (long)strtoul(s, &end, base);
+        x = (long)PyOS_strtoul(const_cast<char*>(s), &end, base);
         if (x < 0)
             return PyLong_FromString(s, pend, base);
     } else
-        x = strtol(s, &end, base);
+        x = PyOS_strtol(const_cast<char*>(s), &end, base);
     if (end == s || !isalnum(Py_CHARMASK(end[-1])))
         goto bad;
     while (*end && isspace(Py_CHARMASK(*end)))
@@ -226,7 +227,7 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
 }
 
 #ifdef Py_USING_UNICODE
-PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
+extern "C" PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
     PyObject* result;
     char* buffer = (char*)PyMem_MALLOC(length + 1);
 
@@ -338,23 +339,24 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     if (rhs < 0)
         return boxFloat(pow_float_float(lhs, rhs));
 
-    if (rhs == 0) {
-        if (lhs < 0)
-            return boxInt(-1);
+    if (rhs == 0)
         return boxInt(1);
-    }
 
     assert(rhs > 0);
-    while (rhs) {
+    while (true) {
         if (rhs & 1) {
             // TODO: could potentially avoid restarting the entire computation on overflow?
             if (__builtin_smull_overflow(rtn, curpow, &rtn))
                 return longPow(boxLong(lhs), boxLong(orig_rhs));
         }
-        if (__builtin_smull_overflow(curpow, curpow, &curpow))
-            return longPow(boxLong(lhs), boxLong(orig_rhs));
 
         rhs >>= 1;
+
+        if (!rhs)
+            break;
+
+        if (__builtin_smull_overflow(curpow, curpow, &curpow))
+            return longPow(boxLong(lhs), boxLong(orig_rhs));
     }
     return boxInt(rtn);
 }
@@ -1031,9 +1033,32 @@ extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     return new (cls) BoxedInt(n->n);
 }
 
-extern "C" Box* intInit(BoxedInt* self, Box* val, Box* args) {
-    // int.__init__ will actually let you call it with anything
-    return None;
+static const unsigned char BitLengthTable[32]
+    = { 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 };
+
+static int bits_in_ulong(unsigned long d) noexcept {
+    int d_bits = 0;
+    while (d >= 32) {
+        d_bits += 6;
+        d >>= 6;
+    }
+    d_bits += (int)BitLengthTable[d];
+    return d_bits;
+}
+
+extern "C" Box* intBitLength(BoxedInt* v) {
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor 'bit_length' requires a 'int' object but received a '%s'",
+                       getTypeName(v));
+
+    unsigned long n;
+    if (v->n < 0)
+        /* avoid undefined behaviour when v->n == -LONG_MAX-1 */
+        n = 0U - (unsigned long)v->n;
+    else
+        n = (unsigned long)v->n;
+
+    return PyInt_FromLong(bits_in_ulong(n));
 }
 
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
@@ -1085,6 +1110,13 @@ static Box* int1(Box*, void*) {
     return boxInt(1);
 }
 
+static int64_t int_hash(BoxedInt* o) noexcept {
+    int64_t n = o->n;
+    if (n == -1)
+        return -2;
+    return n;
+}
+
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
@@ -1119,7 +1151,7 @@ void setupInt() {
     int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, UNKNOWN, 1)));
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
+    int_cls->tp_hash = (hashfunc)int_hash;
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, UNKNOWN, 2)));
 
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
@@ -1128,11 +1160,11 @@ void setupInt() {
     int_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)intTrunc, BOXED_INT, 1)));
     int_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)intIndex, BOXED_INT, 1)));
 
-    int_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
+    int_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false,
+                                                                 ParamNames({ "", "x", "base" }, "", "")),
+                                                   { boxInt(0), NULL }));
 
-    int_cls->giveAttr("__init__",
-                      new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
+    int_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)intBitLength, BOXED_INT, 1)));
 
     int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
@@ -1140,6 +1172,7 @@ void setupInt() {
     int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
 
+    add_operators(int_cls);
     int_cls->freeze();
 }
 
