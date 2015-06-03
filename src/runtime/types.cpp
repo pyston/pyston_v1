@@ -24,6 +24,7 @@
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
+#include "codegen/ast_interpreter.h"
 #include "codegen/unwinding.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -90,6 +91,14 @@ bool IN_SHUTDOWN = false;
 #define SLICE_START_OFFSET ((char*)&(((BoxedSlice*)0x01)->start) - (char*)0x1)
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
+
+void FrameInfo::gcVisit(GCVisitor* visitor) {
+    visitor->visit(boxedLocals);
+    visitor->visit(exc.traceback);
+    visitor->visit(exc.type);
+    visitor->visit(exc.value);
+    visitor->visit(frame_obj);
+}
 
 // Analogue of PyType_GenericAlloc (default tp_alloc), but should only be used for Pyston classes!
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
@@ -2637,6 +2646,7 @@ void setupRuntime() {
 
     closure_cls->freeze();
 
+    setupInterpreter();
     setupCAPI();
 
     // Can't set up object methods until we set up CAPI support:
