@@ -692,7 +692,11 @@ Box* longFloat(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
                        getTypeName(v));
+    double inf = std::numeric_limits<double>::infinity();
     double f = mpz_get_d(v->n);
+    if (f == inf || f == -inf) {
+        raiseExcHelper(OverflowError, "long int too large to convert to float");
+    }
     return new BoxedFloat(f);
 }
 
