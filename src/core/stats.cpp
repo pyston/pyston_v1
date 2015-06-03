@@ -26,15 +26,28 @@ namespace pyston {
 
 __thread StatTimer* StatTimer::stack;
 
-StatTimer* StatTimer::swapStack(StatTimer* s, uint64_t at_time) {
+StatTimer* StatTimer::swapStack(StatTimer* s) {
+    uint64_t at_time = getCPUTicks();
+
+    assert(stack);
+    assert(s);
     StatTimer* prev_stack = stack;
-    if (stack) {
-        stack->pause(at_time);
-    }
+    stack->pause(at_time);
     stack = s;
-    if (stack) {
-        stack->resume(at_time);
-    }
+    stack->resume(at_time);
+    assert(prev_stack);
+    return prev_stack;
+}
+
+StatTimer* StatTimer::createStack(StatTimer& timer) {
+    uint64_t at_time = getCPUTicks();
+
+    assert(stack);
+    StatTimer* prev_stack = stack;
+    stack->pause(at_time);
+    stack = NULL;
+
+    timer.pushTopLevel(at_time);
     return prev_stack;
 }
 #endif

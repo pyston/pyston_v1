@@ -34,13 +34,9 @@ namespace pyston {
 #if STAT_TIMERS
 #define STAT_TIMER(id, name)                                                                                           \
     static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
-    StatTimer _st##id(_stcounter##id)
-#define STAT_TIMER2(id, name, at_time)                                                                                 \
-    static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
-    StatTimer _st##id(_stcounter##id, at_time)
+    ScopedStatTimer _st##id(_stcounter##id)
 #else
-#define STAT_TIMER(id, name) StatTimer _st##id(0);
-#define STAT_TIMER2(id, name, at_time) StatTimer _st##id(0);
+#define STAT_TIMER(id, name)
 #endif
 
 #define STAT_TIMER_NAME(id) _st##id
@@ -117,60 +113,56 @@ private:
     // the start time of the current active segment (0 == paused)
     uint64_t _start_time;
 
-    uint64_t _last_pause_time;
-
     StatTimer* _prev;
 
     uint64_t* _statcounter;
 
 public:
-    StatTimer(uint64_t* counter, bool push = true) {
+    StatTimer(uint64_t* counter) : _statcounter(counter) {}
+
+    void pushNonTopLevel() {
         uint64_t at_time = getCPUTicks();
+#ifndef NDEBUG
         _start_time = 0;
-        _statcounter = counter;
+#endif
 
-        if (!push) {
-            _prev = NULL;
-            return;
-        }
-
+        assert(stack);
         _prev = stack;
         stack = this;
-        if (_prev) {
-            _prev->pause(at_time);
-        }
+        _prev->pause(at_time);
         resume(at_time);
     }
 
-    StatTimer(uint64_t* counter, uint64_t at_time) {
-        _start_time = 0;
-        _statcounter = counter;
-        _prev = stack;
-        stack = this;
-        if (_prev) {
-            _prev->pause(at_time);
-        }
-        resume(at_time);
-    }
-
-    ~StatTimer() {
+    void popNonTopLevel() {
         assert(stack == this);
 
         uint64_t at_time;
-        if (!isPaused()) {
-            at_time = getCPUTicks();
-            pause(at_time);
-        } else {
-            // fprintf (stderr, "WARNING: timer was paused.\n");
-            at_time = _last_pause_time;
-        }
+        assert(!isPaused());
+        at_time = getCPUTicks();
+        pause(at_time);
 
+        assert(_prev);
         stack = _prev;
-        if (stack) {
-            stack->resume(at_time);
-        }
+        stack->resume(at_time);
     }
 
+    void pushTopLevel(uint64_t at_time) {
+#ifndef NDEBUG
+        _start_time = 0;
+#endif
+        assert(!stack);
+        _prev = stack;
+        stack = this;
+        resume(at_time);
+    }
+
+    void popTopLevel(uint64_t at_time) {
+        assert(!_prev);
+        stack = _prev;
+        pause(at_time);
+    }
+
+private:
     void pause(uint64_t at_time) {
         assert(!isPaused());
         assert(at_time > _start_time);
@@ -179,26 +171,35 @@ public:
         Stats::log(_statcounter, _duration);
 
         _start_time = 0;
-        _last_pause_time = at_time;
-        // fprintf (stderr, "paused  %d at %lu\n", _statid, at_time);
     }
+
     void resume(uint64_t at_time) {
         assert(isPaused());
         _start_time = at_time;
-        // fprintf (stderr, "resumed %d at %lu\n", _statid, at_time);
     }
 
+public:
+#ifndef NDEBUG
     bool isPaused() const { return _start_time == 0; }
+#endif
 
-    static StatTimer* getStack() { return stack; }
+    // Creates a new stattimer stack from an unstarted top-level timer
+    static StatTimer* createStack(StatTimer& timer);
+    static StatTimer* swapStack(StatTimer* s);
 
-    static StatTimer* swapStack(StatTimer* s, uint64_t at_time);
+    static void assertActive() { ASSERT(stack && !stack->isPaused(), ""); }
+};
+class ScopedStatTimer {
+private:
+    StatTimer timer;
 
-    static void assertActive() { RELEASE_ASSERT(stack && !stack->isPaused(), ""); }
+public:
+    ScopedStatTimer(uint64_t* counter) : timer(counter) { timer.pushNonTopLevel(); }
+    ~ScopedStatTimer() { timer.popNonTopLevel(); }
 };
 #else
 struct StatTimer {
-    StatTimer(int statid, bool push = true) {}
+    StatTimer(int statid) {}
     StatTimer(int statid, uint64_t at_time) {}
     ~StatTimer() {}
     bool isPaused() const { return false; }
@@ -206,8 +207,8 @@ struct StatTimer {
     void pause(uint64_t at_time) {}
     void resume(uint64_t at_time) {}
 
-    static StatTimer* getStack() { return NULL; }
-    static StatTimer* swapStack(StatTimer* s, uint64_t at_time) { return NULL; }
+    static StatTimer* createStack(StatTimer& timer);
+    static StatTimer* swapStack(StatTimer* s);
     static void assertActive() {}
 };
 #endif

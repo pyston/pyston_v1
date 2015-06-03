@@ -130,7 +130,7 @@ static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
 #endif
 size_t PyHasher::operator()(Box* b) const {
 #if STAT_TIMERS
-    StatTimer _st(pyhasher_timer_counter);
+    ScopedStatTimer _st(pyhasher_timer_counter);
 #endif
     if (b->cls == str_cls) {
         StringHash<char> H;
@@ -143,7 +143,7 @@ size_t PyHasher::operator()(Box* b) const {
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
 #if STAT_TIMERS
-    StatTimer _st(pyeq_timer_counter);
+    ScopedStatTimer _st(pyeq_timer_counter);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
@@ -154,7 +154,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
 #if STAT_TIMERS
-    StatTimer _st(pylt_timer_counter);
+    ScopedStatTimer _st(pylt_timer_counter);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);

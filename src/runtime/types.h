@@ -836,8 +836,8 @@ public:
     void* stack_begin;
 
 #if STAT_TIMERS
-    StatTimer* statTimers;
-    uint64_t timer_time;
+    StatTimer* prev_stack;
+    StatTimer my_timer;
 #endif
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
