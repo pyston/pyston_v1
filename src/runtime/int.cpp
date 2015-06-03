@@ -31,6 +31,8 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+
 namespace pyston {
 
 extern "C" long PyInt_GetMax() noexcept {
