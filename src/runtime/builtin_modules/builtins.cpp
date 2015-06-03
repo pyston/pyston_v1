@@ -162,10 +162,11 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args) {
         if (!minElement) {
             minElement = e;
         } else {
-            Box* comp_result = compareInternal(minElement, e, AST_TYPE::Gt, NULL);
-            if (nonzero(comp_result)) {
+            int r = PyObject_RichCompareBool(minElement, e, Py_GT);
+            if (r == -1)
+                throwCAPIException();
+            if (r)
                 minElement = e;
-            }
         }
     }
 
@@ -192,10 +193,11 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
         if (!maxElement) {
             maxElement = e;
         } else {
-            Box* comp_result = compareInternal(maxElement, e, AST_TYPE::Lt, NULL);
-            if (nonzero(comp_result)) {
+            int r = PyObject_RichCompareBool(maxElement, e, Py_LT);
+            if (r == -1)
+                throwCAPIException();
+            if (r)
                 maxElement = e;
-            }
         }
     }
 
@@ -254,7 +256,7 @@ extern "C" Box* chr(Box* arg) {
     }
 
     char c = (char)n;
-    return boxStringRef(llvm::StringRef(&c, 1));
+    return boxString(llvm::StringRef(&c, 1));
 }
 
 extern "C" Box* unichr(Box* arg) {
@@ -427,7 +429,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattr(obj, str->data());
+        rtn = getattrInternal(obj, str->data(), NULL);
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -719,7 +721,15 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
-        abort();
+        // PyErr_NewException isn't supposed to fail, and callers sometimes take advantage of that
+        // by not checking the return value.  Since failing probably indicates a bug anyway,
+        // to be safe just print the traceback and die.
+        e.printExcAndTraceback();
+        RELEASE_ASSERT(0, "PyErr_NewException failed");
+
+        // The proper way of handling it:
+        setCAPIException(e);
+        return NULL;
     }
 }
 

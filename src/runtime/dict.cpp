@@ -227,10 +227,14 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
     Box* key = static_cast<Box*>(_key);
     Box* item = static_cast<Box*>(_item);
 
+    assert(key);
+    assert(item);
+
     try {
         setitem(b, key, item);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return -1;
     }
     return 0;
 }

@@ -764,7 +764,7 @@ static int try_3way_compare(PyObject* v, PyObject* w) {
     0 if v == w;
     1 if v >  w.
 */
-static int default_3way_compare(PyObject* v, PyObject* w) {
+/* Pyston change: static*/ int default_3way_compare(PyObject* v, PyObject* w) {
     int c;
     const char* vname, *wname;
 
@@ -865,7 +865,7 @@ extern "C" int PyObject_Compare(PyObject* v, PyObject* w) noexcept {
 }
 
 /* Return (new reference to) Py_True or Py_False. */
-static PyObject* convert_3way_to_object(int op, int c) noexcept {
+/* Pyston change: static */ PyObject* convert_3way_to_object(int op, int c) noexcept {
     PyObject* result;
     switch (op) {
         case Py_LT:

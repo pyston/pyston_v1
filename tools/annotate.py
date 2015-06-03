@@ -106,6 +106,7 @@ This will typically look like:
 Benchmark that was run.  '--heap-map-target BENCHMARK' is
 equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
     """.strip())
+    parser.add_argument("--perf-data", default="perf.data")
     args = parser.parse_args()
 
     func = args.func_name
@@ -116,7 +117,7 @@ equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
 
     objdump = get_objdump(func)
 
-    p = subprocess.Popen(["perf", "annotate", "-v", func], stdout=subprocess.PIPE, stderr=open("/dev/null", "w"))
+    p = subprocess.Popen(["perf", "annotate", "-i", args.perf_data, "-v", func], stdout=subprocess.PIPE, stderr=open("/dev/null", "w"))
     annotate = p.communicate()[0]
     assert p.wait() == 0
 

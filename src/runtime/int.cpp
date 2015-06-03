@@ -17,6 +17,7 @@
 #include <cmath>
 #include <sstream>
 
+#include "capi/typeobject.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -29,6 +30,8 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
 
 namespace pyston {
 
@@ -563,109 +566,6 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
     }
 }
 
-extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n == rhs->n);
-}
-
-extern "C" Box* intEq(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (isSubclass(rhs->cls, int_cls)) {
-        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-        return boxBool(lhs->n == rhs_int->n);
-    } else {
-        return NotImplemented;
-    }
-}
-
-extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n != rhs->n);
-}
-
-extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (!isSubclass(rhs->cls, int_cls)) {
-        return NotImplemented;
-    }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n != rhs_int->n);
-}
-
-extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n < rhs->n);
-}
-
-extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (!isSubclass(rhs->cls, int_cls)) {
-        return NotImplemented;
-    }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n < rhs_int->n);
-}
-
-extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n <= rhs->n);
-}
-
-extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (!isSubclass(rhs->cls, int_cls)) {
-        return NotImplemented;
-    }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n <= rhs_int->n);
-}
-
-extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n > rhs->n);
-}
-
-extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (!isSubclass(rhs->cls, int_cls)) {
-        return NotImplemented;
-    }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n > rhs_int->n);
-}
-
-extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->n >= rhs->n);
-}
-
-extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'int' object but received a '%s'", getTypeName(lhs));
-
-    if (!isSubclass(rhs->cls, int_cls)) {
-        return NotImplemented;
-    }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n >= rhs_int->n);
-}
-
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(isSubclass(lhs->cls, int_cls));
     assert(isSubclass(rhs->cls, int_cls));
@@ -920,7 +820,7 @@ extern "C" Box* intHex(BoxedInt* self) {
         len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
     else
         len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
-    return boxStringRef(llvm::StringRef(buf, len));
+    return boxString(llvm::StringRef(buf, len));
 }
 
 extern "C" Box* intOct(BoxedInt* self) {
@@ -1109,6 +1009,40 @@ static Box* int1(Box*, void*) {
     return boxInt(1);
 }
 
+static int64_t int_hash(BoxedInt* o) noexcept {
+    int64_t n = o->n;
+    if (n == -1)
+        return -2;
+    return n;
+}
+
+static PyObject* int_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    if (!PyInt_Check(v) || !PyInt_Check(w)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+
+    int64_t lhs = static_cast<BoxedInt*>(v)->n;
+    int64_t rhs = static_cast<BoxedInt*>(w)->n;
+
+    switch (op) {
+        case Py_EQ:
+            return boxBool(lhs == rhs);
+        case Py_NE:
+            return boxBool(lhs != rhs);
+        case Py_LT:
+            return boxBool(lhs < rhs);
+        case Py_LE:
+            return boxBool(lhs <= rhs);
+        case Py_GT:
+            return boxBool(lhs > rhs);
+        case Py_GE:
+            return boxBool(lhs >= rhs);
+        default:
+            RELEASE_ASSERT(0, "%d", op);
+    }
+}
+
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
@@ -1128,12 +1062,8 @@ void setupInt() {
     int_cls->giveAttr("__pow__",
                       new BoxedFunction(boxRTFunction((void*)intPow, UNKNOWN, 3, 1, false, false), { None }));
 
-    _addFuncIntUnknown("__eq__", BOXED_BOOL, (void*)intEqInt, (void*)intEq);
-    _addFuncIntUnknown("__ne__", BOXED_BOOL, (void*)intNeInt, (void*)intNe);
-    _addFuncIntUnknown("__lt__", BOXED_BOOL, (void*)intLtInt, (void*)intLt);
-    _addFuncIntUnknown("__le__", BOXED_BOOL, (void*)intLeInt, (void*)intLe);
-    _addFuncIntUnknown("__gt__", BOXED_BOOL, (void*)intGtInt, (void*)intGt);
-    _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
+    // Note: CPython implements int comparisons using tp_compare
+    int_cls->tp_richcompare = int_richcompare;
 
     _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
     _addFuncIntUnknown("__rshift__", UNKNOWN, (void*)intRShiftInt, (void*)intRShift);
@@ -1143,7 +1073,7 @@ void setupInt() {
     int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, UNKNOWN, 1)));
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
+    int_cls->tp_hash = (hashfunc)int_hash;
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, UNKNOWN, 2)));
 
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
@@ -1164,6 +1094,7 @@ void setupInt() {
     int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
 
+    add_operators(int_cls);
     int_cls->freeze();
 }
 

@@ -18,6 +18,7 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include "capi/typeobject.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
@@ -224,89 +225,6 @@ Box* tupleRepr(BoxedTuple* t) {
     return boxString(os.str());
 }
 
-Box* _tupleCmp(BoxedTuple* lhs, BoxedTuple* rhs, AST_TYPE::AST_TYPE op_type) {
-    int lsz = lhs->size();
-    int rsz = rhs->size();
-
-    bool is_order
-        = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
-
-    int n = std::min(lsz, rsz);
-    for (int i = 0; i < n; i++) {
-        Box* is_eq = compareInternal(lhs->elts[i], rhs->elts[i], AST_TYPE::Eq, NULL);
-        bool bis_eq = nonzero(is_eq);
-
-        if (bis_eq)
-            continue;
-
-        if (op_type == AST_TYPE::Eq) {
-            return boxBool(false);
-        } else if (op_type == AST_TYPE::NotEq) {
-            return boxBool(true);
-        } else {
-            Box* r = compareInternal(lhs->elts[i], rhs->elts[i], op_type, NULL);
-            return r;
-        }
-    }
-
-    if (op_type == AST_TYPE::Lt)
-        return boxBool(lsz < rsz);
-    else if (op_type == AST_TYPE::LtE)
-        return boxBool(lsz <= rsz);
-    else if (op_type == AST_TYPE::Gt)
-        return boxBool(lsz > rsz);
-    else if (op_type == AST_TYPE::GtE)
-        return boxBool(lsz >= rsz);
-    else if (op_type == AST_TYPE::Eq)
-        return boxBool(lsz == rsz);
-    else if (op_type == AST_TYPE::NotEq)
-        return boxBool(lsz != rsz);
-
-    RELEASE_ASSERT(0, "%d", op_type);
-}
-
-Box* tupleLt(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Lt);
-}
-
-Box* tupleLe(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::LtE);
-}
-
-Box* tupleGt(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Gt);
-}
-
-Box* tupleGe(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::GtE);
-}
-
-Box* tupleEq(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Eq);
-}
-
-Box* tupleNe(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
-        return NotImplemented;
-    }
-    return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::NotEq);
-}
-
 Box* tupleNonzero(BoxedTuple* self) {
     RELEASE_ASSERT(isSubclass(self->cls, tuple_cls), "");
     return boxBool(self->size() != 0);
@@ -335,20 +253,6 @@ Box* tupleIndex(BoxedTuple* self, Box* elt) {
     }
 
     raiseExcHelper(ValueError, "tuple.index(x): x not in tuple");
-}
-
-Box* tupleHash(BoxedTuple* self) {
-    STAT_TIMER(t0, "us_timer_tupleHash");
-    assert(isSubclass(self->cls, tuple_cls));
-
-    int64_t rtn = 3527539;
-    for (auto e : *self) {
-        BoxedInt* h = hash(e);
-        assert(isSubclass(h->cls, int_cls));
-        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
-    }
-
-    return boxInt(rtn);
 }
 
 extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
@@ -434,6 +338,110 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
     v->visit(it->t);
 }
 
+static int64_t tuple_hash(BoxedTuple* v) noexcept {
+    long x, y;
+    Py_ssize_t len = Py_SIZE(v);
+    PyObject** p;
+    long mult = 1000003L;
+    x = 0x345678L;
+    p = v->elts;
+    while (--len >= 0) {
+        y = PyObject_Hash(*p++);
+        if (y == -1)
+            return -1;
+        x = (x ^ y) * mult;
+        /* the cast might truncate len; that doesn't change hash stability */
+        mult += (long)(82520L + len + len);
+    }
+    x += 97531L;
+    if (x == -1)
+        x = -2;
+    return x;
+}
+
+static PyObject* tuplerichcompare(PyObject* v, PyObject* w, int op) noexcept {
+    BoxedTuple* vt, *wt;
+    Py_ssize_t i;
+    Py_ssize_t vlen, wlen;
+
+    if (!PyTuple_Check(v) || !PyTuple_Check(w)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+
+    vt = (BoxedTuple*)v;
+    wt = (BoxedTuple*)w;
+
+    vlen = Py_SIZE(vt);
+    wlen = Py_SIZE(wt);
+
+    /* Note:  the corresponding code for lists has an "early out" test
+     * here when op is EQ or NE and the lengths differ.  That pays there,
+     * but Tim was unable to find any real code where EQ/NE tuple
+     * compares don't have the same length, so testing for it here would
+     * have cost without benefit.
+     */
+
+    /* Search for the first index where items are different.
+     * Note that because tuples are immutable, it's safe to reuse
+     * vlen and wlen across the comparison calls.
+     */
+    for (i = 0; i < vlen && i < wlen; i++) {
+        int k = PyObject_RichCompareBool(vt->elts[i], wt->elts[i], Py_EQ);
+        if (k < 0)
+            return NULL;
+        if (!k)
+            break;
+    }
+
+    if (i >= vlen || i >= wlen) {
+        /* No more items to compare -- compare sizes */
+        int cmp;
+        PyObject* res;
+        switch (op) {
+            case Py_LT:
+                cmp = vlen < wlen;
+                break;
+            case Py_LE:
+                cmp = vlen <= wlen;
+                break;
+            case Py_EQ:
+                cmp = vlen == wlen;
+                break;
+            case Py_NE:
+                cmp = vlen != wlen;
+                break;
+            case Py_GT:
+                cmp = vlen > wlen;
+                break;
+            case Py_GE:
+                cmp = vlen >= wlen;
+                break;
+            default:
+                return NULL; /* cannot happen */
+        }
+        if (cmp)
+            res = Py_True;
+        else
+            res = Py_False;
+        Py_INCREF(res);
+        return res;
+    }
+
+    /* We have an item that differs -- shortcuts for EQ/NE */
+    if (op == Py_EQ) {
+        Py_INCREF(Py_False);
+        return Py_False;
+    }
+    if (op == Py_NE) {
+        Py_INCREF(Py_True);
+        return Py_True;
+    }
+
+    /* Compare the final item again using the proper operator */
+    return PyObject_RichCompare(vt->elts[i], wt->elts[i], op);
+}
+
 
 void setupTuple() {
     tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
@@ -453,21 +461,18 @@ void setupTuple() {
                         new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1)));
 
 
-    tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)tupleGt, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, UNKNOWN, 2)));
+    tuple_cls->tp_richcompare = tuplerichcompare;
 
     tuple_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)tupleNonzero, BOXED_BOOL, 1)));
 
-    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
     tuple_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)tupleAdd, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
+
+    tuple_cls->tp_hash = (hashfunc)tuple_hash;
+    add_operators(tuple_cls);
 
     tuple_cls->freeze();
 

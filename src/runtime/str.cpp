@@ -23,6 +23,7 @@
 
 #include "Python.h"
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/common.h"
 #include "core/types.h"
@@ -1154,64 +1155,46 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     return boxString(buf);
 }
 
-extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
+Box* str_richcompare(Box* lhs, Box* rhs, int op) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
+    // Note: it is somehow about 50% faster to do this check inside the switch
+    // statement, rather than out here.  It's functionally equivalent but the
+    // generated assembly is somehow quite better:
+    // if (unlikely(!PyString_Check(rhs)))
+    // return NotImplemented;
 
+    BoxedString* slhs = static_cast<BoxedString*>(lhs);
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() < srhs->s());
-}
 
-extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
-
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
-
-    BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() <= srhs->s());
-}
-
-extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
-
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
-
-    BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() > srhs->s());
-}
-
-extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
-
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
-
-    BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() >= srhs->s());
-}
-
-extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
-
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
-
-    BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() == srhs->s());
-}
-
-extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
-
-    if (!isSubclass(rhs->cls, str_cls))
-        return NotImplemented;
-
-    BoxedString* srhs = static_cast<BoxedString*>(rhs);
-    return boxBool(lhs->s() != srhs->s());
+    switch (op) {
+        case Py_EQ:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() == srhs->s());
+        case Py_NE:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() != srhs->s());
+        case Py_LT:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() < srhs->s());
+        case Py_LE:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() <= srhs->s());
+        case Py_GT:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() > srhs->s());
+        case Py_GE:
+            if (unlikely(!PyString_Check(rhs)))
+                return NotImplemented;
+            return boxBool(slhs->s() >= srhs->s());
+        default:
+            llvm_unreachable("invalid op");
+    }
 }
 
 #define JUST_LEFT 0
@@ -1823,9 +1806,9 @@ Box* strStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.trim(chars_str));
+        return boxString(str.trim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.trim(" \t\n\r\f\v"));
+        return boxString(str.trim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -1847,9 +1830,9 @@ Box* strLStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.ltrim(chars_str));
+        return boxString(str.ltrim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.ltrim(" \t\n\r\f\v"));
+        return boxString(str.ltrim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -1871,9 +1854,9 @@ Box* strRStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.rtrim(chars_str));
+        return boxString(str.rtrim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.rtrim(" \t\n\r\f\v"));
+        return boxString(str.rtrim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -2220,7 +2203,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         }
 
         char c = self->s()[n];
-        return boxStringRef(llvm::StringRef(&c, 1));
+        return boxString(llvm::StringRef(&c, 1));
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -2269,7 +2252,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return boxStringRef(llvm::StringRef(&c, 1));
+        return boxString(llvm::StringRef(&c, 1));
     }
 };
 
@@ -2734,12 +2717,7 @@ void setupStr() {
     // TODO not sure if this is right in all cases:
     str_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
 
-    str_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)strLt, UNKNOWN, 2)));
-    str_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)strLe, UNKNOWN, 2)));
-    str_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)strGt, UNKNOWN, 2)));
-    str_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)strGe, UNKNOWN, 2)));
-    str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2)));
-    str_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2)));
+    str_cls->tp_richcompare = str_richcompare;
 
     BoxedString* spaceChar = boxStrConstant(" ");
     str_cls->giveAttr("ljust",
@@ -2763,6 +2741,7 @@ void setupStr() {
     str_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false), { EmptyString }));
 
+    add_operators(str_cls);
     str_cls->freeze();
 
     basestring_cls->giveAttr(

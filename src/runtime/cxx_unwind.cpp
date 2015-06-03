@@ -401,7 +401,7 @@ static inline bool find_call_site_entry(const lsda_info_t* info, const uint8_t* 
     while (p < info->action_table) { // The call site table ends where the action table begins.
         p = parse_call_site_entry(p, info, entry);
 
-        if (VERBOSITY("cxx_unwind") >= 3) {
+        if (VERBOSITY("cxx_unwind") >= 5) {
             printf("    start %p end %p landingpad %p action %lx\n", entry->instrs_start,
                    entry->instrs_start + entry->instrs_len_bytes, entry->landing_pad, entry->action_offset_plus_one);
         }
@@ -424,7 +424,7 @@ static inline NORETURN void resume(unw_cursor_t* cursor, const uint8_t* landing_
                                    const ExcData* exc_data) {
     exc_data->check();
     assert(landing_pad);
-    if (VERBOSITY("cxx_unwind") >= 2)
+    if (VERBOSITY("cxx_unwind") >= 4)
         printf("  * RESUMED: ip %p  switch_value %ld\n", (const void*)landing_pad, (long)switch_value);
 
     if (0 != switch_value) {
@@ -465,7 +465,7 @@ static inline int64_t determine_action(const lsda_info_t* info, const call_site_
         return CLEANUP_ACTION;
 
     // Read a chain of actions.
-    if (VERBOSITY("cxx_unwind") >= 3) {
+    if (VERBOSITY("cxx_unwind") >= 5) {
         printf("      reading action chain\n");
     }
 
@@ -477,7 +477,7 @@ static inline int64_t determine_action(const lsda_info_t* info, const call_site_
         ptrdiff_t offset = p - info->action_table;
         int64_t type_filter;
         p = next_action(p, &type_filter);
-        if (VERBOSITY("cxx_unwind") >= 3) {
+        if (VERBOSITY("cxx_unwind") >= 5) {
             if (p)
                 printf("      %ld: filter %ld  next %ld\n", offset, type_filter, p - info->action_table);
             else
@@ -539,7 +539,7 @@ static inline void unwind_loop(const ExcData* exc_data) {
         assert((pip.lsda == 0) == (pip.handler == 0));
         assert(pip.flags == 0);
 
-        if (VERBOSITY("cxx_unwind") >= 2) {
+        if (VERBOSITY("cxx_unwind") >= 4) {
             print_frame(&cursor, &pip);
         }
 
@@ -586,7 +586,7 @@ static inline void unwind_loop(const ExcData* exc_data) {
         }
         // After this point we are guaranteed to resume something rather than unwinding further.
 
-        if (VERBOSITY("cxx_unwind") >= 3) {
+        if (VERBOSITY("cxx_unwind") >= 4) {
             print_lsda(&info);
         }
 
@@ -633,7 +633,7 @@ extern "C" void _Unwind_Resume(struct _Unwind_Exception* _exc) {
 #endif
     pyston::us_unwind_cleanup.log(pyston::per_thread_cleanup_timer.end());
 
-    if (VERBOSITY("cxx_unwind"))
+    if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** _Unwind_Resume() *****\n");
     // we give `_exc' type `struct _Unwind_Exception*' because unwind.h demands it; it's not actually accurate
     const pyston::ExcData* data = (const pyston::ExcData*)_exc;
@@ -680,7 +680,7 @@ extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
     assert(exc_obj_in);
     pyston::us_unwind_resume_catch.log(pyston::per_thread_resume_catch_timer.end());
 
-    if (VERBOSITY("cxx_unwind"))
+    if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_begin_catch() *****\n");
 
     pyston::ExcData* e = (pyston::ExcData*)exc_obj_in;
@@ -689,7 +689,7 @@ extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
 }
 
 extern "C" void __cxa_end_catch() {
-    if (VERBOSITY("cxx_unwind"))
+    if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_end_catch() *****\n");
     // See comment in __cxa_begin_catch for why we don't clear the exception ferry here.
 }
@@ -704,7 +704,7 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     assert(exc_obj);
     RELEASE_ASSERT(tinfo == &EXCINFO_TYPE_INFO, "can't throw a non-ExcInfo value! type info: %p", tinfo);
 
-    if (VERBOSITY("cxx_unwind"))
+    if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_throw() *****\n");
 
     const pyston::ExcData* exc_data = (const pyston::ExcData*)exc_obj;

@@ -1,12 +1,12 @@
 def f(a, b):
-    print a, b, "<", a < b
-    print a, b, "<=", a <= b
-    print a, b, ">", a > b
-    print a, b, ">=", a >= b
-    print a, b, "==", a == b
-    print a, b, "!=", a != b
-    print a, b, "is", a is b
-    print a, b, "is not", a is not b
+    print repr(a), repr(b), "<", a < b
+    print repr(a), repr(b), "<=", a <= b
+    print repr(a), repr(b), ">", a > b
+    print repr(a), repr(b), ">=", a >= b
+    print repr(a), repr(b), "==", a == b
+    print repr(a), repr(b), "!=", a != b
+    print repr(a), repr(b), "is", a is b
+    print repr(a), repr(b), "is not", a is not b
 
 class C(object):
     pass
@@ -14,7 +14,7 @@ class C(object):
 class Z(object):
     pass
 
-args = [0, 1, 0.1, 1.1, "hello", float('nan'), float('inf'), float('-inf')]#, C(), Z()]
+args = [0, 1, 0.1, 1.1, "hello", float('nan'), float('inf'), float('-inf'), 0L, 1L]#, C(), Z()]
 
 for i in xrange(len(args)):
     for j in xrange(i):

@@ -20,6 +20,8 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include "capi/typeobject.h"
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -625,8 +627,9 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
-            const std::string& s = static_cast<BoxedString*>(val)->s();
-            int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
+            llvm::StringRef s = static_cast<BoxedString*>(val)->s();
+            assert(s.data()[s.size()] == '\0');
+            int r = mpz_init_set_str(rtn->n, s.data(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else if (val->cls == float_cls) {
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
@@ -853,104 +856,18 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
     return NotImplemented;
 }
 
-// TODO reduce duplication between these 6 functions, and add double support
-Box* longGt(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'long' object but received a '%s'", getTypeName(v1));
+static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
+    RELEASE_ASSERT(isSubclass(_v1->cls, long_cls), "");
+    BoxedLong* v1 = static_cast<BoxedLong*>(_v1);
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        return boxBool(mpz_cmp(v1->n, v2->n) > 0);
+        return convert_3way_to_object(op, mpz_cmp(v1->n, v2->n));
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
-        return boxBool(mpz_cmp_si(v1->n, v2->n) > 0);
-    } else {
-        return NotImplemented;
-    }
-}
-
-Box* longGe(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'long' object but received a '%s'", getTypeName(v1));
-
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        return boxBool(mpz_cmp(v1->n, v2->n) >= 0);
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-
-        return boxBool(mpz_cmp_si(v1->n, v2->n) >= 0);
-    } else {
-        return NotImplemented;
-    }
-}
-
-Box* longLt(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'long' object but received a '%s'", getTypeName(v1));
-
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        return boxBool(mpz_cmp(v1->n, v2->n) < 0);
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-
-        return boxBool(mpz_cmp_si(v1->n, v2->n) < 0);
-    } else {
-        return NotImplemented;
-    }
-}
-
-Box* longLe(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'long' object but received a '%s'", getTypeName(v1));
-
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        return boxBool(mpz_cmp(v1->n, v2->n) <= 0);
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-
-        return boxBool(mpz_cmp_si(v1->n, v2->n) <= 0);
-    } else {
-        return NotImplemented;
-    }
-}
-
-Box* longEq(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'long' object but received a '%s'", getTypeName(v1));
-
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        return boxBool(mpz_cmp(v1->n, v2->n) == 0);
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-
-        return boxBool(mpz_cmp_si(v1->n, v2->n) == 0);
-    } else {
-        return NotImplemented;
-    }
-}
-
-Box* longNe(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'long' object but received a '%s'", getTypeName(v1));
-
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        return boxBool(mpz_cmp(v1->n, v2->n) != 0);
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-
-        return boxBool(mpz_cmp_si(v1->n, v2->n) != 0);
+        return convert_3way_to_object(op, mpz_cmp_si(v1->n, v2->n));
     } else {
         return NotImplemented;
     }
@@ -1464,12 +1381,8 @@ void setupLong() {
     long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
     long_cls->giveAttr("__rxor__", long_cls->getattr("__xor__"));
 
-    long_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)longGt, UNKNOWN, 2)));
-    long_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)longGe, UNKNOWN, 2)));
-    long_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)longLt, UNKNOWN, 2)));
-    long_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)longLe, UNKNOWN, 2)));
-    long_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)longEq, UNKNOWN, 2)));
-    long_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)longNe, UNKNOWN, 2)));
+    // Note: CPython implements long comparisons using tp_compare
+    long_cls->tp_richcompare = long_richcompare;
 
     long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
     long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
@@ -1496,6 +1409,7 @@ void setupLong() {
     long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
 
+    add_operators(long_cls);
     long_cls->freeze();
 
     long_cls->tp_as_number->nb_power = long_pow;
