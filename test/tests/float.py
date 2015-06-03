@@ -74,3 +74,8 @@ try:
     0.0 ** (-1.0)
 except ZeroDivisionError as e:
     print e.message
+
+print float(1l)
+print float(0l)
+print float(-1l)
+print (221<<211).__float__()
