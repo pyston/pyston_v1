@@ -111,9 +111,7 @@ extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type);
 extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type);
 
 extern "C" Box* boxStringPtr(const std::string* s);
-Box* boxString(const std::string& s);
-Box* boxString(std::string&& s);
-Box* boxStringRef(llvm::StringRef s);
+Box* boxString(llvm::StringRef s);
 Box* boxStringTwine(const llvm::Twine& s);
 
 extern "C" BoxedString* boxStrConstant(const char* chars);

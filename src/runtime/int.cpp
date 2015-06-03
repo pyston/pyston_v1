@@ -923,7 +923,7 @@ extern "C" Box* intHex(BoxedInt* self) {
         len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
     else
         len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
-    return boxStringRef(llvm::StringRef(buf, len));
+    return boxString(llvm::StringRef(buf, len));
 }
 
 extern "C" Box* intOct(BoxedInt* self) {

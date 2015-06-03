@@ -418,7 +418,7 @@ Box* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
     if (idx_iter != str_const_index.end())
         return str_constants[idx_iter->second];
 
-    Box* box = boxStringRef(ast_str);
+    Box* box = boxString(ast_str);
     str_const_index[ast_str] = str_constants.size();
     str_constants.push_back(box);
     return box;
@@ -1725,7 +1725,7 @@ Box* attrwrapperKeys(Box* b) {
 }
 
 void attrwrapperDel(Box* b, llvm::StringRef attr) {
-    AttrWrapper::delitem(b, boxStringRef(attr));
+    AttrWrapper::delitem(b, boxString(attr));
 }
 
 Box* objectNewNoArgs(BoxedClass* cls) {

@@ -254,7 +254,7 @@ extern "C" Box* chr(Box* arg) {
     }
 
     char c = (char)n;
-    return boxStringRef(llvm::StringRef(&c, 1));
+    return boxString(llvm::StringRef(&c, 1));
 }
 
 extern "C" Box* unichr(Box* arg) {
