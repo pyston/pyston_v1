@@ -50,15 +50,8 @@ extern "C" Box* boxStringPtr(const std::string* s) {
     return new (s->size()) BoxedString(s->c_str(), s->size());
 }
 
-Box* boxStringRef(llvm::StringRef s) {
+Box* boxString(llvm::StringRef s) {
     return new (s.size()) BoxedString(s);
-}
-
-Box* boxString(const std::string& s) {
-    return new (s.size()) BoxedString(s.c_str(), s.size());
-}
-Box* boxString(std::string&& s) {
-    return new (s.size()) BoxedString(s.c_str(), s.size());
 }
 
 Box* boxStringTwine(const llvm::Twine& t) {

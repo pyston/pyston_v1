@@ -1117,7 +1117,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 Box* boxChar(char c) {
     char d[1];
     d[0] = c;
-    return boxStringRef(llvm::StringRef(d, 1));
+    return boxString(llvm::StringRef(d, 1));
 }
 
 static Box* noneIfNull(Box* b) {
@@ -1265,7 +1265,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, llvm::
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
                 char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
-                return boxStringRef(llvm::StringRef(rtn));
+                return boxString(llvm::StringRef(rtn));
             }
 
             default:
@@ -3695,7 +3695,11 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             return boxBool(result);
         }
 
-        bool b = nonzero(contained);
+        bool b;
+        if (contained->cls == bool_cls)
+            b = contained == True;
+        else
+            b = contained->nonzeroIC();
         if (op_type == AST_TYPE::NotIn)
             return boxBool(!b);
         return boxBool(b);

@@ -632,7 +632,7 @@ BoxedFloat* _floatNew(Box* a) {
     } else if (isSubclass(a->cls, int_cls)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(a)->s();
+        llvm::StringRef s = static_cast<BoxedString*>(a)->s();
         if (s == "nan")
             return new BoxedFloat(NAN);
         if (s == "-nan")
@@ -644,10 +644,11 @@ BoxedFloat* _floatNew(Box* a) {
 
         // TODO this should just use CPython's implementation:
         char* endptr;
-        const char* startptr = s.c_str();
+        assert(s.data()[s.size()] == '\0');
+        const char* startptr = s.data();
         double r = strtod(startptr, &endptr);
         if (endptr != startptr + s.size())
-            raiseExcHelper(ValueError, "could not convert string to float: %s", s.c_str());
+            raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
         return new BoxedFloat(r);
     } else {
         static const std::string float_str("__float__");

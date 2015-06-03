@@ -1823,9 +1823,9 @@ Box* strStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.trim(chars_str));
+        return boxString(str.trim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.trim(" \t\n\r\f\v"));
+        return boxString(str.trim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -1847,9 +1847,9 @@ Box* strLStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.ltrim(chars_str));
+        return boxString(str.ltrim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.ltrim(" \t\n\r\f\v"));
+        return boxString(str.ltrim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -1871,9 +1871,9 @@ Box* strRStrip(BoxedString* self, Box* chars) {
 
     if (isSubclass(chars->cls, str_cls)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
-        return boxStringRef(str.rtrim(chars_str));
+        return boxString(str.rtrim(chars_str));
     } else if (chars->cls == none_cls) {
-        return boxStringRef(str.rtrim(" \t\n\r\f\v"));
+        return boxString(str.rtrim(" \t\n\r\f\v"));
     } else if (isSubclass(chars->cls, unicode_cls)) {
         PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
         PyObject* res;
@@ -2220,7 +2220,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         }
 
         char c = self->s()[n];
-        return boxStringRef(llvm::StringRef(&c, 1));
+        return boxString(llvm::StringRef(&c, 1));
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -2269,7 +2269,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return boxStringRef(llvm::StringRef(&c, 1));
+        return boxString(llvm::StringRef(&c, 1));
     }
 };
 

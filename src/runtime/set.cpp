@@ -516,7 +516,7 @@ void setupSet() {
     v_fu.push_back(FROZENSET);
     v_fu.push_back(UNKNOWN);
 
-    auto add = [&](const std::string& name, void* func) {
+    auto add = [&](llvm::StringRef name, void* func) {
         CLFunction* func_obj = createRTFunction(2, 0, false, false);
         addRTFunction(func_obj, (void*)func, SET, v_ss);
         addRTFunction(func_obj, (void*)func, SET, v_sf);
