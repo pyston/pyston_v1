@@ -28,11 +28,6 @@
 #ifndef PYSTON_CORE_SMALLVECTOR_H
 #define PYSTON_CORE_SMALLVECTOR_H
 
-#include "llvm/ADT/iterator_range.h"
-#include "llvm/Support/AlignOf.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Support/type_traits.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -40,6 +35,12 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
+
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Support/AlignOf.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/type_traits.h"
 
 namespace pyston {
 
