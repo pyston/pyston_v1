@@ -2294,6 +2294,63 @@ Box* decodeUTF8StringPtr(const std::string* s) {
     return rtn;
 }
 
+static PyObject* type_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* result;
+    Py_uintptr_t vv, ww;
+    int c;
+
+    /* Make sure both arguments are types. */
+    if (!PyType_Check(v) || !PyType_Check(w) ||
+        /* If there is a __cmp__ method defined, let it be called instead
+           of our dumb function designed merely to warn.  See bug
+           #7491. */
+        Py_TYPE(v)->tp_compare || Py_TYPE(w)->tp_compare) {
+        result = Py_NotImplemented;
+        goto out;
+    }
+
+    /* Py3K warning if comparison isn't == or !=  */
+    if (Py_Py3kWarningFlag && op != Py_EQ && op != Py_NE
+        && PyErr_WarnEx(PyExc_DeprecationWarning, "type inequality comparisons not supported "
+                                                  "in 3.x",
+                        1) < 0) {
+        return NULL;
+    }
+
+    /* Compare addresses */
+    vv = (Py_uintptr_t)v;
+    ww = (Py_uintptr_t)w;
+    switch (op) {
+        case Py_LT:
+            c = vv < ww;
+            break;
+        case Py_LE:
+            c = vv <= ww;
+            break;
+        case Py_EQ:
+            c = vv == ww;
+            break;
+        case Py_NE:
+            c = vv != ww;
+            break;
+        case Py_GT:
+            c = vv > ww;
+            break;
+        case Py_GE:
+            c = vv >= ww;
+            break;
+        default:
+            result = Py_NotImplemented;
+            goto out;
+    }
+    result = c ? Py_True : Py_False;
+
+/* incref and return */
+out:
+    Py_INCREF(result);
+    return result;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -2563,6 +2620,8 @@ void setupRuntime() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
     type_cls->giveAttr("__subclasses__", new BoxedFunction(boxRTFunction((void*)typeSubclasses, UNKNOWN, 1)));
     type_cls->giveAttr("mro", new BoxedFunction(boxRTFunction((void*)typeMro, UNKNOWN, 1)));
+    type_cls->tp_richcompare = type_richcompare;
+    add_operators(type_cls);
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));

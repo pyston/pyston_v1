@@ -137,26 +137,19 @@ size_t PyHasher::operator()(Box* b) const {
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
     STAT_TIMER(t0, "us_timer_PyEq");
 
-    if (lhs == rhs)
-        return true;
-
-    if (lhs->cls == rhs->cls) {
-        if (lhs->cls == str_cls) {
-            return static_cast<BoxedString*>(lhs)->s() == static_cast<BoxedString*>(rhs)->s();
-        }
-    }
-
-    // TODO fix this
-    Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Eq, NULL);
-    return cmp->nonzeroIC();
+    int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
+    if (r == -1)
+        throwCAPIException();
+    return (bool)r;
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
     STAT_TIMER(t0, "us_timer_PyLt");
 
-    // TODO fix this
-    Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
-    return cmp->nonzeroIC();
+    int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
+    if (r == -1)
+        throwCAPIException();
+    return (bool)r;
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
@@ -3705,6 +3698,11 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return boxBool(b);
     }
 
+    if (isUserDefined(lhs->cls) || isUserDefined(rhs->cls)) {
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
+    }
+
     // Can do the guard checks after the Is/IsNot handling, since that is
     // irrespective of the object classes
     if (rewrite_args) {
@@ -3715,6 +3713,48 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         // of objects and their attributes, and the attributes' attributes.
         rewrite_args->lhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
         rewrite_args->rhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
+    }
+
+    // TODO: switch from our op types to cpythons
+    int cpython_op_type;
+    switch (op_type) {
+        case AST_TYPE::Eq:
+            cpython_op_type = Py_EQ;
+            break;
+        case AST_TYPE::NotEq:
+            cpython_op_type = Py_NE;
+            break;
+        case AST_TYPE::Lt:
+            cpython_op_type = Py_LT;
+            break;
+        case AST_TYPE::LtE:
+            cpython_op_type = Py_LE;
+            break;
+        case AST_TYPE::Gt:
+            cpython_op_type = Py_GT;
+            break;
+        case AST_TYPE::GtE:
+            cpython_op_type = Py_GE;
+            break;
+        default:
+            RELEASE_ASSERT(0, "%d", op_type);
+    }
+
+    if (rewrite_args && lhs->cls == rhs->cls && !PyInstance_Check(lhs) && lhs->cls->tp_richcompare != NULL
+        && lhs->cls->tp_richcompare != slot_tp_richcompare) {
+        // This branch is the `v->ob_type == w->ob_type` branch of PyObject_RichCompare, but
+        // simplified by using the assumption that tp_richcompare exists and never returns NotImplemented
+        // for builtin types when both arguments are the right type.
+
+        assert(!isUserDefined(lhs->cls));
+
+        Box* r = lhs->cls->tp_richcompare(lhs, rhs, cpython_op_type);
+        RELEASE_ASSERT(r != NotImplemented, "%s returned notimplemented?", lhs->cls->tp_name);
+        rewrite_args->out_rtn
+            = rewrite_args->rewriter->call(true, (void*)lhs->cls->tp_richcompare, rewrite_args->lhs, rewrite_args->rhs,
+                                           rewrite_args->rewriter->loadConst(cpython_op_type));
+        rewrite_args->out_success = true;
+        return r;
     }
 
     const std::string& op_name = getOpName(op_type);
@@ -3735,11 +3775,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
     if (lrtn) {
         if (lrtn != NotImplemented) {
-            bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
             if (rewrite_args) {
-                if (can_patchpoint) {
-                    rewrite_args->out_success = true;
-                }
+                rewrite_args->out_success = true;
             }
             return lrtn;
         }
@@ -3783,38 +3820,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 #endif
 
-    // TODO
-    // According to http://docs.python.org/2/library/stdtypes.html#comparisons
-    // CPython implementation detail: Objects of different types except numbers are ordered by their type names; objects
-    // of the same types that don’t support proper comparison are ordered by their address.
-
-    if (op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE || op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE) {
-        intptr_t cmp1, cmp2;
-        if (lhs->cls == rhs->cls) {
-            cmp1 = (intptr_t)lhs;
-            cmp2 = (intptr_t)rhs;
-        } else {
-            // This isn't really necessary, but try to make sure that numbers get sorted first
-            if (lhs->cls == int_cls || lhs->cls == float_cls)
-                cmp1 = 0;
-            else
-                cmp1 = (intptr_t)lhs->cls;
-            if (rhs->cls == int_cls || rhs->cls == float_cls)
-                cmp2 = 0;
-            else
-                cmp2 = (intptr_t)rhs->cls;
-        }
-
-        if (op_type == AST_TYPE::Gt)
-            return boxBool(cmp1 > cmp2);
-        if (op_type == AST_TYPE::GtE)
-            return boxBool(cmp1 >= cmp2);
-        if (op_type == AST_TYPE::Lt)
-            return boxBool(cmp1 < cmp2);
-        if (op_type == AST_TYPE::LtE)
-            return boxBool(cmp1 <= cmp2);
-    }
-    RELEASE_ASSERT(0, "%d", op_type);
+    int c = default_3way_compare(lhs, rhs);
+    return convert_3way_to_object(cpython_op_type, c);
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
@@ -3827,21 +3834,52 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "compare"));
 
-    Box* rtn;
     if (rewriter.get()) {
         // rewriter->trap();
         CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
                                         rewriter->getReturnDestination());
-        rtn = compareInternal(lhs, rhs, op_type, &rewrite_args);
+        Box* rtn = compareInternal(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else
             rewriter->commitReturning(rewrite_args.out_rtn);
+        return rtn;
     } else {
-        rtn = compareInternal(lhs, rhs, op_type, NULL);
+        // TODO: switch from our op types to cpythons
+        int cpython_op_type;
+        if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn)
+            return compareInternal(lhs, rhs, op_type, NULL);
+        if (op_type == AST_TYPE::Is)
+            return boxBool(lhs == rhs);
+        if (op_type == AST_TYPE::IsNot)
+            return boxBool(lhs != rhs);
+        switch (op_type) {
+            case AST_TYPE::Eq:
+                cpython_op_type = Py_EQ;
+                break;
+            case AST_TYPE::NotEq:
+                cpython_op_type = Py_NE;
+                break;
+            case AST_TYPE::Lt:
+                cpython_op_type = Py_LT;
+                break;
+            case AST_TYPE::LtE:
+                cpython_op_type = Py_LE;
+                break;
+            case AST_TYPE::Gt:
+                cpython_op_type = Py_GT;
+                break;
+            case AST_TYPE::GtE:
+                cpython_op_type = Py_GE;
+                break;
+            default:
+                RELEASE_ASSERT(0, "%d", op_type);
+        }
+        Box* r = PyObject_RichCompare(lhs, rhs, cpython_op_type);
+        if (!r)
+            throwCAPIException();
+        return r;
     }
-
-    return rtn;
 }
 
 extern "C" Box* unaryop(Box* operand, int op_type) {
