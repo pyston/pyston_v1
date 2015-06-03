@@ -31,6 +31,10 @@
 namespace pyston {
 namespace gc {
 
+#if STAT_TIMERS
+int gc_alloc_stattimer_id = Stats::getStatId("us_timer_gc_alloc");
+#endif
+
 extern "C" void* gc_compat_malloc(size_t sz) noexcept {
     return gc_alloc(sz, GCKind::CONSERVATIVE);
 }

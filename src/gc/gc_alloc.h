@@ -40,8 +40,13 @@ static StatCounter gc_alloc_bytes_typed[] = {
 };
 #endif
 
+#if STAT_TIMERS
+extern int gc_alloc_stattimer_id;
+#endif
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
-    STAT_TIMER(t0, "us_timer_gc_alloc");
+#if STAT_TIMERS
+    StatTimer gc_alloc_stattimer(gc_alloc_stattimer_id);
+#endif
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 
 #ifndef NVALGRIND

@@ -123,8 +123,15 @@ static Box* (*callattrInternal2)(Box*, llvm::StringRef, LookupScope, CallRewrite
 static Box* (*callattrInternal3)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
 
+#if STAT_TIMERS
+static int pyhasher_timer_id = Stats::getStatId("us_timer_PyHasher");
+static int pyeq_timer_id = Stats::getStatId("us_timer_PyEq");
+static int pylt_timer_id = Stats::getStatId("us_timer_PyLt");
+#endif
 size_t PyHasher::operator()(Box* b) const {
-    STAT_TIMER(t0, "us_timer_PyHasher");
+#if STAT_TIMERS
+    StatTimer _st(pyhasher_timer_id);
+#endif
     if (b->cls == str_cls) {
         StringHash<char> H;
         auto s = static_cast<BoxedString*>(b);
@@ -135,7 +142,9 @@ size_t PyHasher::operator()(Box* b) const {
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyEq");
+#if STAT_TIMERS
+    StatTimer _st(pyeq_timer_id);
+#endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
     if (r == -1)
@@ -144,7 +153,9 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyLt");
+#if STAT_TIMERS
+    StatTimer _st(pylt_timer_id);
+#endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
     if (r == -1)
