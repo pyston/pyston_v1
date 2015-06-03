@@ -33,11 +33,11 @@ namespace pyston {
 
 #if STAT_TIMERS
 #define STAT_TIMER(id, name)                                                                                           \
-    static int _stid##id = Stats::getStatId(name);                                                                     \
-    StatTimer _st##id(_stid##id)
+    static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
+    StatTimer _st##id(_stcounter##id)
 #define STAT_TIMER2(id, name, at_time)                                                                                 \
-    static int _stid##id = Stats::getStatId(name);                                                                     \
-    StatTimer _st##id(_stid##id, at_time)
+    static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
+    StatTimer _st##id(_stcounter##id, at_time)
 #else
 #define STAT_TIMER(id, name) StatTimer _st##id(0);
 #define STAT_TIMER2(id, name, at_time) StatTimer _st##id(0);
@@ -48,8 +48,7 @@ namespace pyston {
 #if !DISABLE_STATS
 struct Stats {
 private:
-    static std::vector<uint64_t>* counts;
-    static std::unordered_map<int, std::string>* names;
+    static std::unordered_map<uint64_t*, std::string>* names;
     static bool enabled;
 
     static timespec start_ts;
@@ -59,35 +58,34 @@ public:
     static void startEstimatingCPUFreq();
     static double estimateCPUFreq();
 
-    static int getStatId(const std::string& name);
-    static std::string getStatName(int id);
+    static uint64_t* getStatCounter(const std::string& name);
 
     static void setEnabled(bool enabled) { Stats::enabled = enabled; }
-    static void log(int id, uint64_t count = 1) { (*counts)[id] += count; }
+    static void log(uint64_t* counter, uint64_t count = 1) { *counter += count; }
 
-    static void clear() { std::fill(counts->begin(), counts->end(), 0); }
+    static void clear();
     static void dump(bool includeZeros = true);
     static void endOfInit();
 };
 
 struct StatCounter {
 private:
-    int id;
+    uint64_t* counter;
 
 public:
     StatCounter(const std::string& name);
 
-    void log(uint64_t count = 1) { Stats::log(id, count); }
+    void log(uint64_t count = 1) { *counter += count; }
 };
 
 struct StatPerThreadCounter {
 private:
-    int id = 0;
+    uint64_t* counter = 0;
 
 public:
     StatPerThreadCounter(const std::string& name);
 
-    void log(uint64_t count = 1) { Stats::log(id, count); }
+    void log(uint64_t count = 1) { *counter += count; }
 };
 
 #else
@@ -123,13 +121,13 @@ private:
 
     StatTimer* _prev;
 
-    int _statid;
+    uint64_t* _statcounter;
 
 public:
-    StatTimer(int statid, bool push = true) {
+    StatTimer(uint64_t* counter, bool push = true) {
         uint64_t at_time = getCPUTicks();
         _start_time = 0;
-        _statid = statid;
+        _statcounter = counter;
 
         if (!push) {
             _prev = NULL;
@@ -144,9 +142,9 @@ public:
         resume(at_time);
     }
 
-    StatTimer(int statid, uint64_t at_time) {
+    StatTimer(uint64_t* counter, uint64_t at_time) {
         _start_time = 0;
-        _statid = statid;
+        _statcounter = counter;
         _prev = stack;
         stack = this;
         if (_prev) {
@@ -178,7 +176,7 @@ public:
         assert(at_time > _start_time);
 
         uint64_t _duration = at_time - _start_time;
-        Stats::log(_statid, _duration);
+        Stats::log(_statcounter, _duration);
 
         _start_time = 0;
         _last_pause_time = at_time;
@@ -191,7 +189,6 @@ public:
     }
 
     bool isPaused() const { return _start_time == 0; }
-    int getId() const { return _statid; }
 
     static StatTimer* getStack() { return stack; }
 

@@ -123,7 +123,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     }
 
     std::string stat_name = "mem_section_" + std::string(SectionName);
-    Stats::log(Stats::getStatId(stat_name), MB.size());
+    Stats::log(Stats::getStatCounter(stat_name), MB.size());
 
     // Save this address as the basis for our next request
     MemGroup.Near = MB;

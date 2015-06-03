@@ -124,13 +124,13 @@ static Box* (*callattrInternal3)(Box*, llvm::StringRef, LookupScope, CallRewrite
     = (Box * (*)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
 
 #if STAT_TIMERS
-static int pyhasher_timer_id = Stats::getStatId("us_timer_PyHasher");
-static int pyeq_timer_id = Stats::getStatId("us_timer_PyEq");
-static int pylt_timer_id = Stats::getStatId("us_timer_PyLt");
+static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
+static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
+static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
 #endif
 size_t PyHasher::operator()(Box* b) const {
 #if STAT_TIMERS
-    StatTimer _st(pyhasher_timer_id);
+    StatTimer _st(pyhasher_timer_counter);
 #endif
     if (b->cls == str_cls) {
         StringHash<char> H;
@@ -143,7 +143,7 @@ size_t PyHasher::operator()(Box* b) const {
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
 #if STAT_TIMERS
-    StatTimer _st(pyeq_timer_id);
+    StatTimer _st(pyeq_timer_counter);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
@@ -154,7 +154,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
 #if STAT_TIMERS
-    StatTimer _st(pylt_timer_id);
+    StatTimer _st(pylt_timer_counter);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
@@ -1766,8 +1766,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 
@@ -4834,8 +4834,8 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getglobal__" + *name;
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 

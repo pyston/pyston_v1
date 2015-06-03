@@ -23,17 +23,6 @@ namespace pyston {
 
 #if !DISABLE_STATS
 #if STAT_TIMERS
-extern "C" const char* getStatTimerNameById(int id) {
-    return Stats::getStatName(id).c_str();
-}
-
-extern "C" int getStatTimerId() {
-    return StatTimer::getStack()->getId();
-}
-
-extern "C" const char* getStatTimerName() {
-    return getStatTimerNameById(getStatTimerId());
-}
 
 __thread StatTimer* StatTimer::stack;
 
@@ -50,42 +39,46 @@ StatTimer* StatTimer::swapStack(StatTimer* s, uint64_t at_time) {
 }
 #endif
 
-std::vector<uint64_t>* Stats::counts;
-std::unordered_map<int, std::string>* Stats::names;
+std::unordered_map<uint64_t*, std::string>* Stats::names;
 bool Stats::enabled;
 
 timespec Stats::start_ts;
 uint64_t Stats::start_tick;
 
-StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
+StatCounter::StatCounter(const std::string& name) : counter(Stats::getStatCounter(name)) {
 }
 
 StatPerThreadCounter::StatPerThreadCounter(const std::string& name) {
     char buf[80];
     snprintf(buf, 80, "%s_t%ld", name.c_str(), pthread_self());
-    id = Stats::getStatId(buf);
+    counter = Stats::getStatCounter(buf);
 }
 
-int Stats::getStatId(const std::string& name) {
+static std::vector<uint64_t*>* counts;
+uint64_t* Stats::getStatCounter(const std::string& name) {
     // hacky but easy way of getting around static constructor ordering issues for now:
-    static std::unordered_map<int, std::string> names;
+    static std::unordered_map<uint64_t*, std::string> names;
     Stats::names = &names;
-    static std::vector<uint64_t> counts;
-    Stats::counts = &counts;
-    static std::unordered_map<std::string, int> made;
+    static std::unordered_map<std::string, uint64_t*> made;
+    // TODO: can do better than doing a malloc per counter:
+    static std::vector<uint64_t*> counts;
+    pyston::counts = &counts;
 
     if (made.count(name))
         return made[name];
 
-    int rtn = names.size();
+    uint64_t* rtn = new uint64_t(0);
     names[rtn] = name;
     made[name] = rtn;
-    counts.push_back(0);
+    counts.push_back(rtn);
     return rtn;
 }
 
-std::string Stats::getStatName(int id) {
-    return (*names)[id];
+void Stats::clear() {
+    assert(counts);
+    for (auto p : *counts) {
+        *p = 0;
+    }
 }
 
 void Stats::startEstimatingCPUFreq() {
@@ -119,7 +112,7 @@ void Stats::dump(bool includeZeros) {
 
     fprintf(stderr, "Counters:\n");
 
-    std::vector<std::pair<std::string, int>> pairs;
+    std::vector<std::pair<std::string, uint64_t*>> pairs;
     for (const auto& p : *names) {
         pairs.push_back(make_pair(p.second, p.first));
     }
@@ -129,19 +122,19 @@ void Stats::dump(bool includeZeros) {
     uint64_t ticks_in_main = 0;
     uint64_t accumulated_stat_timer_ticks = 0;
     for (int i = 0; i < pairs.size(); i++) {
-        if (includeZeros || (*counts)[pairs[i].second] > 0) {
+        uint64_t count = *pairs[i].second;
+        if (includeZeros || count > 0) {
             if (startswith(pairs[i].first, "us_") || startswith(pairs[i].first, "_init_us_")) {
-                fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(),
-                        (uint64_t)((*counts)[pairs[i].second] / cycles_per_us));
+                fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(), (uint64_t)(count / cycles_per_us));
 
             } else
-                fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
+                fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(), count);
 
             if (startswith(pairs[i].first, "us_timer_"))
-                accumulated_stat_timer_ticks += (*counts)[pairs[i].second];
+                accumulated_stat_timer_ticks += count;
 
             if (pairs[i].first == "ticks_in_main")
-                ticks_in_main = (*counts)[pairs[i].second];
+                ticks_in_main = count;
         }
     }
 
@@ -165,10 +158,10 @@ void Stats::dump(bool includeZeros) {
 }
 
 void Stats::endOfInit() {
-    int orig_names = names->size();
-    for (int orig_id = 0; orig_id < orig_names; orig_id++) {
-        int init_id = getStatId("_init_" + (*names)[orig_id]);
-        log(init_id, (*counts)[orig_id]);
+    std::unordered_map<uint64_t*, std::string> names_copy(names->begin(), names->end());
+    for (const auto& p : names_copy) {
+        uint64_t* init_id = getStatCounter("_init_" + p.second);
+        log(init_id, *p.first);
     }
 };
 
