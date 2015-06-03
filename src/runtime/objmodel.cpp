@@ -3695,7 +3695,11 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             return boxBool(result);
         }
 
-        bool b = nonzero(contained);
+        bool b;
+        if (contained->cls == bool_cls)
+            b = contained == True;
+        else
+            b = contained->nonzeroIC();
         if (op_type == AST_TYPE::NotIn)
             return boxBool(!b);
         return boxBool(b);
