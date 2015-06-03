@@ -244,7 +244,7 @@ add_test(NAME analysis_unittest COMMAND analysis_unittest)
 add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 # we pass -I to cpython tests and skip failing ones b/c they are slooow otherwise
 add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t30 ${CMAKE_SOURCE_DIR}/test/cpython)
-add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t300 ${CMAKE_SOURCE_DIR}/test/integration)
+add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t600 ${CMAKE_SOURCE_DIR}/test/integration)
 add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-O -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 
