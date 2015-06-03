@@ -126,12 +126,69 @@ private:
     int _statid;
 
 public:
-    StatTimer(int statid, bool push = true);
-    StatTimer(int statid, uint64_t at_time);
-    ~StatTimer();
+    StatTimer(int statid, bool push = true) {
+        uint64_t at_time = getCPUTicks();
+        _start_time = 0;
+        _statid = statid;
 
-    void pause(uint64_t at_time);
-    void resume(uint64_t at_time);
+        if (!push) {
+            _prev = NULL;
+            return;
+        }
+
+        _prev = stack;
+        stack = this;
+        if (_prev) {
+            _prev->pause(at_time);
+        }
+        resume(at_time);
+    }
+
+    StatTimer(int statid, uint64_t at_time) {
+        _start_time = 0;
+        _statid = statid;
+        _prev = stack;
+        stack = this;
+        if (_prev) {
+            _prev->pause(at_time);
+        }
+        resume(at_time);
+    }
+
+    ~StatTimer() {
+        assert(stack == this);
+
+        uint64_t at_time;
+        if (!isPaused()) {
+            at_time = getCPUTicks();
+            pause(at_time);
+        } else {
+            // fprintf (stderr, "WARNING: timer was paused.\n");
+            at_time = _last_pause_time;
+        }
+
+        stack = _prev;
+        if (stack) {
+            stack->resume(at_time);
+        }
+    }
+
+    void pause(uint64_t at_time) {
+        assert(!isPaused());
+        assert(at_time > _start_time);
+
+        uint64_t _duration = at_time - _start_time;
+        Stats::log(_statid, _duration);
+
+        _start_time = 0;
+        _last_pause_time = at_time;
+        // fprintf (stderr, "paused  %d at %lu\n", _statid, at_time);
+    }
+    void resume(uint64_t at_time) {
+        assert(isPaused());
+        _start_time = at_time;
+        // fprintf (stderr, "resumed %d at %lu\n", _statid, at_time);
+    }
 
     bool isPaused() const { return _start_time == 0; }
     int getId() const { return _statid; }
