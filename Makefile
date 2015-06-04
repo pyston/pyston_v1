@@ -17,7 +17,9 @@ USE_DISTCC := 0
 ENABLE_VALGRIND := 0
 
 GDB := gdb
-GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
+# If you followed the old install instructions:
+# GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
+GCC_DIR := /usr
 GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
 
 USE_DEBUG_LIBUNWIND := 0
@@ -543,11 +545,6 @@ check:
 	@# skip -O for dbg
 
 	$(MAKE) run_unittests ARGS=
-
-	@# Building in gcc mode is helpful to find various compiler-specific warnings.
-	@# We've also discovered UB in our code from running in gcc mode, so try running it as well.
-	$(MAKE) pyston_gcc
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
 	$(MAKE) pyston_release
 	@# It can be useful to test release mode, since it actually exposes different functionality

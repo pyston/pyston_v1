@@ -24,7 +24,11 @@
 
 namespace pyston {
 
-uint64_t getCPUTicks();
+inline uint64_t getCPUTicks() {
+    unsigned long lo, hi;
+    asm("rdtsc" : "=a"(lo), "=d"(hi));
+    return (lo | (hi << 32));
+}
 
 #define DISABLE_TIMERS 0
 
