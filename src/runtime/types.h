@@ -111,9 +111,7 @@ extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type);
 extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type);
 
 extern "C" Box* boxStringPtr(const std::string* s);
-Box* boxString(const std::string& s);
-Box* boxString(std::string&& s);
-Box* boxStringRef(llvm::StringRef s);
+Box* boxString(llvm::StringRef s);
 Box* boxStringTwine(const llvm::Twine& s);
 
 extern "C" BoxedString* boxStrConstant(const char* chars);
@@ -698,7 +696,7 @@ public:
     BoxedModule() {} // noop constructor to disable zero-initialization of cls
     std::string name();
 
-    Box* getStringConstant(const std::string& ast_str);
+    Box* getStringConstant(llvm::StringRef ast_str);
 
     llvm::StringMap<int> str_const_index;
     std::vector<Box*> str_constants;
@@ -838,8 +836,8 @@ public:
     void* stack_begin;
 
 #if STAT_TIMERS
-    StatTimer* statTimers;
-    uint64_t timer_time;
+    StatTimer* prev_stack;
+    StatTimer my_timer;
 #endif
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
@@ -854,7 +852,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
-void attrwrapperDel(Box* b, const std::string& attr);
+void attrwrapperDel(Box* b, llvm::StringRef attr);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);

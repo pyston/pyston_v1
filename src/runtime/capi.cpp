@@ -506,15 +506,6 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
     }
 }
 
-extern "C" long PyObject_Hash(PyObject* o) noexcept {
-    try {
-        return hash(o)->n;
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return -1;
-    }
-}
-
 extern "C" long PyObject_HashNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'", Py_TYPE(self)->tp_name);
     return -1;
@@ -595,8 +586,11 @@ extern "C" long _Py_HashPointer(void* p) noexcept {
 }
 
 extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
+    if (o->cls == bool_cls)
+        return o == True;
+
     try {
-        return nonzero(o);
+        return o->nonzeroIC();
     } catch (ExcInfo e) {
         fatalOrError(PyExc_NotImplementedError, "unimplemented");
         return -1;
@@ -1656,6 +1650,13 @@ static Box* methodGetDoc(Box* b, void*) {
     return None;
 }
 
+static Box* wrapperdescrGetDoc(Box* b, void*) {
+    assert(b->cls == wrapperdescr_cls);
+    auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
+    assert(s.size());
+    return boxString(s);
+}
+
 /* extension modules might be compiled with GC support so these
    functions must always be available */
 
@@ -1744,6 +1745,8 @@ void setupCAPI() {
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
                                                                            UNKNOWN, 2, 0, true, true)));
+    wrapperdescr_cls->giveAttr("__doc__",
+                               new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->freeze();
 
     wrapperobject_cls->giveAttr(

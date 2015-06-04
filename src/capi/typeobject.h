@@ -20,7 +20,7 @@
 namespace pyston {
 
 // Returns if a slot was updated
-bool update_slot(BoxedClass* self, const std::string& attr) noexcept;
+bool update_slot(BoxedClass* self, llvm::StringRef attr) noexcept;
 
 void add_operators(BoxedClass* self) noexcept;
 void fixup_slot_dispatchers(BoxedClass* self) noexcept;
@@ -33,6 +33,8 @@ void commonClassSetup(BoxedClass* cls);
 PyTypeObject* best_base(PyObject* bases) noexcept;
 PyObject* mro_external(PyObject* self) noexcept;
 int type_set_bases(PyTypeObject* type, PyObject* value, void* context) noexcept;
+
+PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept;
 }
 
 #endif

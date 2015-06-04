@@ -685,6 +685,9 @@ static PyObject* slot_tp_str(PyObject* self) noexcept {
 }
 
 static long slot_tp_hash(PyObject* self) noexcept {
+    static StatCounter slowpath_hash("slowpath_hash");
+    slowpath_hash.log();
+
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
     long h;
@@ -758,7 +761,15 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
     return res;
 }
 
-static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
+/* Pyston change: static*/ PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
+    static StatCounter slowpath_richcompare("slowpath_richcompare");
+    slowpath_richcompare.log();
+#if 0
+    std::string per_name_stat_name = "slowpath_richcompare." + std::string(self->cls->tp_name);
+    int id = Stats::getStatId(per_name_stat_name);
+    Stats::log(id);
+#endif
+
     PyObject* res;
 
     if (Py_TYPE(self)->tp_richcompare == slot_tp_richcompare) {
@@ -1482,7 +1493,7 @@ static slotdef slotdefs[]
         SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
         SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
         SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
-        { NULL, 0, NULL, NULL, NULL, 0 } };
+        { "", 0, NULL, NULL, "", 0 } };
 
 static void init_slotdefs() noexcept {
     static bool initialized = false;
@@ -1491,21 +1502,21 @@ static void init_slotdefs() noexcept {
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
         if (i > 0) {
-            if (!slotdefs[i].name)
+            if (!slotdefs[i].name.size())
                 continue;
 
 #ifndef NDEBUG
             if (slotdefs[i - 1].offset > slotdefs[i].offset) {
-                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name);
+                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name.data());
                 for (int j = i; j < sizeof(slotdefs) / sizeof(slotdefs[0]); j++) {
                     if (slotdefs[i - 1].offset <= slotdefs[j].offset) {
-                        printf("Should go before %s\n", slotdefs[j].name);
+                        printf("Should go before %s\n", slotdefs[j].name.data());
                         break;
                     }
                 }
             }
 #endif
-            ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name);
+            ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name.data());
             // CPython interns the name here
         }
     }
@@ -1534,7 +1545,7 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noex
         /* Collect all slotdefs that match name into ptrs. */
         pname = name;
         pp = ptrs;
-        for (p = slotdefs; p->name; p++) {
+        for (p = slotdefs; p->name.size() != 0; p++) {
             if (p->name == name)
                 *pp++ = p;
         }
@@ -1556,7 +1567,7 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noex
 }
 
 static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexcept {
-    assert(p->name);
+    assert(p->name.size() != 0);
 
     PyObject* descr;
     BoxedWrapperDescriptor* d;
@@ -1646,7 +1657,7 @@ static int update_slots_callback(PyTypeObject* type, void* data) noexcept {
 static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
 static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
 
-bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
+bool update_slot(BoxedClass* type, llvm::StringRef attr) noexcept {
     slotdef* ptrs[MAX_EQUIV];
     slotdef* p;
     slotdef** pp;
@@ -1661,7 +1672,7 @@ bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
 
     init_slotdefs();
     pp = ptrs;
-    for (p = slotdefs; p->name; p++) {
+    for (p = slotdefs; p->name.size() != 0; p++) {
         /* XXX assume name is interned! */
         if (p->name == attr)
             *pp++ = p;
@@ -1688,7 +1699,7 @@ void fixup_slot_dispatchers(BoxedClass* self) noexcept {
     init_slotdefs();
 
     const slotdef* p = slotdefs;
-    while (p->name)
+    while (p->name.size() != 0)
         p = update_one_slot(self, p);
 }
 
@@ -2666,7 +2677,7 @@ static void update_all_slots(PyTypeObject* type) noexcept {
     slotdef* p;
 
     init_slotdefs();
-    for (p = slotdefs; p->name; p++) {
+    for (p = slotdefs; p->name.size() > 0; p++) {
         /* update_slot returns int but can't actually fail */
         update_slot(type, p->name);
     }

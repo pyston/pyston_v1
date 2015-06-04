@@ -1,0 +1,20 @@
+From be4f78b09bcb44eaf23d103acf865d547893e2a6 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kmod@dropbox.com>
+Date: Tue, 2 Jun 2015 04:25:24 +0000
+Subject: [PATCH] Add patched marker
+
+---
+ pyston_patched         | 1 +
+ 1 files changed, 1 insertions(+)
+ create mode 100644 pyston_patched
+
+diff --git a/pyston_patched b/pyston_patched
+new file mode 100644
+index 0000000..64219e8
+--- /dev/null
++++ b/pyston_patched
+@@ -0,0 +1 @@
++Patched for Pyston!
+-- 
+1.9.1
+

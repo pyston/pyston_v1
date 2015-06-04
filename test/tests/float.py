@@ -65,3 +65,12 @@ print (0.5).as_integer_ratio()
 print (0.5).is_integer()
 print (1.0).is_integer()
 print 1.0.__hash__(), 1.1.__hash__(), -1.1.__hash__()
+
+print 1.0 ** (10 ** 100)
+print (-1.0) ** (10 ** 100)
+print (-1.0) ** (10 ** 100 + 1)
+print 0.0 ** 0.0
+try:
+    0.0 ** (-1.0)
+except ZeroDivisionError as e:
+    print e.message

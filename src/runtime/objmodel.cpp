@@ -123,43 +123,44 @@ static Box* (*callattrInternal2)(Box*, llvm::StringRef, LookupScope, CallRewrite
 static Box* (*callattrInternal3)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
 
+#if STAT_TIMERS
+static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
+static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
+static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
+#endif
 size_t PyHasher::operator()(Box* b) const {
-    STAT_TIMER(t0, "us_timer_PyHasher");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pyhasher_timer_counter);
+#endif
     if (b->cls == str_cls) {
         StringHash<char> H;
         auto s = static_cast<BoxedString*>(b);
         return H(s->data(), s->size());
     }
 
-    BoxedInt* i = hash(b);
-    assert(sizeof(size_t) == sizeof(i->n));
-    size_t rtn = i->n;
-    return rtn;
+    return hashUnboxed(b);
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyEq");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pyeq_timer_counter);
+#endif
 
-    if (lhs == rhs)
-        return true;
-
-    if (lhs->cls == rhs->cls) {
-        if (lhs->cls == str_cls) {
-            return static_cast<BoxedString*>(lhs)->s() == static_cast<BoxedString*>(rhs)->s();
-        }
-    }
-
-    // TODO fix this
-    Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Eq, NULL);
-    return cmp->nonzeroIC();
+    int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
+    if (r == -1)
+        throwCAPIException();
+    return (bool)r;
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyLt");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pylt_timer_counter);
+#endif
 
-    // TODO fix this
-    Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
-    return cmp->nonzeroIC();
+    int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
+    if (r == -1)
+        throwCAPIException();
+    return (bool)r;
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
@@ -216,7 +217,9 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+#if EXPENSIVE_STAT_TIMERS
     STAT_TIMER(t0, "us_timer_isSubclass");
+#endif
     return PyType_IsSubtype(child, parent);
 }
 
@@ -1120,7 +1123,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 Box* boxChar(char c) {
     char d[1];
     d[0] = c;
-    return boxStringRef(llvm::StringRef(d, 1));
+    return boxString(llvm::StringRef(d, 1));
 }
 
 static Box* noneIfNull(Box* b) {
@@ -1268,7 +1271,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, llvm::
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
                 char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
-                return boxStringRef(llvm::StringRef(rtn));
+                return boxString(llvm::StringRef(rtn));
             }
 
             default:
@@ -1765,8 +1768,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 
@@ -2224,30 +2227,43 @@ extern "C" bool exceptionMatches(Box* obj, Box* cls) {
     return rtn;
 }
 
+/* Macro to get the tp_richcompare field of a type if defined */
+#define RICHCOMPARE(t) (PyType_HasFeature((t), Py_TPFLAGS_HAVE_RICHCOMPARE) ? (t)->tp_richcompare : NULL)
+
+extern "C" long PyObject_Hash(PyObject* v) noexcept {
+    PyTypeObject* tp = v->cls;
+    if (tp->tp_hash != NULL)
+        return (*tp->tp_hash)(v);
+#if 0 // pyston change
+    /* To keep to the general practice that inheriting
+     * solely from object in C code should work without
+     * an explicit call to PyType_Ready, we implicitly call
+     * PyType_Ready here and then check the tp_hash slot again
+     */
+    if (tp->tp_dict == NULL) {
+        if (PyType_Ready(tp) < 0)
+            return -1;
+        if (tp->tp_hash != NULL)
+            return (*tp->tp_hash)(v);
+    }
+#endif
+    if (tp->tp_compare == NULL && RICHCOMPARE(tp) == NULL) {
+        return _Py_HashPointer(v); /* Use address as hash value */
+    }
+    /* If there's a cmp but no hash defined, the object can't be hashed */
+    return PyObject_HashNotImplemented(v);
+}
+
+int64_t hashUnboxed(Box* obj) {
+    auto r = PyObject_Hash(obj);
+    if (r == -1)
+        throwCAPIException();
+    return r;
+}
+
 extern "C" BoxedInt* hash(Box* obj) {
-    static StatCounter slowpath_hash("slowpath_hash");
-    slowpath_hash.log();
-
-    // goes through descriptor logic
-    Box* hash = getclsattrInternal(obj, "__hash__", NULL);
-
-    if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
-                   || obj->cls == module_cls || obj->cls == capifunc_cls || obj->cls == instancemethod_cls,
-               "%s.__hash__", getTypeName(obj));
-        // TODO not the best way to handle this...
-        return static_cast<BoxedInt*>(boxInt((i64)obj));
-    }
-
-    if (hash == None) {
-        raiseExcHelper(TypeError, "unhashable type: '%s'", obj->cls->tp_name);
-    }
-
-    Box* rtn = runtimeCallInternal(hash, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    if (rtn->cls != int_cls) {
-        raiseExcHelper(TypeError, "an integer is required");
-    }
-    return static_cast<BoxedInt*>(rtn);
+    int64_t r = hashUnboxed(obj);
+    return new BoxedInt(r);
 }
 
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
@@ -2373,8 +2389,11 @@ extern "C" void dumpEx(void* p, int levels) {
         return;
     }
 
-    if (al->kind_id == gc::GCKind::PYTHON) {
-        printf("Python object\n");
+    if (al->kind_id == gc::GCKind::PYTHON || al->kind_id == gc::GCKind::CONSERVATIVE_PYTHON) {
+        if (al->kind_id == gc::GCKind::PYTHON)
+            printf("Python object (precisely scanned)\n");
+        else
+            printf("Python object (conservatively scanned)\n");
         Box* b = (Box*)p;
 
         printf("Class: %s", getFullTypeName(b).c_str());
@@ -3682,10 +3701,19 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             return boxBool(result);
         }
 
-        bool b = nonzero(contained);
+        bool b;
+        if (contained->cls == bool_cls)
+            b = contained == True;
+        else
+            b = contained->nonzeroIC();
         if (op_type == AST_TYPE::NotIn)
             return boxBool(!b);
         return boxBool(b);
+    }
+
+    if (isUserDefined(lhs->cls) || isUserDefined(rhs->cls)) {
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     // Can do the guard checks after the Is/IsNot handling, since that is
@@ -3698,6 +3726,48 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         // of objects and their attributes, and the attributes' attributes.
         rewrite_args->lhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
         rewrite_args->rhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
+    }
+
+    // TODO: switch from our op types to cpythons
+    int cpython_op_type;
+    switch (op_type) {
+        case AST_TYPE::Eq:
+            cpython_op_type = Py_EQ;
+            break;
+        case AST_TYPE::NotEq:
+            cpython_op_type = Py_NE;
+            break;
+        case AST_TYPE::Lt:
+            cpython_op_type = Py_LT;
+            break;
+        case AST_TYPE::LtE:
+            cpython_op_type = Py_LE;
+            break;
+        case AST_TYPE::Gt:
+            cpython_op_type = Py_GT;
+            break;
+        case AST_TYPE::GtE:
+            cpython_op_type = Py_GE;
+            break;
+        default:
+            RELEASE_ASSERT(0, "%d", op_type);
+    }
+
+    if (rewrite_args && lhs->cls == rhs->cls && !PyInstance_Check(lhs) && lhs->cls->tp_richcompare != NULL
+        && lhs->cls->tp_richcompare != slot_tp_richcompare) {
+        // This branch is the `v->ob_type == w->ob_type` branch of PyObject_RichCompare, but
+        // simplified by using the assumption that tp_richcompare exists and never returns NotImplemented
+        // for builtin types when both arguments are the right type.
+
+        assert(!isUserDefined(lhs->cls));
+
+        Box* r = lhs->cls->tp_richcompare(lhs, rhs, cpython_op_type);
+        RELEASE_ASSERT(r != NotImplemented, "%s returned notimplemented?", lhs->cls->tp_name);
+        rewrite_args->out_rtn
+            = rewrite_args->rewriter->call(true, (void*)lhs->cls->tp_richcompare, rewrite_args->lhs, rewrite_args->rhs,
+                                           rewrite_args->rewriter->loadConst(cpython_op_type));
+        rewrite_args->out_success = true;
+        return r;
     }
 
     const std::string& op_name = getOpName(op_type);
@@ -3718,11 +3788,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
     if (lrtn) {
         if (lrtn != NotImplemented) {
-            bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
             if (rewrite_args) {
-                if (can_patchpoint) {
-                    rewrite_args->out_success = true;
-                }
+                rewrite_args->out_success = true;
             }
             return lrtn;
         }
@@ -3766,38 +3833,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 #endif
 
-    // TODO
-    // According to http://docs.python.org/2/library/stdtypes.html#comparisons
-    // CPython implementation detail: Objects of different types except numbers are ordered by their type names; objects
-    // of the same types that don’t support proper comparison are ordered by their address.
-
-    if (op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE || op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE) {
-        intptr_t cmp1, cmp2;
-        if (lhs->cls == rhs->cls) {
-            cmp1 = (intptr_t)lhs;
-            cmp2 = (intptr_t)rhs;
-        } else {
-            // This isn't really necessary, but try to make sure that numbers get sorted first
-            if (lhs->cls == int_cls || lhs->cls == float_cls)
-                cmp1 = 0;
-            else
-                cmp1 = (intptr_t)lhs->cls;
-            if (rhs->cls == int_cls || rhs->cls == float_cls)
-                cmp2 = 0;
-            else
-                cmp2 = (intptr_t)rhs->cls;
-        }
-
-        if (op_type == AST_TYPE::Gt)
-            return boxBool(cmp1 > cmp2);
-        if (op_type == AST_TYPE::GtE)
-            return boxBool(cmp1 >= cmp2);
-        if (op_type == AST_TYPE::Lt)
-            return boxBool(cmp1 < cmp2);
-        if (op_type == AST_TYPE::LtE)
-            return boxBool(cmp1 <= cmp2);
-    }
-    RELEASE_ASSERT(0, "%d", op_type);
+    int c = default_3way_compare(lhs, rhs);
+    return convert_3way_to_object(cpython_op_type, c);
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
@@ -3810,21 +3847,52 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "compare"));
 
-    Box* rtn;
     if (rewriter.get()) {
         // rewriter->trap();
         CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
                                         rewriter->getReturnDestination());
-        rtn = compareInternal(lhs, rhs, op_type, &rewrite_args);
+        Box* rtn = compareInternal(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else
             rewriter->commitReturning(rewrite_args.out_rtn);
+        return rtn;
     } else {
-        rtn = compareInternal(lhs, rhs, op_type, NULL);
+        // TODO: switch from our op types to cpythons
+        int cpython_op_type;
+        if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn)
+            return compareInternal(lhs, rhs, op_type, NULL);
+        if (op_type == AST_TYPE::Is)
+            return boxBool(lhs == rhs);
+        if (op_type == AST_TYPE::IsNot)
+            return boxBool(lhs != rhs);
+        switch (op_type) {
+            case AST_TYPE::Eq:
+                cpython_op_type = Py_EQ;
+                break;
+            case AST_TYPE::NotEq:
+                cpython_op_type = Py_NE;
+                break;
+            case AST_TYPE::Lt:
+                cpython_op_type = Py_LT;
+                break;
+            case AST_TYPE::LtE:
+                cpython_op_type = Py_LE;
+                break;
+            case AST_TYPE::Gt:
+                cpython_op_type = Py_GT;
+                break;
+            case AST_TYPE::GtE:
+                cpython_op_type = Py_GE;
+                break;
+            default:
+                RELEASE_ASSERT(0, "%d", op_type);
+        }
+        Box* r = PyObject_RichCompare(lhs, rhs, cpython_op_type);
+        if (!r)
+            throwCAPIException();
+        return r;
     }
-
-    return rtn;
 }
 
 extern "C" Box* unaryop(Box* operand, int op_type) {
@@ -4768,8 +4836,8 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getglobal__" + *name;
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 

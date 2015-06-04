@@ -28,7 +28,7 @@ extern "C" {
 BoxedClass* classobj_cls, *instance_cls;
 }
 
-static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
+static Box* classLookup(BoxedClassobj* cls, llvm::StringRef attr) {
     Box* r = cls->getattr(attr);
     if (r)
         return r;

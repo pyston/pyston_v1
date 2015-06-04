@@ -268,7 +268,10 @@ static int main(int argc, char** argv) {
     Timer main_time;
     int rtncode = 0;
     {
-        STAT_TIMER2(t0, "us_timer_main_toplevel", main_time.getStartTime());
+#if STAT_TIMERS
+        StatTimer timer(Stats::getStatCounter("us_timer_main_toplevel"));
+        timer.pushTopLevel(main_time.getStartTime());
+#endif
 
         int code;
         const char* command = NULL;
@@ -502,11 +505,14 @@ static int main(int argc, char** argv) {
         joinRuntime();
         _t.split("finishing up");
 
+#if STAT_TIMERS
         uint64_t main_time_ended_at;
         uint64_t main_time_duration = main_time.end(&main_time_ended_at);
         static StatCounter mt("ticks_in_main");
         mt.log(main_time_duration);
-        STAT_TIMER_NAME(t0).pause(main_time_ended_at);
+
+        timer.popTopLevel(main_time_ended_at);
+#endif
     }
     Stats::dump(true);
 

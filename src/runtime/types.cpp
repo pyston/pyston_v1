@@ -413,7 +413,7 @@ std::string BoxedModule::name() {
     }
 }
 
-Box* BoxedModule::getStringConstant(const std::string& ast_str) {
+Box* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
     auto idx_iter = str_const_index.find(ast_str);
     if (idx_iter != str_const_index.end())
         return str_constants[idx_iter->second];
@@ -1724,7 +1724,7 @@ Box* attrwrapperKeys(Box* b) {
     return AttrWrapper::keys(b);
 }
 
-void attrwrapperDel(Box* b, const std::string& attr) {
+void attrwrapperDel(Box* b, llvm::StringRef attr) {
     AttrWrapper::delitem(b, boxString(attr));
 }
 
@@ -2294,6 +2294,63 @@ Box* decodeUTF8StringPtr(const std::string* s) {
     return rtn;
 }
 
+static PyObject* type_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* result;
+    Py_uintptr_t vv, ww;
+    int c;
+
+    /* Make sure both arguments are types. */
+    if (!PyType_Check(v) || !PyType_Check(w) ||
+        /* If there is a __cmp__ method defined, let it be called instead
+           of our dumb function designed merely to warn.  See bug
+           #7491. */
+        Py_TYPE(v)->tp_compare || Py_TYPE(w)->tp_compare) {
+        result = Py_NotImplemented;
+        goto out;
+    }
+
+    /* Py3K warning if comparison isn't == or !=  */
+    if (Py_Py3kWarningFlag && op != Py_EQ && op != Py_NE
+        && PyErr_WarnEx(PyExc_DeprecationWarning, "type inequality comparisons not supported "
+                                                  "in 3.x",
+                        1) < 0) {
+        return NULL;
+    }
+
+    /* Compare addresses */
+    vv = (Py_uintptr_t)v;
+    ww = (Py_uintptr_t)w;
+    switch (op) {
+        case Py_LT:
+            c = vv < ww;
+            break;
+        case Py_LE:
+            c = vv <= ww;
+            break;
+        case Py_EQ:
+            c = vv == ww;
+            break;
+        case Py_NE:
+            c = vv != ww;
+            break;
+        case Py_GT:
+            c = vv > ww;
+            break;
+        case Py_GE:
+            c = vv >= ww;
+            break;
+        default:
+            result = Py_NotImplemented;
+            goto out;
+    }
+    result = c ? Py_True : Py_False;
+
+/* incref and return */
+out:
+    Py_INCREF(result);
+    return result;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -2440,6 +2497,8 @@ void setupRuntime() {
     wrapperobject_cls->tp_mro = BoxedTuple::create({ wrapperobject_cls, object_cls });
     wrapperdescr_cls->tp_mro = BoxedTuple::create({ wrapperdescr_cls, object_cls });
 
+    object_cls->tp_hash = (hashfunc)_Py_HashPointer;
+
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
     BOXED_FLOAT = typeFromClass(float_cls);
@@ -2536,8 +2595,6 @@ void setupRuntime() {
 
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr("__hash__",
-                         new BoxedFunction(boxRTFunction((void*)objectHash, BOXED_INT, 1, 0, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -2557,17 +2614,19 @@ void setupRuntime() {
     type_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
-    type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
+    type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
     type_cls->giveAttr("__mro__",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
     type_cls->giveAttr("__subclasses__", new BoxedFunction(boxRTFunction((void*)typeSubclasses, UNKNOWN, 1)));
     type_cls->giveAttr("mro", new BoxedFunction(boxRTFunction((void*)typeMro, UNKNOWN, 1)));
+    type_cls->tp_richcompare = type_richcompare;
+    add_operators(type_cls);
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
-    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
+    none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
 
     module_cls->giveAttr("__init__",
@@ -2779,6 +2838,10 @@ void setupRuntime() {
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
+
+    assert(object_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(none_cls->tp_hash == (hashfunc)_Py_HashPointer);
+    assert(type_cls->tp_hash == (hashfunc)_Py_HashPointer);
 
     setupSysEnd();
 

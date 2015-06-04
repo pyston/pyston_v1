@@ -25,11 +25,11 @@ typedef PyObject* (*wrapperfunc)(PyObject* self, PyObject* args, void* wrapped);
 typedef PyObject* (*wrapperfunc_kwds)(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds);
 
 struct wrapper_def {
-    const char* name;
+    const llvm::StringRef name;
     int offset;
     void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
     wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
-    const char* doc;
+    const llvm::StringRef doc;
     int flags;
     // exists in CPython: PyObject *name_strobj
 };
@@ -236,6 +236,9 @@ public:
         v->visit(o->type);
     }
 };
+
+PyObject* convert_3way_to_object(int op, int c) noexcept;
+int default_3way_compare(PyObject* v, PyObject* w);
 
 } // namespace pyston
 
