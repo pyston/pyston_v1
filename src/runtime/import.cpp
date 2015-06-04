@@ -223,7 +223,7 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         BoxedString* p = static_cast<BoxedString*>(_p);
 
         joined_path.clear();
-        llvm::sys::path::append(joined_path, std::string(p->s()), name);
+        llvm::sys::path::append(joined_path, p->s(), name);
         std::string dn(joined_path.str());
 
         llvm::sys::path::append(joined_path, "__init__.py");
