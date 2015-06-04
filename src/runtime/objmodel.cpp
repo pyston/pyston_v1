@@ -123,8 +123,15 @@ static Box* (*callattrInternal2)(Box*, llvm::StringRef, LookupScope, CallRewrite
 static Box* (*callattrInternal3)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, llvm::StringRef, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
 
+#if STAT_TIMERS
+static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
+static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
+static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
+#endif
 size_t PyHasher::operator()(Box* b) const {
-    STAT_TIMER(t0, "us_timer_PyHasher");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pyhasher_timer_counter);
+#endif
     if (b->cls == str_cls) {
         StringHash<char> H;
         auto s = static_cast<BoxedString*>(b);
@@ -135,7 +142,9 @@ size_t PyHasher::operator()(Box* b) const {
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyEq");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pyeq_timer_counter);
+#endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
     if (r == -1)
@@ -144,7 +153,9 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
-    STAT_TIMER(t0, "us_timer_PyLt");
+#if EXPENSIVE_STAT_TIMERS
+    ScopedStatTimer _st(pylt_timer_counter);
+#endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
     if (r == -1)
@@ -206,7 +217,9 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+#if EXPENSIVE_STAT_TIMERS
     STAT_TIMER(t0, "us_timer_isSubclass");
+#endif
     return PyType_IsSubtype(child, parent);
 }
 
@@ -1755,8 +1768,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 
@@ -4823,8 +4836,8 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getglobal__" + *name;
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
 #endif
     }
 

@@ -63,11 +63,23 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
     assert(target);
     assert(varargs);
 
+#if STAT_TIMERS
+    // TODO: maybe we should just not log anything for threads...
+    static uint64_t* timer_counter = Stats::getStatCounter("us_timer_thread_start");
+    StatTimer timer(timer_counter);
+    timer.pushTopLevel(getCPUTicks());
+#endif
+
     try {
         runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         e.printExcAndTraceback();
     }
+
+#if STAT_TIMERS
+    timer.popTopLevel(getCPUTicks());
+#endif
+
     return NULL;
 }
 
