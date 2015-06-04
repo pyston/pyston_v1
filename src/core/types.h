@@ -88,6 +88,10 @@ public:
     GCVisitor(TraceStack* stack) : stack(stack) {}
 
     // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
+    void visitIf(void* p) {
+        if (p)
+            visit(p);
+    }
     void visit(void* p);
     void visitRange(void* const* start, void* const* end);
     void visitPotential(void* p);

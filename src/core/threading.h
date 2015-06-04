@@ -22,6 +22,7 @@
 
 #include "core/common.h"
 #include "core/thread_utils.h"
+#include "core/types.h"
 
 namespace pyston {
 class Box;
@@ -54,6 +55,7 @@ void visitAllStacks(gc::GCVisitor* v);
 void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit);
 void popGenerator();
 
+ExcInfo* getExceptionFerry();
 
 #ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1

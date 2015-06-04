@@ -79,10 +79,16 @@ public:
     std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
 
+    ExcInfo exc_info;
+
     PyThreadState* public_thread_state;
 
     ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
-        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
+        : saved(false),
+          stack_start(stack_start),
+          pthread_id(pthread_id),
+          exc_info(NULL, NULL, NULL),
+          public_thread_state(public_thread_state) {}
 
     void saveCurrent() {
         assert(!saved);
@@ -115,14 +121,14 @@ public:
 
     void accept(gc::GCVisitor* v) {
         auto pub_state = public_thread_state;
-        if (pub_state->curexc_type)
-            v->visit(pub_state->curexc_type);
-        if (pub_state->curexc_value)
-            v->visit(pub_state->curexc_value);
-        if (pub_state->curexc_traceback)
-            v->visit(pub_state->curexc_traceback);
-        if (pub_state->dict)
-            v->visit(pub_state->dict);
+        v->visitIf(pub_state->curexc_type);
+        v->visitIf(pub_state->curexc_value);
+        v->visitIf(pub_state->curexc_traceback);
+        v->visitIf(pub_state->dict);
+
+        v->visitIf(exc_info.type);
+        v->visitIf(exc_info.value);
+        v->visitIf(exc_info.traceback);
 
         for (auto& stack_info : previous_stacks) {
             v->visit(stack_info.next_generator);
@@ -147,6 +153,10 @@ void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_lim
 void popGenerator() {
     assert(current_internal_thread_state);
     current_internal_thread_state->popGenerator();
+}
+
+ExcInfo* getExceptionFerry() {
+    return &current_internal_thread_state->exc_info;
 }
 
 // These are guarded by threading_lock
