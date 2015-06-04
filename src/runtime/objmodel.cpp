@@ -129,7 +129,7 @@ static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
 static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
 #endif
 size_t PyHasher::operator()(Box* b) const {
-#if STAT_TIMERS
+#if EXPENSIVE_STAT_TIMERS
     ScopedStatTimer _st(pyhasher_timer_counter);
 #endif
     if (b->cls == str_cls) {
@@ -142,7 +142,7 @@ size_t PyHasher::operator()(Box* b) const {
 }
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
-#if STAT_TIMERS
+#if EXPENSIVE_STAT_TIMERS
     ScopedStatTimer _st(pyeq_timer_counter);
 #endif
 
@@ -153,7 +153,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
-#if STAT_TIMERS
+#if EXPENSIVE_STAT_TIMERS
     ScopedStatTimer _st(pylt_timer_counter);
 #endif
 
@@ -217,7 +217,9 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+#if EXPENSIVE_STAT_TIMERS
     STAT_TIMER(t0, "us_timer_isSubclass");
+#endif
     return PyType_IsSubtype(child, parent);
 }
 

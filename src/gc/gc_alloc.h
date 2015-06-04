@@ -44,8 +44,11 @@ static StatCounter gc_alloc_bytes_typed[] = {
 extern uint64_t* gc_alloc_stattimer_counter;
 #endif
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
-#if STAT_TIMERS
-    StatTimer gc_alloc_stattimer(gc_alloc_stattimer_counter);
+#if EXPENSIVE_STAT_TIMERS
+    // This stat timer is quite expensive, not just because this function is extremely hot,
+    // but also because it tends to increase the size of this function enough that we can't
+    // inline it, which is especially useful for this function.
+    ScopedStatTimer gc_alloc_stattimer(gc_alloc_stattimer_counter);
 #endif
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 

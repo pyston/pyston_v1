@@ -30,6 +30,7 @@ namespace pyston {
 
 #define STAT_ALLOCATIONS 0 && !DISABLE_STATS
 #define STAT_TIMERS 0 && !DISABLE_STATS
+#define EXPENSIVE_STAT_TIMERS 0 && STAT_TIMERS
 
 #if STAT_TIMERS
 #define STAT_TIMER(id, name)                                                                                           \
