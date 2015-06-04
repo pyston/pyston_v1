@@ -2,7 +2,7 @@
 # right order
 
 import weakref
-import gc
+from testing_helpers import test_gc
 
 def callback(wr):
     print "object was destroyed", wr()
@@ -24,50 +24,36 @@ class NewStyle(object):
     def __del__(self):
         print "deleted", self.index
 
-def strong_scope_old():
-    # These go out of scope first.
+def scope_old1():
     c1 = OldStyle(1)
+    return weakref.ref(c1, callback)
+
+def scope_old2():
     c2 = OldStyle(2)
+    return (weakref.ref(c2, callback), weakref.ref(c2, callback))
+
+def scope_old3():
     c3 = OldStyle(3)
-
-    normal_weakref1 = weakref.ref(c1, callback)
-    normal_weakref2_1 = weakref.ref(c2, callback)
-    normal_weakref2_2 = weakref.ref(c2, callback)
     adverserial_weakref = weakref.ref(c3, retainer(c3))
-    return (normal_weakref1, normal_weakref2_1, normal_weakref2_2)
 
-def strong_scope_new():
-    # These go out of scope first.
+def scope_new1():
     c1 = NewStyle(1)
+    return weakref.ref(c1, callback)
+
+def scope_new2():
     c2 = NewStyle(2)
+    return (weakref.ref(c2, callback), weakref.ref(c2, callback))
+
+def scope_new3():
     c3 = NewStyle(3)
-
-    normal_weakref1 = weakref.ref(c1, callback)
-    normal_weakref2_1 = weakref.ref(c2, callback)
-    normal_weakref2_2 = weakref.ref(c2, callback)
     adverserial_weakref = weakref.ref(c3, retainer(c3))
-    return (normal_weakref1, normal_weakref2_1, normal_weakref2_2)
-
-
-def fact(n):
-    if n <= 1:
-        return n
-    return n * fact(n-1)
 
 print ">> Test old style"
-weakrefs = strong_scope_old()
-
-# make sure to override remaining references to the objects
-# in the stack since the GC will scan the stack conservatively
-fact(10)
-
-gc.collect()
-gc.collect()
+test_gc(scope_old1)
+test_gc(scope_old2)
+test_gc(scope_old3, 3)
 
 print ">> Test new style"
-weakrefs = strong_scope_new()
-
-fact(10)
-
-gc.collect()
-gc.collect()
+test_gc(scope_new1)
+test_gc(scope_new2)
+test_gc(scope_new3, 3)

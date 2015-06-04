@@ -124,7 +124,7 @@ void _bytesAllocatedTripped() {
 
 //////
 /// Finalizers
-//
+
 bool hasFinalizer(Box* b) {
     if (b->cls == instance_cls) {
         // For old-style classes, pretend that there is always a finalizer. We do this

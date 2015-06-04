@@ -171,6 +171,7 @@ inline void clearOrderingState(GCAllocation* header) {
 #undef ORDERING_BITS
 
 bool hasOrderedFinalizer(Box* b);
+bool heapObjectHasCallableFinalizer(GCAllocation* al);
 void finalize(Box* b);
 bool isWeaklyReferenced(Box* b);
 

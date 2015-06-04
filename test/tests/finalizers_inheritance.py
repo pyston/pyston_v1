@@ -1,4 +1,4 @@
-import gc
+from testing_helpers import test_gc
 
 class C(object):
     def __del__(self):
@@ -25,25 +25,25 @@ class H(C):
 class I(H, E):
     pass
 
-def fact(n):
-    if n <= 1:
-        return n
-    return n * fact(n-1)
-
-def foo():
+def scopeC():
     c = C()
+def scopeD():
     d = D()
+def scopeE():
     e = E()
+def scopeF():
     f = F()
+def scopeG():
     g = G()
+def scopeH():
     h = H()
+def scopeI():
     i = I()
 
-foo()
-
-# override remaining references on the stack
-fact(10)
-
-gc.collect()
-gc.collect()
-gc.collect()
+test_gc(scopeC)
+test_gc(scopeD)
+test_gc(scopeE)
+test_gc(scopeF)
+test_gc(scopeG)
+test_gc(scopeH)
+test_gc(scopeI)

@@ -2,7 +2,7 @@
 # It's hard to guarantee the order of weakref callbacks being called
 # when we have a GC
 import weakref
-import gc
+from testing_helpers import test_gc
 
 def callback(wr):
     print "object was destroyed", wr()
@@ -33,23 +33,8 @@ def foo2():
     wr3 = weakref.ref(c3, weak_retainer(wr4))
     return (wr3, wr4)
 
-def fact(n):
-    if n <= 1:
-        return n
-    return n * fact(n-1)
-
-wr1, wr2 = foo1()
-wr3, wr4 = foo2()
-
-# make sure to override remaining references to the weakref
-# in the stack since the GC will scan the stack conservatively
-fact(10)
-
-gc.collect()
-gc.collect()
-gc.collect()
-gc.collect()
-gc.collect()
+wr1, wr2 = test_gc(foo1, 5)
+wr3, wr4 = test_gc(foo2, 5)
 
 print wr1(), wr2()
 print wr3(), wr4()

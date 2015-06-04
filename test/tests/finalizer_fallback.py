@@ -1,4 +1,6 @@
-import gc
+from testing_helpers import test_gc
+
+# __del__ does not get called because it doesn't fallback to getattr
 
 # Note that this is an old-style class.
 class C:
@@ -18,15 +20,4 @@ def foo():
     # Here, c goes out of scope.
     return
 
-foo()
-
-def fact(n):
-    if n <= 1:
-        return n
-    return n * fact(n-1)
-
-fact(10)
-
-# __del__ does not get called because it doesn't fallback to getattr
-gc.collect()
-gc.collect()
+test_gc(foo)

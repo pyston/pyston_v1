@@ -83,6 +83,8 @@ protected:
     void** start;
     void** end;
 
+    void* previous_pop = NULL;
+
     void get_chunk() {
         if (free_chunks.size()) {
             start = free_chunks.back();
@@ -142,10 +144,12 @@ public:
 
 
     void* pop() {
-        if (cur > start)
-            return *--cur;
-
-        return pop_chunk_and_item();
+        if (cur > start) {
+            previous_pop = *--cur;
+        } else {
+            previous_pop = pop_chunk_and_item();
+        }
+        return previous_pop;
     }
 };
 std::vector<void**> TraceStack::free_chunks;
@@ -160,6 +164,26 @@ public:
     }
 
     virtual bool visit_action(GCAllocation* al) {
+// Use this to print the directed edges of the GC graph traversal.
+// i.e. print every a > b where a is a pointer and b is something a references
+#if 0
+        if (previous_pop) {
+            GCAllocation* source_allocation = GCAllocation::fromUserData(previous_pop);
+            if (source_allocation->kind_id == GCKind::PYTHON) {
+                printf("(%s) ", ((Box*)previous_pop)->cls->tp_name);
+            }
+            printf("%p > %p", previous_pop, al->user_data);
+        } else {
+            printf("source %p", al->user_data);
+        }
+
+        if (al->kind_id == GCKind::PYTHON) {
+            printf(" (%s)", ((Box*)al->user_data)->cls->tp_name);
+        }
+        printf("\n");
+
+#endif
+
         if (isMarked(al)) {
             return false;
         } else {
