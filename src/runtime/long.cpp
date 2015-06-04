@@ -1241,6 +1241,10 @@ Box* longHash(BoxedLong* self) {
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
+    // If the long fits into an int we have to return the same hash in order that we can find the value in a dict.
+    if (mpz_fits_slong_p(self->n))
+        return boxInt(mpz_get_si(self->n));
+
     // Not sure if this is a good hash function or not;
     // simple, but only includes top bits:
     union {
