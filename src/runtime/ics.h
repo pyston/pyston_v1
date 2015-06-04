@@ -35,6 +35,7 @@ public:
 class RuntimeIC {
 private:
     void* addr;
+    size_t total_size;
     EHFrameManager eh_frame;
 
     std::unique_ptr<ICInfo> icinfo;
