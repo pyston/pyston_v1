@@ -92,8 +92,8 @@ struct Stats {
     static void setEnabled(bool enabled) {}
     static void dump(bool includeZeros = true) { printf("(Stats disabled)\n"); }
     static void clear() {}
-    static void log(int id, int count = 1) {}
-    static int getStatId(const std::string& name) { return 0; }
+    static void log(uint64_t* counter, int count = 1) {}
+    static uint64_t* getStatCounter(const std::string& name) { return nullptr; }
     static void endOfInit() {}
 };
 struct StatCounter {
@@ -200,8 +200,7 @@ public:
 };
 #else
 struct StatTimer {
-    StatTimer(int statid) {}
-    StatTimer(int statid, uint64_t at_time) {}
+    StatTimer(uint64_t*) {}
     ~StatTimer() {}
     bool isPaused() const { return false; }
 

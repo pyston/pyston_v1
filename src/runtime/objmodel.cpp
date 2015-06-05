@@ -3711,7 +3711,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return boxBool(b);
     }
 
-    if (isUserDefined(lhs->cls) || isUserDefined(rhs->cls)) {
+    bool any_user_defined = isUserDefined(lhs->cls) || isUserDefined(rhs->cls);
+    if (any_user_defined) {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
     }
@@ -3753,7 +3754,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             RELEASE_ASSERT(0, "%d", op_type);
     }
 
-    if (rewrite_args && lhs->cls == rhs->cls && !PyInstance_Check(lhs) && lhs->cls->tp_richcompare != NULL
+    if (!any_user_defined && lhs->cls == rhs->cls && !PyInstance_Check(lhs) && lhs->cls->tp_richcompare != NULL
         && lhs->cls->tp_richcompare != slot_tp_richcompare) {
         // This branch is the `v->ob_type == w->ob_type` branch of PyObject_RichCompare, but
         // simplified by using the assumption that tp_richcompare exists and never returns NotImplemented
@@ -3763,10 +3764,12 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
         Box* r = lhs->cls->tp_richcompare(lhs, rhs, cpython_op_type);
         RELEASE_ASSERT(r != NotImplemented, "%s returned notimplemented?", lhs->cls->tp_name);
-        rewrite_args->out_rtn
-            = rewrite_args->rewriter->call(true, (void*)lhs->cls->tp_richcompare, rewrite_args->lhs, rewrite_args->rhs,
-                                           rewrite_args->rewriter->loadConst(cpython_op_type));
-        rewrite_args->out_success = true;
+        if (rewrite_args) {
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)lhs->cls->tp_richcompare, rewrite_args->lhs,
+                                               rewrite_args->rhs, rewrite_args->rewriter->loadConst(cpython_op_type));
+            rewrite_args->out_success = true;
+        }
         return r;
     }
 

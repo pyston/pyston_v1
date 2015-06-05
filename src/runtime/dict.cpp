@@ -205,10 +205,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 
         raiseExcHelper(KeyError, k);
     }
-
-    Box* pos = self->d[k];
-
-    return pos;
+    return it->second;
 }
 
 extern "C" PyObject* PyDict_New() noexcept {
