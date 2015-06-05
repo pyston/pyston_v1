@@ -42,6 +42,7 @@
 #include "codegen/memmgr.h"
 #include "codegen/profiling/profiling.h"
 #include "codegen/stackmaps.h"
+#include "core/hash.h"
 #include "core/options.h"
 #include "core/types.h"
 #include "core/util.h"
@@ -206,38 +207,6 @@ public:
 
 class PystonObjectCache : public llvm::ObjectCache {
 private:
-    // Stream which calculates the SHA256 hash of the data writen to.
-    class HashOStream : public llvm::raw_ostream {
-        EVP_MD_CTX* md_ctx;
-
-        void write_impl(const char* ptr, size_t size) override { EVP_DigestUpdate(md_ctx, ptr, size); }
-        uint64_t current_pos() const override { return 0; }
-
-    public:
-        HashOStream() {
-            md_ctx = EVP_MD_CTX_create();
-            RELEASE_ASSERT(md_ctx, "");
-            int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
-            RELEASE_ASSERT(ret == 1, "");
-        }
-        ~HashOStream() { EVP_MD_CTX_destroy(md_ctx); }
-
-        std::string getHash() {
-            flush();
-            unsigned char md_value[EVP_MAX_MD_SIZE];
-            unsigned int md_len = 0;
-            int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
-            RELEASE_ASSERT(ret == 1, "");
-
-            std::string str;
-            str.reserve(md_len * 2 + 1);
-            llvm::raw_string_ostream stream(str);
-            for (int i = 0; i < md_len; ++i)
-                stream.write_hex(md_value[i]);
-            return stream.str();
-        }
-    };
-
     llvm::SmallString<128> cache_dir;
     std::string module_identifier;
     std::string hash_before_codegen;
@@ -282,7 +251,7 @@ public:
         module_identifier = M->getModuleIdentifier();
 
         // Generate a hash for the module
-        HashOStream hash_stream;
+        SHA256OStream hash_stream;
         llvm::WriteBitcodeToFile(M, hash_stream);
         hash_before_codegen = hash_stream.getHash();
 

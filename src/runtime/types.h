@@ -29,6 +29,35 @@
 #include "gc/gc_alloc.h"
 
 namespace pyston {
+struct LocalShape {
+    uint64_t t0;
+    uint64_t t1;
+    uint64_t t2;
+    uint64_t t3;
+
+    LocalShape(uint64_t t0, uint64_t t1, uint64_t t2, uint64_t t3) : t0(t0), t1(t1), t2(t2), t3(t3) {}
+    LocalShape(Box* b) : t0((uintptr_t)b), t1((uintptr_t)b), t2((uintptr_t)b), t3((uintptr_t)b) {}
+
+    bool isUninitialized() const { return t0 == 0 && t1 == 0 && t2 == 0 && t3 == 0; }
+
+    static LocalShape uninitialized() { return LocalShape(0, 0, 0, 0); }
+};
+}
+
+namespace llvm {
+template <> struct DenseMapInfo<pyston::LocalShape> {
+    static inline pyston::LocalShape getEmptyKey() { return pyston::LocalShape::uninitialized(); }
+    static inline pyston::LocalShape getTombstoneKey() { return pyston::LocalShape(-1, -1, -1, -1); }
+    static unsigned getHashValue(const pyston::LocalShape& localVal) {
+        return (unsigned)localVal.t0 ^ localVal.t1 ^ localVal.t2 ^ localVal.t3;
+    }
+    static bool isEqual(const pyston::LocalShape& s1, const pyston::LocalShape& s2) {
+        return (s1.t0 == s2.t0 && s1.t1 == s2.t1 && s1.t2 == s2.t2 && s1.t3 == s2.t3);
+    }
+};
+}
+
+namespace pyston {
 
 extern bool IN_SHUTDOWN;
 
@@ -140,6 +169,47 @@ extern "C" void printFloat(double d);
 Box* objectStr(Box*);
 Box* objectRepr(Box*);
 
+class Shape : public GCAllocated<gc::GCKind::SHAPE> {
+public:
+    static Shape* root_shape;
+
+    ContiguousMap<LocalShape, Shape*, llvm::DenseMap<LocalShape, int>> children;
+    Shape* parent;
+
+    static LocalShape computeLocalShape(Box* b);
+    static Shape* computeTotalShape(Box* b);
+
+
+    Shape* getOrMakeChild(LocalShape child_local_shape) {
+        auto it = children.find(child_local_shape);
+        if (it != children.end())
+            return children.getMapped(it->second);
+
+        Shape* rtn = new Shape(this);
+
+        this->children[child_local_shape] = rtn;
+        return rtn;
+    }
+
+    static Shape* makeRoot() {
+#ifndef NDEBUG
+        static bool made = false;
+        assert(!made);
+        made = true;
+#endif
+        return new Shape(NULL);
+    }
+
+    void gc_visit(GCVisitor* visitor) {
+        visitor->visit(parent);
+        visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
+    }
+
+    ~Shape() {}
+
+private:
+    Shape(Shape* parent) : parent(parent) {}
+};
 
 class BoxedClass : public BoxVar {
 public:
@@ -149,6 +219,9 @@ public:
     PyTypeObject_BODY;
 
     HCAttrs attrs;
+
+    LocalShape local_shape;
+    Shape* total_shape;
 
     // TODO: these don't actually get deallocated right now
     std::unique_ptr<CallattrIC> hasnext_ic, next_ic, repr_ic;
@@ -260,6 +333,8 @@ static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, 
 static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
 static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
 static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
+static_assert(offsetof(pyston::BoxedClass, local_shape) == offsetof(struct _typeobject, _local_shape), "");
+static_assert(offsetof(pyston::BoxedClass, total_shape) == offsetof(struct _typeobject, _total_shape), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
 static_assert(offsetof(pyston::BoxedHeapClass, as_number) == offsetof(PyHeapTypeObject, as_number), "");
@@ -587,6 +662,7 @@ public:
 
     Box* const* begin() const { return &elts[0]; }
     Box* const* end() const { return &elts[ob_size]; }
+
     Box*& operator[](size_t index) { return elts[index]; }
 
     size_t size() const { return ob_size; }

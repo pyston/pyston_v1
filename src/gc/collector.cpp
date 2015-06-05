@@ -332,6 +332,9 @@ void markPhase() {
         } else if (kind_id == GCKind::HIDDEN_CLASS) {
             HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
             hcls->gc_visit(&visitor);
+        } else if (kind_id == GCKind::SHAPE) {
+            Shape* shape = reinterpret_cast<Shape*>(p);
+            shape->gc_visit(&visitor);
         } else {
             RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
         }

@@ -212,7 +212,7 @@ struct HeapStatistics {
     int num_hcls_by_attrs[HCLS_ATTRS_STAT_MAX + 1];
     int num_hcls_by_attrs_exceed;
 
-    TypeStats python, conservative, conservative_python, untracked, hcls, precise;
+    TypeStats python, conservative, conservative_python, untracked, hcls, precise, shape;
     TypeStats total;
 
     HeapStatistics(bool collect_cls_stats, bool collect_hcls_stats)
@@ -277,6 +277,9 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
             else
                 stats->num_hcls_by_attrs_exceed++;
         }
+    } else if (al->kind_id == GCKind::SHAPE) {
+        stats->shape.nallocs++;
+        stats->shape.nbytes += nbytes;
     } else if (al->kind_id == GCKind::PRECISE) {
         stats->precise.nallocs++;
         stats->precise.nbytes += nbytes;
@@ -306,6 +309,7 @@ void Heap::dumpHeapStatistics(int level) {
     stats.conservative_python.print("conservative_python");
     stats.untracked.print("untracked");
     stats.hcls.print("hcls");
+    stats.shape.print("shape");
     stats.precise.print("precise");
 
     if (collect_cls_stats) {

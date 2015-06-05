@@ -61,6 +61,12 @@ static Box* dumpStats(Box* includeZeros) {
     return None;
 }
 
+static Box* dumpTotalShape(Box* cls) {
+    Shape* s = Shape::computeTotalShape(cls);
+    fprintf(stderr, "TotalShape(%p)\n", s);
+    return None;
+}
+
 void setupPyston() {
     pyston_module = createModule("__pyston__");
 
@@ -72,5 +78,9 @@ void setupPyston() {
     pyston_module->giveAttr("dumpStats",
                             new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 1, 1, false, false),
                                                              "dumpStats", { False }));
+
+    pyston_module->giveAttr("dumpTotalShape",
+                            new BoxedBuiltinFunctionOrMethod(
+                                boxRTFunction((void*)dumpTotalShape, NONE, 1, 0, false, false), "dumpTotalShape"));
 }
 }

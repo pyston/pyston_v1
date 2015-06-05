@@ -454,6 +454,14 @@ struct _typeobject {
 
     void* _hcls;
     void* _hcattrs;
+    struct {
+        // we store the sha256 hash in here
+        uint64_t t0;
+        uint64_t t1;
+        uint64_t t2;
+        uint64_t t3;
+    } _local_shape;
+    void* _total_shape;
     char _ics[32];
     void* _gcvisit_func;
     void* _dtor;
