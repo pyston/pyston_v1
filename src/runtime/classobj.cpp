@@ -712,24 +712,22 @@ static PyObject* instance_index(PyObject* self) noexcept {
     return res;
 }
 
-Box* instanceEq(Box* _inst, Box* other) {
+Box* _instanceBinary(Box* _inst, Box* other, const char* attr) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    Box* func = _instanceGetattribute(inst, boxStrConstant("__eq__"), false);
+    Box* func = _instanceGetattribute(inst, boxStrConstant(attr), false);
     if (!func)
         return NotImplemented;
     return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 
-Box* instanceNe(Box* _inst, Box* other) {
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+Box* instanceEq(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__eq__");
+}
 
-    Box* func = _instanceGetattribute(inst, boxStrConstant("__ne__"), false);
-    if (!func)
-        return NotImplemented;
-    return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
+Box* instanceNe(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__ne__");
 }
 
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
