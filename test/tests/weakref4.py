@@ -13,7 +13,10 @@ def recurse(f, n):
     return f()
 
 
-w = recurse(doStuff, 100)
+l1 = []
+for i in xrange(5):
+    w = recurse(doStuff, 100)
+    l1.append(w)
 
 # Try creating a large object to make sure we can handle them:
 def f():
@@ -22,10 +25,12 @@ def f():
         __slots__ = ['a' + str(i) for i in xrange(1000)]
     return weakref.ref(C)
 
-
-r = recurse(f, 100)
+l2 = []
+for i in xrange(5):
+    r = recurse(f, 100)
+    l2.append(r)
 
 import gc
 gc.collect()
-assert r() is None, "object was not collected"
-assert w() is None, "object was not collected"
+assert any(r() is None for r in l2), "object was not collected"
+assert any(w() is None for w in l1), "object was not collected"
