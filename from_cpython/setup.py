@@ -40,8 +40,21 @@ def pyexpat_ext():
                       depends = expat_depends,
                     )
 
+def elementtree_ext():
+    # elementtree depends on expat
+    pyexpat = pyexpat_ext()
+    define_macros = pyexpat.define_macros + [('USE_PYEXPAT_CAPI', None),]
+    return Extension('_elementtree',
+                        define_macros = define_macros,
+                        include_dirs = pyexpat.include_dirs,
+                        libraries = pyexpat.libraries,
+                        sources = [relpath('Modules/_elementtree.c')],
+                        depends = pyexpat.depends,
+                      )
+
+
 setup(name="Pyston",
         version="1.0",
         description="Pyston shared modules",
-        ext_modules=[multiprocessing_ext(), pyexpat_ext()]
+        ext_modules=[multiprocessing_ext(), pyexpat_ext(), elementtree_ext()]
     )

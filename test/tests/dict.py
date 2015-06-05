@@ -1,7 +1,7 @@
 d = {2:2}
 d[1] = 1
 print d
-print d[1]
+print d[1], d[1L], d[1.0], d[True]
 
 d = {}
 for i in xrange(10):

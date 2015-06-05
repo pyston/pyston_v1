@@ -1208,7 +1208,8 @@ SHAREDMODS_SRCS := \
 	expat/xmltok.c \
 	expat/xmltok_impl.c \
 	expat/xmltok_ns.c \
- 	pyexpat.c
+ 	pyexpat.c \
+ 	_elementtree.c
 SHAREDMODS_SRCS := $(SHAREDMODS_SRCS:%=from_cpython/Modules/%)
 SHAREDMODS_OBJS := $(SHAREDMODS_NAMES:%=lib_pyston/%.pyston.so)
 

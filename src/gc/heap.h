@@ -27,9 +27,9 @@
 namespace pyston {
 
 namespace gc {
-extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
-extern "C" inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
-extern "C" inline void gc_free(void* ptr) __attribute__((visibility("default")));
+extern "C" void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
+extern "C" void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
+extern "C" void gc_free(void* ptr) __attribute__((visibility("default")));
 }
 
 template <class T> class StlCompatAllocator {
