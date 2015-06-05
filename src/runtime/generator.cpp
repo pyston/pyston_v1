@@ -124,7 +124,7 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
     // check if the generator already exited
     if (self->entryExited) {
         freeGeneratorStack(self);
-        return;
+        raiseExcHelper(StopIteration, (const char*)nullptr);
     }
 
     self->returnValue = v;
@@ -189,9 +189,10 @@ Box* generatorSend(Box* s, Box* v) {
         // exc.
         assert(self->exception.type == NULL || self->exception.matches(StopIteration));
         ExcInfo old_exc = self->exception;
-        self->exception = excInfoForRaise(StopIteration, None, None);
+        // Clear the exception for GC purposes:
+        self->exception = ExcInfo(nullptr, nullptr, nullptr);
         if (old_exc.type == NULL)
-            old_exc = self->exception;
+            raiseExcHelper(StopIteration, (const char*)nullptr);
         raiseRaw(old_exc);
     }
 
