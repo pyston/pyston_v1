@@ -161,7 +161,10 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
 
     if (self->entryExited) {
         freeGeneratorStack(self);
-        self->exception = excInfoForRaise(StopIteration, None, None);
+        // Reset the current exception.
+        // We could directly create the StopIteration exception but we delay creating it because often the caller is not
+        // interested in the exception (=generatorHasnext). If we really need it we will create it inside generatorSend.
+        self->exception = ExcInfo(NULL, NULL, NULL);
         return;
     }
 }
@@ -184,9 +187,11 @@ Box* generatorSend(Box* s, Box* v) {
         // create a new one if the generator exited implicit.
         // CPython raises the custom exception just once, on the next generator 'next' it will we a normal StopIteration
         // exc.
-        assert(self->exception.matches(StopIteration));
+        assert(self->exception.type == NULL || self->exception.matches(StopIteration));
         ExcInfo old_exc = self->exception;
         self->exception = excInfoForRaise(StopIteration, None, None);
+        if (old_exc.type == NULL)
+            old_exc = self->exception;
         raiseRaw(old_exc);
     }
 
