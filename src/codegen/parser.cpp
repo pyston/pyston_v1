@@ -1122,6 +1122,7 @@ AST_Module* caching_parse_file(const char* fn) {
             return parse_file(fn);
     }
 
+    static const int MAX_TRIES = 5;
 
     std::vector<char> file_data;
     int tries = 0;
@@ -1138,8 +1139,11 @@ AST_Module* caching_parse_file(const char* fn) {
                     file_data.push_back(buf[i]);
 
                 if (read == 0) {
-                    if (ferror(fp))
+                    if (ferror(fp)) {
+                        if (tries == MAX_TRIES)
+                            fprintf(stderr, "Error reading %s: %s\n", cache_fn.c_str(), strerror(errno));
                         good = false;
+                    }
                     break;
                 }
             }
@@ -1153,8 +1157,8 @@ AST_Module* caching_parse_file(const char* fn) {
 
         if (good) {
             if (strncmp(&file_data[0], getMagic(), MAGIC_STRING_LENGTH) != 0) {
-                if (VERBOSITY()) {
-                    printf("Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
+                if (VERBOSITY() || tries == MAX_TRIES) {
+                    fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
                 }
                 good = false;
             }
@@ -1168,8 +1172,8 @@ AST_Module* caching_parse_file(const char* fn) {
             int expected_total_length = MAGIC_STRING_LENGTH + LENGTH_LENGTH + CHECKSUM_LENGTH + length;
 
             if (expected_total_length != file_data.size()) {
-                if (VERBOSITY()) {
-                    printf("Warning: truncated .pyc file found; ignoring\n");
+                if (VERBOSITY() || tries == MAX_TRIES) {
+                    fprintf(stderr, "Warning: truncated .pyc file found; ignoring\n");
                 }
                 good = false;
             } else {
@@ -1188,8 +1192,8 @@ AST_Module* caching_parse_file(const char* fn) {
             }
 
             if (checksum != 0) {
-                if (VERBOSITY())
-                    printf("pyc checksum failed!\n");
+                if (VERBOSITY() || tries == MAX_TRIES)
+                    fprintf(stderr, "pyc checksum failed!\n");
                 good = false;
             }
         }
@@ -1204,12 +1208,15 @@ AST_Module* caching_parse_file(const char* fn) {
                 assert(rtn->type == AST_TYPE::Module);
                 return ast_cast<AST_Module>(rtn);
             }
+
+            if (tries == MAX_TRIES)
+                fprintf(stderr, "Returned NULL module?\n");
             good = false;
         }
 
         assert(!good);
         tries++;
-        RELEASE_ASSERT(tries <= 5, "repeatedly failing to parse file");
+        RELEASE_ASSERT(tries <= MAX_TRIES, "repeatedly failing to parse file");
         if (!good) {
             assert(!fp);
             file_data.clear();
