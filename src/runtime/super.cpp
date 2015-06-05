@@ -38,7 +38,7 @@ public:
     DEFAULT_CLASS(super_cls);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == super_cls);
+        assert(isSubclass(_o->cls, super_cls));
         BoxedSuper* o = static_cast<BoxedSuper*>(_o);
 
         boxGCHandler(v, o);
@@ -54,7 +54,7 @@ public:
 static const char* class_str = "__class__";
 
 Box* superGetattribute(Box* _s, Box* _attr) {
-    RELEASE_ASSERT(_s->cls == super_cls, "");
+    RELEASE_ASSERT(isSubclass(_s->cls, super_cls), "");
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
 
     RELEASE_ASSERT(_attr->cls == str_cls, "");
@@ -128,10 +128,10 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, std::string(attr->s()), NULL);
-    // TODO implement this
-    RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
-    return processDescriptor(r, s, s->cls);
+    Box* r = getattrInternalGeneric(s, attr->s(), NULL, true, false, NULL, NULL);
+    if (r)
+        return processDescriptor(r, s, s->cls);
+    raiseExcHelper(AttributeError, "'super' object has no attribute '%s'", attr->data());
 }
 
 Box* superRepr(Box* _s) {
@@ -167,7 +167,7 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
 }
 
 Box* superInit(Box* _self, Box* _type, Box* obj) {
-    RELEASE_ASSERT(_self->cls == super_cls, "");
+    RELEASE_ASSERT(isSubclass(_self->cls, super_cls), "");
     BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
     if (!isSubclass(_type->cls, type_cls))
@@ -187,12 +187,44 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     return None;
 }
 
+static PyObject* superDescrGet(PyObject* self, PyObject* obj, PyObject* type) {
+    BoxedSuper* su = static_cast<BoxedSuper*>(self);
+    BoxedSuper* newobj;
+
+    if (obj == NULL || obj == None || su->obj != NULL) {
+        /* Not binding to an object, or already bound */
+        Py_INCREF(self);
+        return self;
+    }
+    if (su->cls != super_cls) {
+        /* If su is an instance of a (strict) subclass of super,
+           call its type */
+        return runtimeCall(su->cls, ArgPassSpec(2, 0, false, false), su->type, obj, NULL, NULL, NULL);
+    } else {
+        /* Inline the common case */
+        BoxedClass* obj_type = supercheck(su->type, obj);
+        if (obj_type == NULL)
+            return NULL;
+        newobj = new (su->cls) BoxedSuper(NULL, NULL, NULL);
+        if (newobj == NULL)
+            return NULL;
+        Py_INCREF(su->type);
+        Py_INCREF(obj);
+        newobj->type = su->type;
+        newobj->obj = obj;
+        newobj->obj_type = obj_type;
+        return (PyObject*)newobj;
+    }
+}
+
 void setupSuper() {
     super_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false,
                                        "super");
 
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
+
+    super_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)superDescrGet, UNKNOWN, 3)));
 
     super_cls->giveAttr("__init__",
                         new BoxedFunction(boxRTFunction((void*)superInit, UNKNOWN, 3, 1, false, false), { NULL }));
