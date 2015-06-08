@@ -19,7 +19,7 @@ def create_virtenv(name, package_list = None, force_create = False):
             subprocess.check_call(args)
 
             if package_list:
-                subprocess.check_call([name + "/bin/pip", "install"] + package_list)
+                pip_install(name, package_list)
         except:
             print "Error occurred; trying to remove partially-created directory"
             ei = sys.exc_info()
@@ -31,6 +31,8 @@ def create_virtenv(name, package_list = None, force_create = False):
     else:
         print "Reusing existing virtualenv"
 
+def pip_install(name, package_list):
+    subprocess.check_call([name + "/bin/pip", "install"] + package_list)
 
 def parse_output(output):
     result = []
@@ -42,6 +44,14 @@ def parse_output(output):
     for m in it:
         d = { "failures" : int(m.group(2)), "errors" : int(m.group(1)) }
         result.append(d)
+    it = re.finditer("FAILED \(failures=(\d+)\)", output)
+    for m in it:
+        d = { "failures" : int(m.group(1)), "errors" : 0 }
+        result.append(d)
+    it = re.finditer("FAILED \(errors=(\d+)\)", output)
+    for m in it:
+        d = { "failures" : 0, "errors" : int(m.group(1)) }
+        result.append(d)
     return result
 
 def run_test_and_parse_output(cmd, cwd, env = None):
@@ -49,4 +59,17 @@ def run_test_and_parse_output(cmd, cwd, env = None):
     output, unused_err = process.communicate()
     retcode = process.poll()
     return retcode, parse_output(output), output
+
+def run_test(cmd, cwd, expected, env = None):
+    errcode, result, output = run_test_and_parse_output(cmd, cwd=cwd, env=env)
+    print
+    print "Return code:", errcode
+    if expected == result:
+        print "Received expected output"
+    else:
+        print >> sys.stderr, output
+        print >> sys.stderr, "WRONG output"
+        print >> sys.stderr, "is:", result
+        print >> sys.stderr, "expected:", expected
+        assert result == expected
 

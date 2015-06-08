@@ -1,3 +1,4 @@
+# skip-if: True
 import os, sys, subprocess
 from test_helper import create_virtenv, run_test_and_parse_output
 
