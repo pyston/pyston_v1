@@ -520,14 +520,15 @@ static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
     return rtn;
 }
 
-static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
+static std::unique_ptr<const LineInfo> lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     AST_stmt* current_stmt = frame_it.getCurrentStatement();
     auto* cf = frame_it.getCF();
     assert(cf);
 
     auto source = cf->clfunc->source.get();
 
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+    return std::unique_ptr<const LineInfo>(
+        new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName()));
 }
 
 // To produce a traceback, we:
@@ -583,11 +584,9 @@ BoxedTraceback* getTraceback() {
 
     Timer _t("getTraceback", 1000);
 
-    std::vector<const LineInfo*> entries;
+    std::vector<std::unique_ptr<const LineInfo>> entries;
     unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
-        const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
-        if (line_info)
-            entries.push_back(line_info);
+        entries.push_back(lineInfoForFrame(*frame_iter.get()));
         return false;
     });
 

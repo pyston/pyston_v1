@@ -70,9 +70,8 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxStrConstant(msg), NULL, NULL, NULL, NULL);
 
     auto tb = getTraceback();
-    std::vector<const LineInfo*> entries = tb->lines;
-    entries.push_back(new LineInfo(lineno, col_offset, file, func));
-    raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
+    tb->lines.push_back(std::unique_ptr<LineInfo>(new LineInfo(lineno, col_offset, file, func)));
+    raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(tb->lines))));
 }
 
 void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...) {

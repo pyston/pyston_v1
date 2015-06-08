@@ -53,7 +53,7 @@ void printTraceback(Box* b) {
 
     fprintf(stderr, "Traceback (most recent call last):\n");
 
-    for (auto line : tb->lines) {
+    for (auto&& line : tb->lines) {
         fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
 
         if (line->line < 0)
@@ -98,7 +98,7 @@ Box* BoxedTraceback::getLines(Box* b) {
     if (!tb->py_lines) {
         BoxedList* lines = new BoxedList();
         lines->ensure(tb->lines.size());
-        for (auto line : tb->lines) {
+        for (auto&& line : tb->lines) {
             auto l = BoxedTuple::create({ boxString(line->file), boxString(line->func), boxInt(line->line) });
             listAppendInternal(lines, l);
         }
@@ -113,6 +113,7 @@ void setupTraceback() {
                                            sizeof(BoxedTraceback), false, "traceback");
 
     traceback_cls->giveAttr("getLines", new BoxedFunction(boxRTFunction((void*)BoxedTraceback::getLines, UNKNOWN, 1)));
+    traceback_cls->simple_destructor = BoxedTraceback::destructor;
 
     traceback_cls->freeze();
 }
