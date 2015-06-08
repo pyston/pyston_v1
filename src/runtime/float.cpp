@@ -651,9 +651,9 @@ BoxedFloat* _floatNew(Box* a) {
             raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
         return new BoxedFloat(r);
     } else {
-        static const std::string float_str("__float__");
-        Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
+        Box* r = callattr(a, float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                          NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
             fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n", getTypeName(a));

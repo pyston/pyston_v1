@@ -56,15 +56,15 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool) : takes_param_names(t
         for (int i = 0; i < arguments->args.size(); i++) {
             AST_expr* arg = arguments->args[i];
             if (arg->type == AST_TYPE::Name) {
-                args.push_back(ast_cast<AST_Name>(arg)->id.str());
+                args.push_back(ast_cast<AST_Name>(arg)->id.s());
             } else {
                 InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                args.push_back(dot_arg_name.str());
+                args.push_back(dot_arg_name.s());
             }
         }
 
-        vararg = arguments->vararg.str();
-        kwarg = arguments->kwarg.str();
+        vararg = arguments->vararg.s();
+        kwarg = arguments->kwarg.s();
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -92,9 +92,9 @@ const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name.str();
+            return ast_cast<AST_ClassDef>(ast)->name.s();
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name.str();
+            return ast_cast<AST_FunctionDef>(ast)->name.s();
         case AST_TYPE::Lambda:
             return "<lambda>";
         case AST_TYPE::Module:
@@ -158,7 +158,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
         num_jits.log();
 
         if (VERBOSITY() >= 1 && us > 100000) {
-            printf("Took %.1fs to compile %s\n", us * 0.000001, cf->func->getName().str().c_str());
+            printf("Took %.1fs to compile %s\n", us * 0.000001, cf->func->getName().data());
             printf("Has %ld basic blocks\n", cf->func->getBasicBlockList().size());
         }
     }
@@ -219,7 +219,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
         if (entry_descriptor && VERBOSITY("irgen") >= 2) {
             for (const auto& p : entry_descriptor->args) {
-                ss << p.first.str() << ": " << p.second->debugName() << '\n';
+                ss << p.first.s() << ": " << p.second->debugName() << '\n';
             }
         }
 
@@ -351,8 +351,10 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     EffortLevel effort = EffortLevel::INTERPRETED;
 
     Box* doc_string = cl->source->getDocString();
-    if (doc_string != None)
-        setGlobal(boxedLocals, "__doc__", doc_string);
+    if (doc_string != None) {
+        static BoxedString* doc_box = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
+        setGlobal(boxedLocals, doc_box, doc_string);
+    }
 
     CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
     assert(cf->clfunc->versions.size());

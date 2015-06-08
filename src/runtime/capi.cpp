@@ -233,19 +233,8 @@ done:
 
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept {
-    if (!isSubclass(attr_name->cls, str_cls)) {
-        if (PyUnicode_Check(attr_name)) {
-            attr_name = _PyUnicode_AsDefaultEncodedString(attr_name, NULL);
-            if (attr_name == NULL)
-                return NULL;
-        } else {
-            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
-            return NULL;
-        }
-    }
-
     try {
-        return getattr(o, static_cast<BoxedString*>(attr_name)->data());
+        return getattrMaybeNonstring(o, attr_name);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -974,7 +963,7 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
 }
 
 extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
-    PyErr_SetObject(exception, boxStrConstant(string));
+    PyErr_SetObject(exception, boxString(string));
 }
 
 extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
@@ -1607,7 +1596,7 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
     checkAndThrowCAPIException();
 
     BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxStrConstant(full_name.c_str());
+    Box* s = boxString(full_name);
     Box* _m = sys_modules->d[s];
     RELEASE_ASSERT(_m, "dynamic module not initialized properly");
     assert(_m->cls == module_cls);
@@ -1619,7 +1608,7 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
 
 Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
                                      Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                     const std::vector<const std::string*>* keyword_names) {
+                                     const std::vector<BoxedString*>* keyword_names) {
     if (argspec != ArgPassSpec(2))
         return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
@@ -1646,7 +1635,7 @@ static Box* methodGetDoc(Box* b, void*) {
     assert(b->cls == method_cls);
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
     if (s)
-        return boxStrConstant(s);
+        return boxString(s);
     return None;
 }
 

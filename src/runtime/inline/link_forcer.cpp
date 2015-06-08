@@ -16,6 +16,7 @@
 // This is so that the types of the functions are available to the compiler.
 
 #include "codegen/irgen/hooks.h"
+#include "core/ast.h"
 #include "core/types.h"
 #include "gc/heap.h"
 #include "runtime/complex.h"
@@ -38,8 +39,9 @@ static void forceLink(void* x) {
 
 namespace _force {
 
-// Force the "FrameInfo" type to make it into the stdlib:
-FrameInfo* _frame_info_forcer;
+// Create dummy objects of these types to make sure the types make it into the stdlib:
+FrameInfo* _frameinfo_forcer;
+AST_stmt* _asttmt_forcer;
 
 #define FORCE(name) forceLink((void*)name)
 void force() {
@@ -50,7 +52,6 @@ void force() {
     FORCE(unboxInt);
     FORCE(boxFloat);
     FORCE(unboxFloat);
-    FORCE(boxStringPtr);
     FORCE(boxCLFunction);
     FORCE(unboxCLFunction);
     FORCE(boxInstanceMethod);

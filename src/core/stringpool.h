@@ -33,19 +33,25 @@ template <> struct hash<llvm::StringRef> {
 
 namespace pyston {
 
+class BoxedString;
+
+namespace gc {
+class GCVisitor;
+}
+
 class InternedStringPool;
 class InternedString {
 private:
-    const std::string* _str;
+    BoxedString* _str;
 
 #ifndef NDEBUG
     // Only for testing purposes:
     InternedStringPool* pool;
-    InternedString(const std::string* str, InternedStringPool* pool) : _str(str), pool(pool) {}
+    InternedString(BoxedString* str, InternedStringPool* pool) : _str(str), pool(pool) {}
 
     static InternedStringPool* invalidPool() { return reinterpret_cast<InternedStringPool*>(-1); }
 #else
-    InternedString(const std::string* str) : _str(str) {}
+    InternedString(BoxedString* str) : _str(str) {}
 #endif
 
 public:
@@ -55,16 +61,12 @@ public:
     InternedString() : _str(NULL) {}
 #endif
 
-    // operator const std::string&() { return *_str; }
-    const std::string& str() const {
+    BoxedString* getBox() const {
         assert(this->_str);
-        return *_str;
+        return _str;
     }
 
-    const char* c_str() const {
-        assert(this->_str);
-        return _str->c_str();
-    }
+    const char* c_str() const;
 
     bool operator==(InternedString rhs) const {
         assert(this->_str || this->pool == invalidPool());
@@ -73,14 +75,11 @@ public:
         return this->_str == rhs._str;
     }
 
-    // This function is slow because it does a string < string comparison and should be avoided.
-    bool operator<(InternedString rhs) const {
-        assert(this->_str);
-        assert(this->pool == rhs.pool);
-        return *this->_str < *rhs._str;
-    }
+    // This function compares the actual string contents
+    bool operator<(InternedString rhs) const { return this->s().compare(rhs.s()) == -1; }
 
-    operator llvm::StringRef() { return llvm::StringRef(*_str); }
+    llvm::StringRef s() const;
+    operator llvm::StringRef() const { return s(); }
 
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
@@ -93,32 +92,11 @@ private:
     // We probably don't need to pull in llvm::StringRef as the key, but it's better than std::string
     // which I assume forces extra allocations.
     // (We could define a custom string-pointer container but is it worth it?)
-    std::unordered_map<llvm::StringRef, std::string*> interned;
+    std::unordered_map<llvm::StringRef, BoxedString*> interned;
 
 public:
-    ~InternedStringPool() {
-        for (auto& p : interned) {
-            delete p.second;
-        }
-    }
-
-    template <class T> InternedString get(T&& arg) {
-        auto it = interned.find(llvm::StringRef(arg));
-
-        std::string* s;
-        if (it != interned.end()) {
-            s = it->second;
-        } else {
-            s = new std::string(std::forward<T>(arg));
-            interned.insert(it, std::make_pair(llvm::StringRef(*s), s));
-        }
-
-#ifndef NDEBUG
-        return InternedString(s, this);
-#else
-        return InternedString(s);
-#endif
-    }
+    void gcHandler(gc::GCVisitor* v);
+    InternedString get(llvm::StringRef s);
 };
 
 } // namespace pyston
@@ -133,7 +111,7 @@ template <> struct less<pyston::InternedString> {
         // TODO: we should be able to do this comparison on the pointer value, not on the string value,
         // but there are apparently parts of the code that rely on string sorting being actually alphabetical.
         // We could create a faster "consistent ordering but not alphabetical" comparator if it makes a difference.
-        return *lhs._str < *rhs._str;
+        return lhs < rhs;
     }
 };
 }
@@ -149,9 +127,9 @@ template <> struct DenseMapInfo<pyston::InternedString> {
     }
     static inline pyston::InternedString getTombstoneKey() {
 #ifndef NDEBUG
-        return pyston::InternedString((const std::string*)-1, pyston::InternedString::invalidPool());
+        return pyston::InternedString((pyston::BoxedString*)-1, pyston::InternedString::invalidPool());
 #else
-        return pyston::InternedString((const std::string*)-1);
+        return pyston::InternedString((pyston::BoxedString*)-1);
 #endif
     }
     static unsigned getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }

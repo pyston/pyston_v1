@@ -32,6 +32,10 @@ class OpInfo;
 class CompilerType;
 class IREmitter;
 
+class BoxedInt;
+class BoxedFloat;
+class BoxedLong;
+
 typedef llvm::SmallVector<uint64_t, 1> FrameVals;
 
 class CompilerType {
@@ -43,11 +47,11 @@ public:
     virtual ConcreteCompilerType* getConcreteType() = 0;
     virtual ConcreteCompilerType* getBoxType() = 0;
     virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
-    virtual CompilerType* getattrType(const std::string* attr, bool cls_only) = 0;
+    virtual CompilerType* getattrType(llvm::StringRef attr, bool cls_only) = 0;
     virtual CompilerType* getPystonIterType();
-    virtual Result hasattr(const std::string* attr);
+    virtual Result hasattr(llvm::StringRef attr);
     virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
-                                   const std::vector<const std::string*>* keyword_names) = 0;
+                                   const std::vector<llvm::StringRef>* keyword_names) = 0;
 
     virtual BoxedClass* guaranteedClass() = 0;
     virtual Box* deserializeFromFrame(const FrameVals& vals) = 0;
@@ -104,32 +108,31 @@ public:
         printf("hasnext not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
                                       bool cls_only) {
         printf("getattr not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
-                         CompilerVariable* v) {
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr, CompilerVariable* v) {
         printf("setattr not defined for %s\n", debugName().c_str());
         abort();
     }
 
-    virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr) {
+    virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* value, BoxedString* attr) {
         printf("delattr not defined for %s\n", debugName().c_str());
         abort();
     }
 
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
                                        CallattrFlags flags, struct ArgPassSpec argspec,
                                        const std::vector<CompilerVariable*>& args,
-                                       const std::vector<const std::string*>* keyword_names) {
+                                       const std::vector<BoxedString*>* keyword_names) {
         printf("callattr not defined for %s\n", debugName().c_str());
         abort();
     }
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
-                                   const std::vector<const std::string*>* keyword_names) {
+                                   const std::vector<BoxedString*>* keyword_names) {
         printf("call not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -154,12 +157,12 @@ public:
         printf("makeClassCheck not defined for %s\n", debugName().c_str());
         abort();
     }
-    CompilerType* getattrType(const std::string* attr, bool cls_only) override {
+    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
         printf("getattrType not defined for %s\n", debugName().c_str());
         abort();
     }
     CompilerType* callType(struct ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
-                           const std::vector<const std::string*>* keyword_names) override {
+                           const std::vector<llvm::StringRef>* keyword_names) override {
         printf("callType not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -261,17 +264,15 @@ public:
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) = 0;
     virtual ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) = 0;
-    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only)
-        = 0;
-    virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) = 0;
-    virtual void delattr(IREmitter& emitter, const OpInfo& info, const std::string* attr) = 0;
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr,
-                                       CallattrFlags flags, struct ArgPassSpec argspec,
-                                       const std::vector<CompilerVariable*>& args,
-                                       const std::vector<const std::string*>* keyword_names) = 0;
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, bool cls_only) = 0;
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CompilerVariable* v) = 0;
+    virtual void delattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr) = 0;
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
+                                       struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<BoxedString*>* keyword_names) = 0;
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
-                                   const std::vector<const std::string*>* keyword_names) = 0;
+                                   const std::vector<BoxedString*>* keyword_names) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
     virtual CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info) = 0;
@@ -335,25 +336,25 @@ public:
     ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) override {
         return type->hasnext(emitter, info, this);
     }
-    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only) override {
+    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, bool cls_only) override {
         return type->getattr(emitter, info, this, attr, cls_only);
     }
-    void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) override {
+    void setattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CompilerVariable* v) override {
         type->setattr(emitter, info, this, attr, v);
     }
 
-    void delattr(IREmitter& emitter, const OpInfo& info, const std::string* attr) override {
+    void delattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr) override {
         type->delattr(emitter, info, this, attr);
     }
 
-    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CallattrFlags flags,
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
                                struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
-                               const std::vector<const std::string*>* keyword_names) override {
+                               const std::vector<BoxedString*>* keyword_names) override {
         return type->callattr(emitter, info, this, attr, flags, argspec, args, keyword_names);
     }
     CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
                            const std::vector<CompilerVariable*>& args,
-                           const std::vector<const std::string*>* keyword_names) override {
+                           const std::vector<BoxedString*>* keyword_names) override {
         return type->call(emitter, info, this, argspec, args, keyword_names);
     }
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) override {
@@ -391,13 +392,16 @@ public:
 // assert(value->getType() == type->llvmType());
 //}
 
+ConcreteCompilerVariable* makeBool(bool);
 ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
-ConcreteCompilerVariable* makeBool(bool);
-ConcreteCompilerVariable* makeLong(IREmitter& emitter, std::string&);
-ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, double imag);
-CompilerVariable* makeStr(const std::string*);
-CompilerVariable* makeUnicode(IREmitter& emitter, const std::string*);
+ConcreteCompilerVariable* makeLong(Box*);
+ConcreteCompilerVariable* makePureImaginary(Box*);
+CompilerVariable* makeStr(BoxedString*);
+CompilerVariable* makeUnicode(Box*);
+#if 0
+CompilerVariable* makeUnicode(IREmitter& emitter, llvm::StringRef);
+#endif
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure, Box* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();

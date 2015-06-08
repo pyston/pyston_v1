@@ -1771,7 +1771,7 @@ void setupFile() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_name), true));
 
     file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, 2, false, false),
-                                                    { boxStrConstant("r"), boxInt(-1) }));
+                                                    { boxString("r"), boxInt(-1) }));
 
     for (auto& md : file_methods) {
         file_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, file_cls));

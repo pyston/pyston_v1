@@ -578,10 +578,11 @@ extern "C" PyObject* _PyLong_FromMPZ(const _PyLongMPZ num) noexcept {
     return r;
 }
 
-extern "C" Box* createLong(const std::string* s) {
+extern "C" Box* createLong(llvm::StringRef s) {
     BoxedLong* rtn = new BoxedLong();
-    int r = mpz_init_set_str(rtn->n, s->c_str(), 10);
-    RELEASE_ASSERT(r == 0, "%d: '%s'", r, s->c_str());
+    assert(s.data()[s.size()] == '\0');
+    int r = mpz_init_set_str(rtn->n, s.data(), 10);
+    RELEASE_ASSERT(r == 0, "%d: '%s'", r, s.data());
     return rtn;
 }
 
@@ -634,8 +635,8 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (val->cls == float_cls) {
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
-            static const std::string long_str("__long__");
-            Box* r = callattr(val, &long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+            static BoxedString* long_str = static_cast<BoxedString*>(PyString_InternFromString("__long__"));
+            Box* r = callattr(val, long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
                               ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
             if (!r) {

@@ -147,7 +147,7 @@ public:
     }
     bool visit_alias(AST_alias* node) {
         InternedString name = node->name;
-        if (node->asname.str().size())
+        if (node->asname.s().size())
             name = node->asname;
 
         _doStore(name);
@@ -174,14 +174,14 @@ LivenessAnalysis::~LivenessAnalysis() {
 }
 
 bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
-    if (node->id.str()[0] != '#')
+    if (node->id.s()[0] != '#')
         return false;
 
     return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->id, parent_block));
 }
 
 bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
-    if (name.str()[0] != '#')
+    if (name.s()[0] != '#')
         return true;
 
     if (block->successors.size() == 0)
@@ -322,7 +322,7 @@ public:
 
     virtual bool visit_alias(AST_alias* node) {
         InternedString name = node->name;
-        if (node->asname.str().size())
+        if (node->asname.s().size())
             name = node->asname;
 
         _doSet(name);
@@ -339,9 +339,9 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg.str().size())
+        if (node->kwarg.s().size())
             _doSet(node->kwarg);
-        if (node->vararg.str().size())
+        if (node->vararg.s().size())
             _doSet(node->vararg);
         for (int i = 0; i < node->args.size(); i++) {
             _doSet(node->args[i]);
@@ -464,13 +464,13 @@ const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) 
 }
 
 bool PhiAnalysis::isRequired(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.str(), "!"));
+    assert(!startswith(name.s(), "!"));
     assert(required_phis.count(block));
     return required_phis[block].count(name) != 0;
 }
 
 bool PhiAnalysis::isRequiredAfter(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.str(), "!"));
+    assert(!startswith(name.s(), "!"));
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
     if (block->successors.size() != 1)
@@ -481,7 +481,7 @@ bool PhiAnalysis::isRequiredAfter(InternedString name, CFGBlock* block) {
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.str(), "!"));
+    assert(!startswith(name.s(), "!"));
 
     for (auto b : block->successors) {
         if (isPotentiallyUndefinedAt(name, b))
@@ -491,7 +491,7 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(InternedString name, CFGBlock* blo
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAt(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.str(), "!"));
+    assert(!startswith(name.s(), "!"));
 
     assert(definedness.defined_at_beginning.count(block));
     return definedness.defined_at_beginning[block][name] != DefinednessAnalysis::Defined;
@@ -531,15 +531,15 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
 
     llvm::StringSet<> potentially_undefined;
     for (const auto& p : entry_descriptor->args) {
-        if (!startswith(p.first.str(), "!is_defined_"))
+        if (!startswith(p.first.s(), "!is_defined_"))
             continue;
-        potentially_undefined.insert(p.first.str().substr(12));
+        potentially_undefined.insert(p.first.s().substr(12));
     }
 
     for (const auto& p : entry_descriptor->args) {
-        if (p.first.str()[0] == '!')
+        if (p.first.s()[0] == '!')
             continue;
-        if (potentially_undefined.count(p.first.str()))
+        if (potentially_undefined.count(p.first.s()))
             initial_map[p.first] = DefinednessAnalysis::PotentiallyDefined;
         else
             initial_map[p.first] = DefinednessAnalysis::Defined;

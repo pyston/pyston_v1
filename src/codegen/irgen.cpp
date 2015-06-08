@@ -278,13 +278,13 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(c
 }
 
 static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedString name, CFGBlock* block) {
-    if (isIsDefinedName(name.str()))
+    if (isIsDefinedName(name))
         return BOOL;
-    else if (name.str() == PASSED_GENERATOR_NAME)
+    else if (name.s() == PASSED_GENERATOR_NAME)
         return GENERATOR;
-    else if (name.str() == PASSED_CLOSURE_NAME)
+    else if (name.s() == PASSED_CLOSURE_NAME)
         return CLOSURE;
-    else if (name.str() == CREATED_CLOSURE_NAME)
+    else if (name.s() == CREATED_CLOSURE_NAME)
         return CLOSURE;
     else
         return types->getTypeAtBlockStart(name, block);
@@ -429,7 +429,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
             if (from_arg->getType() == g.llvm_frame_info_type->getPointerTo()) {
-                assert(p.first.str() == FRAME_INFO_PTR_NAME);
+                assert(p.first.s() == FRAME_INFO_PTR_NAME);
                 irstate->setFrameInfoArgument(from_arg);
                 // Don't add the frame info to the symbol table since we will store it separately:
                 continue;
@@ -461,7 +461,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
             if (VERBOSITY("irgen") >= 2)
-                v->setName("prev_" + p.first.str());
+                v->setName("prev_" + p.first.s());
 
             (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
         }
@@ -603,7 +603,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             for (const auto& p : entry_descriptor->args) {
                 // Don't add the frame info to the symbol table since we will store it separately
                 // (we manually added it during the calculation of osr_syms):
-                if (p.first.str() == FRAME_INFO_PTR_NAME)
+                if (p.first.s() == FRAME_INFO_PTR_NAME)
                     continue;
 
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
@@ -612,7 +612,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 //        analyzed_type->debugName().c_str());
 
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
-                                                                      block->predecessors.size() + 1, p.first.str());
+                                                                      block->predecessors.size() + 1, p.first.s());
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi, true);
                 generator->giveLocalSymbol(p.first, var);
                 (*phis)[p.first] = std::make_pair(analyzed_type, phi);
@@ -649,7 +649,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
-                    = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.str());
+                    = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi, true);
                 generator->giveLocalSymbol(s, var);
 
@@ -748,7 +748,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ConcreteCompilerVariable* cv = entry.second; // incoming CCV from predecessor block
                     // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
-                                                                          block->predecessors.size(), name.str());
+                                                                          block->predecessors.size(), name.s());
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi, true);
                     generator->giveLocalSymbol(name, var);
@@ -1018,6 +1018,10 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     CompiledFunction* cf
         = new CompiledFunction(NULL, spec, (effort == EffortLevel::INTERPRETED), NULL, effort, entry_descriptor);
+
+    // Make sure that the instruction memory keeps the module object alive.
+    // TODO: implement this for real
+    gc::registerPermanentRoot(source->parent_module, /* allow_duplicates= */ true);
 
     llvm::FunctionType* ft = llvm::FunctionType::get(cf->getReturnType()->llvmType(), llvm_arg_types, false /*vararg*/);
 

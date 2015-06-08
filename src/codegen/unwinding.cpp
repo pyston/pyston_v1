@@ -906,7 +906,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
         }
         assert(closure != NULL);
         Box* val = closure->elts[derefInfo.offset];
-        Box* boxedName = boxString(name.str());
+        Box* boxedName = name.getBox();
         if (val != NULL) {
             d->d[boxedName] = val;
         } else {

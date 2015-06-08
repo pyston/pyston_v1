@@ -262,6 +262,7 @@ void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
     visitor->visit(interp->created_closure);
     visitor->visit(interp->generator);
     visitor->visit(interp->globals);
+    visitor->visit(interp->source_info->parent_module);
     interp->frame_info.gcVisit(visitor);
 }
 
@@ -389,11 +390,11 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
 void ASTInterpreter::doStore(InternedString name, Value value) {
     ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-        setGlobal(globals, name, value.o);
+        setGlobal(globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
-        setitem(frame_info.boxedLocals, boxString(name.str()), value.o);
+        setitem(frame_info.boxedLocals, name.getBox(), value.o);
     } else {
         sym_table[name] = value.o;
         if (vst == ScopeInfo::VarScopeType::CLOSURE) {
@@ -408,7 +409,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
         doStore(name->id, value);
     } else if (node->type == AST_TYPE::Attribute) {
         AST_Attribute* attr = (AST_Attribute*)node;
-        pyston::setattr(visit_expr(attr->value).o, attr->attr.c_str(), value.o);
+        pyston::setattr(visit_expr(attr->value).o, attr->attr.getBox(), value.o);
     } else if (node->type == AST_TYPE::Tuple) {
         AST_Tuple* tuple = (AST_Tuple*)node;
         Box** array = unpackIntoArray(value.o, tuple->elts.size());
@@ -560,16 +561,16 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 OSREntryDescriptor* entry = OSREntryDescriptor::create(compiled_func, node);
 
                 for (auto& it : sorted_symbol_table) {
-                    if (isIsDefinedName(it.first.str()))
+                    if (isIsDefinedName(it.first))
                         entry->args[it.first] = BOOL;
-                    else if (it.first.str() == PASSED_GENERATOR_NAME)
+                    else if (it.first.s() == PASSED_GENERATOR_NAME)
                         entry->args[it.first] = GENERATOR;
-                    else if (it.first.str() == PASSED_CLOSURE_NAME || it.first.str() == CREATED_CLOSURE_NAME)
+                    else if (it.first.s() == PASSED_CLOSURE_NAME || it.first.s() == CREATED_CLOSURE_NAME)
                         entry->args[it.first] = CLOSURE;
-                    else if (it.first.str() == FRAME_INFO_PTR_NAME)
+                    else if (it.first.s() == FRAME_INFO_PTR_NAME)
                         entry->args[it.first] = FRAME_INFO;
                     else {
-                        assert(it.first.str()[0] != '!');
+                        assert(it.first.s()[0] != '!');
                         entry->args[it.first] = UNKNOWN;
                     }
                 }
@@ -617,7 +618,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
 }
 
 Value ASTInterpreter::visit_clsAttribute(AST_ClsAttribute* node) {
-    return getclsattr(visit_expr(node->value).o, node->attr.c_str());
+    return getclsattr(visit_expr(node->value).o, node->attr.getBox());
 }
 
 Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
@@ -643,7 +644,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
-        v = importFrom(module.o, &name);
+        // TODO: shouldn't have to rebox here
+        v = importFrom(module.o, boxString(name));
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
         assert(node->args.size() == 3);
         assert(node->args[0]->type == AST_TYPE::Num);
@@ -655,7 +657,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         auto ast_str = ast_cast<AST_Str>(node->args[2]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
-        v = import(level, froms.o, &module_name);
+        v = import(level, froms.o, module_name);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -871,7 +873,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
         passed_globals = globals;
     Box* attrDict = runtimeCall(boxCLFunction(cl, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
 
-    Box* classobj = createUserClass(&node->name.str(), basesTuple, attrDict);
+    Box* classobj = createUserClass(node->name.getBox(), basesTuple, attrDict);
 
     for (int i = decorators.size() - 1; i >= 0; i--)
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
@@ -898,8 +900,8 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
 #endif
 
-    static std::string AssertionError_str("AssertionError");
-    Box* assertion_type = getGlobal(globals, &AssertionError_str);
+    static BoxedString* AssertionError_str = static_cast<BoxedString*>(PyString_InternFromString("AssertionError"));
+    Box* assertion_type = getGlobal(globals, AssertionError_str);
     assertFail(assertion_type, node->msg ? visit_expr(node->msg).o : 0);
 
     return Value();
@@ -923,7 +925,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             }
             case AST_TYPE::Attribute: {
                 AST_Attribute* attr = (AST_Attribute*)target_;
-                pyston::delattr(visit_expr(attr->value).o, attr->attr.c_str());
+                pyston::delattr(visit_expr(attr->value).o, attr->attr.getBox());
                 break;
             }
             case AST_TYPE::Name: {
@@ -931,19 +933,19 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
 
                 ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-                    delGlobal(globals, &target->id.str());
+                    delGlobal(globals, target->id.getBox());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
                     assert(frame_info.boxedLocals != NULL);
                     if (frame_info.boxedLocals->cls == dict_cls) {
                         auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-                        auto it = d.find(boxString(target->id.str()));
+                        auto it = d.find(target->id.getBox());
                         if (it == d.end()) {
                             assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
                         }
                         d.erase(it);
                     } else if (frame_info.boxedLocals->cls == attrwrapper_cls) {
-                        attrwrapperDel(frame_info.boxedLocals, target->id.str());
+                        attrwrapperDel(frame_info.boxedLocals, target->id);
                     } else {
                         RELEASE_ASSERT(0, "%s", frame_info.boxedLocals->cls->tp_name);
                     }
@@ -977,9 +979,9 @@ Value ASTInterpreter::visit_assign(AST_Assign* node) {
 }
 
 Value ASTInterpreter::visit_print(AST_Print* node) {
-    static const std::string write_str("write");
-    static const std::string newline_str("\n");
-    static const std::string space_str(" ");
+    static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+    static BoxedString* newline_str = static_cast<BoxedString*>(PyString_InternFromString("\n"));
+    static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
 
     STAT_TIMER(t0, "us_timer_visit_print");
 
@@ -992,7 +994,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
         // begin code for handling of softspace
         bool new_softspace = (i < nvals - 1) || (!node->nl);
         if (softspace(dest, new_softspace)) {
-            callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(space_str), 0, 0, 0, 0);
+            callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0, 0);
         }
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
@@ -1000,7 +1002,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     }
 
     if (node->nl) {
-        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), boxString(newline_str), 0, 0, 0, 0);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
         if (nvals == 0) {
             softspace(dest, false);
         }
@@ -1111,9 +1113,9 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     for (AST_expr* e : node->args)
         args.push_back(visit_expr(e).o);
 
-    std::vector<const std::string*> keywords;
+    std::vector<BoxedString*> keywords;
     for (AST_keyword* k : node->keywords) {
-        keywords.push_back(&k->arg.str());
+        keywords.push_back(k->arg.getBox());
         args.push_back(visit_expr(k->value).o);
     }
 
@@ -1126,7 +1128,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs, node->kwargs);
 
     if (is_callattr) {
-        return callattr(func.o, &attr.str(),
+        return callattr(func.o, attr.getBox(),
                         CallattrFlags({.cls_only = callattr_clsonly, .null_on_nonexistent = false }), argspec,
                         args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0,
                         args.size() > 3 ? &args[3] : 0, &keywords);
@@ -1147,7 +1149,7 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     else if (node->num_type == AST_Num::FLOAT)
         return boxFloat(node->n_float);
     else if (node->num_type == AST_Num::LONG)
-        return createLong(&node->n_long);
+        return createLong(node->n_long);
     else if (node->num_type == AST_Num::COMPLEX)
         return boxComplex(0.0, node->n_float);
     RELEASE_ASSERT(0, "not implemented");
@@ -1194,7 +1196,7 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
     if (node->str_type == AST_Str::STR) {
         return source_info->parent_module->getStringConstant(node->str_data);
     } else if (node->str_type == AST_Str::UNICODE) {
-        return decodeUTF8StringPtr(&node->str_data);
+        return decodeUTF8StringPtr(node->str_data);
     } else {
         RELEASE_ASSERT(0, "%d", node->str_type);
     }
@@ -1207,7 +1209,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
     switch (node->lookup_type) {
         case ScopeInfo::VarScopeType::GLOBAL:
-            return getGlobal(globals, &node->id.str());
+            return getGlobal(globals, node->id.getBox());
         case ScopeInfo::VarScopeType::DEREF: {
             DerefInfo deref_info = scope_info->getDerefInfo(node->id);
             assert(passed_closure);
@@ -1232,7 +1234,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return Value();
         }
         case ScopeInfo::VarScopeType::NAME: {
-            return boxedLocalsGet(frame_info.boxedLocals, node->id.c_str(), globals);
+            return boxedLocalsGet(frame_info.boxedLocals, node->id.getBox(), globals);
         }
         default:
             abort();
@@ -1263,7 +1265,7 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
 }
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
-    return pyston::getattr(visit_expr(node->value).o, node->attr.c_str());
+    return pyston::getattr(visit_expr(node->value).o, node->attr.getBox());
 }
 }
 
@@ -1368,7 +1370,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
             assert(asgn->targets.size() == 1);
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
-            assert(name->id.str()[0] == '#');
+            assert(name->id.s()[0] == '#');
             interpreter->addSymbol(name->id, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
@@ -1441,10 +1443,10 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     assert(interpreter);
     BoxedDict* rtn = new BoxedDict();
     for (auto& l : interpreter->getSymbolTable()) {
-        if (only_user_visible && (l.first.str()[0] == '!' || l.first.str()[0] == '#'))
+        if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
             continue;
 
-        rtn->d[boxString(l.first.str())] = interpreter->getSymbolTable().getMapped(l.second);
+        rtn->d[l.first.getBox()] = interpreter->getSymbolTable().getMapped(l.second);
     }
 
     return rtn;

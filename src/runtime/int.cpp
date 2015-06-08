@@ -895,9 +895,9 @@ static Box* _intNew(Box* val, Box* base) {
         return new BoxedInt(d);
     } else {
         RELEASE_ASSERT(!base, "");
-        static const std::string int_str("__int__");
-        Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        static BoxedString* int_str = static_cast<BoxedString*>(PyString_InternFromString("__int__"));
+        Box* r = callattr(val, int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                          NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
             fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n", getTypeName(val));

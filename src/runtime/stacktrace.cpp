@@ -66,8 +66,8 @@ void raiseExc(Box* exc_obj) {
 
 // Have a special helper function for syntax errors, since we want to include the location
 // of the syntax error in the traceback, even though it is not part of the execution:
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func) {
-    Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxStrConstant(msg), NULL, NULL, NULL, NULL);
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
+    Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
     auto tb = getTraceback();
     std::vector<const LineInfo*> entries = tb->lines;
@@ -75,7 +75,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
 }
 
-void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...) {
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
     va_list ap;
     va_start(ap, msg);
 
@@ -280,7 +280,7 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
         va_end(ap);
 
-        BoxedString* message = boxStrConstant(buf);
+        BoxedString* message = boxString(buf);
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), message, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     } else {

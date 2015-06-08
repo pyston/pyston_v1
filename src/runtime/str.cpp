@@ -347,10 +347,12 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 static llvm::StringMap<Box*> interned_strings;
+static StatCounter num_interned_strings("num_interned_string");
 extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
     RELEASE_ASSERT(s, "");
     auto& entry = interned_strings[s];
     if (!entry) {
+        num_interned_strings.log();
         entry = PyGC_AddRoot(boxString(s));
         // CPython returns mortal but in our current implementation they are inmortal
         ((BoxedString*)entry)->interned_state = SSTATE_INTERNED_IMMORTAL;
@@ -374,6 +376,7 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
     if (entry)
         *p = entry;
     else {
+        num_interned_strings.log();
         entry = PyGC_AddRoot(s);
 
         // CPython returns mortal but in our current implementation they are inmortal
@@ -1771,8 +1774,9 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
 
 
     return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
+        { boxString(llvm::StringRef(self->data(), found_idx)),
+          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
+          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
 }
 
 Box* strRpartition(BoxedString* self, BoxedString* sep) {
@@ -1784,8 +1788,9 @@ Box* strRpartition(BoxedString* self, BoxedString* sep) {
         return BoxedTuple::create({ EmptyString, EmptyString, self });
 
     return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
+        { boxString(llvm::StringRef(self->data(), found_idx)),
+          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
+          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
 }
 
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
@@ -2268,7 +2273,7 @@ Box* strIter(BoxedString* self) {
 }
 
 extern "C" PyObject* PyString_FromString(const char* s) noexcept {
-    return boxStrConstant(s);
+    return boxString(s);
 }
 
 extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** s, register Py_ssize_t* len) noexcept {
@@ -2315,7 +2320,7 @@ char* getWriteableStringContents(BoxedString* s) {
 extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexcept {
     if (s == NULL)
         return createUninitializedString(n);
-    return boxStrConstantSize(s, n);
+    return boxString(llvm::StringRef(s, n));
 }
 
 static /*const*/ char* string_getbuffer(register PyObject* op) noexcept {
@@ -2719,7 +2724,7 @@ void setupStr() {
 
     str_cls->tp_richcompare = str_richcompare;
 
-    BoxedString* spaceChar = boxStrConstant(" ");
+    BoxedString* spaceChar = boxString(" ");
     str_cls->giveAttr("ljust",
                       new BoxedFunction(boxRTFunction((void*)strLjust, UNKNOWN, 3, 1, false, false), { spaceChar }));
     str_cls->giveAttr("rjust",
@@ -2744,8 +2749,8 @@ void setupStr() {
     add_operators(str_cls);
     str_cls->freeze();
 
-    basestring_cls->giveAttr(
-        "__doc__", boxStrConstant("Type basestring cannot be instantiated; it is the base for str and unicode."));
+    basestring_cls->giveAttr("__doc__",
+                             boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));
     basestring_cls->giveAttr("__new__",
                              new BoxedFunction(boxRTFunction((void*)basestringNew, UNKNOWN, 1, 0, true, true)));
     basestring_cls->freeze();

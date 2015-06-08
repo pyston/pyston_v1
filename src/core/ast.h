@@ -858,8 +858,7 @@ public:
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Str() : AST_expr(AST_TYPE::Str), str_type(UNSET) {}
-    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(s) {}
-    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
+    AST_Str(std::string s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
@@ -1401,10 +1400,10 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
 }
 
 llvm::StringRef getOpSymbol(int op_type);
-const std::string& getOpName(int op_type);
+BoxedString* getOpName(int op_type);
 int getReverseCmpOp(int op_type, bool& success);
-std::string getReverseOpName(int op_type);
-std::string getInplaceOpName(int op_type);
+BoxedString* getReverseOpName(int op_type);
+BoxedString* getInplaceOpName(int op_type);
 std::string getInplaceOpSymbol(int op_type);
 };
 
