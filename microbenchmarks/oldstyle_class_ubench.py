@@ -43,3 +43,15 @@ for i in xrange(1000):
         # if not n:
             # break
     # sre_parse.parse(pattern, 0)
+
+class C:
+    pass
+
+c = C()
+c.a = 1
+def f(c):
+    n = 10000000
+    while n:
+        c.a
+f(c)
+
