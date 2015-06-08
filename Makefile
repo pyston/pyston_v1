@@ -1160,7 +1160,9 @@ watch_%:
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find . \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET $(WATCH_ARGS); done )
+		Makefile $$(find src test \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
+			$(MAKE) $$TARGET $(WATCH_ARGS); \
+		done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
 watch: watch_pyston_dbg
@@ -1168,6 +1170,16 @@ watch_vim:
 	$(MAKE) watch WATCH_ARGS='COLOR=0 USE_DISTCC=0 -j1 2>&1 | tee compile.log'
 wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_POST_CMDS="--ex quit"
+
+.PHONY: head_%
+HEAD := 40
+head_%:
+	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | head -n$(HEAD)"
+head: head_pyston_dbg
+.PHONY: hwatch_%
+hwatch_%:
+	@ $(MAKE) $(dir $@)$(patsubst hwatch_%,watch_head_%,$(notdir $@))
+hwatch: hwatch_pyston_dbg
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
