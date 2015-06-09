@@ -2394,7 +2394,9 @@ void setupRuntime() {
     basestring_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
 
     // We add 1 to the tp_basicsize of the BoxedString in order to hold the null byte at the end.
-    str_cls = new (0) BoxedHeapClass(basestring_cls, NULL, 0, 0, sizeof(BoxedString) + 1, false, NULL);
+    // We use offsetof(BoxedString, s_data) as opposed to sizeof(BoxedString) so that we can
+    // use the extra padding bytes at the end of the BoxedString.
+    str_cls = new (0) BoxedHeapClass(basestring_cls, NULL, 0, 0, offsetof(BoxedString, s_data) + 1, false, NULL);
     str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
     str_cls->tp_itemsize = sizeof(char);
 

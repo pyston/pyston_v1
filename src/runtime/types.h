@@ -440,7 +440,7 @@ public:
 
         assert(str_cls->tp_alloc == PystonType_GenericAlloc);
         assert(str_cls->tp_itemsize == 1);
-        assert(str_cls->tp_basicsize == sizeof(BoxedString) + 1);
+        assert(str_cls->tp_basicsize == offsetof(BoxedString, s_data) + 1);
         assert(str_cls->is_pyston_class);
         assert(str_cls->attrs_offset == 0);
 
@@ -453,7 +453,7 @@ public:
         return rtn;
     }
 
-    // these should be private, but strNew needs them
+    // these should be private, but str.cpp needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
     explicit BoxedString(size_t n, char c) __attribute__((visibility("default")));
     explicit BoxedString(llvm::StringRef s) __attribute__((visibility("default")));
@@ -463,6 +463,8 @@ private:
     void* operator new(size_t size) = delete;
 
     char s_data[0];
+
+    friend void setupRuntime();
 };
 
 template <typename T> struct StringHash {
