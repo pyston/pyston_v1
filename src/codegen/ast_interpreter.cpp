@@ -318,7 +318,8 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
 static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 
-RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) { }
+RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) {
+}
 
 RegisterHelper::~RegisterHelper() {
     assert(interpreter);
@@ -335,12 +336,12 @@ void RegisterHelper::doRegister(void* frame_addr, ASTInterpreter* interpreter) {
     interpreter->frame_addr = frame_addr;
     s_interpreterMap[frame_addr] = interpreter;
 }
-    
-    void RegisterHelper::deregister(void* frame_addr) {
-        assert(frame_addr);
-        assert(s_interpreterMap.count(frame_addr));
-        s_interpreterMap.erase(frame_addr);
-    }
+
+void RegisterHelper::deregister(void* frame_addr) {
+    assert(frame_addr);
+    assert(s_interpreterMap.count(frame_addr));
+    s_interpreterMap.erase(frame_addr);
+}
 
 Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at,
                                    RegisterHelper* reg) {
@@ -631,7 +632,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         next_block = node->normal_dest;
     } catch (ExcInfo e) {
 
-        if (cur_thread_state.unwind_state == UNWIND_STATE_NORMAL) {
+        if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL) {
             // when generating the traceback incrementally we only
             // include an interpreter frame if we unwind through
             // ASTInterpreter::execute_inner.  this will keep a toplevel
@@ -643,7 +644,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
                                  reinterpret_cast<BoxedTraceback**>(&e.traceback));
         }
 
-        cur_thread_state.unwind_state = UNWIND_STATE_NORMAL;
+        threading::ThreadStateInternal::setUnwindState(UNWIND_STATE_NORMAL);
 
         next_block = node->exc_dest;
         last_exception = e;

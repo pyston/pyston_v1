@@ -24,12 +24,12 @@
 #include "codegen/ast_interpreter.h" // interpreter_instr_addr
 #include "codegen/unwinding.h"       // getCFForAddress
 #include "core/ast.h"
-#include "core/stats.h"              // StatCounter
-#include "core/threading.h"          // for getExceptionFerry
-#include "core/types.h"              // for ExcInfo
-#include "core/util.h"               // Timer
-#include "runtime/generator.h"       // generatorEntry
-#include "runtime/traceback.h"       // BoxedTraceback::addLine
+#include "core/stats.h"        // StatCounter
+#include "core/threading.h"    // for getExceptionFerry
+#include "core/types.h"        // for ExcInfo
+#include "core/util.h"         // Timer
+#include "runtime/generator.h" // generatorEntry
+#include "runtime/traceback.h" // BoxedTraceback::addLine
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -493,7 +493,8 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    BoxedTraceback** tb_loc = reinterpret_cast<BoxedTraceback**>(&threading::getExceptionFerry()->traceback);
+    BoxedTraceback** tb_loc
+        = reinterpret_cast<BoxedTraceback**>(&threading::ThreadStateInternal::getExceptionFerry()->traceback);
 
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
@@ -633,7 +634,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
     // during unwinding!
 
-    return pyston::threading::getExceptionFerry();
+    return pyston::threading::ThreadStateInternal::getExceptionFerry();
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our

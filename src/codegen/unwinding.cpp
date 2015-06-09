@@ -473,13 +473,13 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
         }
     }
 
-    if (cur_thread_state.unwind_state == UNWIND_STATE_NORMAL) {
+    if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL) {
         bool stop = func(&info);
         if (stop)
             return true;
     }
 
-    cur_thread_state.unwind_state = (bool)cf->entry_descriptor ? UNWIND_STATE_OSR : UNWIND_STATE_NORMAL;
+    threading::ThreadStateInternal::setUnwindState((bool)cf->entry_descriptor ? UNWIND_STATE_OSR : UNWIND_STATE_NORMAL);
     return false;
 }
 
@@ -488,7 +488,8 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    cur_thread_state.unwind_state = UNWIND_STATE_NORMAL; // ensure we won't be skipping any python frames at the start
+    threading::ThreadStateInternal::setUnwindState(
+        UNWIND_STATE_NORMAL); // ensure we won't be skipping any python frames at the start
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);

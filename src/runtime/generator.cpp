@@ -90,7 +90,7 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
 
-        threading::pushGenerator(g, g->stack_begin, g->returnContext);
+        threading::ThreadStateInternal::pushGenerator(g, g->stack_begin, g->returnContext);
         try {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
 
@@ -107,7 +107,7 @@ void generatorEntry(BoxedGenerator* g) {
 
         // we returned from the body of the generator. next/send/throw will notify the caller
         g->entryExited = true;
-        threading::popGenerator();
+        threading::ThreadStateInternal::popGenerator();
     }
     swapContext(&g->context, g->returnContext, 0);
 }
@@ -264,9 +264,9 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     self->returnValue = value;
 
-    threading::popGenerator();
+    threading::ThreadStateInternal::popGenerator();
     swapContext(&self->context, self->returnContext, 0);
-    threading::pushGenerator(obj, obj->stack_begin, obj->returnContext);
+    threading::ThreadStateInternal::pushGenerator(obj, obj->stack_begin, obj->returnContext);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception.type) {

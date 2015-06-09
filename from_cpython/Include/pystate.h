@@ -110,15 +110,6 @@ typedef struct _ts {
 
 } PyThreadState;
 #endif
-// somewhat similar to CPython's WHY_* enum
-// UNWIND_STATE_NORMAL : == WHY_EXCEPTION.  we call it "NORMAL" since we often unwind due to things other than exceptions (getGlobals, getLocals, etc)
-// UNWIND_STATE_RERAISE: same as NORMAL, except we are supposed to skip the first frame.
-// UNWIND_STATE_OSR    : The previous frame was an osr replacement for the next one, so we should skip it
-enum UnwindState {
-    UNWIND_STATE_NORMAL = 0,
-    UNWIND_STATE_RERAISE,
-    UNWIND_STATE_OSR
-};
 typedef struct _ts {
     int recursion_depth;
 
@@ -127,9 +118,6 @@ typedef struct _ts {
     PyObject *curexc_traceback;
 
     PyObject *dict;  /* Stores per-thread state */
-
-    // one of the UNWIND_STATE_* above
-    int unwind_state;
 
     // Pyston note: additions in here need to be mirrored in ThreadStateInternal::accept
 } PyThreadState;
