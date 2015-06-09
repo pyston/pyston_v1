@@ -1,21 +1,11 @@
 import os, sys
-from test_helper import create_virtenv, run_test_and_parse_output
+from test_helper import create_virtenv, run_test
 
-ENV_NAME = "cheetah_test_env_" + os.path.basename(sys.executable)
+ENV_NAME = os.path.abspath("cheetah_test_env_" + os.path.basename(sys.executable))
 create_virtenv(ENV_NAME, ["cheetah==2.4.4"], force_create = True)
 
-cheetah_exe = os.path.abspath(ENV_NAME + "/bin/cheetah")
+cheetah_exe = os.path.join(ENV_NAME, "bin", "cheetah")
 env = os.environ
-env["PATH"] = env["PATH"] + ":" + os.path.abspath(ENV_NAME + "/bin")
-errcode, result, output = run_test_and_parse_output([cheetah_exe, "test"], cwd=os.path.abspath(ENV_NAME), env= env)
-print
-print "Return code:", errcode
+env["PATH"] = env["PATH"] + ":" + os.path.join(ENV_NAME, "bin")
 expected = [{'errors': 4, 'failures': 53}, {'errors': 232, 'failures': 53}]
-if expected == result:
-    print "Received expected output"
-else:
-    print >> sys.stderr, output
-    print >> sys.stderr, "WRONG output"
-    print >> sys.stderr, "is:", result
-    print >> sys.stderr, "expected:", expected
-    assert result == expected
+run_test([cheetah_exe, "test"], cwd=ENV_NAME, expected=expected, env=env)

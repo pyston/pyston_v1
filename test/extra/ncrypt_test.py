@@ -3,7 +3,7 @@ from test_helper import create_virtenv, run_test
 
 ENV_NAME = "ncrypt_test_env_" + os.path.basename(sys.executable)
 SRC_DIR = os.path.abspath(os.path.join(ENV_NAME, "src"))
-PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
+PYTHON_EXE = os.path.abspath(os.path.join(ENV_NAME, "bin", "python"))
 
 def install_pyrex():
     url = "http://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/oldtar/Pyrex-0.9.8.6.tar.gz"
