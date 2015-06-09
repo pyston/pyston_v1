@@ -173,6 +173,7 @@ inline void clearOrderingState(GCAllocation* header) {
 bool hasOrderedFinalizer(Box* b);
 bool heapObjectHasCallableFinalizer(GCAllocation* al);
 void finalize(Box* b);
+void finalizeIfUnordered(Box* b);
 bool isWeaklyReferenced(Box* b);
 
 #define PAGE_SIZE 4096

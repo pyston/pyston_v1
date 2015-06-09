@@ -54,6 +54,7 @@ static std::vector<std::pair<void*, void*>> potential_root_ranges;
 static std::unordered_set<void*> nonheap_roots;
 
 static std::list<Box*> pending_finalization_list;
+static std::list<PyWeakReference*> weakrefs_needing_callback_list;
 
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap
@@ -437,6 +438,14 @@ void markPhase() {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
+    for (auto box : pending_finalization_list) {
+        visitor.visit(box);
+    }
+
+    for (auto weakref : weakrefs_needing_callback_list) {
+        visitor.visit(weakref);
+    }
+
     while (void* p = stack->pop()) {
         GCAllocation* al = GCAllocation::fromUserData(p);
 
@@ -513,16 +522,12 @@ void finalizationOrderingPhase() {
         assert(state == FinalizationState::REACHABLE_FROM_FINALIZER || state == FinalizationState::ALIVE);
 
         if (state == FinalizationState::REACHABLE_FROM_FINALIZER) {
-            assert(roots.count(marked) == 0);
-            registerPermanentRoot(marked);
             pending_finalization_list.push_back(marked);
         }
     }
 }
 
 static void sweepPhase(std::vector<Box*>& weakly_referenced) {
-    // we need to use the allocator here because these objects are referenced only here, and calling the weakref
-    // callbacks could start another gc
     global_heap.freeUnmarked(weakly_referenced);
 }
 
@@ -555,10 +560,18 @@ void callPendingFinalizers() {
             }
         }
 
-        deregisterPermanentRoot(box);
-        assert(roots.count(box) == 0);
-
         finalize(box);
+    }
+
+    // Callbacks for weakly-referenced objects without finalizers.
+    while (!weakrefs_needing_callback_list.empty()) {
+        PyWeakReference* head = weakrefs_needing_callback_list.front();
+        weakrefs_needing_callback_list.pop_front();
+
+        if (head->wr_callback) {
+            runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+            head->wr_callback = NULL;
+        }
     }
 
     assert(pending_finalization_list.empty());
@@ -623,17 +636,9 @@ void runCollection() {
     std::vector<Box*> weakly_referenced;
     sweepPhase(weakly_referenced);
 
-    // Handle weakrefs in two passes:
-    // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
-    //   over the garbage-and-corrupt-but-still-alive weakly_referenced list in order to find these objects,
-    //   so the gc is not reentrant during this section.  after this we discard that list.
-    // - then, call all the weakref callbacks we collected from the first pass.
-
-    // Use a StlCompatAllocator to keep the pending weakref objects alive in case we trigger a new collection.
-    // In theory we could push so much onto this list that we would cause a new collection to start:
-    std::list<PyWeakReference*, StlCompatAllocator<PyWeakReference*>> weak_references;
-
     // Free weakly-referenced objects without finalizers and make a list of callbacks to call.
+    // They will be called later outside of GC when it is safe to do so. Weakrefs callbacks are
+    // just like finalizers, except that they don't impose ordering.
     for (auto o : weakly_referenced) {
         assert(isValidGCObject(o));
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
@@ -644,25 +649,18 @@ void runCollection() {
                 _PyWeakref_ClearRef(head);
 
                 if (head->wr_callback) {
-                    weak_references.push_back(head);
+                    weakrefs_needing_callback_list.push_back(head);
                 }
             }
         }
+
         global_heap.free(GCAllocation::fromUserData(o));
+
+        // We didn't finalize these objects because we skipped them during sweep phase.
+        finalizeIfUnordered(o);
     }
 
     should_not_reenter_gc = false; // end non-reentrant section
-
-    // Callbacks for weakly-referenced objects without finalizers.
-    while (!weak_references.empty()) {
-        PyWeakReference* head = weak_references.front();
-        weak_references.pop_front();
-
-        if (head->wr_callback) {
-            runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
-            head->wr_callback = NULL;
-        }
-    }
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
