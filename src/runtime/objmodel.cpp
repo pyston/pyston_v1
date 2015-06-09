@@ -173,6 +173,13 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     // Should we only do this selectively?
     execution_point.cf->speculationFailed();
 
+    // Except of exc.type we skip initializing the exc fields inside the JITed code path (small perf improvement) that's
+    // why we have todo it now if we didn't set an exception (which sets all fields)
+    if (frame_state.frame_info->exc.type == NULL) {
+        frame_state.frame_info->exc.traceback = NULL;
+        frame_state.frame_info->exc.value = NULL;
+    }
+
     return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, frame_state);
 }
 
