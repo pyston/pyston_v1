@@ -277,7 +277,6 @@ void markPhase() {
     GCVisitor visitor(&stack);
 
     threading::visitAllStacks(&visitor);
-    gatherInterpreterRoots(&visitor);
 
     for (auto h : *getRootHandles()) {
         visitor.visit(h->value);

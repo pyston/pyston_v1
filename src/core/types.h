@@ -706,6 +706,8 @@ struct FrameInfo {
     BoxedFrame* frame_obj;
 
     FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
+
+    void gcVisit(GCVisitor* visitor);
 };
 
 struct CallattrFlags {
