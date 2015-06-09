@@ -444,9 +444,19 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
 template <typename FrameFunc>
 bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, FrameFunc func) {
     CompiledFunction* cf = getCFForAddress(ip);
-    if (cf) {
-        PythonFrameIteratorImpl info(PythonFrameId::COMPILED, ip, bp, cf);
+    bool jitted = cf != NULL;
+    if (!cf) {
+        if (inASTInterpreterExecuteInner(ip)) {
+            cf = getCFForInterpretedFrame((void*)bp);
+            assert(cf);
+        }
+    }
 
+    if (!cf)
+        return false;
+
+    PythonFrameIteratorImpl info(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
+    if (jitted) {
         // Try getting all the callee-save registers, and save the ones we were able to get.
         // Some of them may be inaccessible, I think because they weren't defined by that
         // stack frame, which can show up as a -UNW_EBADREG return code.
@@ -461,33 +471,15 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
                 info.regs_valid |= (1 << i);
             }
         }
-
-        if (cur_thread_state.unwind_why == UNWIND_WHY_NORMAL) {
-            bool stop = func(&info);
-            if (stop)
-                return true;
-        }
-
-        cur_thread_state.unwind_why = (bool)cf->entry_descriptor ? UNWIND_WHY_OSR : UNWIND_WHY_NORMAL;
-        return false;
     }
 
-    if (inASTInterpreterExecuteInner(ip)) {
-        cf = getCFForInterpretedFrame((void*)bp);
-        assert(cf);
-
-        PythonFrameIteratorImpl info(PythonFrameId::INTERPRETED, ip, bp, cf);
-
-        if (cur_thread_state.unwind_why == UNWIND_WHY_NORMAL) {
-            bool stop = func(&info);
-            if (stop)
-                return true;
-        }
-
-        cur_thread_state.unwind_why = (bool)cf->entry_descriptor ? UNWIND_WHY_OSR : UNWIND_WHY_NORMAL;
-        return false;
+    if (cur_thread_state.unwind_state == UNWIND_STATE_NORMAL) {
+        bool stop = func(&info);
+        if (stop)
+            return true;
     }
 
+    cur_thread_state.unwind_state = (bool)cf->entry_descriptor ? UNWIND_STATE_OSR : UNWIND_STATE_NORMAL;
     return false;
 }
 
@@ -496,7 +488,7 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    cur_thread_state.unwind_why = UNWIND_WHY_NORMAL; // ensure we won't be skipping any python frames at the start
+    cur_thread_state.unwind_state = UNWIND_STATE_NORMAL; // ensure we won't be skipping any python frames at the start
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);

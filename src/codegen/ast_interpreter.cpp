@@ -631,7 +631,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         next_block = node->normal_dest;
     } catch (ExcInfo e) {
 
-        if (cur_thread_state.unwind_why == UNWIND_WHY_NORMAL) {
+        if (cur_thread_state.unwind_state == UNWIND_STATE_NORMAL) {
             // when generating the traceback incrementally we only
             // include an interpreter frame if we unwind through
             // ASTInterpreter::execute_inner.  this will keep a toplevel
@@ -643,7 +643,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
                                  reinterpret_cast<BoxedTraceback**>(&e.traceback));
         }
 
-        cur_thread_state.unwind_why = UNWIND_WHY_NORMAL;
+        cur_thread_state.unwind_state = UNWIND_STATE_NORMAL;
 
         next_block = node->exc_dest;
         last_exception = e;

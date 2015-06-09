@@ -204,7 +204,7 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
-    cur_thread_state.unwind_why = UNWIND_WHY_RERAISE;
+    cur_thread_state.unwind_state = UNWIND_STATE_RERAISE;
     raiseRaw(*exc_info);
 }
 
@@ -283,7 +283,7 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
-    cur_thread_state.unwind_why = reraise ? UNWIND_WHY_RERAISE : UNWIND_WHY_NORMAL;
+    cur_thread_state.unwind_state = reraise ? UNWIND_STATE_RERAISE : UNWIND_STATE_NORMAL;
     raiseRaw(exc_info);
 }
 
