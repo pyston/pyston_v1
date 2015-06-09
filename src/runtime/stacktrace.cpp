@@ -17,6 +17,7 @@
 #include <dlfcn.h>
 
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "core/options.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"

@@ -1282,9 +1282,11 @@ void setupBuiltins() {
     builtins_module->giveAttr("execfile",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1), "execfile"));
 
-    builtins_module->giveAttr(
-        "compile", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)compile, UNKNOWN, 5, 2, false, false),
-                                                    "compile", { boxInt(0), boxInt(0) }));
+    CLFunction* compile_func = createRTFunction(
+        5, 2, false, false, ParamNames({ "source", "filename", "mode", "flags", "dont_inherit" }, "", ""));
+    addRTFunction(compile_func, (void*)compile, UNKNOWN, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
+    builtins_module->giveAttr("compile",
+                              new BoxedBuiltinFunctionOrMethod(compile_func, "compile", { boxInt(0), boxInt(0) }));
 
     builtins_module->giveAttr(
         "map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map, LIST, 1, 0, true, false), "map"));

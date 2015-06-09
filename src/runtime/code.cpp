@@ -18,6 +18,7 @@
 
 #include "code.h"
 
+#include "core/ast.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"

@@ -747,10 +747,6 @@ private:
         assert(left);
         assert(right);
 
-        if (type == AST_TYPE::Div && (irstate->getSourceInfo()->parent_module->future_flags & FF_DIVISION)) {
-            type = AST_TYPE::TrueDiv;
-        }
-
         return left->binexp(emitter, getOpInfoForNode(node, unw_info), right, type, exp_type);
     }
 
@@ -1842,7 +1838,9 @@ private:
             vlocals = getNullPtr(g.llvm_value_type_ptr);
         }
 
-        emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
+        static_assert(sizeof(FutureFlags) == 4, "");
+        emitter.createCall(unw_info, g.funcs.exec,
+                           { vbody, vglobals, vlocals, getConstantInt(irstate->getSourceInfo()->future_flags, g.i32) });
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
@@ -2655,7 +2653,8 @@ CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_s
 
     CLFunction*& cl = made[node];
     if (cl == NULL) {
-        std::unique_ptr<SourceInfo> si(new SourceInfo(source->parent_module, source->scoping, node, body, source->fn));
+        std::unique_ptr<SourceInfo> si(
+            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->fn));
         if (args)
             cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.str().size(),
                                 args->kwarg.str().size(), std::move(si));

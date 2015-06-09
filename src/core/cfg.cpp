@@ -19,6 +19,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "Python.h"
+
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -637,7 +639,7 @@ private:
         AST_BinOp* rtn = new AST_BinOp();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
-        rtn->op_type = node->op_type;
+        rtn->op_type = remapBinOpType(node->op_type);
         rtn->left = remapExpr(node->left);
         rtn->right = remapExpr(node->right);
         return rtn;
@@ -1481,7 +1483,7 @@ public:
             // level == -1 means check both sys path and relative for imports.
             // so if `from __future__ import absolute_import` was used in the file, set level to 0
             int level;
-            if (!(future_flags & FF_ABSOLUTE_IMPORT))
+            if (!(future_flags & CO_FUTURE_ABSOLUTE_IMPORT))
                 level = -1;
             else
                 level = 0;
@@ -1532,7 +1534,7 @@ public:
         // level == -1 means check both sys path and relative for imports.
         // so if `from __future__ import absolute_import` was used in the file, set level to 0
         int level;
-        if (node->level == 0 && !(future_flags & FF_ABSOLUTE_IMPORT))
+        if (node->level == 0 && !(future_flags & CO_FUTURE_ABSOLUTE_IMPORT))
             level = -1;
         else
             level = node->level;
@@ -1716,7 +1718,7 @@ public:
         }
 
         AST_AugBinOp* binop = new AST_AugBinOp();
-        binop->op_type = node->op_type;
+        binop->op_type = remapBinOpType(node->op_type);
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
         binop->col_offset = node->col_offset;
@@ -1726,6 +1728,14 @@ public:
         pushAssign(node_name, binop);
         pushAssign(remapped_target, makeLoad(node_name, node));
         return true;
+    }
+
+    AST_TYPE::AST_TYPE remapBinOpType(AST_TYPE::AST_TYPE op_type) {
+        if (op_type == AST_TYPE::Div && (future_flags & (CO_FUTURE_DIVISION))) {
+            return AST_TYPE::TrueDiv;
+        } else {
+            return op_type;
+        }
     }
 
     bool visit_delete(AST_Delete* node) override {
@@ -2466,7 +2476,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     ScopingAnalysis* scoping_analysis = source->scoping;
 
-    CFGVisitor visitor(source, source->ast->type, source->parent_module->future_flags, scoping_analysis, rtn);
+    CFGVisitor visitor(source, source->ast->type, source->future_flags, scoping_analysis, rtn);
 
     bool skip_first = false;
 

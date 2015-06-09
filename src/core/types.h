@@ -242,6 +242,8 @@ private:
     ParamNames() : takes_param_names(false) {}
 };
 
+typedef int FutureFlags;
+
 class BoxedModule;
 class ScopeInfo;
 class InternedStringPool;
@@ -249,6 +251,7 @@ class SourceInfo {
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
+    FutureFlags future_flags;
     AST* ast;
     CFG* cfg;
     bool is_generator;
@@ -267,7 +270,8 @@ public:
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, std::vector<AST_stmt*> body, std::string fn);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
+               std::vector<AST_stmt*> body, std::string fn);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
