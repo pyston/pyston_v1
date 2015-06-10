@@ -493,9 +493,6 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    BoxedTraceback** tb_loc
-        = reinterpret_cast<BoxedTraceback**>(&threading::ThreadStateInternal::getExceptionFerry()->traceback);
-
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
         {
@@ -509,7 +506,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             print_frame(&cursor, &pip);
         }
 
-        maybeTracebackHere(&cursor, tb_loc);
+        maybeTracebackHere(&cursor);
 
         // Skip frames without handlers
         if (pip.handler == 0) {

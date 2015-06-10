@@ -76,6 +76,7 @@ void raiseRaw(const ExcInfo& e) {
 }
 
 void raiseExc(Box* exc_obj) {
+    threading::ThreadStateInternal::setUnwindState(UNWIND_STATE_NORMAL);
     raiseRaw(ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback()));
 }
 
@@ -205,7 +206,7 @@ extern "C" void raise0() {
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
 
-    threading::ThreadStateInternal::setUnwindState(UNWIND_STATE_RERAISE);
+    threading::ThreadStateInternal::setUnwindState(UNWIND_STATE_SKIPNEXT);
     raiseRaw(*exc_info);
 }
 
@@ -285,7 +286,7 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
-    threading::ThreadStateInternal::setUnwindState(reraise ? UNWIND_STATE_RERAISE : UNWIND_STATE_NORMAL);
+    threading::ThreadStateInternal::setUnwindState(reraise ? UNWIND_STATE_SKIPNEXT : UNWIND_STATE_NORMAL);
     raiseRaw(exc_info);
 }
 

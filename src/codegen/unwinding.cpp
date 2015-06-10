@@ -473,14 +473,7 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
         }
     }
 
-    if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL) {
-        bool stop = func(&info);
-        if (stop)
-            return true;
-    }
-
-    threading::ThreadStateInternal::setUnwindState((bool)cf->entry_descriptor ? UNWIND_STATE_OSR : UNWIND_STATE_NORMAL);
-    return false;
+    return func(&info);
 }
 
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
@@ -505,8 +498,19 @@ template <typename Func> void unwindPythonStack(Func func) {
         unw_word_t ip = get_cursor_ip(&cursor);
         unw_word_t bp = get_cursor_bp(&cursor);
 
-        if (unwindProcessFrame(ip, bp, &cursor, func))
+        bool stop_unwinding = unwindProcessFrame(ip, bp, &cursor, [&](PythonFrameIteratorImpl* frame_iter) {
+            bool rtn = false;
+            if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL)
+                rtn = func(frame_iter);
+
+            threading::ThreadStateInternal::setUnwindState(
+                (bool)frame_iter->cf->entry_descriptor ? UNWIND_STATE_SKIPNEXT : UNWIND_STATE_NORMAL);
+            return rtn;
+        });
+
+        if (stop_unwinding) {
             break;
+        }
 
         if (inGeneratorEntry(ip)) {
             // for generators continue unwinding in the context in which the generator got called
@@ -548,14 +552,21 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
-void maybeTracebackHere(void* unw_cursor, BoxedTraceback** tb) {
+void maybeTracebackHere(void* unw_cursor) {
     unw_cursor_t* cursor = (unw_cursor_t*)unw_cursor;
 
     unw_word_t ip = get_cursor_ip(cursor);
     unw_word_t bp = get_cursor_bp(cursor);
 
+    BoxedTraceback** tb_loc
+        = reinterpret_cast<BoxedTraceback**>(&threading::ThreadStateInternal::getExceptionFerry()->traceback);
+
     unwindProcessFrame(ip, bp, cursor, [&](PythonFrameIteratorImpl* frame_iter) {
-        BoxedTraceback::Here(lineInfoForFrame(frame_iter), tb);
+        if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL)
+            BoxedTraceback::Here(lineInfoForFrame(frame_iter), tb_loc);
+
+        threading::ThreadStateInternal::setUnwindState((bool)frame_iter->cf->entry_descriptor ? UNWIND_STATE_SKIPNEXT
+                                                                                              : UNWIND_STATE_NORMAL);
         return false;
     });
 }
@@ -718,7 +729,7 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
     std::swap(this->impl, impl);
 }
 
-// TODO factor getStackLoclasIncludingUserHidden and fastLocalsToBoxedLocals
+// TODO factor getStackLocalsIncludingUserHidden and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
 FrameStackState getFrameStackState() {

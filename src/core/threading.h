@@ -33,11 +33,11 @@ class GCVisitor;
 }
 
 // somewhat similar to CPython's WHY_* enum
-// UNWIND_STATE_NORMAL : == WHY_EXCEPTION.  we call it "NORMAL" since we often unwind due to things other than
+// UNWIND_STATE_NORMAL  : == WHY_EXCEPTION.  we call it "NORMAL" since we often unwind due to things other than
 // exceptions (getGlobals, getLocals, etc)
-// UNWIND_STATE_RERAISE: same as NORMAL, except we are supposed to skip the first frame.
-// UNWIND_STATE_OSR    : The previous frame was an osr replacement for the next one, so we should skip it
-enum UnwindState { UNWIND_STATE_NORMAL = 0, UNWIND_STATE_RERAISE, UNWIND_STATE_OSR };
+// UNWIND_STATE_SKIPNEXT: skip this frame (do not include it in tracebacks).  this happens when re-raising an exception
+//                        and also when dealing with osr replacements (we skip the frame we OSR).
+enum UnwindState { UNWIND_STATE_NORMAL = 0, UNWIND_STATE_SKIPNEXT };
 
 namespace threading {
 

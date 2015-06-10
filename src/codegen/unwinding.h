@@ -36,7 +36,7 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
 
-void maybeTracebackHere(void* unw_cursor, BoxedTraceback** tb);
+void maybeTracebackHere(void* unw_cursor);
 
 struct ExecutionPoint {
     CompiledFunction* cf;
