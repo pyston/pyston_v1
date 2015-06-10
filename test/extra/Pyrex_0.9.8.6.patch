@@ -1,0 +1,50 @@
+diff -ur Pyrex-0.9.8.6_orig/Pyrex-0.9.8.6/Pyrex/Compiler/ModuleNode.py Pyrex-0.9.8.6/Pyrex/Compiler/ModuleNode.py
+--- Pyrex-0.9.8.6_orig/Pyrex-0.9.8.6/Pyrex/Compiler/ModuleNode.py	2010-02-24 07:52:25.000000000 +0100
++++ Pyrex-0.9.8.6/Pyrex/Compiler/ModuleNode.py	2015-05-20 19:36:12.363341727 +0200
+@@ -711,15 +711,21 @@
+                     "PyObject *etype, *eval, *etb;")
+             code.putln(
+                     "PyErr_Fetch(&etype, &eval, &etb);")
++            # Pyston change:
++            #code.putln(
++            #        "++o->ob_refcnt;")
+             code.putln(
+-                    "++o->ob_refcnt;")
++                    "Py_INCREF(o);")
+             code.putln(
+                     "%s(o);" % 
+                         entry.func_cname)
+             code.putln(
+                     "if (PyErr_Occurred()) PyErr_WriteUnraisable(o);")
++            # Pyston change:           
++            #code.putln(
++            #        "--o->ob_refcnt;")            
+             code.putln(
+-                    "--o->ob_refcnt;")
++                    "Py_DECREF(o);")
+             code.putln(
+                     "PyErr_Restore(etype, eval, etb);")
+             code.putln(
+diff -ur Pyrex-0.9.8.6_orig/Pyrex-0.9.8.6/Pyrex/Compiler/Nodes.py Pyrex-0.9.8.6/Pyrex/Compiler/Nodes.py
+--- Pyrex-0.9.8.6_orig/Pyrex-0.9.8.6/Pyrex/Compiler/Nodes.py	2010-02-24 07:59:07.000000000 +0100
++++ Pyrex-0.9.8.6/Pyrex/Compiler/Nodes.py	2015-05-20 19:37:12.179468079 +0200
+@@ -2955,6 +2955,8 @@
+ """
+ static void __Pyx_AddTraceback(char *funcname); /*proto*/
+ ""","""
++// Pyston change: We don't support custom traceback entries yet
++#if 0
+ #include "compile.h"
+ #include "frameobject.h"
+ #include "traceback.h"
+@@ -3012,6 +3014,10 @@
+     Py_XDECREF(py_code);
+     Py_XDECREF(py_frame);
+ }
++#else
++static void __Pyx_AddTraceback(char *funcname) {
++}
++#endif
+ """ % {
+     'FILENAME': Naming.filename_cname,
+     'LINENO':  Naming.lineno_cname,
