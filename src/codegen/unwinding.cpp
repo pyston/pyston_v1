@@ -115,34 +115,21 @@ void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_fr
     // dyn_info that contains a binary search table.
 }
 
+struct compare_cf {
+    int operator()(const uint64_t& key, const CompiledFunction* item) const {
+        // key is the return address of the callsite, so we will check it against
+        // the region (start, end] (opposite-endedness of normal half-open regions)
+        if (key <= item->code_start)
+            return -1;
+        else if (key > item->code_start + item->code_size)
+            return 1;
+        return 0;
+    }
+};
+
 class CFRegistry {
 private:
     std::vector<CompiledFunction*> cfs;
-
-    // similar to Java's Array.binarySearch:
-    // return values are either:
-    //   >= 0 : the index where a given item was found
-    //   < 0  : a negative number that can be transformed (using "-num-1") into the insertion point
-    //
-    // addr is the return address of the callsite, so we will check it against
-    // the region (start, end] (opposite-endedness of normal half-open regions)
-    //
-    int find_cf(uint64_t addr) {
-        int l = 0;
-        int r = cfs.size() - 1;
-        while (l <= r) {
-            int mid = l + (r - l) / 2;
-            auto mid_cf = cfs[mid];
-            if (addr <= mid_cf->code_start) {
-                r = mid - 1;
-            } else if (addr > mid_cf->code_start + mid_cf->code_size) {
-                l = mid + 1;
-            } else {
-                return mid;
-            }
-        }
-        return -(l + 1);
-    }
 
 public:
     void registerCF(CompiledFunction* cf) {
@@ -151,7 +138,7 @@ public:
             return;
         }
 
-        int idx = find_cf((uint64_t)cf->code_start);
+        int idx = binarySearch((uint64_t)cf->code_start, cfs.begin(), cfs.end(), compare_cf());
         if (idx >= 0)
             RELEASE_ASSERT(0, "CompiledFunction registered twice?");
 
@@ -162,7 +149,7 @@ public:
         if (cfs.empty())
             return NULL;
 
-        int idx = find_cf(addr);
+        int idx = binarySearch(addr, cfs.begin(), cfs.end(), compare_cf());
         if (idx >= 0)
             return cfs[idx];
 
