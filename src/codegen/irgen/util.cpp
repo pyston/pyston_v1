@@ -67,8 +67,9 @@ val, getStringName(str));
 
 std::unordered_map<std::string, const char*> strings;
 
+/*
 // Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(const std::string& str) {
+llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
     const char* c;
     if (strings.count(str)) {
         c = strings[str];
@@ -84,9 +85,10 @@ llvm::Constant* getStringConstantPtr(const std::string& str) {
 }
 
 // Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(const char* str) {
+llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
     return getStringConstantPtr(std::string(str, strlen(str) + 1));
 }
+*/
 
 // Sometimes we want to embed pointers into the emitted code, usually to link the emitted code
 // to some associated compiler-level data structure.

@@ -1242,7 +1242,7 @@ private:
         }
 
         // this is the part that actually generates temporaries & assigns to them.
-        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.str()[0] != '#')) {
+        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.s()[0] != '#')) {
             InternedString name = nodeName();
             pushAssign(name, rtn);
             return makeLoad(name, node);
@@ -1335,10 +1335,10 @@ public:
             assert(asgn->targets.size() == 1);
             if (asgn->targets[0]->type == AST_TYPE::Name) {
                 AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
-                if (target->id.str()[0] != '#') {
+                if (target->id.s()[0] != '#') {
 // assigning to a non-temporary
 #ifndef NDEBUG
-                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.str()[0] == '#')
+                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.s()[0] == '#')
                         && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
                         print_ast(node);
@@ -1348,13 +1348,13 @@ public:
 #endif
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.str()[0] == '#') {
+                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.s()[0] == '#') {
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
                 } else if (asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str
                            || (asgn->value->type == AST_TYPE::Name
-                               && ast_cast<AST_Name>(asgn->value)->id.str().compare("None") == 0)) {
+                               && ast_cast<AST_Name>(asgn->value)->id.s() == "None")) {
                     // Assigning to a temporary name from an expression that can't throw:
                     // NB. `None' can't throw in Python, because it's hardcoded
                     // (seriously, try reassigning "None" in CPython).
@@ -1461,7 +1461,7 @@ public:
         return true;
     }
 
-    static std::string getTopModule(const std::string& full_name) {
+    static llvm::StringRef getTopModule(llvm::StringRef full_name) {
         size_t period_index = full_name.find('.');
         if (period_index == std::string::npos) {
             return full_name;
@@ -1489,32 +1489,32 @@ public:
                 level = 0;
             static_cast<AST_Num*>(import->args[0])->n_int = level;
             import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
-            import->args.push_back(new AST_Str(a->name.str()));
+            import->args.push_back(new AST_Str(a->name.s()));
 
             InternedString tmpname = nodeName();
             pushAssign(tmpname, import);
 
-            if (a->asname.str().size() == 0) {
+            if (a->asname.s().size() == 0) {
                 // No asname, so load the top-level module into the name
                 // (e.g., for `import os.path`, loads the os module into `os`)
-                pushAssign(internString(getTopModule(a->name.str())), makeLoad(tmpname, node));
+                pushAssign(internString(getTopModule(a->name.s())), makeLoad(tmpname, node));
             } else {
                 // If there is an asname, get the bottom-level module by
                 // getting the attributes and load it into asname.
                 int l = 0;
                 do {
-                    int r = a->name.str().find('.', l);
+                    int r = a->name.s().find('.', l);
                     if (r == std::string::npos) {
-                        r = a->name.str().size();
+                        r = a->name.s().size();
                     }
                     if (l == 0) {
                         l = r + 1;
                         continue;
                     }
                     pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node), AST_TYPE::Load,
-                                                          internString(a->name.str().substr(l, r - l))));
+                                                          internString(a->name.s().substr(l, r - l))));
                     l = r + 1;
-                } while (l < a->name.str().size());
+                } while (l < a->name.s().size());
                 pushAssign(a->asname, makeLoad(tmpname, node));
             }
         }
@@ -1543,15 +1543,15 @@ public:
         import->args.push_back(new AST_Tuple());
         static_cast<AST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
         for (int i = 0; i < node->names.size(); i++) {
-            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name.str()));
+            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name.s()));
         }
-        import->args.push_back(new AST_Str(node->module.str()));
+        import->args.push_back(new AST_Str(node->module.s()));
 
         InternedString tmp_module_name = nodeName();
         pushAssign(tmp_module_name, import);
 
         for (AST_alias* a : node->names) {
-            if (a->name.str() == "*") {
+            if (a->name.s() == "*") {
 
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
@@ -1569,11 +1569,11 @@ public:
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
                 import_from->args.push_back(makeLoad(tmp_module_name, node));
-                import_from->args.push_back(new AST_Str(a->name.str()));
+                import_from->args.push_back(new AST_Str(a->name.s()));
 
                 InternedString tmp_import_name = nodeName();
                 pushAssign(tmp_import_name, import_from);
-                pushAssign(a->asname.str().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
+                pushAssign(a->asname.s().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
             }
         }
 

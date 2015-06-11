@@ -34,6 +34,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/complex.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
 #include "runtime/ics.h"
@@ -229,8 +230,8 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
         hasnext_ic.reset(ic);
     }
 
-    static std::string hasnext_str("__hasnext__");
-    return ic->call(obj, &hasnext_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = null_on_nonexistent }),
+    static BoxedString* hasnext_str = static_cast<BoxedString*>(PyString_InternFromString("__hasnext__"));
+    return ic->call(obj, hasnext_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = null_on_nonexistent }),
                     ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
@@ -243,8 +244,8 @@ Box* BoxedClass::callNextIC(Box* obj) {
         next_ic.reset(ic);
     }
 
-    static std::string next_str("next");
-    return ic->call(obj, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+    static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+    return ic->call(obj, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
                     nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
@@ -257,8 +258,8 @@ Box* BoxedClass::callReprIC(Box* obj) {
         repr_ic.reset(ic);
     }
 
-    static std::string repr_str("__repr__");
-    return ic->call(obj, &repr_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+    static BoxedString* repr_str = static_cast<BoxedString*>(PyString_InternFromString("__repr__"));
+    return ic->call(obj, repr_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
                     nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
@@ -361,7 +362,7 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
     : BoxedBuiltinFunctionOrMethod(f, name, {}) {
 
-    this->doc = doc ? boxStrConstant(doc) : None;
+    this->doc = doc ? boxString(doc) : None;
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
@@ -371,7 +372,7 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const 
 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
-    this->doc = doc ? boxStrConstant(doc) : None;
+    this->doc = doc ? boxString(doc) : None;
 }
 
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
@@ -424,23 +425,63 @@ std::string BoxedModule::name() {
     }
 }
 
-Box* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
-    auto idx_iter = str_const_index.find(ast_str);
-    if (idx_iter != str_const_index.end())
-        return str_constants[idx_iter->second];
-
-    Box* box = boxString(ast_str);
-    str_const_index[ast_str] = str_constants.size();
-    str_constants.push_back(box);
-    return box;
+BoxedString* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
+    BoxedString*& r = str_constants[ast_str];
+    if (!r)
+        r = boxString(ast_str);
+    return r;
 }
 
-extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
+Box* BoxedModule::getUnicodeConstant(llvm::StringRef ast_str) {
+    Box*& r = unicode_constants[ast_str];
+    if (!r)
+        r = decodeUTF8StringPtr(ast_str);
+    return r;
+}
+
+BoxedInt* BoxedModule::getIntConstant(int64_t n) {
+    BoxedInt*& r = int_constants[n];
+    if (!r)
+        r = new BoxedInt(n);
+    return r;
+}
+
+BoxedFloat* BoxedModule::getFloatConstant(double d) {
+    BoxedFloat*& r = float_constants[d];
+    if (!r)
+        r = static_cast<BoxedFloat*>(boxFloat(d));
+    return r;
+}
+
+Box* BoxedModule::getPureImaginaryConstant(double d) {
+    Box*& r = imaginary_constants[d];
+    if (!r)
+        r = createPureImaginary(d);
+    return r;
+}
+
+Box* BoxedModule::getLongConstant(llvm::StringRef ast_str) {
+    Box*& r = long_constants[ast_str];
+    if (!r)
+        r = createLong(ast_str);
+    return r;
+}
+
+template <typename A, typename B, typename C> void visitContiguousMap(GCVisitor* v, ContiguousMap<A, B, C>& map) {
+    v->visitRange((void* const*)&map.vector()[0], (void* const*)&map.vector()[map.size()]);
+}
+
+void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedModule* d = (BoxedModule*)b;
 
-    v->visitRange((void* const*)&d->str_constants[0], (void* const*)&d->str_constants[d->str_constants.size()]);
+    visitContiguousMap(v, d->str_constants);
+    visitContiguousMap(v, d->unicode_constants);
+    visitContiguousMap(v, d->int_constants);
+    visitContiguousMap(v, d->float_constants);
+    visitContiguousMap(v, d->imaginary_constants);
+    visitContiguousMap(v, d->long_constants);
 }
 
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
@@ -701,7 +742,7 @@ BoxedTuple* EmptyTuple;
 BoxedString* EmptyString;
 }
 
-extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr_dict) {
+extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict) {
     ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict));
     BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
@@ -709,7 +750,7 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
 
     Box* metaclass = NULL;
-    metaclass = attr_dict->getOrNull(boxStrConstant("__metaclass__"));
+    metaclass = attr_dict->getOrNull(boxString("__metaclass__"));
 
     if (metaclass != NULL) {
     } else if (bases->size() > 0) {
@@ -727,7 +768,7 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
     assert(metaclass);
 
     try {
-        Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
+        Box* r = runtimeCall(metaclass, ArgPassSpec(3), name, _bases, _attr_dict, NULL, NULL);
         RELEASE_ASSERT(r, "");
         return r;
     } catch (ExcInfo e) {
@@ -736,8 +777,10 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         Box* msg = e.value;
         assert(msg);
         // TODO this is an extra Pyston check and I don't think we should have to do it:
-        if (isSubclass(e.value->cls, BaseException))
-            msg = getattr(e.value, "message");
+        if (isSubclass(e.value->cls, BaseException)) {
+            static BoxedString* message_str = static_cast<BoxedString*>(PyString_InternFromString("message"));
+            msg = getattr(e.value, message_str);
+        }
 
         if (isSubclass(msg->cls, str_cls)) {
             auto newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
@@ -765,7 +808,7 @@ extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type) {
 }
 
 extern "C" BoxedString* noneRepr(Box* v) {
-    return boxStrConstant("None");
+    return boxString("None");
 }
 
 extern "C" Box* noneHash(Box* v) {
@@ -779,32 +822,32 @@ extern "C" Box* noneNonzero(Box* v) {
 extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod* v) {
     // TODO there has to be a better way
     if (v == repr_obj)
-        return boxStrConstant("<built-in function repr>");
+        return boxString("<built-in function repr>");
     if (v == len_obj)
-        return boxStrConstant("<built-in function len>");
+        return boxString("<built-in function len>");
     if (v == hash_obj)
-        return boxStrConstant("<built-in function hash>");
+        return boxString("<built-in function hash>");
     if (v == range_obj)
-        return boxStrConstant("<built-in function range>");
+        return boxString("<built-in function range>");
     if (v == abs_obj)
-        return boxStrConstant("<built-in function abs>");
+        return boxString("<built-in function abs>");
     if (v == min_obj)
-        return boxStrConstant("<built-in function min>");
+        return boxString("<built-in function min>");
     if (v == max_obj)
-        return boxStrConstant("<built-in function max>");
+        return boxString("<built-in function max>");
     if (v == open_obj)
-        return boxStrConstant("<built-in function open>");
+        return boxString("<built-in function open>");
     if (v == id_obj)
-        return boxStrConstant("<built-in function id>");
+        return boxString("<built-in function id>");
     if (v == chr_obj)
-        return boxStrConstant("<built-in function chr>");
+        return boxString("<built-in function chr>");
     if (v == ord_obj)
-        return boxStrConstant("<built-in function ord>");
+        return boxString("<built-in function ord>");
     RELEASE_ASSERT(false, "builtinFunctionOrMethodRepr not properly implemented");
 }
 
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
-    return boxStrConstant("function");
+    return boxString("function");
 }
 
 static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
@@ -882,7 +925,9 @@ static Box* functionGlobals(Box* self, void*) {
     }
     assert(func->f->source);
     assert(func->f->source->scoping->areGlobalsFromModule());
-    return getattr(func->f->source->parent_module, "__dict__");
+
+    static BoxedString* dict_str = static_cast<BoxedString*>(PyString_InternFromString("__dict__"));
+    return getattr(func->f->source->parent_module, dict_str);
 }
 
 static void functionSetDefaults(Box* b, Box* v, void*) {
@@ -1006,7 +1051,9 @@ static Box* instancemethodRepr(Box* b) {
     Box* funcname = NULL, * klassname = NULL, * result = NULL;
     const char* sfuncname = "?", * sklassname = "?";
 
-    funcname = getattrInternal(func, "__name__", NULL);
+    static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
+    funcname = getattrInternal(func, name_str, NULL);
+
     if (funcname != NULL) {
         if (!PyString_Check(funcname)) {
             funcname = NULL;
@@ -1017,7 +1064,7 @@ static Box* instancemethodRepr(Box* b) {
     if (klass == NULL) {
         klassname = NULL;
     } else {
-        klassname = getattrInternal(klass, "__name__", NULL);
+        klassname = getattrInternal(klass, name_str, NULL);
         if (klassname != NULL) {
             if (!PyString_Check(klassname)) {
                 klassname = NULL;
@@ -1663,7 +1710,7 @@ public:
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
-        const std::string eq_str = "__eq__";
+        static BoxedString* eq_str = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
         return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
                                 NULL);
     }
@@ -1794,7 +1841,7 @@ Box* objectRepr(Box* obj) {
     } else {
         snprintf(buf, 80, "<%s object at %p>", getTypeName(obj), obj);
     }
-    return boxStrConstant(buf);
+    return boxString(buf);
 }
 
 Box* objectStr(Box* obj) {
@@ -1812,7 +1859,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
     }
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
-    setattrGeneric(obj, attr_str->s(), value, NULL);
+    setattrGeneric(obj, attr_str, value, NULL);
     return None;
 }
 
@@ -2298,9 +2345,10 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     return op;
 }
 
-Box* decodeUTF8StringPtr(const std::string* s) {
-    Box* rtn = PyUnicode_DecodeUTF8(s->c_str(), s->size(), "strict");
-    checkAndThrowCAPIException();
+Box* decodeUTF8StringPtr(llvm::StringRef s) {
+    Box* rtn = PyUnicode_DecodeUTF8(s.data(), s.size(), "strict");
+    if (!rtn)
+        throwCAPIException();
     assert(rtn);
     return rtn;
 }
@@ -2402,10 +2450,10 @@ void setupRuntime() {
 
     // Hold off on assigning names until str_cls is ready
     object_cls->tp_name = "object";
-    BoxedString* boxed_type_name = static_cast<BoxedString*>(boxStrConstant("type"));
-    BoxedString* boxed_basestring_name = static_cast<BoxedString*>(boxStrConstant("basestring"));
-    BoxedString* boxed_str_name = static_cast<BoxedString*>(boxStrConstant("str"));
-    BoxedString* boxed_none_name = static_cast<BoxedString*>(boxStrConstant("NoneType"));
+    BoxedString* boxed_type_name = static_cast<BoxedString*>(boxString("type"));
+    BoxedString* boxed_basestring_name = static_cast<BoxedString*>(boxString("basestring"));
+    BoxedString* boxed_str_name = static_cast<BoxedString*>(boxString("str"));
+    BoxedString* boxed_none_name = static_cast<BoxedString*>(boxString("NoneType"));
     static_cast<BoxedHeapClass*>(type_cls)->ht_name = boxed_type_name;
     static_cast<BoxedHeapClass*>(basestring_cls)->ht_name = boxed_basestring_name;
     static_cast<BoxedHeapClass*>(str_cls)->ht_name = boxed_str_name;
@@ -2426,64 +2474,62 @@ void setupRuntime() {
 
 
     tuple_cls = new (0)
-        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
+        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxString("tuple"));
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     gc::registerPermanentRoot(EmptyTuple);
-    list_cls = new (0)
-        BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    list_cls = new (0) BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxString("list"));
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     pyston_getset_cls = new (0)
-        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
+        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxString("getset"));
     attrwrapper_cls = new (0) BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
-                                             static_cast<BoxedString*>(boxStrConstant("attrwrapper")));
+                                             static_cast<BoxedString*>(boxString("attrwrapper")));
     dict_cls = new (0) BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
-                                      static_cast<BoxedString*>(boxStrConstant("dict")));
+                                      static_cast<BoxedString*>(boxString("dict")));
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
-                                      sizeof(BoxedFile), false, static_cast<BoxedString*>(boxStrConstant("file")));
-    int_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false,
-                                     static_cast<BoxedString*>(boxStrConstant("int")));
+                                      sizeof(BoxedFile), false, static_cast<BoxedString*>(boxString("file")));
+    int_cls = new (0)
+        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false, static_cast<BoxedString*>(boxString("int")));
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    bool_cls = new (0) BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false,
-                                      static_cast<BoxedString*>(boxStrConstant("bool")));
+    bool_cls = new (0)
+        BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, static_cast<BoxedString*>(boxString("bool")));
     complex_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false,
-                                         static_cast<BoxedString*>(boxStrConstant("complex")));
+                                         static_cast<BoxedString*>(boxString("complex")));
     long_cls = new (0) BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, 0, sizeof(BoxedLong), false,
-                                      static_cast<BoxedString*>(boxStrConstant("long")));
+                                      static_cast<BoxedString*>(boxString("long")));
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false,
-                                       static_cast<BoxedString*>(boxStrConstant("float")));
+                                       static_cast<BoxedString*>(boxString("float")));
     function_cls = new (0) BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                           offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false,
-                                          static_cast<BoxedString*>(boxStrConstant("function")));
+                                          static_cast<BoxedString*>(boxString("function")));
     builtin_function_or_method_cls = new (0)
         BoxedHeapClass(object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
                        sizeof(BoxedBuiltinFunctionOrMethod), false,
-                       static_cast<BoxedString*>(boxStrConstant("builtin_function_or_method")));
+                       static_cast<BoxedString*>(boxString("builtin_function_or_method")));
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
 
-    module_cls = new (0)
-        BoxedHeapClass(object_cls, &moduleGCHandler, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false,
-                       static_cast<BoxedString*>(boxStrConstant("module")));
+    module_cls = new (0) BoxedHeapClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,
+                                        sizeof(BoxedModule), false, static_cast<BoxedString*>(boxString("module")));
     member_descriptor_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
-                                                   static_cast<BoxedString*>(boxStrConstant("member_descriptor")));
+                                                   static_cast<BoxedString*>(boxString("member_descriptor")));
     capifunc_cls = new (0) BoxedHeapClass(object_cls, BoxedCApiFunction::gcHandler, 0, 0, sizeof(BoxedCApiFunction),
-                                          false, static_cast<BoxedString*>(boxStrConstant("capifunc")));
+                                          false, static_cast<BoxedString*>(boxString("capifunc")));
     method_cls = new (0)
         BoxedHeapClass(object_cls, BoxedMethodDescriptor::gcHandler, 0, 0, sizeof(BoxedMethodDescriptor), false,
-                       static_cast<BoxedString*>(boxStrConstant("method")));
+                       static_cast<BoxedString*>(boxString("method")));
     wrapperobject_cls = new (0)
         BoxedHeapClass(object_cls, BoxedWrapperObject::gcHandler, 0, 0, sizeof(BoxedWrapperObject), false,
-                       static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
+                       static_cast<BoxedString*>(boxString("method-wrapper")));
     wrapperdescr_cls = new (0)
         BoxedHeapClass(object_cls, BoxedWrapperDescriptor::gcHandler, 0, 0, sizeof(BoxedWrapperDescriptor), false,
-                       static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
+                       static_cast<BoxedString*>(boxString("wrapper_descriptor")));
 
-    EmptyString = boxStrConstant("");
+    EmptyString = boxString("");
     gc::registerPermanentRoot(EmptyString);
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
@@ -2866,7 +2912,7 @@ BoxedModule* createModule(const std::string& name, const char* fn, const char* d
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
-    Box* b_name = boxStringPtr(&name);
+    Box* b_name = boxString(name);
 
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:

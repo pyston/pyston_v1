@@ -52,7 +52,7 @@ public:
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
-        return boxStrConstant(self->method_def->ml_name);
+        return boxString(self->method_def->ml_name);
     }
 
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
@@ -111,12 +111,12 @@ public:
         RELEASE_ASSERT(b->cls == capifunc_cls, "");
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
-            return boxStrConstant(s);
+            return boxString(s);
         return None;
     }
 
     static Box* callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                             Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
+                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == capifunc_cls);

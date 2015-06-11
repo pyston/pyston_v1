@@ -50,7 +50,7 @@ void raiseFutureImportErrorNotBeginning(const char* file, AST* node) {
 class BadFutureImportVisitor : public NoopASTVisitor {
 public:
     virtual bool visit_importfrom(AST_ImportFrom* node) {
-        if (node->module.str() == "__future__") {
+        if (node->module.s() == "__future__") {
             raiseFutureImportErrorNotBeginning(file, node);
         }
         return true;
@@ -84,15 +84,15 @@ FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file)
     for (int i = 0; i < body.size(); i++) {
         AST_stmt* stmt = body[i];
 
-        if (stmt->type == AST_TYPE::ImportFrom && static_cast<AST_ImportFrom*>(stmt)->module.str() == "__future__") {
+        if (stmt->type == AST_TYPE::ImportFrom && static_cast<AST_ImportFrom*>(stmt)->module.s() == "__future__") {
             if (future_import_allowed) {
                 // We have a `from __future__` import statement, and we are
                 // still at the top of the file, so just set the appropriate
                 // future flag for each imported option.
 
                 for (AST_alias* alias : static_cast<AST_ImportFrom*>(stmt)->names) {
-                    const std::string& option_name = alias->name.str();
-                    auto iter = future_options.find(option_name);
+                    auto option_name = alias->name;
+                    auto iter = future_options.find(option_name.s());
                     if (iter == future_options.end()) {
                         // If it's not one of the available options, throw an error.
                         // Note: the __future__ module also exposes "all_feature_names",

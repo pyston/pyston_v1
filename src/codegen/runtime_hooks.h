@@ -32,10 +32,9 @@ struct GlobalFuncs {
 
     llvm::Value* printf, *my_assert, *malloc, *free;
 
-    llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction,
-        *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice,
-        *createUserClass, *createClosure, *createGenerator, *createLong, *createSet, *createPureImaginary,
-        *decodeUTF8StringPtr;
+    llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxCLFunction, *unboxCLFunction, *boxInstanceMethod,
+        *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createUserClass, *createClosure,
+        *createGenerator, *createSet;
     llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare, *augbinop, *unboxedLen,
         *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr, *str,
         *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;

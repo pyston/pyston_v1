@@ -88,6 +88,9 @@ public:
                                      llvm::Value* arg3) = 0;
     virtual llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
                                   UnwindInfo unw_info) = 0;
+
+    virtual Box* getIntConstant(int64_t n) = 0;
+    virtual Box* getFloatConstant(double d) = 0;
 };
 
 extern const std::string CREATED_CLOSURE_NAME;
@@ -95,7 +98,7 @@ extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
 
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
-bool isIsDefinedName(const std::string& name);
+bool isIsDefinedName(llvm::StringRef name);
 
 CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);

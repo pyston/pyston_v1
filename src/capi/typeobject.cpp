@@ -3022,7 +3022,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     if (!cls->hasattr("__doc__")) {
         if (cls->tp_doc) {
-            cls->giveAttr("__doc__", boxStrConstant(cls->tp_doc));
+            cls->giveAttr("__doc__", boxString(cls->tp_doc));
         } else {
             cls->giveAttr("__doc__", None);
         }

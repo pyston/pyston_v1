@@ -20,7 +20,10 @@
 #include <cstring>
 #include <stdint.h>
 
+#include "Python.h"
+
 #include "core/cfg.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -101,16 +104,44 @@ std::string getInplaceOpSymbol(int op_type) {
     return std::string(getOpSymbol(op_type)) + '=';
 }
 
-const static std::string strAdd("__add__"), strBitAnd("__and__"), strBitOr("__or__"), strBitXor("__xor__"),
-    strDiv("__div__"), strTrueDiv("__truediv__"), strDivMod("__divmod__"), strEq("__eq__"), strFloorDiv("__floordiv__"),
-    strLShift("__lshift__"), strLt("__lt__"), strLtE("__le__"), strGt("__gt__"), strGtE("__ge__"),
-    strIn("__contains__"), strInvert("__invert__"), strMod("__mod__"), strMult("__mul__"), strNot("__nonzero__"),
-    strNotEq("__ne__"), strPow("__pow__"), strRShift("__rshift__"), strSub("__sub__"), strUAdd("__pos__"),
-    strUSub("__neg__");
-
-const std::string& getOpName(int op_type) {
+BoxedString* getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
+
+    static BoxedString* strAdd, *strBitAnd, *strBitOr, *strBitXor, *strDiv, *strTrueDiv, *strDivMod, *strEq,
+        *strFloorDiv, *strLShift, *strLt, *strLtE, *strGt, *strGtE, *strIn, *strInvert, *strMod, *strMult, *strNot,
+        *strNotEq, *strPow, *strRShift, *strSub, *strUAdd, *strUSub;
+
+    static bool initialized = false;
+    if (!initialized) {
+        strAdd = static_cast<BoxedString*>(PyString_InternFromString("__add__"));
+        strBitAnd = static_cast<BoxedString*>(PyString_InternFromString("__and__"));
+        strBitOr = static_cast<BoxedString*>(PyString_InternFromString("__or__"));
+        strBitXor = static_cast<BoxedString*>(PyString_InternFromString("__xor__"));
+        strDiv = static_cast<BoxedString*>(PyString_InternFromString("__div__"));
+        strTrueDiv = static_cast<BoxedString*>(PyString_InternFromString("__truediv__"));
+        strDivMod = static_cast<BoxedString*>(PyString_InternFromString("__divmod__"));
+        strEq = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
+        strFloorDiv = static_cast<BoxedString*>(PyString_InternFromString("__floordiv__"));
+        strLShift = static_cast<BoxedString*>(PyString_InternFromString("__lshift__"));
+        strLt = static_cast<BoxedString*>(PyString_InternFromString("__lt__"));
+        strLtE = static_cast<BoxedString*>(PyString_InternFromString("__le__"));
+        strGt = static_cast<BoxedString*>(PyString_InternFromString("__gt__"));
+        strGtE = static_cast<BoxedString*>(PyString_InternFromString("__ge__"));
+        strIn = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
+        strInvert = static_cast<BoxedString*>(PyString_InternFromString("__invert__"));
+        strMod = static_cast<BoxedString*>(PyString_InternFromString("__mod__"));
+        strMult = static_cast<BoxedString*>(PyString_InternFromString("__mul__"));
+        strNot = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
+        strNotEq = static_cast<BoxedString*>(PyString_InternFromString("__ne__"));
+        strPow = static_cast<BoxedString*>(PyString_InternFromString("__pow__"));
+        strRShift = static_cast<BoxedString*>(PyString_InternFromString("__rshift__"));
+        strSub = static_cast<BoxedString*>(PyString_InternFromString("__sub__"));
+        strUAdd = static_cast<BoxedString*>(PyString_InternFromString("__pos__"));
+        strUSub = static_cast<BoxedString*>(PyString_InternFromString("__neg__"));
+
+        initialized = true;
+    }
 
     switch (op_type) {
         case AST_TYPE::Add:
@@ -169,9 +200,10 @@ const std::string& getOpName(int op_type) {
     }
 }
 
-std::string getInplaceOpName(int op_type) {
-    const std::string& normal_name = getOpName(op_type);
-    return "__i" + normal_name.substr(2);
+BoxedString* getInplaceOpName(int op_type) {
+    BoxedString* normal_name = getOpName(op_type);
+    // TODO inefficient
+    return static_cast<BoxedString*>(PyString_InternFromString(("__i" + normal_name->s().substr(2).str()).c_str()));
 }
 
 // Maybe better name is "swapped" -- it's what the runtime will try if the normal op
@@ -195,13 +227,14 @@ int getReverseCmpOp(int op_type, bool& success) {
     return op_type;
 }
 
-std::string getReverseOpName(int op_type) {
+BoxedString* getReverseOpName(int op_type) {
     bool reversed = false;
     op_type = getReverseCmpOp(op_type, reversed);
     if (reversed)
         return getOpName(op_type);
-    const std::string& normal_name = getOpName(op_type);
-    return "__r" + normal_name.substr(2);
+    BoxedString* normal_name = getOpName(op_type);
+    // TODO inefficient
+    return static_cast<BoxedString*>(PyString_InternFromString(("__r" + normal_name->s().substr(2).str()).c_str()));
 }
 
 template <class T> static void visitVector(const std::vector<T*>& vec, ASTVisitor* v) {
@@ -1033,7 +1066,7 @@ void PrintVisitor::printIndent() {
 
 bool PrintVisitor::visit_alias(AST_alias* node) {
     printf("%s", node->name.c_str());
-    if (node->asname.str().size())
+    if (node->asname.s().size())
         printf(" as %s", node->asname.c_str());
     return true;
 }
@@ -1824,7 +1857,7 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
             printf("-");
             break;
         default:
-            RELEASE_ASSERT(0, "%s", getOpName(node->op_type).c_str());
+            RELEASE_ASSERT(0, "%s", getOpName(node->op_type)->c_str());
             break;
     }
     node->operand->accept(this);

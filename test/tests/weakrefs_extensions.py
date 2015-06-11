@@ -11,9 +11,11 @@ def f(n):
     return weakref.ref(p)
 
 import weakref
-r = f(20)
+l = []
+for i in xrange(5):
+    l.append(f(20))
 
 import gc
 gc.collect()
 
-print r()
+assert any(r() is None for r in l)

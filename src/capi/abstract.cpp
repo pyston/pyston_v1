@@ -318,15 +318,12 @@ static PyObject* objargs_mktuple(va_list va) noexcept {
 static PyObject* abstract_get_bases(PyObject* cls) noexcept {
     PyObject* bases;
 
-    /*
     static PyObject* __bases__ = NULL;
     if (__bases__ == NULL) {
         __bases__ = PyString_InternFromString("__bases__");
         if (__bases__ == NULL)
             return NULL;
     }
-    */
-    PyObject* __bases__ = boxStrConstant("__bases__");
 
     bases = PyObject_GetAttr(cls, __bases__);
     if (bases == NULL) {
@@ -394,20 +391,17 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
     PyObject* icls;
     int retval = 0;
 
-    /*
     static PyObject* __class__ = NULL;
     if (__class__ == NULL) {
         __class__ = PyString_InternFromString("__class__");
         if (__class__ == NULL)
             return -1;
     }
-    */
 
     if (PyClass_Check(cls) && PyInstance_Check(inst)) {
         PyObject* inclass = static_cast<BoxedInstance*>(inst)->inst_cls;
         retval = PyClass_IsSubclass(inclass, cls);
     } else if (PyType_Check(cls)) {
-        PyObject* __class__ = boxStrConstant("__class__");
         retval = PyObject_TypeCheck(inst, (PyTypeObject*)cls);
         if (retval == 0) {
             PyObject* c = PyObject_GetAttr(inst, __class__);
@@ -420,7 +414,6 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
             }
         }
     } else {
-        PyObject* __class__ = boxStrConstant("__class__");
         if (!check_class(cls, "isinstance() arg 2 must be a class, type,"
                               " or tuple of classes and types"))
             return -1;

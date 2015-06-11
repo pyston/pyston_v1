@@ -299,7 +299,7 @@ public:
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
     typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                     const std::vector<const std::string*>*);
+                                     const std::vector<BoxedString*>*);
     InternalCallable internal_callable = NULL;
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
@@ -661,15 +661,15 @@ void addToSysArgv(const char* str);
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func);
-void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...);
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func);
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...);
 
 struct LineInfo {
 public:
     const int line, column;
     std::string file, func;
 
-    LineInfo(int line, int column, const std::string& file, const std::string& func)
+    LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)
         : line(line), column(column), file(file), func(func) {}
 };
 

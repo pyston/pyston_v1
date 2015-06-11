@@ -95,16 +95,16 @@ extern "C" Box* abs_(Box* x) {
     } else if (x->cls == long_cls) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
-        static const std::string abs_str("__abs__");
-        return callattr(x, &abs_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+        static BoxedString* abs_str = static_cast<BoxedString*>(PyString_InternFromString("__abs__"));
+        return callattr(x, abs_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
                         NULL, NULL, NULL, NULL, NULL);
     }
 }
 
 extern "C" Box* hexFunc(Box* x) {
-    static const std::string hex_str("__hex__");
-    Box* r = callattr(x, &hex_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
-                      NULL, NULL, NULL, NULL, NULL);
+    static BoxedString* hex_str = static_cast<BoxedString*>(PyString_InternFromString("__hex__"));
+    Box* r = callattr(x, hex_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0), NULL,
+                      NULL, NULL, NULL, NULL);
     if (!r)
         raiseExcHelper(TypeError, "hex() argument can't be converted to hex");
 
@@ -115,9 +115,9 @@ extern "C" Box* hexFunc(Box* x) {
 }
 
 extern "C" Box* octFunc(Box* x) {
-    static const std::string oct_str("__oct__");
-    Box* r = callattr(x, &oct_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
-                      NULL, NULL, NULL, NULL, NULL);
+    static BoxedString* oct_str = static_cast<BoxedString*>(PyString_InternFromString("__oct__"));
+    Box* r = callattr(x, oct_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0), NULL,
+                      NULL, NULL, NULL, NULL);
     if (!r)
         raiseExcHelper(TypeError, "oct() argument can't be converted to oct");
 
@@ -209,8 +209,8 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
 
 extern "C" Box* next(Box* iterator, Box* _default) {
     try {
-        static std::string next_str = "next";
-        return callattr(iterator, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+        static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+        return callattr(iterator, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         if (_default && e.matches(StopIteration))
@@ -346,7 +346,7 @@ Box* range(Box* start, Box* stop, Box* step) {
 
 Box* notimplementedRepr(Box* self) {
     assert(self == NotImplemented);
-    return boxStrConstant("NotImplemented");
+    return boxString("NotImplemented");
 }
 
 Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
@@ -414,7 +414,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
-    delattr(obj, str->data());
+    delattr(obj, str);
     return None;
 }
 
@@ -429,7 +429,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattrInternal(obj, str->data(), NULL);
+        rtn = getattrInternal(obj, str, NULL);
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -453,7 +453,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattr(obj, str->data(), value);
+    setattr(obj, str, value);
     return None;
 }
 
@@ -467,7 +467,7 @@ Box* hasattr(Box* obj, Box* _str) {
     BoxedString* str = static_cast<BoxedString*>(_str);
     Box* attr;
     try {
-        attr = getattrInternal(obj, str->s(), NULL);
+        attr = getattrInternal(obj, str, NULL);
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;
@@ -652,7 +652,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     if (args->size() == 1)
         rtn->giveAttr("message", args->elts[0]);
     else
-        rtn->giveAttr("message", boxStrConstant(""));
+        rtn->giveAttr("message", boxString(""));
     return rtn;
 }
 
@@ -683,7 +683,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
 
     BoxedClass* cls
         = BoxedHeapClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
-    cls->giveAttr("__module__", boxStrConstant("exceptions"));
+    cls->giveAttr("__module__", boxString("exceptions"));
 
     if (base == object_cls) {
         cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew, UNKNOWN, 1, 0, true, true)));
@@ -707,14 +707,14 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         char* dot_pos = strchr(name, '.');
         RELEASE_ASSERT(dot_pos, "");
         int n = strlen(name);
-        BoxedString* boxedName = boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1);
+        BoxedString* boxedName = boxString(llvm::StringRef(dot_pos + 1, n - (dot_pos - name) - 1));
 
         // It can also be a tuple of bases
         RELEASE_ASSERT(isSubclass(_base->cls, type_cls), "");
         BoxedClass* base = static_cast<BoxedClass*>(_base);
 
         if (PyDict_GetItemString(dict, "__module__") == NULL) {
-            PyDict_SetItemString(dict, "__module__", boxStrConstantSize(name, dot_pos - name));
+            PyDict_SetItemString(dict, "__module__", boxString(llvm::StringRef(name, dot_pos - name)));
         }
         checkAndThrowCAPIException();
 
@@ -864,7 +864,11 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     Box* dest, *end;
 
-    auto it = kwargs->d.find(boxStrConstant("file"));
+    static BoxedString* file_str = static_cast<BoxedString*>(PyString_InternFromString("file"));
+    static BoxedString* end_str = static_cast<BoxedString*>(PyString_InternFromString("end"));
+    static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
+
+    auto it = kwargs->d.find(file_str);
     if (it != kwargs->d.end()) {
         dest = it->second;
         kwargs->d.erase(it);
@@ -872,19 +876,17 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
         dest = getSysStdout();
     }
 
-    it = kwargs->d.find(boxStrConstant("end"));
+    it = kwargs->d.find(end_str);
     if (it != kwargs->d.end()) {
         end = it->second;
         kwargs->d.erase(it);
     } else {
-        end = boxStrConstant("\n");
+        end = boxString("\n");
     }
 
     RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
-    static const std::string write_str("write");
-
-    Box* space_box = boxStrConstant(" ");
+    static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
 
     // TODO softspace handling?
     // TODO: duplicates code with ASTInterpreter::visit_print()
@@ -893,18 +895,18 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
         BoxedString* s = str(e);
 
         if (!first) {
-            Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                              ArgPassSpec(1), space_box, NULL, NULL, NULL, NULL);
+            Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                              ArgPassSpec(1), space_str, NULL, NULL, NULL, NULL);
             RELEASE_ASSERT(r, "");
         }
         first = false;
 
-        Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+        Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
                           ArgPassSpec(1), s, NULL, NULL, NULL, NULL);
         RELEASE_ASSERT(r, "");
     }
 
-    Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+    Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
                       ArgPassSpec(1), end, NULL, NULL, NULL, NULL);
     RELEASE_ASSERT(r, "");
 
@@ -912,15 +914,15 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 Box* getreversed(Box* o) {
-    static const std::string reversed_str("__reversed__");
-    static const std::string getitem_str("__getitem__");
+    static BoxedString* reversed_str = static_cast<BoxedString*>(PyString_InternFromString("__reversed__"));
+
     // TODO add rewriting to this?  probably want to try to avoid this path though
-    Box* r = callattr(o, &reversed_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+    Box* r = callattr(o, reversed_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
                       NULL, NULL, NULL, NULL, NULL);
     if (r)
         return r;
 
-    if (!typeLookup(o->cls, getitem_str, NULL)) {
+    if (!typeLookup(o->cls, "__getitem__", NULL)) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }
     int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there
@@ -1261,7 +1263,7 @@ void setupBuiltins() {
 
     open_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)open, typeFromClass(file_cls), 3, 2, false, false,
                                                               ParamNames({ "name", "mode", "buffering" }, "", "")),
-                                                "open", { boxStrConstant("r"), boxInt(-1) });
+                                                "open", { boxString("r"), boxInt(-1) });
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("globals", new BoxedBuiltinFunctionOrMethod(

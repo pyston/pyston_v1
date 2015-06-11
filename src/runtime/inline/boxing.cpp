@@ -30,31 +30,11 @@ extern "C" Box* createList() {
     return new BoxedList();
 }
 
-BoxedString* _boxStrConstant(const char* chars) {
-    size_t len = strlen(chars);
-    return new (len) BoxedString(chars, len);
-}
-extern "C" BoxedString* boxStrConstant(const char* chars) {
-    return _boxStrConstant(chars);
-}
-
-BoxedString* _boxStrConstantSize(const char* chars, size_t n) {
-    return new (n) BoxedString(chars, n);
-}
-
-extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n) {
-    return _boxStrConstantSize(chars, n);
-}
-
-extern "C" Box* boxStringPtr(const std::string* s) {
-    return new (s->size()) BoxedString(s->c_str(), s->size());
-}
-
-Box* boxString(llvm::StringRef s) {
+BoxedString* boxString(llvm::StringRef s) {
     return new (s.size()) BoxedString(s);
 }
 
-Box* boxStringTwine(const llvm::Twine& t) {
+BoxedString* boxStringTwine(const llvm::Twine& t) {
     llvm::SmallString<256> Vec;
     return boxString(t.toStringRef(Vec));
 }
