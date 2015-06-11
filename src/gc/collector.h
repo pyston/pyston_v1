@@ -15,6 +15,7 @@
 #ifndef PYSTON_GC_COLLECTOR_H
 #define PYSTON_GC_COLLECTOR_H
 
+#include <list>
 #include <vector>
 
 #include "core/types.h"
@@ -29,6 +30,9 @@ extern FILE* trace_fp;
 #else
 #define GC_TRACE_LOG(...)
 #endif
+
+extern std::list<Box*> pending_finalization_list;
+extern std::list<PyWeakReference*> weakrefs_needing_callback_list;
 
 // Mark this gc-allocated object as being a root, even if there are no visible references to it.
 // (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use

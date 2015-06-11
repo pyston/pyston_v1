@@ -135,6 +135,11 @@ PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
 // to reduce any chances of compiler reorderings or a GC somehow happening between the assignment
 // to the static slot and the call to PyGC_AddRoot.
 
+// Pyston change : expose these type objects
+extern PyTypeObject Pattern_Type;
+extern PyTypeObject Match_Type;
+extern PyTypeObject Scanner_Type;
+
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str

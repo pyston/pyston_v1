@@ -3011,6 +3011,17 @@ void commonClassSetup(BoxedClass* cls) {
     assert(cls->tp_dict && cls->tp_dict->cls == attrwrapper_cls);
 }
 
+static void checkIfExceptionType(BoxedClass* cls) {
+    BoxedClass* base = cls;
+    while (base) {
+        if (base == PyExc_BaseException) {
+            exception_types.push_back(cls);
+            break;
+        }
+        base = base->tp_base;
+    }
+}
+
 extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
     // We don't cache anything yet that would need to be invalidated:
 }
@@ -3109,6 +3120,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     // this should get automatically initialized to 0 on this path:
     assert(cls->attrs_offset == 0);
+
+    checkIfExceptionType(cls);
 
     return 0;
 }

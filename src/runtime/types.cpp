@@ -94,6 +94,8 @@ void setupGC();
 
 bool IN_SHUTDOWN = false;
 
+std::vector<BoxedClass*> exception_types;
+
 #define SLICE_START_OFFSET ((char*)&(((BoxedSlice*)0x01)->start) - (char*)0x1)
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
@@ -2849,6 +2851,46 @@ out:
     return result;
 }
 
+static void setTypeGCProxy(BoxedClass* cls) {
+    cls->tp_alloc = PystonType_GenericAlloc;
+    cls->gc_visit = proxy_to_tp_traverse;
+    cls->tp_dealloc = proxy_to_tp_clear;
+    cls->has_safe_tp_dealloc = true;
+    cls->is_pyston_class = true;
+}
+
+static void setTypeGCNone(BoxedClass* cls) {
+    cls->tp_alloc = PystonType_GenericAlloc;
+    cls->tp_free = default_free;
+    cls->tp_dealloc = dealloc_null;
+    cls->has_safe_tp_dealloc = true;
+    cls->is_pyston_class = true;
+}
+
+static void setupDefaultClassGCParticipation() {
+    // some additional setup to ensure weakrefs participate in our GC
+    setTypeGCProxy(&_PyWeakref_RefType);
+    setTypeGCProxy(&_PyWeakref_ProxyType);
+    setTypeGCProxy(&_PyWeakref_CallableProxyType);
+
+    // This is an optimization to speed up the handling of unicode objects,
+    // exception objects, regular expression objects, etc in garbage collection.
+    // There's no reason to have them part of finalizer ordering.
+    //
+    // This is important in tests like django-template which allocates
+    // hundreds of thousands of unicode strings.
+    setTypeGCNone(unicode_cls);
+
+    for (BoxedClass* cls : exception_types) {
+        setTypeGCNone(cls);
+    }
+
+    setTypeGCNone(&Scanner_Type);
+    setTypeGCNone(&Match_Type);
+    setTypeGCNone(&Pattern_Type);
+    setTypeGCNone(&PyCallIter_Type);
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -3325,27 +3367,7 @@ void setupRuntime() {
     PyMarshal_Init();
     initstrop();
 
-    // some additional setup to ensure weakrefs participate in our GC
-    BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
-    weakref_ref_cls->tp_alloc = PystonType_GenericAlloc;
-    weakref_ref_cls->gc_visit = proxy_to_tp_traverse;
-    weakref_ref_cls->tp_dealloc = proxy_to_tp_clear;
-    weakref_ref_cls->has_safe_tp_dealloc = true;
-    weakref_ref_cls->is_pyston_class = true;
-
-    BoxedClass* weakref_proxy_cls = &_PyWeakref_ProxyType;
-    weakref_proxy_cls->tp_alloc = PystonType_GenericAlloc;
-    weakref_proxy_cls->gc_visit = proxy_to_tp_traverse;
-    weakref_proxy_cls->tp_dealloc = proxy_to_tp_clear;
-    weakref_proxy_cls->has_safe_tp_dealloc = true;
-    weakref_proxy_cls->is_pyston_class = true;
-
-    BoxedClass* weakref_callableproxy = &_PyWeakref_CallableProxyType;
-    weakref_callableproxy->tp_alloc = PystonType_GenericAlloc;
-    weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
-    weakref_callableproxy->tp_dealloc = proxy_to_tp_clear;
-    weakref_callableproxy->has_safe_tp_dealloc = true;
-    weakref_callableproxy->is_pyston_class = true;
+    setupDefaultClassGCParticipation();
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);

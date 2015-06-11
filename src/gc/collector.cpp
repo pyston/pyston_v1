@@ -48,13 +48,13 @@ namespace gc {
 FILE* trace_fp;
 #endif
 
+std::list<Box*> pending_finalization_list;
+std::list<PyWeakReference*> weakrefs_needing_callback_list;
+
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
 
 static std::unordered_set<void*> nonheap_roots;
-
-static std::list<Box*> pending_finalization_list;
-static std::list<PyWeakReference*> weakrefs_needing_callback_list;
 
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap

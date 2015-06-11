@@ -320,7 +320,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-static void dealloc_null(Box* box) {
+void dealloc_null(Box* box) {
     assert(box->cls->tp_del == NULL);
 }
 
@@ -364,7 +364,7 @@ static void subtype_dealloc(Box* self) {
 // We don't need CPython's version of tp_free since we have GC.
 // We still need to set tp_free to something and not a NULL pointer,
 // because C extensions might still call tp_free from tp_dealloc.
-static void default_free(void*) {
+void default_free(void*) {
 }
 
 bool BoxedClass::hasNativeDestructor() {
