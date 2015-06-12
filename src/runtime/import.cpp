@@ -49,7 +49,7 @@ Box* createAndRunModule(const std::string& name, const std::string& fn) {
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {
         removeModule(name);
-        raiseRaw(e);
+        throw e;
     }
 
     Box* r = getSysModulesDict()->getOrNull(boxString(name));
@@ -74,7 +74,7 @@ static Box* createAndRunModule(const std::string& name, const std::string& fn, c
         compileAndRunModule(ast, module);
     } catch (ExcInfo e) {
         removeModule(name);
-        raiseRaw(e);
+        throw e;
     }
 
     Box* r = getSysModulesDict()->getOrNull(boxString(name));
@@ -406,7 +406,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
                 RELEASE_ASSERT(0, "%d", sr.type);
         } catch (ExcInfo e) {
             removeModule(name);
-            raiseRaw(e);
+            throw e;
         }
 
         if (parent_module && parent_module != None)
@@ -560,7 +560,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
         pathlist = getattrInternal(module, path_str, NULL);
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
-            raiseRaw(e);
+            throw e;
     }
 
     if (pathlist == NULL) {

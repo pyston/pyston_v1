@@ -926,7 +926,7 @@ void checkAndThrowCAPIException() {
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
         if (tb != None)
-            raiseRaw(ExcInfo(value->cls, value, tb));
+            throw ExcInfo(value->cls, value, tb);
         raiseExc(value);
     }
 }

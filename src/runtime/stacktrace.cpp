@@ -72,8 +72,6 @@ void raiseRaw(const ExcInfo& e) {
 #endif
 #endif
 
-    // printf ("beginning unwind\n");
-    beginUnwind();
     throw e;
 }
 
@@ -88,7 +86,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
 
     auto tb = new BoxedTraceback();
     tb->addLine(LineInfo(lineno, col_offset, file, func));
-    raiseRaw(ExcInfo(exc->cls, exc, tb));
+    throw ExcInfo(exc->cls, exc, tb);
 }
 
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
@@ -207,7 +205,7 @@ extern "C" void raise0() {
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
     exc_info->reraise = true;
-    raiseRaw(*exc_info);
+    throw * exc_info;
 }
 
 #ifndef NDEBUG
@@ -288,7 +286,7 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
     exc_info.reraise = reraise;
-    raiseRaw(exc_info);
+    throw exc_info;
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {

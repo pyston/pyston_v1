@@ -635,7 +635,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
     // during unwinding!
 
-    return pyston::getExceptionStorage(pyston::getUnwind());
+    return pyston::getExceptionStorage(pyston::beginUnwind());
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our
