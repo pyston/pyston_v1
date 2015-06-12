@@ -19,6 +19,10 @@
 
 #include "codegen/codegen.h"
 
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#undef UNW_LOCAL_ONLY
+
 namespace pyston {
 
 class Box;
@@ -37,13 +41,14 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
 
-void* beginUnwind();
-void* getUnwind();
-void endUnwind(void* unwind_token);
-void* getExceptionFerry(void* unwind_token);
+class UnwindSession;
+UnwindSession* beginUnwind();
+UnwindSession* getUnwind();
+void endUnwind(UnwindSession* unwind_session);
+void* getExceptionStorage(UnwindSession* unwind_session);
+void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor);
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
-void maybeTracebackHere(void* unw_cursor, void* unwind_token);
 
 struct ExecutionPoint {
     CompiledFunction* cf;

@@ -25,7 +25,6 @@
 #include "codegen/unwinding.h"       // getCFForAddress
 #include "core/ast.h"
 #include "core/stats.h"        // StatCounter
-#include "core/threading.h"    // for getExceptionFerry
 #include "core/types.h"        // for ExcInfo
 #include "core/util.h"         // Timer
 #include "runtime/generator.h" // generatorEntry
@@ -493,7 +492,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    void* unwind_token = getUnwind();
+    auto unwind_token = getUnwind();
 
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
@@ -508,7 +507,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             print_frame(&cursor, &pip);
         }
 
-        maybeTracebackHere(&cursor, unwind_token);
+        unwindingThroughFrame(unwind_token, &cursor);
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -637,7 +636,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
     // during unwinding!
 
-    return pyston::getExceptionFerry(pyston::getUnwind());
+    return pyston::getExceptionStorage(pyston::getUnwind());
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our

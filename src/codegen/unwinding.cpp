@@ -297,11 +297,6 @@ public:
     intptr_t regs[16];
     uint16_t regs_valid;
 
-    // PythonFrameIteratorImpl(const PythonFrameIteratorImpl&) = delete;
-    // void operator=(const PythonFrameIteratorImpl&) = delete;
-    // PythonFrameIteratorImpl(const PythonFrameIteratorImpl&&) = delete;
-    // void operator=(const PythonFrameIteratorImpl&&) = delete;
-
     PythonFrameIteratorImpl() : regs_valid(0) {}
 
     PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CompiledFunction* cf)
@@ -445,7 +440,7 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
 }
 
-bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
+bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
     bool jitted = cf != NULL;
     if (!cf) {
@@ -498,6 +493,10 @@ public:
     }
 
     void addTraceback(const LineInfo& line_info) {
+        if (skip) {
+            skip = false;
+            return;
+        }
         if (exc_info.reraise) {
             exc_info.reraise = false;
             return;
@@ -513,6 +512,75 @@ public:
         v->visitIf(o->exc_info.traceback);
     }
 };
+static __thread UnwindSession* cur_unwind;
+
+UnwindSession* beginUnwind() {
+    if (!cur_unwind) {
+        cur_unwind = new UnwindSession();
+        pyston::gc::registerPermanentRoot(cur_unwind);
+    }
+    // if we can figure out a way to make endUnwind in cxx_uwind.cpp work, we can remove this.
+    cur_unwind->clear();
+    return cur_unwind;
+}
+
+UnwindSession* getUnwind() {
+    RELEASE_ASSERT(cur_unwind, "");
+    return cur_unwind;
+}
+
+void endUnwind(UnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    cur_unwind->clear();
+}
+void* getExceptionStorage(UnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    UnwindSession* state = static_cast<UnwindSession*>(unwind);
+    return state->getExcInfoStorage();
+}
+
+static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
+    AST_stmt* current_stmt = frame_it->getCurrentStatement();
+    auto* cf = frame_it->getCF();
+    assert(cf);
+
+    auto source = cf->clfunc->source.get();
+
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+}
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+    // basically the same as UnwindSession::addTraceback, but needs to
+    // be callable after an UnwindSession has ended.  The interpreter
+    // will call this from catch blocks if it needs to ensure that a
+    // line is added.  Right now this only happens in
+    // ASTInterpreter::visit_invoke.
+
+    // It's basically the same except for one thing: we don't have to
+    // worry about the 'skip' (osr) state that UnwindSession handles
+    // here, because the only way we could have gotten into the ast
+    // interpreter is if the exception wasn't caught, and if there was
+    // the osr frame for the one the interpreter is running, it would
+    // have already caught it.
+    if (exc_info->reraise) {
+        exc_info->reraise = false;
+        return;
+    }
+    BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info->traceback));
+}
+
+void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor) {
+    unw_word_t ip = get_cursor_ip(cursor);
+    unw_word_t bp = get_cursor_bp(cursor);
+
+    PythonFrameIteratorImpl frame_iter;
+    if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
+        unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
+
+        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+        unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+    }
+}
 
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
 // the stack frame that they were created in, so we need to use this approach (as opposed to
@@ -538,7 +606,7 @@ template <typename Func> void unwindPythonStack(Func func) {
         bool stop_unwinding = false;
 
         PythonFrameIteratorImpl frame_iter;
-        if (unwindProcessFrame(ip, bp, &cursor, &frame_iter)) {
+        if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
             if (!unwind_state->shouldSkipFrame())
                 stop_unwinding = func(&frame_iter);
 
@@ -579,70 +647,6 @@ static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
         return true;
     });
     return rtn;
-}
-
-static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
-    AST_stmt* current_stmt = frame_it->getCurrentStatement();
-    auto* cf = frame_it->getCF();
-    assert(cf);
-
-    auto source = cf->clfunc->source.get();
-
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
-}
-
-
-
-void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
-    if (exc_info->reraise) {
-        exc_info->reraise = false;
-        return;
-    }
-    BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info->traceback));
-}
-
-static __thread UnwindSession* cur_unwind;
-void* beginUnwind() {
-    if (!cur_unwind) {
-        cur_unwind = new UnwindSession();
-        pyston::gc::registerPermanentRoot(cur_unwind);
-    }
-    // if we can figure out a way to make endUnwind in cxx_uwind.cpp work, we can remove this.
-    cur_unwind->clear();
-    return cur_unwind;
-}
-
-void* getUnwind() {
-    RELEASE_ASSERT(cur_unwind, "");
-    return cur_unwind;
-}
-
-void endUnwind(void* unwind) {
-    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
-    cur_unwind->clear();
-}
-void* getExceptionFerry(void* unwind) {
-    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
-    UnwindSession* state = static_cast<UnwindSession*>(unwind);
-    return state->getExcInfoStorage();
-}
-
-void maybeTracebackHere(void* unw_cursor, void* unwind_token) {
-    unw_cursor_t* cursor = (unw_cursor_t*)unw_cursor;
-    UnwindSession* state = (UnwindSession*)unwind_token;
-
-    unw_word_t ip = get_cursor_ip(cursor);
-    unw_word_t bp = get_cursor_bp(cursor);
-
-    PythonFrameIteratorImpl frame_iter;
-    if (unwindProcessFrame(ip, bp, cursor, &frame_iter)) {
-        if (!state->shouldSkipFrame()) {
-            state->addTraceback(lineInfoForFrame(&frame_iter));
-        }
-
-        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-        state->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
-    }
 }
 
 // To produce a traceback, we:
