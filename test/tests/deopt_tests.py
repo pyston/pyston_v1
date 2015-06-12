@@ -1,4 +1,5 @@
 # skip-if: '-O' in EXTRA_JIT_ARGS
+# expected: statfail
 # statcheck: 4 <= noninit_count('num_deopt') < 50
 # statcheck: 1 <= stats["num_osr_exits"] <= 2
 
@@ -81,3 +82,25 @@ def main():
         if i == 1500:
             c.pid = 1.0
 main()
+
+
+# This test tries to OSR up to the highest tier and then deopt from there:
+def test_deopt_from_maximal(C):
+    c = C()
+    c.a = 1
+    def f(c):
+        n = 1000000
+        while n:
+            c.a
+            n -= 1
+    f(c)
+    c.a = None
+    f(c)
+
+# Test for both old-style and new-style classes:
+class C:
+    pass
+class D(object):
+    pass
+test_deopt_from_maximal(C)
+test_deopt_from_maximal(D)
