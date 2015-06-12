@@ -108,9 +108,23 @@ g10.next()
 try:
     g10.next()
 except StopIteration as e:
-    print "Cought exc1:", type(e), e
+    print "Caught exc1:", type(e), e
 try:
     g10.next()
 except StopIteration as e:
-    print "Cought exc2:", type(e), e
+    print "Caught exc2:", type(e), e
 
+
+def f():
+    yield 1/0
+g = f()
+
+try:
+    g.next()
+except Exception as e:
+    print type(e), e # ZeroDivisionError
+
+try:
+    g.next()
+except Exception as e:
+    print type(e), e # StopIteration

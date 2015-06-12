@@ -33,6 +33,7 @@ struct LineInfo;
 
 extern const void* interpreter_instr_addr;
 
+void setupInterpreter();
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args);
 Box* astInterpretFunctionEval(CompiledFunction* cf, Box* globals, Box* boxedLocals);
@@ -46,7 +47,6 @@ struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);
 
-void gatherInterpreterRoots(gc::GCVisitor* visitor);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
 }
 

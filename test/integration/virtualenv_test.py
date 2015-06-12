@@ -21,7 +21,15 @@ set -e
 set -ux
 python -c 'import __future__'
 python -c 'import sys; print sys.executable'
-pip install bcrypt==1.1.0 python-gflags==2.0 sqlalchemy==1.0.0 Pillow==2.8.1 decorator==3.4.2 oauth2client==1.4.11
+# The first entry of each line is the main thing we're testing; the rest are dependencies.
+# List the dependencies explicitly so that we can enforce specific revisions; these were the
+# versions that got installed as of 6/5/15
+pip install bcrypt==1.1.0 cffi==1.1.0 six==1.9.0 pycparser==2.13
+pip install python-gflags==2.0
+pip install sqlalchemy==1.0.0
+pip install Pillow==2.8.1
+pip install decorator==3.4.2
+pip install oauth2client==1.4.11 httplib2==0.9.1 pyasn1==0.1.7 pyasn1-modules==0.0.5 rsa==3.1.4
 python -c 'import bcrypt; assert bcrypt.__version__ == "1.1.0"; assert bcrypt.hashpw("password1", "$2a$12$0123456789012345678901").endswith("I1hdtg4K"); print "bcrypt seems to work"'
 python -c 'import gflags; print "gflags imports"'
 python -c 'import sqlalchemy; print "sqlalchemy imports"'

@@ -87,8 +87,6 @@ Context* getReturnContextForGeneratorFrame(void* frame_addr) {
 
 void generatorEntry(BoxedGenerator* g) {
     {
-        STAT_TIMER2(t0, "us_timer_generator_toplevel", g->timer_time);
-
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
 
@@ -110,11 +108,6 @@ void generatorEntry(BoxedGenerator* g) {
         // we returned from the body of the generator. next/send/throw will notify the caller
         g->entryExited = true;
         threading::popGenerator();
-
-#if STAT_TIMERS
-        g->timer_time = getCPUTicks(); // store off the timer that our caller (in g->returnContext) will resume at
-        STAT_TIMER_NAME(t0).pause(g->timer_time);
-#endif
     }
     swapContext(&g->context, g->returnContext, 0);
 }
@@ -131,24 +124,27 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
     // check if the generator already exited
     if (self->entryExited) {
         freeGeneratorStack(self);
-        return;
+        raiseExcHelper(StopIteration, (const char*)nullptr);
     }
 
     self->returnValue = v;
     self->running = true;
 
 #if STAT_TIMERS
-    // store off the time that the generator will use to initialize its toplevel timer
-    self->timer_time = getCPUTicks();
-    StatTimer* current_timers = StatTimer::swapStack(self->statTimers, self->timer_time);
+    if (!self->prev_stack)
+        self->prev_stack = StatTimer::createStack(self->my_timer);
+    else
+        self->prev_stack = StatTimer::swapStack(self->prev_stack);
 #endif
 
     swapContext(&self->returnContext, self->context, (intptr_t)self);
 
 #if STAT_TIMERS
-    // if the generator exited we use the time that generatorEntry stored in self->timer_time (the same time it paused
-    // its timer at).
-    self->statTimers = StatTimer::swapStack(current_timers, self->entryExited ? self->timer_time : getCPUTicks());
+    self->prev_stack = StatTimer::swapStack(self->prev_stack);
+    if (self->entryExited) {
+        assert(self->prev_stack == &self->my_timer);
+        assert(self->my_timer.isPaused());
+    }
 #endif
 
     self->running = false;
@@ -165,7 +161,10 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
 
     if (self->entryExited) {
         freeGeneratorStack(self);
-        self->exception = excInfoForRaise(StopIteration, None, None);
+        // Reset the current exception.
+        // We could directly create the StopIteration exception but we delay creating it because often the caller is not
+        // interested in the exception (=generatorHasnext). If we really need it we will create it inside generatorSend.
+        self->exception = ExcInfo(NULL, NULL, NULL);
         return;
     }
 }
@@ -188,9 +187,12 @@ Box* generatorSend(Box* s, Box* v) {
         // create a new one if the generator exited implicit.
         // CPython raises the custom exception just once, on the next generator 'next' it will we a normal StopIteration
         // exc.
-        assert(self->exception.matches(StopIteration));
+        assert(self->exception.type == NULL || self->exception.matches(StopIteration));
         ExcInfo old_exc = self->exception;
-        self->exception = excInfoForRaise(StopIteration, None, None);
+        // Clear the exception for GC purposes:
+        self->exception = ExcInfo(nullptr, nullptr, nullptr);
+        if (old_exc.type == NULL)
+            raiseExcHelper(StopIteration, (const char*)nullptr);
         raiseRaw(old_exc);
     }
 
@@ -282,7 +284,9 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg
     return new BoxedGenerator(function, arg1, arg2, arg3, args);
 }
 
-
+#if STAT_TIMERS
+static uint64_t* generator_timer_counter = Stats::getStatCounter("us_timer_generator_toplevel");
+#endif
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
     : function(function),
       arg1(arg1),
@@ -294,7 +298,13 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       returnValue(nullptr),
       exception(nullptr, nullptr, nullptr),
       context(nullptr),
-      returnContext(nullptr) {
+      returnContext(nullptr)
+#if STAT_TIMERS
+      ,
+      prev_stack(NULL),
+      my_timer(generator_timer_counter)
+#endif
+{
 
     int numArgs = function->f->num_args;
     if (numArgs > 3) {

@@ -16,6 +16,7 @@
 #include "pythread.h"
 
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "runtime/types.h"
 
 namespace pyston {

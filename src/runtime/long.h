@@ -37,7 +37,7 @@ public:
     DEFAULT_CLASS(long_cls);
 };
 
-extern "C" Box* createLong(const std::string* s);
+extern "C" Box* createLong(llvm::StringRef s);
 extern "C" BoxedLong* boxLong(int64_t n);
 
 Box* longNeg(BoxedLong* lhs);

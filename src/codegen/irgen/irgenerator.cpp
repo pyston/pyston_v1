@@ -117,8 +117,7 @@ static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Valu
 
 static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    static_assert(offsetof(ExcInfo, type) == 0, "");
-    return builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(v, 0, 0), 0, 0);
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 0);
 }
 
 static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
@@ -180,8 +179,16 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // The "normal" case
 
             // frame_info.exc.type = NULL
-            builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), getExcinfoGep(builder, al));
-
+            // frame_info.exc.value = NULL
+            // frame_info.exc.traceback = NULL
+            llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+            llvm::Value* exc_info = getExcinfoGep(builder, al);
+            builder.CreateStore(
+                null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
+            builder.CreateStore(
+                null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, value) / sizeof(Box*)));
+            builder.CreateStore(null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, traceback)
+                                                                                                / sizeof(Box*)));
             // frame_info.boxedLocals = NULL
             llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
             builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
@@ -342,6 +349,24 @@ public:
     }
 
     llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
+#ifndef NDEBUG
+        // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
+        // get checked.
+        llvm::FunctionType* FTy
+            = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())->getElementType());
+
+        assert((args.size() == FTy->getNumParams() || (FTy->isVarArg() && args.size() > FTy->getNumParams()))
+               && "Calling a function with wrong number of args!");
+
+        for (unsigned i = 0; i != args.size(); ++i) {
+            if (!(i >= FTy->getNumParams() || FTy->getParamType(i) == args[i]->getType())) {
+                llvm::errs() << "Expected: " << *FTy->getParamType(i) << '\n';
+                llvm::errs() << "Got: " << *args[i]->getType() << '\n';
+                ASSERT(0, "Calling a function with a bad type for argument %d!", i);
+            }
+        }
+#endif
+
         if (ENABLE_FRAME_INTROSPECTION) {
             llvm::Type* rtn_type = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())
                                                                       ->getElementType())->getReturnType();
@@ -395,18 +420,23 @@ public:
         rtn.setCallingConv(pp->getCallingConvention());
         return rtn.getInstruction();
     }
+
+    Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
+
+    Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
 };
+
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator) {
     return new IREmitterImpl(irstate, curblock, irgenerator);
 }
 
-static std::unordered_map<AST_expr*, std::vector<const std::string*>*> made_keyword_storage;
-static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
+static std::unordered_map<AST_expr*, std::vector<BoxedString*>*> made_keyword_storage;
+static std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node) {
     auto it = made_keyword_storage.find(node);
     if (it != made_keyword_storage.end())
         return it->second;
 
-    auto rtn = new std::vector<const std::string*>();
+    auto rtn = new std::vector<BoxedString*>();
     made_keyword_storage.insert(it, std::make_pair(node, rtn));
     return rtn;
 }
@@ -416,13 +446,13 @@ const std::string PASSED_CLOSURE_NAME = "#passed_closure";
 const std::string PASSED_GENERATOR_NAME = "#passed_generator";
 const std::string FRAME_INFO_PTR_NAME = "#frame_info_ptr";
 
-bool isIsDefinedName(const std::string& name) {
+bool isIsDefinedName(llvm::StringRef name) {
     return startswith(name, "!is_defined_");
 }
 
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings) {
     // TODO could cache this
-    return interned_strings.get("!is_defined_" + name.str());
+    return interned_strings.get("!is_defined_" + std::string(name.s()));
 }
 
 class IRGeneratorImpl : public IRGenerator {
@@ -498,7 +528,7 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
-                                             embedRelocatablePtr(node, g.i8->getPointerTo()), node_value);
+                                             embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
         if (irstate->getReturnType() == VOID)
             emitter.getBuilder()->CreateRetVoid();
         else
@@ -519,14 +549,14 @@ private:
     CompilerVariable* evalAttribute(AST_Attribute* node, UnwindInfo unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), &node->attr.str(), false);
+        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), false);
         value->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, UnwindInfo unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), &node->attr.str(), true);
+        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), true);
         value->decvref(emitter);
         return rtn;
     }
@@ -619,8 +649,10 @@ private:
                 const std::string& name = ast_str->str_data;
                 assert(name.size());
 
-                llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(),
-                                                     embedRelocatablePtr(&name, g.llvm_str_type_ptr));
+                llvm::Value* name_arg = embedRelocatablePtr(
+                    irstate->getSourceInfo()->parent_module->getStringConstant(name), g.llvm_boxedstring_type_ptr);
+                llvm::Value* r
+                    = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
 
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
@@ -662,9 +694,10 @@ private:
                 assert(ast_str->str_type == AST_Str::STR);
                 const std::string& module_name = ast_str->str_data;
 
-                llvm::Value* imported = emitter.createCall3(unw_info, g.funcs.import, getConstantInt(level, g.i32),
-                                                            converted_froms->getValue(),
-                                                            embedRelocatablePtr(&module_name, g.llvm_str_type_ptr));
+                llvm::Value* imported = emitter.createCall(unw_info, g.funcs.import,
+                                                           { getConstantInt(level, g.i32), converted_froms->getValue(),
+                                                             embedRelocatablePtr(module_name.c_str(), g.i8_ptr),
+                                                             getConstantInt(module_name.size(), g.i64) });
                 ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
 
                 converted_froms->decvref(emitter);
@@ -740,10 +773,6 @@ private:
         assert(left);
         assert(right);
 
-        if (type == AST_TYPE::Div && (irstate->getSourceInfo()->parent_module->future_flags & FF_DIVISION)) {
-            type = AST_TYPE::TrueDiv;
-        }
-
         return left->binexp(emitter, getOpInfoForNode(node, unw_info), right, type, exp_type);
     }
 
@@ -789,27 +818,27 @@ private:
     CompilerVariable* evalCall(AST_Call* node, UnwindInfo unw_info) {
         bool is_callattr;
         bool callattr_clsonly = false;
-        const std::string* attr = NULL;
+        InternedString attr;
         CompilerVariable* func;
         if (node->func->type == AST_TYPE::Attribute) {
             is_callattr = true;
             callattr_clsonly = false;
             AST_Attribute* attr_ast = ast_cast<AST_Attribute>(node->func);
             func = evalExpr(attr_ast->value, unw_info);
-            attr = &attr_ast->attr.str();
+            attr = attr_ast->attr;
         } else if (node->func->type == AST_TYPE::ClsAttribute) {
             is_callattr = true;
             callattr_clsonly = true;
             AST_ClsAttribute* attr_ast = ast_cast<AST_ClsAttribute>(node->func);
             func = evalExpr(attr_ast->value, unw_info);
-            attr = &attr_ast->attr.str();
+            attr = attr_ast->attr;
         } else {
             is_callattr = false;
             func = evalExpr(node->func, unw_info);
         }
 
         std::vector<CompilerVariable*> args;
-        std::vector<const std::string*>* keyword_names;
+        std::vector<BoxedString*>* keyword_names;
         if (node->keywords.size()) {
             keyword_names = getKeywordNameStorage(node);
 
@@ -818,7 +847,7 @@ private:
             // keyword names already populated:
             if (!keyword_names->size()) {
                 for (auto kw : node->keywords) {
-                    keyword_names->push_back(&kw->arg.str());
+                    keyword_names->push_back(kw->arg.getBox());
                 }
             }
         } else {
@@ -850,7 +879,8 @@ private:
         CompilerVariable* rtn;
         if (is_callattr) {
             CallattrFlags flags = {.cls_only = callattr_clsonly, .null_on_nonexistent = false };
-            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr, flags, argspec, args, keyword_names);
+            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr.getBox(), flags, argspec, args,
+                                 keyword_names);
         } else {
             rtn = func->call(emitter, getOpInfoForNode(node, unw_info), argspec, args, keyword_names);
         }
@@ -867,8 +897,8 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
-            static const std::string setitem_str("__setitem__");
-            CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, true);
+            static BoxedString* setitem_str = static_cast<BoxedString*>(PyString_InternFromString("__setitem__"));
+            CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
                 CompilerVariable* key = evalExpr(node->keys[i], unw_info);
                 CompilerVariable* value = evalExpr(node->values[i], unw_info);
@@ -946,11 +976,11 @@ private:
 
     llvm::Constant* embedParentModulePtr() {
         BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
-        return embedRelocatablePtr(parent_module, g.llvm_module_type_ptr, "cParentModule");
+        return embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, UnwindInfo unw_info) {
-        if (node->id.str() == "None")
+        if (node->id.s() == "None")
             return getNone();
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
@@ -959,14 +989,14 @@ private:
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(embedParentModulePtr());
-            llvm_args.push_back(embedRelocatablePtr(&node->id.str(), g.llvm_str_type_ptr));
+            llvm_args.push_back(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
             llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
-                                                 embedRelocatablePtr(&node->id.str(), g.llvm_str_type_ptr));
+                                                 embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         }
     }
@@ -975,7 +1005,7 @@ private:
         auto scope_info = irstate->getScopeInfo();
 
         bool is_kill = irstate->getLiveness()->isKill(node, myblock);
-        assert(!is_kill || node->id.str()[0] == '#');
+        assert(!is_kill || node->id.s()[0] == '#');
 
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
@@ -1021,7 +1051,7 @@ private:
             emitter.getBuilder()->SetInsertPoint(curblock);
 
             llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
-                                                     getStringConstantPtr(node->id.str() + '\0'));
+                                                     embedRelocatablePtr(node->id.c_str(), g.i8_ptr));
             call.setDoesNotReturn();
             emitter.getBuilder()->CreateUnreachable();
 
@@ -1032,7 +1062,7 @@ private:
             return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
-            llvm::Value* attr = getStringConstantPtr(node->id.str() + '\0');
+            llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
             llvm::Value* module = embedParentModulePtr();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
@@ -1043,7 +1073,7 @@ private:
                 // state = DEAD;
                 llvm::CallSite call = emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
-                    { getConstantInt(0, g.i1), getStringConstantPtr(node->id.str() + '\0'),
+                    { getConstantInt(0, g.i1), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
                       embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
                 return undefVariable();
@@ -1054,10 +1084,10 @@ private:
                 = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
             if (is_defined_var) {
-                emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                   { i1FromBool(emitter, is_defined_var), getStringConstantPtr(node->id.str() + '\0'),
-                                     embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr),
-                                     getConstantInt(true, g.i1) });
+                emitter.createCall(
+                    unw_info, g.funcs.assertNameDefined,
+                    { i1FromBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
+                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
                 _popFake(defined_name);
@@ -1073,14 +1103,17 @@ private:
     }
 
     CompilerVariable* evalNum(AST_Num* node, UnwindInfo unw_info) {
-        if (node->num_type == AST_Num::INT)
+        // We can operate on ints and floats unboxed, so don't box those at first;
+        // complex and long's have to get boxed so box them immediately.
+        if (node->num_type == AST_Num::INT) {
             return makeInt(node->n_int);
-        else if (node->num_type == AST_Num::FLOAT)
+        } else if (node->num_type == AST_Num::FLOAT) {
             return makeFloat(node->n_float);
-        else if (node->num_type == AST_Num::COMPLEX)
-            return makePureImaginary(emitter, node->n_float);
-        else
-            return makeLong(emitter, node->n_long);
+        } else if (node->num_type == AST_Num::COMPLEX) {
+            return makePureImaginary(irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
+        } else {
+            return makeLong(irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
+        }
     }
 
     CompilerVariable* evalRepr(AST_Repr* node, UnwindInfo unw_info) {
@@ -1106,12 +1139,12 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
 
-        static std::string add_str("add");
+        static BoxedString* add_str = static_cast<BoxedString*>(PyString_InternFromString("add"));
 
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
             CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
-            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), &add_str, flags,
+            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags,
                                                 ArgPassSpec(1), { elt }, NULL);
             r->decvref(emitter);
             elt->decvref(emitter);
@@ -1166,9 +1199,11 @@ private:
                 irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
 
             return new ConcreteCompilerVariable(STR, rtn, true);
-
         } else if (node->str_type == AST_Str::UNICODE) {
-            return makeUnicode(emitter, &node->str_data);
+            llvm::Value* rtn = embedRelocatablePtr(
+                irstate->getSourceInfo()->parent_module->getUnicodeConstant(node->str_data), g.llvm_value_type_ptr);
+
+            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn, true);
         } else {
             RELEASE_ASSERT(0, "%d", node->str_type);
         }
@@ -1297,9 +1332,9 @@ private:
         ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
         attr_dict->decvref(emitter);
 
-        llvm::Value* classobj = emitter.createCall3(unw_info, g.funcs.createUserClass,
-                                                    embedRelocatablePtr(&node->name.str(), g.llvm_str_type_ptr),
-                                                    bases_tuple->getValue(), converted_attr_dict->getValue());
+        llvm::Value* classobj = emitter.createCall3(
+            unw_info, g.funcs.createUserClass, embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr),
+            bases_tuple->getValue(), converted_attr_dict->getValue());
 
         // Note: createuserClass is free to manufacture non-class objects
         CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
@@ -1520,7 +1555,7 @@ private:
     }
 
     void _setFake(InternedString name, CompilerVariable* val) {
-        assert(name.str()[0] == '!');
+        assert(name.s()[0] == '!');
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = val;
@@ -1533,7 +1568,7 @@ private:
     // to check whether a variable is in our symbol table, call _getFake with allow_missing = true and check whether the
     // result is NULL.
     CompilerVariable* _getFake(InternedString name, bool allow_missing = false) {
-        assert(name.str()[0] == '!');
+        assert(name.s()[0] == '!');
         auto it = symbol_table.find(name);
         if (it == symbol_table.end()) {
             assert(allow_missing);
@@ -1552,8 +1587,8 @@ private:
 
     // only updates symbol_table if we're *not* setting a global
     void _doSet(InternedString name, CompilerVariable* val, UnwindInfo unw_info) {
-        assert(name.str() != "None");
-        assert(name.str() != FRAME_INFO_PTR_NAME);
+        assert(name.s() != "None");
+        assert(name.s() != FRAME_INFO_PTR_NAME);
 
         auto scope_info = irstate->getScopeInfo();
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
@@ -1563,12 +1598,12 @@ private:
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
             auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
             ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
-            module->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
+            module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
             module->decvref(emitter);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
-            llvm::Value* attr = getStringConstantPtr(name.str() + '\0');
+            llvm::Value* attr = embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr);
             emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
                                 val->makeConverted(emitter, UNKNOWN)->getValue());
         } else {
@@ -1582,7 +1617,7 @@ private:
             val->incvref();
 
             // Clear out the is_defined name since it is now definitely defined:
-            assert(!isIsDefinedName(name.str()));
+            assert(!isIsDefinedName(name.s()));
             InternedString defined_name = getIsDefinedName(name);
             _popFake(defined_name, true);
 
@@ -1601,7 +1636,7 @@ private:
 
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, UnwindInfo unw_info) {
         CompilerVariable* t = evalExpr(target->value, unw_info);
-        t->setattr(emitter, getEmptyOpInfo(unw_info), &target->attr.str(), val);
+        t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
         t->decvref(emitter);
     }
 
@@ -1646,7 +1681,7 @@ private:
 
 #ifndef NDEBUG
         for (auto e : target->elts) {
-            ASSERT(e->type == AST_TYPE::Name && ast_cast<AST_Name>(e)->id.str()[0] == '#',
+            ASSERT(e->type == AST_TYPE::Name && ast_cast<AST_Name>(e)->id.s()[0] == '#',
                    "should only be unpacking tuples into cfg-generated names!");
         }
 #endif
@@ -1690,9 +1725,9 @@ private:
 
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
-        static std::string AssertionError_str("AssertionError");
+        static BoxedString* AssertionError_str = static_cast<BoxedString*>(PyString_InternFromString("AssertionError"));
         llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
-                                                embedRelocatablePtr(&AssertionError_str, g.llvm_str_type_ptr)));
+                                                embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {
@@ -1764,7 +1799,7 @@ private:
 
     void _doDelAttr(AST_Attribute* node, UnwindInfo unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
-        value->delattr(emitter, getEmptyOpInfo(unw_info), &node->attr.str());
+        value->delattr(emitter, getEmptyOpInfo(unw_info), node->attr.getBox());
     }
 
     void _doDelName(AST_Name* target, UnwindInfo unw_info) {
@@ -1773,13 +1808,13 @@ private:
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
             emitter.createCall2(unw_info, g.funcs.delGlobal, embedParentModulePtr(),
-                                embedRelocatablePtr(&target->id.str(), g.llvm_str_type_ptr));
+                                embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr));
             return;
         }
 
         if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
-            llvm::Value* attr = getStringConstantPtr(target->id.str() + '\0');
+            llvm::Value* attr = embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr);
             emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
             return;
         }
@@ -1791,7 +1826,7 @@ private:
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call
                 = emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                     { getConstantInt(0, g.i1), getStringConstantPtr(target->id.str() + '\0'),
+                                     { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
                                        embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
                                        getConstantInt(true /*local_error_msg*/, g.i1) });
             call.setDoesNotReturn();
@@ -1803,7 +1838,7 @@ private:
 
         if (is_defined_var) {
             emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                               { i1FromBool(emitter, is_defined_var), getStringConstantPtr(target->id.str() + '\0'),
+                               { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
                                  embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
                                  getConstantInt(true /*local_error_msg*/, g.i1) });
             _popFake(defined_name);
@@ -1835,7 +1870,9 @@ private:
             vlocals = getNullPtr(g.llvm_value_type_ptr);
         }
 
-        emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
+        static_assert(sizeof(FutureFlags) == 4, "");
+        emitter.createCall(unw_info, g.funcs.exec,
+                           { vbody, vglobals, vlocals, getConstantInt(irstate->getSourceInfo()->future_flags, g.i32) });
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
@@ -1851,9 +1888,9 @@ private:
         }
         assert(dest);
 
-        static const std::string write_str("write");
-        static const std::string newline_str("\n");
-        static const std::string space_str(" ");
+        static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+        static BoxedString* newline_str = static_cast<BoxedString*>(PyString_InternFromString("\n"));
+        static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
 
         // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
         int nvals = node->values.size();
@@ -1876,8 +1913,8 @@ private:
             curblock = ss_block;
             emitter.getBuilder()->SetInsertPoint(ss_block);
             CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1),
-                                    { makeStr(&space_str) }, NULL);
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1),
+                                    { makeStr(space_str) }, NULL);
             r->decvref(emitter);
 
             emitter.getBuilder()->CreateBr(join_block);
@@ -1889,7 +1926,7 @@ private:
             llvm::Value* v = emitter.createCall(unw_info, g.funcs.strOrUnicode, converted->getValue());
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
-            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1), { s },
+            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1), { s },
                                NULL);
             s->decvref(emitter);
             r->decvref(emitter);
@@ -1898,8 +1935,8 @@ private:
 
         if (node->nl) {
             CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1),
-                                    { makeStr(&newline_str) }, NULL);
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1),
+                                    { makeStr(newline_str) }, NULL);
             r->decvref(emitter);
 
             if (nvals == 0) {
@@ -2277,7 +2314,7 @@ private:
     }
 
     void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, UnwindInfo unw_info) {
-        assert(name.str() != FRAME_INFO_PTR_NAME);
+        assert(name.s() != FRAME_INFO_PTR_NAME);
         ConcreteCompilerVariable* var = unboxVar(t, v, false);
         _doSet(name, var, unw_info);
         var->decvref(emitter);
@@ -2291,8 +2328,8 @@ private:
 
     bool allowableFakeEndingSymbol(InternedString name) {
         // TODO this would be a great place to be able to use interned versions of the static names...
-        return isIsDefinedName(name.str()) || name.str() == PASSED_CLOSURE_NAME || name.str() == CREATED_CLOSURE_NAME
-               || name.str() == PASSED_GENERATOR_NAME;
+        return isIsDefinedName(name.s()) || name.s() == PASSED_CLOSURE_NAME || name.s() == CREATED_CLOSURE_NAME
+               || name.s() == PASSED_GENERATOR_NAME;
     }
 
     void endBlock(State new_state) {
@@ -2306,7 +2343,7 @@ private:
         // Sort the names here to make the process deterministic:
         std::map<InternedString, CompilerVariable*> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
         for (const auto& p : sorted_symbol_table) {
-            assert(p.first.str() != FRAME_INFO_PTR_NAME);
+            assert(p.first.s() != FRAME_INFO_PTR_NAME);
             if (allowableFakeEndingSymbol(p.first))
                 continue;
 
@@ -2412,7 +2449,7 @@ public:
             for (const auto& p : sorted_symbol_table) {
                 CompilerVariable* v = p.second;
                 v->serializeToFrame(stackmap_args);
-                pp->addFrameVar(p.first.str(), v->getType());
+                pp->addFrameVar(p.first.s(), v->getType());
             }
         }
 
@@ -2463,16 +2500,16 @@ public:
                 assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
-                if (isIsDefinedName(it->first.str())) {
+                if (isIsDefinedName(it->first.s())) {
                     assert(it->second->getType() == BOOL);
                     ending_type = BOOL;
-                } else if (it->first.str() == PASSED_CLOSURE_NAME) {
+                } else if (it->first.s() == PASSED_CLOSURE_NAME) {
                     ending_type = getPassedClosureType();
-                } else if (it->first.str() == CREATED_CLOSURE_NAME) {
+                } else if (it->first.s() == CREATED_CLOSURE_NAME) {
                     ending_type = getCreatedClosureType();
-                } else if (it->first.str() == PASSED_GENERATOR_NAME) {
+                } else if (it->first.s() == PASSED_GENERATOR_NAME) {
                     ending_type = GENERATOR;
-                } else if (it->first.str() == FRAME_INFO_PTR_NAME) {
+                } else if (it->first.s() == FRAME_INFO_PTR_NAME) {
                     ending_type = FRAME_INFO;
                 } else {
                     ending_type = types->getTypeAtBlockEnd(it->first, myblock);
@@ -2489,8 +2526,8 @@ public:
     }
 
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
-        assert(name.str() != "None");
-        assert(name.str() != FRAME_INFO_PTR_NAME);
+        assert(name.s() != "None");
+        assert(name.s() != FRAME_INFO_PTR_NAME);
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
         assert(var->getType() != BOXED_INT);
@@ -2648,10 +2685,11 @@ CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_s
 
     CLFunction*& cl = made[node];
     if (cl == NULL) {
-        std::unique_ptr<SourceInfo> si(new SourceInfo(source->parent_module, source->scoping, node, body, source->fn));
+        std::unique_ptr<SourceInfo> si(
+            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->fn));
         if (args)
-            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.str().size(),
-                                args->kwarg.str().size(), std::move(si));
+            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.s().size(),
+                                args->kwarg.s().size(), std::move(si));
         else
             cl = new CLFunction(0, 0, 0, 0, std::move(si));
     }

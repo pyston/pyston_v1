@@ -35,6 +35,9 @@ public:
 class RuntimeIC {
 private:
     void* addr;
+#ifndef NVALGRIND
+    size_t total_size;
+#endif
     EHFrameManager eh_frame;
 
     std::unique_ptr<ICInfo> icinfo;
@@ -67,8 +70,8 @@ class CallattrIC : public RuntimeIC {
 public:
     CallattrIC() : RuntimeIC((void*)callattr, 1, 160) {}
 
-    Box* call(Box* obj, const std::string* attr, CallattrFlags flags, ArgPassSpec spec, Box* arg0, Box* arg1, Box* arg2,
-              Box** args, const std::vector<const std::string*>* keyword_names) {
+    Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPassSpec spec, Box* arg0, Box* arg1, Box* arg2,
+              Box** args, const std::vector<BoxedString*>* keyword_names) {
         return (Box*)call_ptr(obj, attr, flags, spec, arg0, arg1, arg2, args, keyword_names);
     }
 };

@@ -30,6 +30,8 @@ extern "C" PyObject* float_fromhex(PyObject* cls, PyObject* arg) noexcept;
 extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexcept;
 extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
 extern "C" PyObject* float__format__(PyObject* v) noexcept;
+extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+extern "C" int float_pow_unboxed(double iv, double iw, double* res) noexcept;
 
 namespace pyston {
 
@@ -93,10 +95,6 @@ extern "C" double mod_float_float(double lhs, double rhs) {
             r += rhs;
     }
     return r;
-}
-
-extern "C" double pow_float_float(double lhs, double rhs) {
-    return pow(lhs, rhs);
 }
 
 extern "C" double div_float_float(double lhs, double rhs) {
@@ -426,35 +424,35 @@ extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     }
 }
 
+extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
+    Box* res = float_pow(lhs, rhs, mod);
+    if (!res) {
+        throwCAPIException();
+    }
+    return res;
+}
+
 extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None) {
+    // TODO to specialize this, need to account for all the special cases in float_pow
     assert(lhs->cls == float_cls);
     assert(rhs->cls == float_cls);
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-    return boxFloat(pow(lhs->d, rhs->d));
+    return floatPow(lhs, rhs, mod);
 }
 
 extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
+    // TODO to specialize this, need to account for all the special cases in float_pow
     assert(lhs->cls == float_cls);
     assert(isSubclass(rhs->cls, int_cls));
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-    return boxFloat(pow(lhs->d, rhs->n));
+    return floatPow(lhs, rhs, mod);
 }
 
-extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
-    assert(lhs->cls == float_cls);
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatPowInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatPowFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxFloat(pow(lhs->d, PyLong_AsDouble(rhs)));
+extern "C" double pow_float_float(double lhs, double rhs) {
+    double res;
+    int err = float_pow_unboxed(lhs, rhs, &res);
+    if (err) {
+        throwCAPIException();
     } else {
-        return NotImplemented;
+        return res;
     }
 }
 
@@ -634,7 +632,7 @@ BoxedFloat* _floatNew(Box* a) {
     } else if (isSubclass(a->cls, int_cls)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(a)->s();
+        llvm::StringRef s = static_cast<BoxedString*>(a)->s();
         if (s == "nan")
             return new BoxedFloat(NAN);
         if (s == "-nan")
@@ -646,15 +644,16 @@ BoxedFloat* _floatNew(Box* a) {
 
         // TODO this should just use CPython's implementation:
         char* endptr;
-        const char* startptr = s.c_str();
+        assert(s.data()[s.size()] == '\0');
+        const char* startptr = s.data();
         double r = strtod(startptr, &endptr);
         if (endptr != startptr + s.size())
-            raiseExcHelper(ValueError, "could not convert string to float: %s", s.c_str());
+            raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
         return new BoxedFloat(r);
     } else {
-        static const std::string float_str("__float__");
-        Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
+        Box* r = callattr(a, float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                          NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
             fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n", getTypeName(a));

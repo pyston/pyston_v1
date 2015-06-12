@@ -71,7 +71,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
         return NULL;
     }
 
-    if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id.str() == "xrange")
+    if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id.s() == "xrange")
         return xrange_cls;
 
     // if (node->func->type == AST_TYPE::Attribute && ast_cast<AST_Attribute>(node->func)->attr == "dot")
@@ -177,7 +177,7 @@ private:
 
     void* visit_attribute(AST_Attribute* node) override {
         CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(&node->attr.str(), false);
+        CompilerType* rtn = t->getattrType(node->attr, false);
 
         // if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
         // rtn = processSpeculation(float_cls, node, rtn);
@@ -199,7 +199,7 @@ private:
 
     void* visit_clsattribute(AST_ClsAttribute* node) override {
         CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(&node->attr.str(), true);
+        CompilerType* rtn = t->getattrType(node->attr, true);
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
             printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
                    node->col_offset);
@@ -221,8 +221,8 @@ private:
             return UNKNOWN;
 
         // TODO this isn't the exact behavior
-        std::string name = getInplaceOpName(node->op_type);
-        CompilerType* attr_type = left->getattrType(&name, true);
+        BoxedString* name = getInplaceOpName(node->op_type);
+        CompilerType* attr_type = left->getattrType(name->s(), true);
 
         if (attr_type == UNDEF)
             attr_type = UNKNOWN;
@@ -233,12 +233,12 @@ private:
 
         if (left == right && (left == INT || left == FLOAT)) {
             ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into",
-                   "%s %s %s -> %s", left->debugName().c_str(), name.c_str(), right->debugName().c_str(),
+                   "%s %s %s -> %s", left->debugName().c_str(), name->c_str(), right->debugName().c_str(),
                    rtn->debugName().c_str());
         }
 
         ASSERT(rtn != UNDEF, "need to implement the actual semantics here for %s.%s", left->debugName().c_str(),
-               name.c_str());
+               name->c_str());
 
         return rtn;
     }
@@ -250,8 +250,8 @@ private:
             return UNKNOWN;
 
         // TODO this isn't the exact behavior
-        const std::string& name = getOpName(node->op_type);
-        CompilerType* attr_type = left->getattrType(&name, true);
+        BoxedString* name = getOpName(node->op_type);
+        CompilerType* attr_type = left->getattrType(name->s(), true);
 
         if (attr_type == UNDEF)
             attr_type = UNKNOWN;
@@ -262,12 +262,12 @@ private:
 
         if (left == right && (left == INT || left == FLOAT)) {
             ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into",
-                   "%s %s %s -> %s", left->debugName().c_str(), name.c_str(), right->debugName().c_str(),
+                   "%s %s %s -> %s", left->debugName().c_str(), name->data(), right->debugName().c_str(),
                    rtn->debugName().c_str());
         }
 
         ASSERT(rtn != UNDEF, "need to implement the actual semantics here for %s.%s", left->debugName().c_str(),
-               name.c_str());
+               name->c_str());
 
         return rtn;
     }
@@ -335,8 +335,8 @@ private:
                 return BOOL;
             }
 
-            const std::string& name = getOpName(node->ops[0]);
-            CompilerType* attr_type = left->getattrType(&name, true);
+            BoxedString* name = getOpName(node->ops[0]);
+            CompilerType* attr_type = left->getattrType(name->s(), true);
 
             if (attr_type == UNDEF)
                 attr_type = UNKNOWN;
@@ -405,10 +405,6 @@ private:
         auto name_scope = scope_info->getScopeTypeOfName(node->id);
 
         if (name_scope == ScopeInfo::VarScopeType::GLOBAL) {
-            if (node->id.str() == "xrange") {
-                // printf("TODO guard here and return the classobj\n");
-                // return typeOfClassobj(xrange_cls);
-            }
             return UNKNOWN;
         }
 
@@ -479,7 +475,7 @@ private:
         CompilerType* val = getType(node->value);
         CompilerType* slice = getType(node->slice);
         static std::string name("__getitem__");
-        CompilerType* getitem_type = val->getattrType(&name, true);
+        CompilerType* getitem_type = val->getattrType(name, true);
         std::vector<CompilerType*> args;
         args.push_back(slice);
         return getitem_type->callType(ArgPassSpec(1), args, NULL);
@@ -497,8 +493,8 @@ private:
         CompilerType* operand = getType(node->operand);
 
         // TODO this isn't the exact behavior
-        const std::string& name = getOpName(node->op_type);
-        CompilerType* attr_type = operand->getattrType(&name, true);
+        BoxedString* name = getOpName(node->op_type);
+        CompilerType* attr_type = operand->getattrType(name->s(), true);
         std::vector<CompilerType*> arg_types;
         return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
     }
@@ -588,7 +584,7 @@ private:
     // not part of the visitor api:
     void _visit_alias(AST_alias* node) {
         InternedString name = node->name;
-        if (node->asname.str().size())
+        if (node->asname.s().size())
             name = node->asname;
 
         _doSet(name, UNKNOWN);

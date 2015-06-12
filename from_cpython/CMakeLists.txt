@@ -113,7 +113,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautolo
 add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS} ${STDPARSER_SRCS})
 add_dependencies(FROM_CPYTHON copy_stdlib)
 
-add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
+add_custom_command(OUTPUT
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
                    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
                    DEPENDS
                        pyston
@@ -128,5 +131,6 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston
                        Modules/expat/xmltok_impl.c
                        Modules/expat/xmltok_ns.c
                        Modules/pyexpat.c
+                       Modules/_elementtree.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)

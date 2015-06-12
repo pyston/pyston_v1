@@ -77,19 +77,19 @@ BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s())));
 }
 
-static void mangleNameInPlace(InternedString& id, const std::string* private_name,
-                              InternedStringPool& interned_strings) {
-    if (!private_name)
+static void mangleNameInPlace(InternedString& id, llvm::StringRef private_name, InternedStringPool& interned_strings) {
+    if (!private_name.size())
         return;
 
-    int len = id.str().size();
-    if (len < 2 || id.str()[0] != '_' || id.str()[1] != '_')
+    int len = id.s().size();
+    if (len < 2 || id.s()[0] != '_' || id.s()[1] != '_')
         return;
 
-    if ((id.str()[len - 2] == '_' && id.str()[len - 1] == '_') || id.str().find('.') != std::string::npos)
+    if ((id.s()[len - 2] == '_' && id.s()[len - 1] == '_') || id.s().find('.') != std::string::npos)
         return;
 
-    const char* p = private_name->c_str();
+    assert(private_name.data()[private_name.size()] == '\0');
+    const char* p = private_name.data();
     while (*p == '_') {
         p++;
         len--;
@@ -97,18 +97,19 @@ static void mangleNameInPlace(InternedString& id, const std::string* private_nam
     if (*p == '\0')
         return;
 
-    id = interned_strings.get("_" + (p + id.str()));
+    // TODO add a twine interface to interned strings?
+    id = interned_strings.get("_" + std::string(p) + std::string(id.s()));
 }
 
-static InternedString mangleName(InternedString id, const std::string* private_name,
+static InternedString mangleName(InternedString id, llvm::StringRef private_name,
                                  InternedStringPool& interned_strings) {
     InternedString rtn(id);
     mangleNameInPlace(rtn, private_name, interned_strings);
     return rtn;
 }
 
-static bool isCompilerCreatedName(InternedString name) {
-    return name.str()[0] == '!' || name.str()[0] == '#';
+static bool isCompilerCreatedName(llvm::StringRef name) {
+    return name[0] == '!' || name[0] == '#';
 }
 
 class ModuleScopeInfo : public ScopeInfo {
@@ -211,7 +212,7 @@ public:
 struct ScopingAnalysis::ScopeNameUsage {
     AST* node;
     ScopeNameUsage* parent;
-    const std::string* private_name;
+    llvm::StringRef private_name;
     ScopingAnalysis* scoping;
 
     // Properties determined from crawling the scope:
@@ -267,11 +268,11 @@ struct ScopingAnalysis::ScopeNameUsage {
         }
 
         if (node->type == AST_TYPE::ClassDef) {
-            private_name = &ast_cast<AST_ClassDef>(node)->name.str();
+            private_name = ast_cast<AST_ClassDef>(node)->name;
         } else if (parent) {
             private_name = parent->private_name;
         } else {
-            private_name = NULL;
+            private_name = llvm::StringRef();
         }
     }
 
@@ -445,7 +446,7 @@ static void raiseGlobalAndLocalException(InternedString name, AST* node) {
     AST_FunctionDef* funcNode = ast_cast<AST_FunctionDef>(node);
     char buf[1024];
     snprintf(buf, sizeof(buf), "name '%s' is local and global", name.c_str());
-    raiseSyntaxError(buf, funcNode->lineno, funcNode->col_offset, "" /* file?? */, funcNode->name.str());
+    raiseSyntaxError(buf, funcNode->lineno, funcNode->col_offset, "" /* file?? */, funcNode->name.s());
 }
 
 class NameCollectorVisitor : public ASTVisitor {
@@ -606,11 +607,11 @@ public:
                 e->accept(this);
             }
 
-            if (node->args->vararg.str().size()) {
+            if (node->args->vararg.s().size()) {
                 mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);
             }
-            if (node->args->kwarg.str().size()) {
+            if (node->args->kwarg.s().size()) {
                 mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->kwarg);
             }
@@ -674,11 +675,11 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.str().size()) {
+            if (node->args->vararg.s().size()) {
                 mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);
             }
-            if (node->args->kwarg.str().size()) {
+            if (node->args->kwarg.s().size()) {
                 mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->kwarg);
             }
@@ -698,7 +699,7 @@ public:
             AST_alias* alias = node->names[i];
             mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
             mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
-            if (alias->asname.str().size())
+            if (alias->asname.s().size())
                 doWrite(alias->asname);
             else
                 doWrite(alias->name);
@@ -710,13 +711,13 @@ public:
         mangleNameInPlace(node->module, cur->private_name, scoping->getInternedStrings());
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
-            if (alias->name.str() == std::string("*")) {
+            if (alias->name.s() == std::string("*")) {
                 mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
                 doImportStar(node);
             } else {
                 mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
                 mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
-                if (alias->asname.str().size())
+                if (alias->asname.s().size())
                     doWrite(alias->asname);
                 else
                     doWrite(alias->name);
@@ -789,7 +790,7 @@ static void raiseNameForcingSyntaxError(const char* msg, ScopingAnalysis::ScopeN
 
     char buf[1024];
     snprintf(buf, sizeof(buf), syntaxElemMsg, funcNode->name.c_str(), msg);
-    raiseSyntaxError(buf, lineno, 0, "" /* file?? */, funcNode->name.str());
+    raiseSyntaxError(buf, lineno, 0, "" /* file?? */, funcNode->name.s());
 }
 
 void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
@@ -869,7 +870,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                 snprintf(buf, sizeof(buf), "can not delete variable '%s' referenced in nested scope", name.c_str());
                 assert(usage->node->type == AST_TYPE::FunctionDef);
                 AST_FunctionDef* funcNode = static_cast<AST_FunctionDef*>(usage->node);
-                raiseSyntaxError(buf, name_node->lineno, 0, "" /* file?? */, funcNode->name.str());
+                raiseSyntaxError(buf, name_node->lineno, 0, "" /* file?? */, funcNode->name);
             }
         }
     }

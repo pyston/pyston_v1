@@ -12,7 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "future.h"
+#include "codegen/irgen/future.h"
+
+#include <map>
+
+#include "Python.h"
+
+#include "core/ast.h"
 
 namespace pyston {
 
@@ -23,13 +29,15 @@ struct FutureOption {
 };
 
 const std::map<std::string, FutureOption> future_options
-    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), FF_ABSOLUTE_IMPORT } },
-        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_DIVISION } },
-        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_GENERATOR } },
-        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_UNICODE_LITERALS } },
-        { "print_function", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTION } },
-        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
-        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
+    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), CO_FUTURE_ABSOLUTE_IMPORT } },
+        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), CO_FUTURE_DIVISION } },
+        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), CO_FUTURE_UNICODE_LITERALS } },
+        { "print_function", { version_hex(2, 6, 0), version_hex(3, 0, 0), CO_FUTURE_PRINT_FUNCTION } },
+        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), CO_FUTURE_WITH_STATEMENT } },
+
+        // These are mandatory in all versions we care about (>= 2.3)
+        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), CO_GENERATOR } },
+        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), CO_NESTED } } };
 
 void raiseFutureImportErrorNotFound(const char* file, AST* node, const char* name) {
     raiseSyntaxErrorHelper(file, "", node, "future feature %s is not defined", name);
@@ -42,7 +50,7 @@ void raiseFutureImportErrorNotBeginning(const char* file, AST* node) {
 class BadFutureImportVisitor : public NoopASTVisitor {
 public:
     virtual bool visit_importfrom(AST_ImportFrom* node) {
-        if (node->module.str() == "__future__") {
+        if (node->module.s() == "__future__") {
             raiseFutureImportErrorNotBeginning(file, node);
         }
         return true;
@@ -59,7 +67,7 @@ inline bool is_stmt_string(AST_stmt* stmt) {
     return stmt->type == AST_TYPE::Expr && static_cast<AST_Expr*>(stmt)->value->type == AST_TYPE::Str;
 }
 
-FutureFlags getFutureFlags(AST_Module* m, const char* file) {
+FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file) {
     FutureFlags ff = 0;
 
     // Set the defaults for the future flags depending on what version we are
@@ -73,18 +81,18 @@ FutureFlags getFutureFlags(AST_Module* m, const char* file) {
     // occur at the beginning of the file.
     bool future_import_allowed = true;
     BadFutureImportVisitor import_visitor(file);
-    for (int i = 0; i < m->body.size(); i++) {
-        AST_stmt* stmt = m->body[i];
+    for (int i = 0; i < body.size(); i++) {
+        AST_stmt* stmt = body[i];
 
-        if (stmt->type == AST_TYPE::ImportFrom && static_cast<AST_ImportFrom*>(stmt)->module.str() == "__future__") {
+        if (stmt->type == AST_TYPE::ImportFrom && static_cast<AST_ImportFrom*>(stmt)->module.s() == "__future__") {
             if (future_import_allowed) {
                 // We have a `from __future__` import statement, and we are
                 // still at the top of the file, so just set the appropriate
                 // future flag for each imported option.
 
                 for (AST_alias* alias : static_cast<AST_ImportFrom*>(stmt)->names) {
-                    const std::string& option_name = alias->name.str();
-                    auto iter = future_options.find(option_name);
+                    auto option_name = alias->name;
+                    auto iter = future_options.find(option_name.s());
                     if (iter == future_options.end()) {
                         // If it's not one of the available options, throw an error.
                         // Note: the __future__ module also exposes "all_feature_names",

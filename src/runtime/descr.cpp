@@ -38,8 +38,10 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
     assert(prop);
     assert(fget);
     Box* get_doc;
+
+    static BoxedString* doc_str = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
     try {
-        get_doc = getattrInternal(fget, "__doc__", NULL);
+        get_doc = getattrInternal(fget, doc_str, NULL);
     } catch (ExcInfo e) {
         if (!e.matches(Exception)) {
             throw e;
@@ -55,7 +57,7 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
             in dict of the subclass instance instead,
             otherwise it gets shadowed by __doc__ in the
             class's dict. */
-            setattr(prop, "__doc__", get_doc);
+            setattr(prop, doc_str, get_doc);
         }
         prop->getter_doc = true;
     }

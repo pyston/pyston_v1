@@ -53,7 +53,8 @@ script:
   - ccache -z
   - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
   - ccache -s
-  - PYSTON_RUN_ARGS=G python $TRAVIS_BUILD_DIR/tools/tester.py -R ./pyston -a=-S -k -t180 --exit-code-only $TRAVIS_BUILD_DIR/test/extra
+  - mysql -e 'create database mysqldb_test charset utf8;'
+  - PYSTON_RUN_ARGS=G python $TRAVIS_BUILD_DIR/tools/tester.py -R ./pyston -a=-S -k -t600 --exit-code-only $TRAVIS_BUILD_DIR/test/extra
 
 os:
   - linux

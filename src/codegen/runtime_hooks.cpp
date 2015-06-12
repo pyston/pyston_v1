@@ -133,11 +133,17 @@ void initGlobalFuncs(GlobalState& g) {
     assert(g.llvm_class_type);
     g.llvm_class_type_ptr = g.llvm_class_type->getPointerTo();
 
-    g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
+    g.llvm_boxedstring_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedString");
+    assert(g.llvm_boxedstring_type_ptr);
+    g.llvm_boxedstring_type_ptr = g.llvm_boxedstring_type_ptr->getPointerTo();
 
     g.llvm_dict_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedDict");
     assert(g.llvm_dict_type_ptr);
     g.llvm_dict_type_ptr = g.llvm_dict_type_ptr->getPointerTo();
+
+    g.llvm_aststmt_type_ptr = g.stdlib_module->getTypeByName("class.pyston::AST_stmt");
+    assert(g.llvm_aststmt_type_ptr);
+    g.llvm_aststmt_type_ptr = g.llvm_aststmt_type_ptr->getPointerTo();
 
     // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
     // It will be a pointer to a type named something like class.std::vector or
@@ -175,7 +181,6 @@ void initGlobalFuncs(GlobalState& g) {
     GET(unboxInt);
     GET(boxFloat);
     GET(unboxFloat);
-    GET(boxStringPtr);
     GET(boxInstanceMethod);
     GET(boxBool);
     GET(unboxBool);
@@ -185,10 +190,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSlice);
     GET(createClosure);
     GET(createGenerator);
-    GET(createLong);
-    GET(createPureImaginary);
     GET(createSet);
-    GET(decodeUTF8StringPtr);
 
     GET(getattr);
     GET(setattr);
@@ -247,17 +249,18 @@ void initGlobalFuncs(GlobalState& g) {
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
     g.funcs.callattr = getFunc((void*)callattr, "callattr");
-    g.funcs.callattr0
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr, g.i1, g.i32);
-    g.funcs.callattr1 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i32, g.llvm_value_type_ptr);
-    g.funcs.callattr2 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.callattr3 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.callattrN = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
-                                g.llvm_value_type_ptr->getPointerTo());
+    g.funcs.callattr0 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_boxedstring_type_ptr, g.i1, g.i32);
+    g.funcs.callattr1 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr);
+    g.funcs.callattr2 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.callattr3
+        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i1,
+                  g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.callattrN = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
     g.funcs.reoptCompiledFunc = addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
     g.funcs.compilePartialFunc = addFunc((void*)compilePartialFunc, g.i8_ptr, g.i8_ptr);

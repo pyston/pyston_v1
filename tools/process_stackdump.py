@@ -6,7 +6,7 @@ if __name__ == "__main__":
     parser.add_argument("tracebacks_file", action="store", default=None)
     parser.add_argument("--num-display", action="store", default=6, type=int)
     parser.add_argument("--dedup-frames", action="store", default=None, type=int)
-    parser.add_argument("--dedup-file", action="store_true")
+    parser.add_argument("--dedup-file", action="store", const=1, nargs='?')
     parser.add_argument("--dedup-function", action="store_true")
     args = parser.parse_args()
 
@@ -20,7 +20,20 @@ if __name__ == "__main__":
         key_func = lambda t: '\n'.join(t.split('\n')[-2 * args.dedup_frames:]) # last 4 stack frames
     if args.dedup_file:
         assert not key_func
-        key_func = lambda t: traceback_locations(t)[-1].split('"')[1]
+        def key_func(t):
+            locs = traceback_locations(t)
+            prev_f = None
+            n = int(args.dedup_file)
+            files = []
+            for l in reversed(locs):
+                f = l.split('"')[1]
+                if f == prev_f:
+                    continue
+                prev_f = f
+                files.append("  " + f)
+                if len(files) == n:
+                    break
+            return '\n'.join(reversed(files))
     if args.dedup_function:
         assert not key_func
         def key_func(t):

@@ -14,6 +14,10 @@
 
 #include "runtime/ics.h"
 
+#ifndef NVALGRIND
+#include <sys/mman.h>
+#endif
+
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "codegen/compvars.h"
@@ -25,6 +29,10 @@
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
+
+#ifndef NVALGRIND
+#define PAGE_SIZE 4096
+#endif
 
 namespace pyston {
 
@@ -163,7 +171,13 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
 
 void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
     assert(eh_frame_addr == NULL);
+#ifdef NVALGRIND
     eh_frame_addr = malloc(EH_FRAME_SIZE);
+#else
+    eh_frame_addr = mmap(NULL, (EH_FRAME_SIZE + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    RELEASE_ASSERT(eh_frame_addr != MAP_FAILED, "");
+#endif
     writeTrivialEhFrame(eh_frame_addr, func_addr, func_size);
     // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
     // TODO: can we omit the terminator in general?
@@ -174,7 +188,11 @@ void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
 EHFrameManager::~EHFrameManager() {
     if (eh_frame_addr) {
         deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+#ifdef NVALGRIND
         free(eh_frame_addr);
+#else
+        munmap(eh_frame_addr, (EH_FRAME_SIZE + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1));
+#endif
     }
 }
 
@@ -227,8 +245,16 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
         static const int CALL_SIZE = 13;
 
         int patchable_size = num_slots * slot_size;
+
+#ifdef NVALGRIND
         int total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
         addr = malloc(total_size);
+#else
+        total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
+        addr = mmap(NULL, (total_size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE | PROT_EXEC,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        RELEASE_ASSERT(addr != MAP_FAILED, "");
+#endif
 
         // printf("Allocated runtime IC at %p\n", addr);
 
@@ -285,7 +311,11 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
         deregisterCompiledPatchpoint(icinfo.get());
+#ifdef NVALGRIND
         free(addr);
+#else
+        munmap(addr, total_size);
+#endif
     } else {
     }
 }

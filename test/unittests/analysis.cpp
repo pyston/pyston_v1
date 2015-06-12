@@ -7,6 +7,7 @@
 
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
+#include "codegen/irgen/future.h"
 #include "codegen/osrentry.h"
 #include "codegen/parser.h"
 #include "core/ast.h"
@@ -36,7 +37,9 @@ TEST_F(AnalysisTest, augassign) {
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
-    SourceInfo* si = new SourceInfo(createModule("augassign", fn.c_str()), scoping, func, func->body, fn);
+    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
+
+    SourceInfo* si = new SourceInfo(createModule("augassign", fn.c_str()), scoping, future_flags, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
@@ -62,9 +65,11 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
+    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
+
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
     SourceInfo* si = new SourceInfo(createModule("osr" + std::to_string((is_osr << 1) + i_maybe_undefined), fn.c_str()),
-            scoping, func, func->body, fn);
+            scoping, future_flags, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);

@@ -75,15 +75,13 @@ private:
         writeULL(u.u);
     }
 
-    void writeString(const std::string& v) {
+    void writeString(llvm::StringRef v) {
         writeUInt(v.size());
-        fwrite(v.c_str(), 1, v.size(), file);
+        fwrite(v.data(), 1, v.size(), file);
         for (int i = 0; i < v.size(); i++) {
             checksum ^= v[i];
         }
     }
-
-    void writeString(const InternedString v) { writeString(v.str()); }
 
     void writeStringVector(const std::vector<InternedString>& vec) {
         writeShort(vec.size());

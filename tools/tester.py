@@ -225,6 +225,19 @@ def get_test_options(fn, check_stats, run_memcheck):
 
     return opts
 
+def diff_output(expected, received, expected_file_prefix, received_file_prefix):
+    exp_fd, exp_fn = tempfile.mkstemp(prefix=expected_file_prefix)
+    rec_fd, rec_fn = tempfile.mkstemp(prefix=received_file_prefix)
+    os.fdopen(exp_fd, 'w').write(expected)
+    os.fdopen(rec_fd, 'w').write(received)
+    p = subprocess.Popen(["diff", "--unified=5", "-a", exp_fn, rec_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
+    diff = p.stdout.read()
+    assert p.wait() in (0, 1)
+    os.unlink(exp_fn)
+    os.unlink(rec_fn)
+    return diff
+
+
 def determine_test_result(fn, opts, code, out, stderr, elapsed):
     if opts.allow_warnings:
         out_lines = []
@@ -266,9 +279,9 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         # run CPython to get the expected output
         expected_code, expected_out, expected_err = get_expected_output(fn)
 
-    if code != expected_code:
-        color = 31 # red
+    color = 31 # red
 
+    if code != expected_code:
         if code == 0:
             err = "(Unexpected success)"
         else:
@@ -294,7 +307,6 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             raise Exception("%s\n%s\n%s" % (msg, err, stderr))
 
     elif opts.should_error == (code == 0):
-        color = 31              # red
         if code == 0:
             msg = "Exited successfully; remove '# should_error' if this is expected"
         else:
@@ -312,27 +324,29 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         if opts.expected == "fail":
             return "Expected failure (bad output)"
         else:
+            diff = diff_output(expected_out, out, "expected_", "received_")
             if KEEP_GOING:
                 failed.append(fn)
-                return "\033[31mFAILED\033[0m (bad output)"
-            exp_fd, exp_fn = tempfile.mkstemp(prefix="expected_")
-            out_fd, out_fn = tempfile.mkstemp(prefix="received_")
-            os.fdopen(exp_fd, 'w').write(expected_out)
-            os.fdopen(out_fd, 'w').write(out)
-            p = subprocess.Popen(["diff", "--unified=5", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
-            diff = p.stdout.read()
-            assert p.wait() in (0, 1)
-            os.unlink(exp_fn)
-            os.unlink(out_fn)
-            raise Exception("Failed on %s:\n%s" % (fn, diff))
+                if VERBOSE >= 1:
+                    return "\033[%dmFAILED\033[0m (bad output)\n%s" % (color, diff)
+                else:
+                    return "\033[%dmFAILED\033[0m (bad output)" % (color,)
+
+            else:
+                raise Exception("Failed on %s:\n%s" % (fn, diff))
     elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
         if opts.expected == "fail":
             return "Expected failure (bad stderr)"
-        elif KEEP_GOING:
-            failed.append(fn)
-            return "\033[31mFAILED\033[0m (bad stderr)"
         else:
-            raise Exception((canonicalize_stderr(stderr), canonicalize_stderr(expected_err)))
+            diff = diff_output(expected_err, stderr, "expectederr_", "receivederr_")
+            if KEEP_GOING:
+                failed.append(fn)
+                if VERBOSE >= 1:
+                    return "\033[%dmFAILED\033[0m (bad stderr)\n%s" % (color, diff)
+                else:
+                    return "\033[%dmFAILED\033[0m (bad stderr)" % (color,)
+            else:
+                raise Exception((canonicalize_stderr(stderr), canonicalize_stderr(expected_err)))
     elif opts.expected == "fail":
         if KEEP_GOING:
             failed.append(fn)

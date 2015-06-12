@@ -242,6 +242,8 @@ private:
     ParamNames() : takes_param_names(false) {}
 };
 
+typedef int FutureFlags;
+
 class BoxedModule;
 class ScopeInfo;
 class InternedStringPool;
@@ -249,6 +251,7 @@ class SourceInfo {
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
+    FutureFlags future_flags;
     AST* ast;
     CFG* cfg;
     bool is_generator;
@@ -267,7 +270,8 @@ public:
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, std::vector<AST_stmt*> body, std::string fn);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
+               std::vector<AST_stmt*> body, std::string fn);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
@@ -295,7 +299,7 @@ public:
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
     typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                     const std::vector<const std::string*>*);
+                                     const std::vector<BoxedString*>*);
     InternalCallable internal_callable = NULL;
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
@@ -524,8 +528,8 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     if (cls->tp_name) {                                                                                                \
         std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
         std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
-        Stats::log(Stats::getStatId(per_name_alloc_name));                                                             \
-        Stats::log(Stats::getStatId(per_name_allocsize_name), size);                                                   \
+        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
+        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
     }
 #define ALLOC_STATS_VAR(cls)                                                                                           \
     if (cls->tp_name) {                                                                                                \
@@ -650,22 +654,22 @@ BoxedModule* createModule(const std::string& name, const char* fn = NULL, const 
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this
-void appendToSysPath(const std::string& path);
-void prependToSysPath(const std::string& path);
+void appendToSysPath(llvm::StringRef path);
+void prependToSysPath(llvm::StringRef path);
 void addToSysArgv(const char* str);
 
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func);
-void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...);
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func);
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...);
 
 struct LineInfo {
 public:
     const int line, column;
     std::string file, func;
 
-    LineInfo(int line, int column, const std::string& file, const std::string& func)
+    LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)
         : line(line), column(column), file(file), func(func) {}
 };
 
@@ -706,6 +710,8 @@ struct FrameInfo {
     BoxedFrame* frame_obj;
 
     FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
+
+    void gcVisit(GCVisitor* visitor);
 };
 
 struct CallattrFlags {

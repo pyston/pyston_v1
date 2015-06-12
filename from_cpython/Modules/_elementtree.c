@@ -1791,8 +1791,9 @@ treebuilder_handle_data(TreeBuilderObject* self, PyObject* data)
         Py_INCREF(data); self->data = data;
     } else {
         /* more than one item; use a list to collect items */
-        if (PyString_CheckExact(self->data) && Py_REFCNT(self->data) == 1 &&
-            PyString_CheckExact(data) && PyString_GET_SIZE(data) == 1) {
+        // Pyston change: Py_REFCNT(self->data) -> 2
+        if (PyString_CheckExact(self->data) && /*Py_REFCNT(self->data)*/2 == 1 &&
+              PyString_CheckExact(data) && PyString_GET_SIZE(data) == 1) {
             /* expat often generates single character data sections; handle
                the most common case by resizing the existing string... */
             Py_ssize_t size = PyString_GET_SIZE(self->data);
@@ -2876,6 +2877,16 @@ init_elementtree(void)
     Py_TYPE(&Element_Type) = Py_TYPE(&TreeBuilder_Type) = &PyType_Type;
 #if defined(USE_EXPAT)
     Py_TYPE(&XMLParser_Type) = &PyType_Type;
+#endif
+
+    // Pyston change: register types
+    if (PyType_Ready(&Element_Type) < 0)
+        return;
+    if (PyType_Ready(&TreeBuilder_Type) < 0)
+        return;
+#if defined(USE_EXPAT)
+    if (PyType_Ready(&XMLParser_Type) < 0)
+        return;
 #endif
 
     m = Py_InitModule("_elementtree", _functions);

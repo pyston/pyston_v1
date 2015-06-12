@@ -35,6 +35,8 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#define DEBUG_MARK_PHASE 0
+
 #ifndef NDEBUG
 #define DEBUG 1
 #else
@@ -43,6 +45,13 @@
 
 namespace pyston {
 namespace gc {
+
+#if DEBUG_MARK_PHASE
+FILE* trace_fp;
+#define TRACE_LOG(...) fprintf(trace_fp, __VA_ARGS__)
+#else
+#define TRACE_LOG(...)
+#endif
 
 class TraceStack {
 private:
@@ -91,6 +100,7 @@ public:
     }
 
     void push(void* p) {
+        TRACE_LOG("Pushing %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
         if (isMarked(al))
             return;
@@ -273,22 +283,31 @@ void markPhase() {
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
 
+#if DEBUG_MARK_PHASE
+    trace_fp = fopen("gc_trace.txt", "w");
+#endif
+    TRACE_LOG("Starting collection\n");
+
+    TRACE_LOG("Looking at roots\n");
     TraceStack stack(roots);
     GCVisitor visitor(&stack);
 
+    TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
-    gatherInterpreterRoots(&visitor);
 
+    TRACE_LOG("Looking at root handles\n");
     for (auto h : *getRootHandles()) {
         visitor.visit(h->value);
     }
 
+    TRACE_LOG("Looking at potential root ranges\n");
     for (auto& e : potential_root_ranges) {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
+        TRACE_LOG("Looking at heap object %p\n", p);
         assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
@@ -336,6 +355,11 @@ void markPhase() {
             RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
         }
     }
+
+#if DEBUG_MARK_PHASE
+    fclose(trace_fp);
+    trace_fp = NULL;
+#endif
 
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;

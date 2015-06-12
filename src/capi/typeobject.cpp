@@ -761,7 +761,15 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
     return res;
 }
 
-static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
+/* Pyston change: static*/ PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
+    static StatCounter slowpath_richcompare("slowpath_richcompare");
+    slowpath_richcompare.log();
+#if 0
+    std::string per_name_stat_name = "slowpath_richcompare." + std::string(self->cls->tp_name);
+    int id = Stats::getStatId(per_name_stat_name);
+    Stats::log(id);
+#endif
+
     PyObject* res;
 
     if (Py_TYPE(self)->tp_richcompare == slot_tp_richcompare) {
@@ -3014,7 +3022,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     if (!cls->hasattr("__doc__")) {
         if (cls->tp_doc) {
-            cls->giveAttr("__doc__", boxStrConstant(cls->tp_doc));
+            cls->giveAttr("__doc__", boxString(cls->tp_doc));
         } else {
             cls->giveAttr("__doc__", None);
         }

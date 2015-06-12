@@ -328,8 +328,7 @@ extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
         /* We're an instance of a classic class */
         /* Try __unicode__ from the instance -- alas we have no type */
         if (!unicodestr) {
-            unicodestr = boxStrConstant("__unicode__");
-            gc::registerPermanentRoot(unicodestr);
+            unicodestr = PyString_InternFromString("__unicode__");
             if (!unicodestr)
                 return NULL;
         }
@@ -382,7 +381,7 @@ extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
 
 extern "C" PyObject* _PyObject_Str(PyObject* v) noexcept {
     if (v == NULL)
-        return boxStrConstant("<NULL>");
+        return boxString("<NULL>");
 
     if (v->cls == str_cls)
         return v;
@@ -419,11 +418,12 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 }
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
+    RELEASE_ASSERT(PyString_Check(name), "");
     try {
         if (value == NULL)
-            delattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s()), NULL);
+            delattrGeneric(obj, static_cast<BoxedString*>(name), NULL);
         else
-            setattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s()), value, NULL);
+            setattrGeneric(obj, static_cast<BoxedString*>(name), value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -443,11 +443,12 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
         }
     }
 
+    assert(PyString_Check(name));
     try {
         if (value == NULL)
-            delattr(obj, static_cast<BoxedString*>(name)->data());
+            delattr(obj, static_cast<BoxedString*>(name));
         else
-            setattr(obj, static_cast<BoxedString*>(name)->data(), value);
+            setattr(obj, static_cast<BoxedString*>(name), value);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -457,7 +458,7 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
     try {
-        setattr(v, name, w);
+        setattr(v, boxString(name), w);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -466,12 +467,8 @@ extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w
 }
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
-    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
-    // won't end up doing a GIL check?
-    // threading::GLDemoteRegion _gil_demote;
-
     try {
-        return getattr(o, attr);
+        return getattr(o, boxString(attr));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -764,7 +761,7 @@ static int try_3way_compare(PyObject* v, PyObject* w) {
     0 if v == w;
     1 if v >  w.
 */
-static int default_3way_compare(PyObject* v, PyObject* w) {
+/* Pyston change: static*/ int default_3way_compare(PyObject* v, PyObject* w) {
     int c;
     const char* vname, *wname;
 
@@ -865,7 +862,7 @@ extern "C" int PyObject_Compare(PyObject* v, PyObject* w) noexcept {
 }
 
 /* Return (new reference to) Py_True or Py_False. */
-static PyObject* convert_3way_to_object(int op, int c) noexcept {
+/* Pyston change: static */ PyObject* convert_3way_to_object(int op, int c) noexcept {
     PyObject* result;
     switch (op) {
         case Py_LT:

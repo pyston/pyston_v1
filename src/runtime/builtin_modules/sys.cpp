@@ -118,12 +118,12 @@ Box* sysGetFrame(Box* val) {
 }
 
 Box* sysGetDefaultEncoding() {
-    return boxStrConstant(PyUnicode_GetDefaultEncoding());
+    return boxString(PyUnicode_GetDefaultEncoding());
 }
 
 Box* sysGetFilesystemEncoding() {
     if (Py_FileSystemDefaultEncoding)
-        return boxStrConstant(Py_FileSystemDefaultEncoding);
+        return boxString(Py_FileSystemDefaultEncoding);
     return None;
 }
 
@@ -194,18 +194,18 @@ void addToSysArgv(const char* str) {
     Box* sys_argv = sys_module->getattr("argv");
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
-    listAppendInternal(sys_argv, boxStrConstant(str));
+    listAppendInternal(sys_argv, boxString(str));
 }
 
-void appendToSysPath(const std::string& path) {
+void appendToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    listAppendInternal(sys_path, boxStringPtr(&path));
+    listAppendInternal(sys_path, boxString(path));
 }
 
-void prependToSysPath(const std::string& path) {
+void prependToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    static std::string attr = "insert";
-    callattr(sys_path, &attr, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
+    static BoxedString* insert_str = static_cast<BoxedString*>(PyString_InternFromString("insert"));
+    callattr(sys_path, insert_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
              boxInt(0), boxString(path), NULL, NULL, NULL);
 }
 
@@ -434,9 +434,9 @@ void setupSys() {
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
-    sys_module->giveAttr("byteorder", boxStrConstant(isLittleEndian() ? "little" : "big"));
+    sys_module->giveAttr("byteorder", boxString(isLittleEndian() ? "little" : "big"));
 
-    sys_module->giveAttr("platform", boxStrConstant(Py_GetPlatform()));
+    sys_module->giveAttr("platform", boxString(Py_GetPlatform()));
 
     sys_module->giveAttr("executable", boxString(Py_GetProgramFullPath()));
 
@@ -461,22 +461,22 @@ void setupSys() {
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
     sys_module->giveAttr("dont_write_bytecode", True);
 
-    sys_module->giveAttr("prefix", boxStrConstant(Py_GetPrefix()));
-    sys_module->giveAttr("exec_prefix", boxStrConstant(Py_GetExecPrefix()));
+    sys_module->giveAttr("prefix", boxString(Py_GetPrefix()));
+    sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));
 
     sys_module->giveAttr("copyright",
-                         boxStrConstant("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
-                                        "Python Software Foundation.\nAll Rights Reserved.\n\nCopyright (c) 2000 "
-                                        "BeOpen.com.\nAll Rights Reserved.\n\nCopyright (c) 1995-2001 Corporation for "
-                                        "National Research Initiatives.\nAll Rights Reserved.\n\nCopyright (c) "
-                                        "1991-1995 Stichting Mathematisch Centrum, Amsterdam.\nAll Rights Reserved."));
+                         boxString("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
+                                   "Python Software Foundation.\nAll Rights Reserved.\n\nCopyright (c) 2000 "
+                                   "BeOpen.com.\nAll Rights Reserved.\n\nCopyright (c) 1995-2001 Corporation for "
+                                   "National Research Initiatives.\nAll Rights Reserved.\n\nCopyright (c) "
+                                   "1991-1995 Stichting Mathematisch Centrum, Amsterdam.\nAll Rights Reserved."));
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
     // TODO: this should be a "sys.version_info" object, not just a tuple (ie can access fields by name)
     sys_module->giveAttr("version_info",
                          BoxedTuple::create({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
-                                              boxInt(PYTHON_VERSION_MICRO), boxStrConstant("beta"), boxInt(0) }));
+                                              boxInt(PYTHON_VERSION_MICRO), boxString("beta"), boxInt(0) }));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));

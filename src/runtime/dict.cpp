@@ -15,6 +15,7 @@
 #include "runtime/dict.h"
 
 #include "capi/types.h"
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -196,8 +197,8 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     if (it == self->d.end()) {
         // Try calling __missing__ if this is a subclass
         if (self->cls != dict_cls) {
-            static const std::string missing("__missing__");
-            Box* r = callattr(self, &missing, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+            static BoxedString* missing_str = static_cast<BoxedString*>(PyString_InternFromString("__missing__"));
+            Box* r = callattr(self, missing_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
                               ArgPassSpec(1), k, NULL, NULL, NULL, NULL);
             if (r)
                 return r;
@@ -205,10 +206,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 
         raiseExcHelper(KeyError, k);
     }
-
-    Box* pos = self->d[k];
-
-    return pos;
+    return it->second;
 }
 
 extern "C" PyObject* PyDict_New() noexcept {
@@ -242,7 +240,7 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
 extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) noexcept {
     Box* key_s;
     try {
-        key_s = boxStrConstant(key);
+        key_s = boxString(key);
     } catch (ExcInfo e) {
         abort();
     }
@@ -314,7 +312,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
     Box* key_s;
     try {
-        key_s = boxStrConstant(key);
+        key_s = boxString(key);
     } catch (ExcInfo e) {
         abort();
     }
@@ -528,8 +526,8 @@ void dictMerge(BoxedDict* self, Box* other) {
         return;
     }
 
-    static const std::string keys_str("keys");
-    Box* keys = callattr(other, &keys_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = true }),
+    static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
+    Box* keys = callattr(other, keys_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = true }),
                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     assert(keys);
 
@@ -592,7 +590,8 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
     if (args->size()) {
         Box* arg = args->elts[0];
-        if (getattrInternal(arg, "keys", NULL)) {
+        static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
+        if (getattrInternal(arg, keys_str, NULL)) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);

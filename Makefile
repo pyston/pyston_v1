@@ -20,7 +20,9 @@ USE_DISTCC := 0
 ENABLE_VALGRIND := 0
 
 GDB := gdb
-GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
+# If you followed the old install instructions:
+# GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
+GCC_DIR := /usr
 GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
 
 USE_DEBUG_LIBUNWIND := 0
@@ -530,16 +532,11 @@ check:
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t300 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 	@# skip -O for dbg
 
 	$(MAKE) run_unittests ARGS=
-
-	@# Building in gcc mode is helpful to find various compiler-specific warnings.
-	@# We've also discovered UB in our code from running in gcc mode, so try running it as well.
-	$(MAKE) pyston_gcc
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
 	$(MAKE) pyston_release
 	@# It can be useful to test release mode, since it actually exposes different functionality
@@ -1027,7 +1024,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t300 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
@@ -1169,7 +1166,9 @@ watch_%:
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find . \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET $(WATCH_ARGS); done )
+		Makefile $$(find src test \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
+			$(MAKE) $$TARGET $(WATCH_ARGS); \
+		done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
 watch: watch_pyston_dbg
@@ -1177,6 +1176,16 @@ watch_vim:
 	$(MAKE) watch WATCH_ARGS='COLOR=0 USE_DISTCC=0 -j1 2>&1 | tee compile.log'
 wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_POST_CMDS="--ex quit"
+
+.PHONY: head_%
+HEAD := 40
+head_%:
+	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | head -n$(HEAD)"
+head: head_pyston_dbg
+.PHONY: hwatch_%
+hwatch_%:
+	@ $(MAKE) $(dir $@)$(patsubst hwatch_%,watch_head_%,$(notdir $@))
+hwatch: hwatch_pyston_dbg
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
@@ -1217,7 +1226,8 @@ SHAREDMODS_SRCS := \
 	expat/xmltok.c \
 	expat/xmltok_impl.c \
 	expat/xmltok_ns.c \
- 	pyexpat.c
+ 	pyexpat.c \
+ 	_elementtree.c
 SHAREDMODS_SRCS := $(SHAREDMODS_SRCS:%=from_cpython/Modules/%)
 SHAREDMODS_OBJS := $(SHAREDMODS_NAMES:%=lib_pyston/%.pyston.so)
 

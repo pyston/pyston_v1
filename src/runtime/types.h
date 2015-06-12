@@ -39,6 +39,7 @@ class BoxedTuple;
 class BoxedFile;
 class BoxedClosure;
 class BoxedGenerator;
+class BoxedLong;
 
 void setupInt();
 void teardownInt();
@@ -110,15 +111,12 @@ extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type);
 extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type);
 
-extern "C" Box* boxStringPtr(const std::string* s);
-Box* boxString(const std::string& s);
-Box* boxString(std::string&& s);
-Box* boxStringRef(llvm::StringRef s);
-Box* boxStringTwine(const llvm::Twine& s);
+// Both llvm::StringRef and llvm::Twine offer implicit conversions from const char*, so
+// put the twine version under a different name.
+BoxedString* boxString(llvm::StringRef s);
+BoxedString* boxStringTwine(const llvm::Twine& s);
 
-extern "C" BoxedString* boxStrConstant(const char* chars);
-extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
-extern "C" Box* decodeUTF8StringPtr(const std::string* s);
+extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 
 // creates an uninitialized string of length n; useful for directly constructing into the string and avoiding copies:
 BoxedString* createUninitializedString(ssize_t n);
@@ -131,7 +129,7 @@ extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals, std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
+extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -428,6 +426,10 @@ public:
     char interned_state;
 
     char* data() { return s_data; }
+    const char* c_str() {
+        assert(data()[size()] == '\0');
+        return data();
+    }
     size_t size() { return this->ob_size; }
 
     // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
@@ -442,7 +444,7 @@ public:
 
         assert(str_cls->tp_alloc == PystonType_GenericAlloc);
         assert(str_cls->tp_itemsize == 1);
-        assert(str_cls->tp_basicsize == sizeof(BoxedString) + 1);
+        assert(str_cls->tp_basicsize == offsetof(BoxedString, s_data) + 1);
         assert(str_cls->is_pyston_class);
         assert(str_cls->attrs_offset == 0);
 
@@ -455,7 +457,7 @@ public:
         return rtn;
     }
 
-    // these should be private, but strNew needs them
+    // these should be private, but str.cpp needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
     explicit BoxedString(size_t n, char c) __attribute__((visibility("default")));
     explicit BoxedString(llvm::StringRef s) __attribute__((visibility("default")));
@@ -465,6 +467,8 @@ private:
     void* operator new(size_t size) = delete;
 
     char s_data[0];
+
+    friend void setupRuntime();
 };
 
 template <typename T> struct StringHash {
@@ -698,11 +702,28 @@ public:
     BoxedModule() {} // noop constructor to disable zero-initialization of cls
     std::string name();
 
-    Box* getStringConstant(const std::string& ast_str);
+    BoxedString* getStringConstant(llvm::StringRef ast_str);
+    Box* getUnicodeConstant(llvm::StringRef ast_str);
+    BoxedInt* getIntConstant(int64_t n);
+    BoxedFloat* getFloatConstant(double d);
+    Box* getPureImaginaryConstant(double d);
+    Box* getLongConstant(llvm::StringRef s);
 
-    llvm::StringMap<int> str_const_index;
-    std::vector<Box*> str_constants;
+    static void gcHandler(GCVisitor* v, Box* self);
 
+private:
+    ContiguousMap<llvm::StringRef, BoxedString*, llvm::StringMap<int>> str_constants;
+    ContiguousMap<llvm::StringRef, Box*, llvm::StringMap<int>> unicode_constants;
+    // Note: DenseMap doesn't work here since we don't prevent the tombstone/empty
+    // keys from reaching it.
+    ContiguousMap<int64_t, BoxedInt*, std::unordered_map<int64_t, int>> int_constants;
+    // I'm not sure how well it works to use doubles as hashtable keys; thankfully
+    // it's not a big deal if we get misses.
+    ContiguousMap<double, BoxedFloat*, std::unordered_map<double, int>> float_constants;
+    ContiguousMap<double, Box*, std::unordered_map<double, int>> imaginary_constants;
+    ContiguousMap<llvm::StringRef, Box*, llvm::StringMap<int>> long_constants;
+
+public:
     DEFAULT_CLASS(module_cls);
 };
 
@@ -838,8 +859,8 @@ public:
     void* stack_begin;
 
 #if STAT_TIMERS
-    StatTimer* statTimers;
-    uint64_t timer_time;
+    StatTimer* prev_stack;
+    StatTimer my_timer;
 #endif
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
@@ -854,7 +875,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
-void attrwrapperDel(Box* b, const std::string& attr);
+void attrwrapperDel(Box* b, llvm::StringRef attr);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);
