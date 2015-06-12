@@ -1393,6 +1393,23 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             Box* r = obj->cls->tp_getattro(obj, attr);
             if (!r)
                 throwCAPIException();
+
+            // If attr is immortal, then we are free to write an embedded reference to it.
+            // Immortal are (unfortunately) common right now, so this is an easy way to get
+            // around the fact that we don't currently scan ICs for GC references, but eventually
+            // we should just add that.
+            if (rewrite_args && attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
+                // In theory we could also just guard that the tp_getattro slot is non-null and then call
+                // into it, instead of guarding that it is the same as it is here.
+                rewrite_args->obj->getAttr(offsetof(Box, cls))
+                    ->addAttrGuard(offsetof(BoxedClass, tp_getattro), (uint64_t)obj->cls->tp_getattro);
+                auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
+                auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
+                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
+                rewrite_args->out_rtn = r_rtn;
+                rewrite_args->out_success = true;
+            }
             return r;
         }
 
