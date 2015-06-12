@@ -77,34 +77,27 @@ template <class ListT> inline void insertIntoLL(ListT** next_pointer, ListT* nex
     next->prev = next_pointer;
 }
 
-template <class ListT, typename Func> inline void forEach(ListT* list, Func func) {
-    auto cur = list;
-    while (cur) {
-        func(cur);
-        cur = cur->next;
-    }
-}
-
 template <class ListT, typename Free>
-inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free free_func) {
-    auto cur = head;
-    while (cur) {
+inline void sweep(ListT list, std::vector<Box*>& weakly_referenced, Free free_func) {
+    auto p = list.begin();
+    auto i = list.begin();
+    while (i < list.end()) {
+        auto cur = *i++;
+
         GCAllocation* al = cur->data;
         if (isMarked(al)) {
             clearMark(al);
-            cur = cur->next;
+            *p++ = cur;
         } else {
             if (_doFree(al, &weakly_referenced)) {
-                removeFromLL(cur);
-
-                auto to_free = cur;
-                cur = cur->next;
-                free_func(to_free);
+                free_func(cur);
             } else {
-                cur = cur->next;
+                *p++ = cur;
             }
         }
     }
+
+    list.resize(p - list.begin());
 }
 
 static unsigned bytesAllocatedSinceCollection;
@@ -632,6 +625,16 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
 #define LARGE_BLOCK_FOR_OBJ(obj) ((LargeBlock*)((int64_t)(obj) & ~(int64_t)(BLOCK_SIZE - 1)))
 #define LARGE_CHUNK_INDEX(obj, section) (((char*)(obj) - (char*)(section)) >> CHUNK_BITS)
 
+template <typename ObjType> struct CompareObj {
+    int operator()(const void* p, const ObjType* obj) {
+        if (p < obj)
+            return -1;
+        if (p >= (char*)&obj->data[0] + obj->size)
+            return 1;
+        return 0;
+    }
+};
+
 GCAllocation* LargeArena::alloc(size_t size) {
     registerGCManagedBytes(size);
 
@@ -644,7 +647,10 @@ GCAllocation* LargeArena::alloc(size_t size) {
     obj->size = size;
 
     nullNextPrev(obj);
-    insertIntoLL(&head, obj);
+
+    int idx = binarySearch(obj, allocated_objects.begin(), allocated_objects.end(), CompareObj<LargeObj>());
+    RELEASE_ASSERT(idx < 0, "large object overlaps previously allocated one");
+    allocated_objects.insert(allocated_objects.begin() + (-idx - 1), obj);
 
     return obj->data;
 }
@@ -667,24 +673,19 @@ void LargeArena::free(GCAllocation* al) {
 }
 
 GCAllocation* LargeArena::allocationFrom(void* ptr) {
-    LargeObj* obj = NULL;
-
-    for (obj = head; obj; obj = obj->next) {
-        char* end = (char*)&obj->data + obj->size;
-
-        if (ptr >= obj->data && ptr < end) {
-            return &obj->data[0];
-        }
-    }
-    return NULL;
+    int idx = binarySearch(ptr, allocated_objects.begin(), allocated_objects.end(), CompareObj<LargeObj>());
+    if (idx < 0)
+        return NULL;
+    return allocated_objects[idx]->data;
 }
 
 void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
-    sweepList(head, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
+    sweep(allocated_objects, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
 void LargeArena::getStatistics(HeapStatistics* stats) {
-    forEach(head, [stats](LargeObj* obj) { addStatistic(stats, obj->data, obj->size); });
+    std::for_each(allocated_objects.begin(), allocated_objects.end(),
+                  [stats](LargeObj* obj) { addStatistic(stats, obj->data, obj->size); });
 }
 
 
@@ -791,7 +792,11 @@ retry:
 }
 
 void LargeArena::_freeLargeObj(LargeObj* obj) {
-    removeFromLL(obj);
+    assert(obj->next == NULL && obj->prev == NULL);
+
+    int idx = binarySearch(obj, allocated_objects.begin(), allocated_objects.end(), CompareObj<LargeObj>());
+    RELEASE_ASSERT(idx >= 0, "freeing object that wasn't allocated?");
+    allocated_objects.erase(allocated_objects.begin() + idx);
 
     size_t size = obj->size;
     LargeBlock* section = LARGE_BLOCK_FOR_OBJ(obj);
@@ -835,10 +840,13 @@ GCAllocation* HugeArena::alloc(size_t size) {
     size_t total_size = size + sizeof(HugeObj);
     total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     HugeObj* rtn = (HugeObj*)doMmap(total_size);
-    rtn->obj_size = size;
+    rtn->size = size;
 
     nullNextPrev(rtn);
-    insertIntoLL(&head, rtn);
+
+    int idx = binarySearch(rtn, allocated_objects.begin(), allocated_objects.end(), CompareObj<HugeObj>());
+    RELEASE_ASSERT(idx < 0, "huge object overlaps previously allocated one");
+    allocated_objects.insert(allocated_objects.begin() + (-idx - 1), rtn);
 
     return rtn->data;
 }
@@ -851,7 +859,7 @@ GCAllocation* HugeArena::realloc(GCAllocation* al, size_t bytes) {
         return al;
 
     GCAllocation* rtn = heap->alloc(bytes);
-    memcpy(rtn, al, std::min(bytes, obj->obj_size));
+    memcpy(rtn, al, std::min(bytes, obj->size));
 
     _freeHugeObj(obj);
     return rtn;
@@ -862,26 +870,29 @@ void HugeArena::free(GCAllocation* al) {
 }
 
 GCAllocation* HugeArena::allocationFrom(void* ptr) {
-    HugeObj* cur = head;
-    while (cur) {
-        if (ptr >= cur && ptr < &cur->data[cur->obj_size])
-            return &cur->data[0];
-        cur = cur->next;
-    }
-    return NULL;
+    int idx = binarySearch(ptr, allocated_objects.begin(), allocated_objects.end(), CompareObj<HugeObj>());
+    if (idx < 0)
+        return NULL;
+    return allocated_objects[idx]->data;
 }
 
 void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
-    sweepList(head, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
+    sweep(allocated_objects, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {
-    forEach(head, [stats](HugeObj* obj) { addStatistic(stats, obj->data, obj->capacity()); });
+    std::for_each(allocated_objects.begin(), allocated_objects.end(),
+                  [stats](HugeObj* obj) { addStatistic(stats, obj->data, obj->capacity()); });
 }
 
-void HugeArena::_freeHugeObj(HugeObj* lobj) {
-    removeFromLL(lobj);
-    int r = munmap(lobj, lobj->mmap_size());
+void HugeArena::_freeHugeObj(HugeObj* obj) {
+    assert(obj->next == NULL && obj->prev == NULL);
+
+    int idx = binarySearch(obj, allocated_objects.begin(), allocated_objects.end(), CompareObj<HugeObj>());
+    RELEASE_ASSERT(idx >= 0, "freeing object that wasn't allocated?");
+    allocated_objects.erase(allocated_objects.begin() + idx);
+
+    int r = munmap(obj, obj->mmap_size());
     assert(r == 0);
 }
 

@@ -380,8 +380,8 @@ private:
 
     static constexpr int NUM_FREE_LISTS = 32;
 
+    std::vector<LargeObj*> allocated_objects;
     Heap* heap;
-    LargeObj* head;
     LargeBlock* blocks;
     LargeFreeChunk* free_lists[NUM_FREE_LISTS]; /* 0 is for larger sizes */
 
@@ -391,7 +391,7 @@ private:
     void _freeLargeObj(LargeObj* obj);
 
 public:
-    LargeArena(Heap* heap) : heap(heap), head(NULL), blocks(NULL) {}
+    LargeArena(Heap* heap) : heap(heap), blocks(NULL) {}
 
     /* Largest object that can be allocated in a large block. */
     static constexpr size_t ALLOC_SIZE_LIMIT = BLOCK_SIZE - CHUNK_SIZE - sizeof(LargeObj);
@@ -426,11 +426,11 @@ public:
 private:
     struct HugeObj {
         HugeObj* next, **prev;
-        size_t obj_size;
+        size_t size;
         GCAllocation data[0];
 
         int mmap_size() {
-            size_t total_size = obj_size + sizeof(HugeObj);
+            size_t total_size = size + sizeof(HugeObj);
             total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
             return total_size;
         }
@@ -446,8 +446,7 @@ private:
 
     void _freeHugeObj(HugeObj* lobj);
 
-    HugeObj* head;
-
+    std::vector<HugeObj*> allocated_objects;
     Heap* heap;
 };
 
