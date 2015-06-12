@@ -58,6 +58,10 @@ struct uw_table_entry {
 
 namespace pyston {
 
+namespace {
+static BoxedClass* unwind_session_cls;
+}
+
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
 // See http://www.airs.com/blog/archives/460 for some useful info.
@@ -441,8 +445,7 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
 }
 
-template <typename FrameFunc>
-bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, FrameFunc func) {
+bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
     bool jitted = cf != NULL;
     if (!cf) {
@@ -455,7 +458,7 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
     if (!cf)
         return false;
 
-    PythonFrameIteratorImpl info(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
+    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
     if (jitted) {
         // Try getting all the callee-save registers, and save the ones we were able to get.
         // Some of them may be inaccessible, I think because they weren't defined by that
@@ -467,22 +470,56 @@ bool unwindProcessFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Fram
             int code = unw_get_reg(cursor, i, &r);
             ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
             if (code == 0) {
-                info.regs[i] = r;
-                info.regs_valid |= (1 << i);
+                info->regs[i] = r;
+                info->regs_valid |= (1 << i);
             }
         }
     }
 
-    return func(&info);
+    return true;
 }
+
+class UnwindSession : public Box {
+    ExcInfo exc_info;
+    bool skip;
+
+public:
+    DEFAULT_CLASS_SIMPLE(unwind_session_cls);
+
+    UnwindSession() : exc_info(NULL, NULL, NULL), skip(false) {}
+
+    ExcInfo* getExcInfoStorage() { return &exc_info; }
+    bool shouldSkipFrame() const { return skip; }
+    void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
+
+    void clear() {
+        exc_info = ExcInfo(NULL, NULL, NULL);
+        skip = false;
+    }
+
+    void addTraceback(const LineInfo& line_info) {
+        if (exc_info.reraise) {
+            exc_info.reraise = false;
+            return;
+        }
+        BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info.traceback));
+    }
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        // assert(_o->cls == unwind_session_cls)
+        UnwindSession* o = static_cast<UnwindSession*>(_o);
+        v->visitIf(o->exc_info.type);
+        v->visitIf(o->exc_info.value);
+        v->visitIf(o->exc_info.traceback);
+    }
+};
 
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
 // the stack frame that they were created in, so we need to use this approach (as opposed to
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    threading::ThreadStateInternal::setUnwindState(
-        UNWIND_STATE_NORMAL); // ensure we won't be skipping any python frames at the start
+    UnwindSession* unwind_state = (UnwindSession*)beginUnwind();
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
@@ -498,19 +535,19 @@ template <typename Func> void unwindPythonStack(Func func) {
         unw_word_t ip = get_cursor_ip(&cursor);
         unw_word_t bp = get_cursor_bp(&cursor);
 
-        bool stop_unwinding = unwindProcessFrame(ip, bp, &cursor, [&](PythonFrameIteratorImpl* frame_iter) {
-            bool rtn = false;
-            if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL)
-                rtn = func(frame_iter);
+        bool stop_unwinding = false;
 
-            threading::ThreadStateInternal::setUnwindState(
-                (bool)frame_iter->cf->entry_descriptor ? UNWIND_STATE_SKIPNEXT : UNWIND_STATE_NORMAL);
-            return rtn;
-        });
+        PythonFrameIteratorImpl frame_iter;
+        if (unwindProcessFrame(ip, bp, &cursor, &frame_iter)) {
+            if (!unwind_state->shouldSkipFrame())
+                stop_unwinding = func(&frame_iter);
 
-        if (stop_unwinding) {
-            break;
+            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+            unwind_state->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
         }
+
+        if (stop_unwinding)
+            break;
 
         if (inGeneratorEntry(ip)) {
             // for generators continue unwinding in the context in which the generator got called
@@ -530,6 +567,8 @@ template <typename Func> void unwindPythonStack(Func func) {
 
         // keep unwinding
     }
+
+    endUnwind(unwind_state);
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
@@ -552,23 +591,58 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
-void maybeTracebackHere(void* unw_cursor) {
+
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+    if (exc_info->reraise) {
+        exc_info->reraise = false;
+        return;
+    }
+    BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info->traceback));
+}
+
+static __thread UnwindSession* cur_unwind;
+void* beginUnwind() {
+    if (!cur_unwind) {
+        cur_unwind = new UnwindSession();
+        pyston::gc::registerPermanentRoot(cur_unwind);
+    }
+    // if we can figure out a way to make endUnwind in cxx_uwind.cpp work, we can remove this.
+    cur_unwind->clear();
+    return cur_unwind;
+}
+
+void* getUnwind() {
+    RELEASE_ASSERT(cur_unwind, "");
+    return cur_unwind;
+}
+
+void endUnwind(void* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    cur_unwind->clear();
+}
+void* getExceptionFerry(void* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    UnwindSession* state = static_cast<UnwindSession*>(unwind);
+    return state->getExcInfoStorage();
+}
+
+void maybeTracebackHere(void* unw_cursor, void* unwind_token) {
     unw_cursor_t* cursor = (unw_cursor_t*)unw_cursor;
+    UnwindSession* state = (UnwindSession*)unwind_token;
 
     unw_word_t ip = get_cursor_ip(cursor);
     unw_word_t bp = get_cursor_bp(cursor);
 
-    BoxedTraceback** tb_loc
-        = reinterpret_cast<BoxedTraceback**>(&threading::ThreadStateInternal::getExceptionFerry()->traceback);
+    PythonFrameIteratorImpl frame_iter;
+    if (unwindProcessFrame(ip, bp, cursor, &frame_iter)) {
+        if (!state->shouldSkipFrame()) {
+            state->addTraceback(lineInfoForFrame(&frame_iter));
+        }
 
-    unwindProcessFrame(ip, bp, cursor, [&](PythonFrameIteratorImpl* frame_iter) {
-        if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL)
-            BoxedTraceback::Here(lineInfoForFrame(frame_iter), tb_loc);
-
-        threading::ThreadStateInternal::setUnwindState((bool)frame_iter->cf->entry_descriptor ? UNWIND_STATE_SKIPNEXT
-                                                                                              : UNWIND_STATE_NORMAL);
-        return false;
-    });
+        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+        state->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+    }
 }
 
 // To produce a traceback, we:
@@ -1052,5 +1126,11 @@ void logByCurrentPythonLine(const std::string& stat_name) {
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();
+}
+
+void setupUnwinding() {
+    unwind_session_cls = BoxedHeapClass::create(type_cls, object_cls, UnwindSession::gcHandler, 0, 0,
+                                                sizeof(UnwindSession), false, "unwind_session");
+    unwind_session_cls->freeze();
 }
 }

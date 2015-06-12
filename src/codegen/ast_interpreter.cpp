@@ -632,19 +632,8 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         next_block = node->normal_dest;
     } catch (ExcInfo e) {
 
-        if (threading::ThreadStateInternal::getUnwindState() == UNWIND_STATE_NORMAL) {
-            // when generating the traceback incrementally we only
-            // include an interpreter frame if we unwind through
-            // ASTInterpreter::execute_inner.  this will keep a toplevel
-            // invoke from showing up, since we catch the exception
-            // here.
-
-            auto source = getCF()->clfunc->source.get();
-            BoxedTraceback::Here(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()),
-                                 reinterpret_cast<BoxedTraceback**>(&e.traceback));
-        }
-
-        threading::ThreadStateInternal::setUnwindState(UNWIND_STATE_NORMAL);
+        auto source = getCF()->clfunc->source.get();
+        exceptionCaughtInInterpreter(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()), &e);
 
         next_block = node->exc_dest;
         last_exception = e;

@@ -29,6 +29,7 @@ struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 
+void setupUnwinding();
 BoxedModule* getCurrentModule();
 Box* getGlobals();     // returns either the module or a globals dict
 Box* getGlobalsDict(); // always returns a dict-like object
@@ -36,7 +37,13 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
 
-void maybeTracebackHere(void* unw_cursor);
+void* beginUnwind();
+void* getUnwind();
+void endUnwind(void* unwind_token);
+void* getExceptionFerry(void* unwind_token);
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
+void maybeTracebackHere(void* unw_cursor, void* unwind_token);
 
 struct ExecutionPoint {
     CompiledFunction* cf;

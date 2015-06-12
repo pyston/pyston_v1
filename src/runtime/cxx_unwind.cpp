@@ -493,12 +493,14 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
+    void* unwind_token = getUnwind();
+
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
-        {
-            // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
-            check(unw_get_proc_info(&cursor, &pip));
-        }
+
+        // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
+        check(unw_get_proc_info(&cursor, &pip));
+
         assert((pip.lsda == 0) == (pip.handler == 0));
         assert(pip.flags == 0);
 
@@ -506,7 +508,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             print_frame(&cursor, &pip);
         }
 
-        maybeTracebackHere(&cursor);
+        maybeTracebackHere(&cursor, unwind_token);
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -554,6 +556,10 @@ static inline void unwind_loop(ExcInfo* exc_data) {
         }
 
         int64_t switch_value = determine_action(&info, &entry);
+        if (switch_value != CLEANUP_ACTION) {
+            // printf ("cleanup action == %ld, should end unwind session\n", switch_value);
+            // endUnwind(unwind_token);
+        }
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
 
@@ -631,7 +637,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
     // during unwinding!
 
-    return pyston::threading::ThreadStateInternal::getExceptionFerry();
+    return pyston::getExceptionFerry(pyston::getUnwind());
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our

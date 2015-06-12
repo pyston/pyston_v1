@@ -2703,6 +2703,7 @@ void setupRuntime() {
 
     closure_cls->freeze();
 
+    setupUnwinding();
     setupInterpreter();
     setupCAPI();
 

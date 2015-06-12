@@ -110,8 +110,8 @@ static llvm::Value* getClosureElementGep(IREmitter& emitter, llvm::Value* closur
 
 static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    static_assert(sizeof(ExcInfo) == 24, "");
-    static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
+    static_assert(sizeof(ExcInfo) == 32, "");
+    static_assert(offsetof(FrameInfo, boxedLocals) == 32, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 1);
 }
 
@@ -122,9 +122,9 @@ static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v
 
 static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    static_assert(sizeof(ExcInfo) == 24, "");
+    static_assert(sizeof(ExcInfo) == 32, "");
     static_assert(sizeof(Box*) == 8, "");
-    static_assert(offsetof(FrameInfo, frame_obj) == 32, "");
+    static_assert(offsetof(FrameInfo, frame_obj) == 40, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 2);
     // TODO: this could be made more resilient by doing something like
     // gep->accumulateConstantOffset(g.tm->getDataLayout(), ap_offset)

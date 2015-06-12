@@ -32,13 +32,6 @@ namespace gc {
 class GCVisitor;
 }
 
-// somewhat similar to CPython's WHY_* enum
-// UNWIND_STATE_NORMAL  : == WHY_EXCEPTION.  we call it "NORMAL" since we often unwind due to things other than
-// exceptions (getGlobals, getLocals, etc)
-// UNWIND_STATE_SKIPNEXT: skip this frame (do not include it in tracebacks).  this happens when re-raising an exception
-//                        and also when dealing with osr replacements (we skip the frame we OSR).
-enum UnwindState { UNWIND_STATE_NORMAL = 0, UNWIND_STATE_SKIPNEXT };
-
 namespace threading {
 
 class ThreadStateInternal {
@@ -82,9 +75,6 @@ public:
     std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
 
-    UnwindState unwind_state;
-    ExcInfo exc_info;
-
     PyThreadState* public_thread_state;
 
     ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state);
@@ -116,21 +106,6 @@ public:
     inline static void popGenerator() {
         assert(ThreadStateInternal::current);
         current->_popGenerator();
-    }
-
-    inline static void setUnwindState(UnwindState state) {
-        assert(ThreadStateInternal::current);
-        current->unwind_state = state;
-    }
-
-    inline static UnwindState getUnwindState() {
-        assert(ThreadStateInternal::current);
-        return current->unwind_state;
-    }
-
-    static ExcInfo* getExceptionFerry() {
-        assert(ThreadStateInternal::current);
-        return &current->exc_info;
     }
 };
 

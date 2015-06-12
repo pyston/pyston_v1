@@ -52,12 +52,7 @@ PthreadFastMutex threading_lock;
 int num_starting_threads(0);
 
 ThreadStateInternal::ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
-    : saved(false),
-      stack_start(stack_start),
-      pthread_id(pthread_id),
-      unwind_state(UNWIND_STATE_NORMAL),
-      exc_info(NULL, NULL, NULL),
-      public_thread_state(public_thread_state) {
+    : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {
 }
 
 void ThreadStateInternal::accept(gc::GCVisitor* v) {
@@ -66,10 +61,6 @@ void ThreadStateInternal::accept(gc::GCVisitor* v) {
     v->visitIf(pub_state->curexc_value);
     v->visitIf(pub_state->curexc_traceback);
     v->visitIf(pub_state->dict);
-
-    v->visitIf(exc_info.type);
-    v->visitIf(exc_info.value);
-    v->visitIf(exc_info.traceback);
 
     for (auto& stack_info : previous_stacks) {
         v->visit(stack_info.next_generator);
