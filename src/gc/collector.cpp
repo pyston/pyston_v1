@@ -403,6 +403,10 @@ void visitByGCKind(void* p, GCVisitor& visitor) {
 }
 
 void markPhase() {
+    static StatCounter sc_marked_objs("gc_marked_object_count_mark_phase");
+    static StatCounter sc_us("us_gc_mark_phase");
+    Timer _t("collecting", /*min_usec=*/10000);
+
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
     // since we'll be looking at potentially-uninitialized values:
@@ -447,6 +451,7 @@ void markPhase() {
     }
 
     while (void* p = stack->pop()) {
+        sc_marked_objs.log();
         GCAllocation* al = GCAllocation::fromUserData(p);
 
 #if TRACE_GC_MARKING
@@ -468,19 +473,34 @@ void markPhase() {
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 void finalizationOrderingFirstPass(Box* obj) {
+    static StatCounter sc_marked_objs("gc_marked_object_count_finalizer_ordering");
+    static StatCounter sc_us("us_gc_mark_finalizer_ordering_1");
+    Timer _t("finalizationOrderingFirstPass", /*min_usec=*/10000);
+
     std::shared_ptr<FirstPhaseStack> stack = std::make_shared<FirstPhaseStack>();
     GCVisitor visitor(stack);
 
     stack->push(obj);
     while (void* p = stack->pop()) {
+        sc_marked_objs.log();
+
         visitByGCKind(p, visitor);
     }
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 void finalizationOrderingSecondPass(Box* obj) {
+    static StatCounter sc_us("us_gc_mark_finalizer_ordering_2");
+    Timer _t("finalizationOrderingSecondPass", /*min_usec=*/10000);
+
     std::shared_ptr<SecondPhaseStack> stack = std::make_shared<SecondPhaseStack>();
     GCVisitor visitor(stack);
 
@@ -490,16 +510,22 @@ void finalizationOrderingSecondPass(Box* obj) {
         assert(orderingState(al) != FinalizationState::UNREACHABLE);
         visitByGCKind(p, visitor);
     }
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 // Implementation of PyPy's finalization ordering algorithm:
 // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
 void finalizationOrderingPhase() {
+    static StatCounter sc_us("us_gc_finalization_ordering_phase");
+    Timer _t("finalizationOrderingPhase", /*min_usec=*/10000);
+
     // TODO: Replace with iterator or something that takes a lambda for memory efficiency?.
     std::vector<Box*> objects_with_finalizers;
-    global_heap.getOrderedFinalizers(objects_with_finalizers);
-
     std::vector<Box*> finalizer_marked;
+
+    global_heap.getOrderedFinalizers(objects_with_finalizers);
 
     for (Box* obj : objects_with_finalizers) {
         GCAllocation* al = GCAllocation::fromUserData(obj);
@@ -525,17 +551,30 @@ void finalizationOrderingPhase() {
             pending_finalization_list.push_back(marked);
         }
     }
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+    static StatCounter sc_us("us_gc_sweep_phase");
+    Timer _t("sweepPhase", /*min_usec=*/10000);
+
     global_heap.freeUnmarked(weakly_referenced);
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 void callPendingFinalizers() {
+    static StatCounter sc_us_finalizer("us_gc_finalizercalls");
+    static StatCounter sc_us_weakref("us_gc_weakrefcalls");
+
     // An object can be resurrected in the finalizer code. So when we call a finalizer, we
     // mark the finalizer as having been called, but the object is only freed in another
     // GC pass (objects whose finalizers have been called are treated the same as objects
     // without finalizers).
+    Timer _timer_finalizer("calling finalizers", /*min_usec=*/10000);
     while (!pending_finalization_list.empty()) {
         Box* box = pending_finalization_list.front();
         pending_finalization_list.pop_front();
@@ -563,7 +602,10 @@ void callPendingFinalizers() {
         finalize(box);
     }
 
+    sc_us_finalizer.log(_timer_finalizer.end());
+
     // Callbacks for weakly-referenced objects without finalizers.
+    Timer _timer_weakref("calling weakref callbacks", /*min_usec=*/10000);
     while (!weakrefs_needing_callback_list.empty()) {
         PyWeakReference* head = weakrefs_needing_callback_list.front();
         weakrefs_needing_callback_list.pop_front();
@@ -573,6 +615,8 @@ void callPendingFinalizers() {
             head->wr_callback = NULL;
         }
     }
+
+    sc_us_weakref.log(_timer_weakref.end());
 
     assert(pending_finalization_list.empty());
 }
@@ -666,7 +710,7 @@ void runCollection() {
         printf("Collection #%d done\n\n", ncollections);
 
     long us = _t.end();
-    static StatCounter sc_us("gc_collections_us");
+    static StatCounter sc_us("us_gc_collections");
     sc_us.log(us);
 
     // dumpHeapStatistics();
