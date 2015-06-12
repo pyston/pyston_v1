@@ -556,8 +556,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
 
         int64_t switch_value = determine_action(&info, &entry);
         if (switch_value != CLEANUP_ACTION) {
-            // printf ("cleanup action == %ld, should end unwind session\n", switch_value);
-            // endUnwind(unwind_token);
+            endUnwind(unwind_token);
         }
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }

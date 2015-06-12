@@ -477,22 +477,31 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
 class UnwindSession : public Box {
     ExcInfo exc_info;
     bool skip;
+    bool is_active;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    UnwindSession() : exc_info(NULL, NULL, NULL), skip(false) {}
+    UnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false) {}
 
     ExcInfo* getExcInfoStorage() { return &exc_info; }
     bool shouldSkipFrame() const { return skip; }
     void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
+    bool isActive() const { return is_active; }
 
-    void clear() {
+    void begin() {
+        RELEASE_ASSERT(!is_active, "");
         exc_info = ExcInfo(NULL, NULL, NULL);
         skip = false;
+        is_active = true;
+    }
+    void end() {
+        RELEASE_ASSERT(is_active, "");
+        is_active = false;
     }
 
     void addTraceback(const LineInfo& line_info) {
+        RELEASE_ASSERT(is_active, "");
         if (skip) {
             skip = false;
             return;
@@ -505,8 +514,13 @@ public:
     }
 
     static void gcHandler(GCVisitor* v, Box* _o) {
-        // assert(_o->cls == unwind_session_cls)
+        assert(_o->cls == unwind_session_cls);
+
         UnwindSession* o = static_cast<UnwindSession*>(_o);
+
+        if (!o->is_active)
+            return;
+
         v->visitIf(o->exc_info.type);
         v->visitIf(o->exc_info.value);
         v->visitIf(o->exc_info.traceback);
@@ -519,8 +533,7 @@ UnwindSession* beginUnwind() {
         cur_unwind = new UnwindSession();
         pyston::gc::registerPermanentRoot(cur_unwind);
     }
-    // if we can figure out a way to make endUnwind in cxx_uwind.cpp work, we can remove this.
-    cur_unwind->clear();
+    cur_unwind->begin();
     return cur_unwind;
 }
 
@@ -531,7 +544,7 @@ UnwindSession* getUnwind() {
 
 void endUnwind(UnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
-    cur_unwind->clear();
+    unwind->end();
 }
 void* getExceptionStorage(UnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
@@ -587,7 +600,10 @@ void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor) 
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    UnwindSession* unwind_state = (UnwindSession*)beginUnwind();
+    UnwindSession* unwind_session = new UnwindSession();
+
+    unwind_session->begin();
+
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
@@ -607,11 +623,11 @@ template <typename Func> void unwindPythonStack(Func func) {
 
         PythonFrameIteratorImpl frame_iter;
         if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
-            if (!unwind_state->shouldSkipFrame())
+            if (!unwind_session->shouldSkipFrame())
                 stop_unwinding = func(&frame_iter);
 
             // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-            unwind_state->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+            unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
         }
 
         if (stop_unwinding)
@@ -636,7 +652,7 @@ template <typename Func> void unwindPythonStack(Func func) {
         // keep unwinding
     }
 
-    endUnwind(unwind_state);
+    unwind_session->end();
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
