@@ -206,6 +206,8 @@ public:
     static StatTimer* createStack(StatTimer& timer);
     static StatTimer* swapStack(StatTimer* s);
 
+    static uint64_t* getCurrentCounter();
+
     static void assertActive() { ASSERT(stack && !stack->isPaused(), ""); }
 };
 class ScopedStatTimer {

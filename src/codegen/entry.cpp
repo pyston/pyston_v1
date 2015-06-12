@@ -362,6 +362,15 @@ static void handle_sigprof(int signum) {
     sigprof_pending++;
 }
 
+//#define INVESTIGATE_STAT_TIMER "us_timer_chosen_cf_body_jitted"
+#ifdef INVESTIGATE_STAT_TIMER
+static uint64_t* stat_counter = Stats::getStatCounter(INVESTIGATE_STAT_TIMER);
+static void handle_sigprof_investigate_stattimer(int signum) {
+    if (StatTimer::getCurrentCounter() == stat_counter)
+        raise(SIGTRAP);
+}
+#endif
+
 static void handle_sigint(int signum) {
     assert(signum == SIGINT);
     // TODO: this should set a flag saying a KeyboardInterrupt is pending.
@@ -472,6 +481,14 @@ void initCodegen() {
     prof_timer.it_value.tv_sec = prof_timer.it_interval.tv_sec = 0;
     prof_timer.it_value.tv_usec = prof_timer.it_interval.tv_usec = 1000;
     signal(SIGPROF, handle_sigprof);
+    setitimer(ITIMER_PROF, &prof_timer, NULL);
+#endif
+
+#ifdef INVESTIGATE_STAT_TIMER
+    struct itimerval prof_timer;
+    prof_timer.it_value.tv_sec = prof_timer.it_interval.tv_sec = 0;
+    prof_timer.it_value.tv_usec = prof_timer.it_interval.tv_usec = 1000;
+    signal(SIGPROF, handle_sigprof_investigate_stattimer);
     setitimer(ITIMER_PROF, &prof_timer, NULL);
 #endif
 

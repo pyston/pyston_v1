@@ -2021,7 +2021,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
 }
 
 extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
-    STAT_TIMER(t0, "us_timer_slowpath_setsattr", 10);
+    STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
 
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
