@@ -110,7 +110,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/util.cpp
 		)
 
-add_dependencies(PYSTON_OBJECTS FROM_CPYTHON libunwind_patched libunwind pypa ${LLVM_LIBS})
+add_dependencies(PYSTON_OBJECTS copy_stdlib libunwind_patched libunwind pypa ${LLVM_LIBS})
 
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
 add_dependencies(PYSTON_MAIN_OBJECT libunwind_patched libunwind pypa liblz4 ${LLVM_LIBS})
