@@ -502,10 +502,6 @@ public:
 
     void addTraceback(const LineInfo& line_info) {
         RELEASE_ASSERT(is_active, "");
-        if (skip) {
-            skip = false;
-            return;
-        }
         if (exc_info.reraise) {
             exc_info.reraise = false;
             return;
@@ -588,7 +584,8 @@ void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor) 
 
     PythonFrameIteratorImpl frame_iter;
     if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
-        unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
+        if (!unwind_session->shouldSkipFrame())
+            unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
 
         // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
         unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
