@@ -332,6 +332,7 @@ private:
 
     const Location return_location;
 
+    bool failed;   // if we tried to generate an invalid rewrite.
     bool finished; // committed or aborted
 #ifndef NDEBUG
     int start_vars;
@@ -366,6 +367,10 @@ private:
         if (type == ActionType::MUTATION) {
             added_changing_action = true;
         } else if (type == ActionType::GUARD) {
+            if (added_changing_action) {
+                failed = true;
+                return;
+            }
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
