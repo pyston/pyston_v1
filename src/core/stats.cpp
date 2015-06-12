@@ -138,41 +138,17 @@ void Stats::dump(bool includeZeros) {
 
     std::sort(pairs.begin(), pairs.end());
 
-    uint64_t ticks_in_main = 0;
-    uint64_t accumulated_stat_timer_ticks = 0;
     for (int i = 0; i < pairs.size(); i++) {
         uint64_t count = *pairs[i].second;
         if (includeZeros || count > 0) {
-            if (startswith(pairs[i].first, "us_") || startswith(pairs[i].first, "_init_us_")) {
+            if (startswith(pairs[i].first, "us_timer_")) {
                 fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(), (uint64_t)(count / cycles_per_us));
-
-            } else
+            } else {
                 fprintf(stderr, "%s: %lu\n", pairs[i].first.c_str(), count);
-
-            if (startswith(pairs[i].first, "us_timer_"))
-                accumulated_stat_timer_ticks += count;
-
-            if (pairs[i].first == "ticks_in_main")
-                ticks_in_main = count;
+            }
         }
     }
 
-    if (includeZeros || accumulated_stat_timer_ticks > 0)
-        fprintf(stderr, "ticks_all_timers: %lu\n", accumulated_stat_timer_ticks);
-
-#if 0
-    // I want to enable this, but am leaving it disabled for the time
-    // being because it causes test failures due to:
-    //
-    // 1) some tests exit from main from inside catch blocks, without
-    //    going through the logic to stop the timers.
-    // 2) some tests create multiple threads which causes problems
-    //    with our non-per thread stat timers.
-
-    if (ticks_in_main && ticks_in_main != accumulated_stat_timer_ticks) {
-        fprintf(stderr, "WARNING: accumulated stat timer ticks != ticks in main - don't trust timer output.");
-    }
-#endif
     fprintf(stderr, "(End of stats)\n");
 }
 
