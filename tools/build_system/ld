@@ -17,6 +17,8 @@ elif which gold > /dev/null ; then
     LD=gold
     # FLAGS="--incremental --incremental-patch=10"
     # RETRY=y
+elif which ld.gold > /dev/null ; then
+    LD=ld.gold
 else
     echo "gold not available"
     LD=ld

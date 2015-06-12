@@ -7,6 +7,9 @@ print-%: ; @echo $($*)
 USE_TEST_LLVM := 0
 DEPS_DIR := $(HOME)/pyston_deps
 
+SRC_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+BUILD_DIR := $(SRC_DIR)/build
+
 LLVM_REVISION_FILE := llvm_revision.txt
 LLVM_REVISION := $(shell cat $(LLVM_REVISION_FILE))
 
@@ -54,8 +57,9 @@ FORCE_TRUNK_BINARIES := 0
 USE_CMAKE := 1
 NINJA := ninja
 
-CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
-CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
+CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
+CMAKE_DIR_DBG_GCC := $(BUILD_DIR)/Debug-gcc
+CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
@@ -183,9 +187,11 @@ COMMON_CXXFLAGS += -I$(DEPS_DIR)/lz4-install/include
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
 	VALGRIND := false
+	CMAKE_VALGRIND := 
 else
 	COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.10.0/include
 	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.10.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.10.0-install/bin/valgrind
+	CMAKE_VALGRIND := -DENABLE_VALGRIND=ON -DVALGRIND_DIR=$(DEPS_DIR)/valgrind-3.10.0-install/
 endif
 
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
@@ -476,8 +482,8 @@ $1_unittest: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS)
 else
 .PHONY: $1_unittest
 $1_unittest:
-	$(NINJA) -C $(HOME)/pyston-build-dbg $1_unittest $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-dbg/$1_unittest .
+	$(NINJA) -C $(CMAKE_DIR_DBG) $1_unittest $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_DBG)/$1_unittest .
 endif
 dbg_$1_unittests: $1_unittest
 	zsh -c 'ulimit -m $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
@@ -501,20 +507,6 @@ $(call add_unittest,analysis)
 define checksha
 	test "$$($1 | sha1sum)" = "$2  -"
 endef
-
-.PHONY: format check_format
-ifneq ($(USE_CMAKE),1)
-format:
-	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
-check_format:
-	$(ECHO) checking formatting...
-	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
-else
-format: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release format
-check_format: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release check-format
-endif
 
 .PHONY: analyze
 analyze:
@@ -840,9 +832,9 @@ $(call make_compile_config,.grwl_dbg,$(CXXFLAGS_DBG) -DTHREADING_USE_GRWL=1 -DTH
 $(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
 else
 %.o: %.cpp $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.o,%.cpp.o,$@) $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_DBG) src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.o,%.cpp.o,$@) $(NINJAFLAGS)
 %.release.o: %.cpp $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.release.o,%.cpp.o,$@) $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.release.o,%.cpp.o,$@) $(NINJAFLAGS)
 endif
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
@@ -946,12 +938,12 @@ $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
-	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
+	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Release
 
 # Shared modules (ie extension modules that get built using pyston on setup.py) that we will ask CMake
 # to build.  You can flip this off to allow builds to continue even if self-hosting the sharedmods would fail.
@@ -965,16 +957,30 @@ pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
 endif
-CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
+CMAKE_DIR_GCC := $(CMAKE_DIR_DBG_GCC)
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_GCC)
-	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
-	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
+	$(NINJA) -C $(CMAKE_DIR_DBG_GCC) pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_DBG_GCC)/pyston pyston_gcc
+
+.PHONY: format check_format
+ifneq ($(USE_CMAKE),1)
+format:
+	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
+check_format:
+	$(ECHO) checking formatting...
+	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
+else
+format: $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) format
+check_format: $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) check-format
+endif
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 

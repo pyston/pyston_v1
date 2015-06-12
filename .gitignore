@@ -1,3 +1,5 @@
+build
+
 Makefile.local
 tools/astprint
 tools/demangle

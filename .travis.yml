@@ -51,9 +51,8 @@ install:
 
 script:
   - ccache -z
-  - ninja -j4 pyston
+  - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
   - ccache -s
-  - PYSTON_RUN_ARGS=G ninja check-pyston
   - mysql -e 'create database mysqldb_test charset utf8;'
   - PYSTON_RUN_ARGS=G python $TRAVIS_BUILD_DIR/tools/tester.py -R ./pyston -a=-S -k -t600 --exit-code-only $TRAVIS_BUILD_DIR/test/extra
 

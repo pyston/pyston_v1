@@ -1,5 +1,5 @@
 #.rst:
-# CheckTypeSize
+# CheckTypeSizeof
 # -------------
 #
 # Pyston: This file is included from cmake 3 for compatability
@@ -11,7 +11,7 @@
 #
 # ::
 #
-#   CHECK_TYPE_SIZE(TYPE VARIABLE [BUILTIN_TYPES_ONLY]
+#   CHECK_TYPE_SIZEOF(TYPE VARIABLE [BUILTIN_TYPES_ONLY]
 #                                 [LANGUAGE <language>])
 #
 # Check if the type exists and determine its size.  On return,
@@ -54,7 +54,7 @@
 #
 # ::
 #
-#   check_type_size("((struct something*)0)->member" SIZEOF_MEMBER)
+#   check_type_sizeof("((struct something*)0)->member" SIZEOF_MEMBER)
 #
 #
 #
@@ -89,11 +89,11 @@ include(CheckIncludeFileCXX)
 cmake_policy(PUSH)
 cmake_policy(VERSION 2.8)
 
-get_filename_component(__check_type_size_dir "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(__check_type_sizeof_dir "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
 #-----------------------------------------------------------------------------
 # Helper function.  DO NOT CALL DIRECTLY.
-function(__check_type_size_impl type var map builtin language)
+function(__check_type_sizeof_impl type var map builtin language)
   if(NOT CMAKE_REQUIRED_QUIET)
     message(STATUS "Check size of ${type}")
   endif()
@@ -118,14 +118,14 @@ function(__check_type_size_impl type var map builtin language)
   # Perform the check.
 
   if("${language}" STREQUAL "C")
-    set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSize/${var}.c)
+    set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSizeof/${var}.c)
   elseif("${language}" STREQUAL "CXX")
-    set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSize/${var}.cpp)
+    set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSizeof/${var}.cpp)
   else()
     message(FATAL_ERROR "Unknown language:\n  ${language}\nSupported languages: C, CXX.\n")
   endif()
-  set(bin ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSize/${var}.bin)
-  configure_file(${__check_type_size_dir}/CheckTypeSize.c.in ${src} @ONLY)
+  set(bin ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckTypeSizeof/${var}.bin)
+  configure_file(${__check_type_sizeof_dir}/CheckTypeSizeof.c.in ${src} @ONLY)
   try_compile(HAVE_${var} ${CMAKE_BINARY_DIR} ${src}
     COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
     LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
@@ -170,14 +170,14 @@ function(__check_type_size_impl type var map builtin language)
 
     # Update the architecture-to-size map.
     if(mismatch AND keys)
-      configure_file(${__check_type_size_dir}/CheckTypeSizeMap.cmake.in ${map} @ONLY)
+      configure_file(${__check_type_sizeof_dir}/CheckTypeSizeMap.cmake.in ${map} @ONLY)
       set(${var} 0)
     else()
       file(REMOVE ${map})
     endif()
 
     if(mismatch AND NOT keys)
-      message(SEND_ERROR "CHECK_TYPE_SIZE found different results, consider setting CMAKE_OSX_ARCHITECTURES or CMAKE_TRY_COMPILE_OSX_ARCHITECTURES to one or no architecture !")
+      message(SEND_ERROR "CHECK_TYPE_SIZEOF found different results, consider setting CMAKE_OSX_ARCHITECTURES or CMAKE_TRY_COMPILE_OSX_ARCHITECTURES to one or no architecture !")
     endif()
 
     if(NOT CMAKE_REQUIRED_QUIET)
@@ -185,7 +185,7 @@ function(__check_type_size_impl type var map builtin language)
     endif()
     file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
       "Determining size of ${type} passed with the following output:\n${output}\n\n")
-    set(${var} "${${var}}" CACHE INTERNAL "CHECK_TYPE_SIZE: sizeof(${type})")
+    set(${var} "${${var}}" CACHE INTERNAL "CHECK_TYPE_SIZEOF: sizeof(${type})")
   else()
     # The check failed to compile.
     if(NOT CMAKE_REQUIRED_QUIET)
@@ -194,24 +194,24 @@ function(__check_type_size_impl type var map builtin language)
     file(READ ${src} content)
     file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
       "Determining size of ${type} failed with the following output:\n${output}\n${src}:\n${content}\n\n")
-    set(${var} "" CACHE INTERNAL "CHECK_TYPE_SIZE: ${type} unknown")
+    set(${var} "" CACHE INTERNAL "CHECK_TYPE_SIZEOF: ${type} unknown")
     file(REMOVE ${map})
   endif()
 endfunction()
 
 #-----------------------------------------------------------------------------
-macro(CHECK_TYPE_SIZE TYPE VARIABLE)
+macro(CHECK_TYPE_SIZEOF TYPE VARIABLE)
   # parse arguments
   unset(doing)
   foreach(arg ${ARGN})
     if("x${arg}" STREQUAL "xBUILTIN_TYPES_ONLY")
-      set(_CHECK_TYPE_SIZE_${arg} 1)
+      set(_CHECK_TYPE_SIZEOF_${arg} 1)
       unset(doing)
     elseif("x${arg}" STREQUAL "xLANGUAGE") # change to MATCHES for more keys
       set(doing "${arg}")
-      set(_CHECK_TYPE_SIZE_${doing} "")
+      set(_CHECK_TYPE_SIZEOF_${doing} "")
     elseif("x${doing}" STREQUAL "xLANGUAGE")
-      set(_CHECK_TYPE_SIZE_${doing} "${arg}")
+      set(_CHECK_TYPE_SIZEOF_${doing} "${arg}")
       unset(doing)
     else()
       message(FATAL_ERROR "Unknown argument:\n  ${arg}\n")
@@ -220,17 +220,17 @@ macro(CHECK_TYPE_SIZE TYPE VARIABLE)
   if("x${doing}" MATCHES "^x(LANGUAGE)$")
     message(FATAL_ERROR "Missing argument:\n  ${doing} arguments requires a value\n")
   endif()
-  if(DEFINED _CHECK_TYPE_SIZE_LANGUAGE)
-    if(NOT "x${_CHECK_TYPE_SIZE_LANGUAGE}" MATCHES "^x(C|CXX)$")
-      message(FATAL_ERROR "Unknown language:\n  ${_CHECK_TYPE_SIZE_LANGUAGE}.\nSupported languages: C, CXX.\n")
+  if(DEFINED _CHECK_TYPE_SIZEOF_LANGUAGE)
+    if(NOT "x${_CHECK_TYPE_SIZEOF_LANGUAGE}" MATCHES "^x(C|CXX)$")
+      message(FATAL_ERROR "Unknown language:\n  ${_CHECK_TYPE_SIZEOF_LANGUAGE}.\nSupported languages: C, CXX.\n")
     endif()
-    set(_language ${_CHECK_TYPE_SIZE_LANGUAGE})
+    set(_language ${_CHECK_TYPE_SIZEOF_LANGUAGE})
   else()
     set(_language C)
   endif()
 
   # Optionally check for standard headers.
-  if(_CHECK_TYPE_SIZE_BUILTIN_TYPES_ONLY)
+  if(_CHECK_TYPE_SIZEOF_BUILTIN_TYPES_ONLY)
     set(_builtin 0)
   else()
     set(_builtin 1)
@@ -244,14 +244,14 @@ macro(CHECK_TYPE_SIZE TYPE VARIABLE)
       check_include_file_cxx(stddef.h HAVE_STDDEF_H)
     endif()
   endif()
-  unset(_CHECK_TYPE_SIZE_BUILTIN_TYPES_ONLY)
-  unset(_CHECK_TYPE_SIZE_LANGUAGE)
+  unset(_CHECK_TYPE_SIZEOF_BUILTIN_TYPES_ONLY)
+  unset(_CHECK_TYPE_SIZEOF_LANGUAGE)
 
   # Compute or load the size or size map.
   set(${VARIABLE}_KEYS)
-  set(_map_file ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/CheckTypeSize/${VARIABLE}.cmake)
+  set(_map_file ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/CheckTypeSizeof/${VARIABLE}.cmake)
   if(NOT DEFINED HAVE_${VARIABLE})
-    __check_type_size_impl(${TYPE} ${VARIABLE} ${_map_file} ${_builtin} ${_language})
+    __check_type_sizeof_impl(${TYPE} ${VARIABLE} ${_map_file} ${_builtin} ${_language})
   endif()
   include(${_map_file} OPTIONAL)
   set(_map_file)

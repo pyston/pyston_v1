@@ -111,6 +111,7 @@ file(GLOB_RECURSE STDPARSER_SRCS Parser
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautological-compare -Wno-type-limits -Wno-unused-result -Wno-strict-aliasing")
 add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS} ${STDPARSER_SRCS})
+add_dependencies(FROM_CPYTHON copy_stdlib)
 
 add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so

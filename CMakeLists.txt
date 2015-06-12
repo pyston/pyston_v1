@@ -3,7 +3,7 @@ project(pyston C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
-include(CheckTypeSize)
+include(pyconfig)
 include(ExternalProject)
 
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
@@ -109,7 +109,7 @@ if(ENABLE_INTEL_JIT_EVENTS)
   add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
 endif()
 add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
-set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
 include(LLVMConfig)
 llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
 
@@ -146,11 +146,11 @@ SET_SOURCE_FILES_PROPERTIES(
 )
 
 # libpypa
-add_subdirectory(libpypa)
+add_subdirectory(libpypa EXCLUDE_FROM_ALL)
 add_dependencies(pypa gitsubmodules)
 
 # lz4
-add_subdirectory(lz4/cmake_unofficial)
+add_subdirectory(lz4/cmake_unofficial EXCLUDE_FROM_ALL)
 add_dependencies(lz4 gitsubmodules)
 
 # valgrind
@@ -192,23 +192,12 @@ add_definitions(${LLVM_DEFINITIONS})
 add_definitions(-DDEFAULT_PYTHON_MAJOR_VERSION=2 -DDEFAULT_PYTHON_MINOR_VERSION=7 -DDEFAULT_PYTHON_MICRO_VERSION=6) # Python 2.7.6
 add_definitions(-DLLVMREV=${LLVMREV})
 
+include_directories(${CMAKE_BINARY_DIR}/from_cpython/Include)
 include_directories(${LLVM_INCLUDE_DIRS})
-include_directories(from_cpython/Include)
 
 find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
-
-
-# generate config.h - must be after LLVM is configured
-set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/src/runtime/types.h)
-set(CMAKE_REQUIRED_DEFINITIONS "-DNVALGRIND -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS")
-set(CMAKE_REQUIRED_INCLUDES ${DEPS_DIR}/llvm-trunk/include
-                            ${CMAKE_BINARY_DIR}/llvm/include
-                            ${CMAKE_SOURCE_DIR}/from_cpython/Include
-                            ${CMAKE_SOURCE_DIR}/src)
-check_type_size("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
-configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
@@ -223,7 +212,7 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
 
 # copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)

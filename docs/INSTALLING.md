@@ -1,10 +1,10 @@
 Pyston currently only supports installing from source; the following instructions have fairly tested as working on Ubuntu, and are extensively verified as not working on Mac.  (Please see issue [#165](https://github.com/dropbox/pyston/issues/165) for discussion on enabling OSX support, which is pretty difficult.)
 
-The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `Makefile`.
+The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  If you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `CMakeLists.txt`.
 
 # CMake build system
 
-Our CMake build system supersedes our old Makefile build system.  The old Makefile rules still exist and can be activated by adding `USE_CMAKE=0` to your make invocation, but they will be removed at some point.  We still use the Makefile as a sort of "lite development environment"; it helps manage multiple cmake configurations and has some testing helpers.
+We use a Makefile as a sort of "lite development environment"; it helps manage multiple cmake configurations and has some testing helpers.
 
 ### Prerequisites
 
@@ -18,9 +18,14 @@ sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-de
 ```
 
 
-**Ubuntu 14.04**
+**Ubuntu 14.04/14.10/15.04**
 ```
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libssl-dev libsqlite3-dev pkg-config
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang libssl-dev libsqlite3-dev pkg-config
+```
+
+**Fedora 21**
+```
+sudo yum install cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake libtool gmp-devel readline-devel openssl-devel sqlite-devel python-devel zlib-devel
 ```
 
 ### Building and testing
@@ -53,6 +58,28 @@ See the main README for more information about available make targets and option
 # Optional dependencies
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:
+
+### GCC 4.8.2
+
+Pyston (and LLVM) requires a fairly modern [host compiler](http://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library), so you will have to compile a recent GCC if it's not already available for your system. The easiest thing to do is to just create a fresh build of GCC:
+
+```
+sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
+cd ~/pyston_deps
+wget http://ftpmirror.gnu.org/gcc/gcc-4.8.2/gcc-4.8.2.tar.bz2
+tar xvf gcc-4.8.2.tar.bz2
+mkdir gcc-4.8.2-{build,install}
+cd gcc-4.8.2-build
+# Space- and time-saving configuration:
+../gcc-4.8.2/configure --disable-bootstrap --enable-languages=c,c++ --prefix=$HOME/pyston_deps/gcc-4.8.2-install
+# full configuration:
+# ../gcc-4.8.2/configure --prefix=$HOME/pyston_deps/gcc-4.8.2-install
+# Specifying LIBRARY_PATH is a workaround to get gcc to compile on newer Ubuntus with multiarch
+LIBRARY_PATH=/usr/lib32 make -j4
+make check
+make install
+```
+
 
 ### gdb
 A modern gdb is highly recommended; users on Ubuntu 12.04 should definitely update:
@@ -164,181 +191,8 @@ Then, run `make dbgpy_TESTNAME` and it will launch the test under gdb.  There's 
 ```
 sudo apt-get install doxygen graphviz
 
-# then run cmake (see below) and invoke the docs target
+# then run cmake and invoke the docs target
 ninja docs
 
 # now within the Pyston build directory open docs/html/index.html with a browser
 ```
-
-Generate doxygen documentation for Pyston. Requires using the cmake build system.
-
-
-
-
-
-# Deprecated Makefile build system
-
-These are the old instructions for our original Makefile build system and toolchain.  They will be disappearing shortly.
-
-### Prerequisites
-GNU make is required to build pyston.
-
-
-Start off by making the relevant directories:
-
-```
-mkdir ~/pyston_deps
-git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
-```
-
-### Compiler for clang
-
-clang requires a fairly modern [host compiler](http://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library), so typically you will have to install a new one.  The easiest thing to do is to just create a fresh build of GCC:
-
-```
-sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
-cd ~/pyston_deps
-wget http://ftpmirror.gnu.org/gcc/gcc-4.8.2/gcc-4.8.2.tar.bz2
-tar xvf gcc-4.8.2.tar.bz2
-mkdir gcc-4.8.2-{build,install}
-cd gcc-4.8.2-build
-# Space- and time-saving configuration:
-../gcc-4.8.2/configure --disable-bootstrap --enable-languages=c,c++ --prefix=$HOME/pyston_deps/gcc-4.8.2-install
-# full configuration:
-# ../gcc-4.8.2/configure --prefix=$HOME/pyston_deps/gcc-4.8.2-install
-# Specifying LIBRARY_PATH is a workaround to get gcc to compile on newer Ubuntus with multiarch
-LIBRARY_PATH=/usr/lib32 make -j4
-make check
-make install
-```
-
-### ccache
-
-ccache is a build tool that can help speed up redundant compilations.  It's not strictly necessary but it's useful enough to be enabled by default; you can disable it by adding `USE_CCACHE := 0` to your Makefile.local.  To get it, run:
-```
-sudo apt-get install ccache
-```
-
-### LLVM dependencies
-```
-sudo apt-get install libncurses5-dev zlib1g-dev liblzma-dev
-```
-
-### LLVM + clang
-
-LLVM and clang depend on a pretty modern compiler; the steps below assume you installed GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in Makefile) that I haven't tested.
-
-```
-cd ~/pyston_deps
-git clone http://llvm.org/git/llvm.git llvm-trunk
-git clone http://llvm.org/git/clang.git llvm-trunk/tools/clang
-cd ~/pyston
-make llvm_up
-make llvm_configure
-make llvm -j4
-```
-
-There seem to be some lingering issues with the LLVM build that haven't been identified yet; if the last step fails with errors along the lines of "rm: could not find file foo.tmp", it is quite likely that simply running it again will cause it to continue successfully.  You may have to do this multiple times, unfortunately.
-
-### libunwind
-
-```
-cd ~/pyston_deps
-sudo apt-get install texlive-extra-utils autoconf
-git clone git://git.sv.gnu.org/libunwind.git libunwind-trunk
-mkdir libunwind-trunk-install
-cd libunwind-trunk
-git checkout 65ac867416
-autoreconf -i
-# disable shared libraries because we'll be installing this in a place that the loader can't find it:
-./configure --prefix=$HOME/pyston_deps/libunwind-trunk-install --enable-shared=0
-make -j4
-make install
-```
-
-Note: if you followed the previous version of the directions and installed libunwind globally, you'll need to uninstall it by doing the following:
-
-```
-cd ~/pyston_deps/libunwind-1.1
-./configure
-sudo make uninstall
-```
-
-and then repeat the correct process
-
-### zsh
-`zsh` is needed when running pyston tests.
-```
-sudo apt-get install zsh
-```
-
-### readline
-`readline` is used for the repl.
-
-```
-sudo apt-get install libreadline-dev
-```
-
-### gmp
-`gmp` is a multiprecision library used for implementing Python longs.  It's also a dependency of gcc, so if you installed that you should already have it:
-
-```
-sudo apt-get install libgmp3-dev
-```
-
-### libpypa
-
-```
-cd ~/pyston_deps
-git clone git://github.com/vinzenz/pypa
-mkdir pypa-install
-cd pypa
-./autogen.sh
-./configure --prefix=$HOME/pyston_deps/pypa-install CXX=$HOME/pyston_deps/gcc-4.8.2-install/bin/g++
-make -j4
-make install
-```
-
-### libssl, libcrypto
-```
-sudo apt-get install libssl-dev
-```
-
-### gtest
-
-For running the unittests:
-
-```
-cd ~/pyston_deps
-wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
-unzip gtest-1.7.0.zip
-cd gtest-1.7.0
-./configure CXXFLAGS="-fno-omit-frame-pointer -isystem $HOME/pyston_deps/gcc-4.8.2-install/include/c++/4.8.2"
-make -j4
-```
-
-### LZ4
-```
-cd ~/pyston_deps
-git clone git://github.com/Cyan4973/lz4.git
-mkdir lz4-install
-cd lz4/lib
-DESTDIR="$HOME/pyston_deps/lz4-install" PREFIX="/" make install
-```
-### Debug build of libunwind
-
-Assuming you've already built the normal version above:
-
-```
-cd ~/pyston_deps
-cp -rv libunwind-trunk libunwind-trunk-debug
-mkdir libunwind-trunk-debug-install
-cd libunwind-trunk-debug
-CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-trunk-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
-make -j4
-make install
-echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/Makefile.local
-```
-
-This will link pyston_dbg and pyston_debug against the debug version of libunwind (the release pyston build will still link against the release libunwind); to enable debug output, set the UNW_DEBUG_LEVEL environment variable, ex to 13.
-
