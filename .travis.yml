@@ -54,7 +54,7 @@ before_script:
 
 script:
   - ccache -z
-  - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
+  - PYSTON_RUN_ARGS=G travis_wait ninja -j4 check-pyston
   - ccache -s
 
 os:

@@ -512,28 +512,12 @@ cpplint:
 .PHONY: check
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
-	$(MAKE) lint
-	$(MAKE) check_format
+
 	$(MAKE) pyston_dbg $(CHECK_DEPS)
-
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
-	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
-	@# skip -O for dbg
-
-	$(MAKE) run_unittests ARGS=
+	( cd $(CMAKE_DIR_DBG) && ctest -V )
 
 	$(MAKE) pyston_release
-	@# It can be useful to test release mode, since it actually exposes different functionality
-	@# since we can make different decisions about which internal functions to inline or not.
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
-	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t120 $(TEST_DIR)/integration $(ARGS)
-	@# skip -n for dbg
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-O -a=-x -a=-S $(TESTS_DIR) $(ARGS)
+	( cd $(CMAKE_DIR_RELEASE) && ctest -V -R pyston )
 
 	echo "All tests passed"
 
