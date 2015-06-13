@@ -51,29 +51,103 @@ PthreadFastMutex threading_lock;
 // be checked while the threading_lock is held; might not be worth it.
 int num_starting_threads(0);
 
-ThreadStateInternal::ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
-    : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {
-}
+class ThreadStateInternal {
+private:
+    bool saved;
+    ucontext_t ucontext;
 
-void ThreadStateInternal::accept(gc::GCVisitor* v) {
-    auto pub_state = public_thread_state;
-    v->visitIf(pub_state->curexc_type);
-    v->visitIf(pub_state->curexc_value);
-    v->visitIf(pub_state->curexc_traceback);
-    v->visitIf(pub_state->dict);
+public:
+    void* stack_start;
 
-    for (auto& stack_info : previous_stacks) {
-        v->visit(stack_info.next_generator);
+    struct StackInfo {
+        BoxedGenerator* next_generator;
+        void* stack_start;
+        void* stack_limit;
+
+        StackInfo(BoxedGenerator* next_generator, void* stack_start, void* stack_limit)
+            : next_generator(next_generator), stack_start(stack_start), stack_limit(stack_limit) {
 #if STACK_GROWS_DOWN
-        v->visitPotentialRange((void**)stack_info.stack_limit, (void**)stack_info.stack_start);
+            assert(stack_start > stack_limit);
+            assert((char*)stack_start - (char*)stack_limit < (1L << 30));
 #else
-        v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
+            assert(stack_start < stack_limit);
+            assert((char*)stack_limit - (char*)stack_start < (1L << 30));
 #endif
+        }
+    };
+
+    std::vector<StackInfo> previous_stacks;
+    pthread_t pthread_id;
+
+    PyThreadState* public_thread_state;
+
+    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
+        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
+
+    void saveCurrent() {
+        assert(!saved);
+        getcontext(&ucontext);
+        saved = true;
     }
+
+    void popCurrent() {
+        assert(saved);
+        saved = false;
+    }
+
+    bool isValid() { return saved; }
+
+    ucontext_t* getContext() { return &ucontext; }
+
+    void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+        previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
+        this->stack_start = new_stack_start;
+    }
+
+    void popGenerator() {
+        assert(previous_stacks.size());
+        StackInfo& stack = previous_stacks.back();
+        stack_start = stack.stack_start;
+        previous_stacks.pop_back();
+    }
+
+    void assertNoGenerators() { assert(previous_stacks.size() == 0); }
+
+    void accept(gc::GCVisitor* v) {
+        auto pub_state = public_thread_state;
+        if (pub_state->curexc_type)
+            v->visit(pub_state->curexc_type);
+        if (pub_state->curexc_value)
+            v->visit(pub_state->curexc_value);
+        if (pub_state->curexc_traceback)
+            v->visit(pub_state->curexc_traceback);
+        if (pub_state->dict)
+            v->visit(pub_state->dict);
+
+        for (auto& stack_info : previous_stacks) {
+            v->visit(stack_info.next_generator);
+#if STACK_GROWS_DOWN
+            v->visitPotentialRange((void**)stack_info.stack_limit, (void**)stack_info.stack_start);
+#else
+            v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
+#endif
+        }
+    }
+};
+static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
+static __thread ThreadStateInternal* current_internal_thread_state = 0;
+
+void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+    assert(new_stack_start);
+    assert(old_stack_limit);
+    assert(current_internal_thread_state);
+    current_internal_thread_state->pushGenerator(g, new_stack_start, old_stack_limit);
 }
 
-static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
-__thread ThreadStateInternal* ThreadStateInternal::current = 0;
+void popGenerator() {
+    assert(current_internal_thread_state);
+    current_internal_thread_state->popGenerator();
+}
 
 // These are guarded by threading_lock
 static int signals_waiting(0);
@@ -111,10 +185,10 @@ static void visitLocalStack(gc::GCVisitor* v) {
     assert(sizeof(registers) % 8 == 0);
     v->visitPotentialRange((void**)&registers, (void**)((&registers) + 1));
 
-    assert(ThreadStateInternal::current);
+    assert(current_internal_thread_state);
 #if STACK_GROWS_DOWN
     void* stack_low = getCurrentStackLimit();
-    void* stack_high = ThreadStateInternal::current->stack_start;
+    void* stack_high = current_internal_thread_state->stack_start;
 #else
     void* stack_low = current_thread_state->stack_start;
     void* stack_high = getCurrentStackLimit();
@@ -123,7 +197,7 @@ static void visitLocalStack(gc::GCVisitor* v) {
     assert(stack_low < stack_high);
     v->visitPotentialRange((void**)stack_low, (void**)stack_high);
 
-    ThreadStateInternal::current->accept(v);
+    current_internal_thread_state->accept(v);
 }
 
 void visitAllStacks(gc::GCVisitor* v) {
@@ -198,7 +272,7 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
         printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
 
-    assert(ThreadStateInternal::current == current_threads[tid]);
+    assert(current_internal_thread_state == current_threads[tid]);
     pushThreadState(current_threads[tid], context);
     signals_waiting--;
 }
@@ -238,8 +312,8 @@ static void* _thread_start(void* _arg) {
 #else
         void* stack_bottom = stack_start;
 #endif
-        ThreadStateInternal::current = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
-        current_threads[current_thread] = ThreadStateInternal::current;
+        current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+        current_threads[current_thread] = current_internal_thread_state;
 
         num_starting_threads--;
 
@@ -251,7 +325,7 @@ static void* _thread_start(void* _arg) {
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
-    ThreadStateInternal::current->assertNoGenerators();
+    current_internal_thread_state->assertNoGenerators();
 
     {
         LOCK_REGION(&threading_lock);
@@ -260,7 +334,7 @@ static void* _thread_start(void* _arg) {
         if (VERBOSITY() >= 2)
             printf("thread tid=%ld exited\n", current_thread);
     }
-    ThreadStateInternal::current = 0;
+    current_internal_thread_state = 0;
 
     return rtn;
 }
@@ -338,9 +412,9 @@ static void* find_stack() {
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
 
-    assert(!ThreadStateInternal::current);
-    ThreadStateInternal::current = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
-    current_threads[pthread_self()] = ThreadStateInternal::current;
+    assert(!current_internal_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    current_threads[pthread_self()] = current_internal_thread_state;
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -356,8 +430,8 @@ void registerMainThread() {
 }
 
 void finishMainThread() {
-    assert(ThreadStateInternal::current);
-    ThreadStateInternal::current->assertNoGenerators();
+    assert(current_internal_thread_state);
+    current_internal_thread_state->assertNoGenerators();
 
     // TODO maybe this is the place to wait for non-daemon threads?
 }
@@ -377,8 +451,8 @@ extern "C" void beginAllowThreads() noexcept {
     {
         LOCK_REGION(&threading_lock);
 
-        assert(ThreadStateInternal::current);
-        ThreadStateInternal::current->saveCurrent();
+        assert(current_internal_thread_state);
+        current_internal_thread_state->saveCurrent();
     }
 }
 
@@ -386,8 +460,8 @@ extern "C" void endAllowThreads() noexcept {
     {
         LOCK_REGION(&threading_lock);
 
-        assert(ThreadStateInternal::current);
-        ThreadStateInternal::current->popCurrent();
+        assert(current_internal_thread_state);
+        current_internal_thread_state->popCurrent();
     }
 
 
