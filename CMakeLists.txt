@@ -18,6 +18,7 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
 endif()
 
 option(ENABLE_CCACHE "enable caching compiler output" ON)
+option(ENABLE_EXTRA_TESTS "pyston extra tests" OFF)
 option(ENABLE_GIL "threading use GIL" ON)
 option(ENABLE_GOLD "enable the gold linker" ON)
 option(ENABLE_GPERFTOOLS "enable the google performance tools" OFF)
@@ -236,6 +237,11 @@ add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE
 add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t600 ${CMAKE_SOURCE_DIR}/test/integration)
 add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-O -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
+
+if(ENABLE_EXTRA_TESTS)
+  add_test(NAME extra_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -a=-S -k -t600 --exit-code-only ${CMAKE_SOURCE_DIR}/test/extra)
+endif()
+
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)

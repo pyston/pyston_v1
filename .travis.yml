@@ -46,7 +46,7 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
+  - cmake -GNinja -DTEST_THREADS=4 -DENABLE_EXTRA_TESTS=ON $TRAVIS_BUILD_DIR
   - ninja libunwind ext_cpython
 
 before_script:
@@ -56,7 +56,6 @@ script:
   - ccache -z
   - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
   - ccache -s
-  - PYSTON_RUN_ARGS=G python $TRAVIS_BUILD_DIR/tools/tester.py -R ./pyston -a=-S -k -t600 --exit-code-only $TRAVIS_BUILD_DIR/test/extra
 
 os:
   - linux
