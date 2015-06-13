@@ -49,11 +49,13 @@ install:
   - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
   - ninja libunwind ext_cpython
 
+before_script:
+  - mysql -e 'create database mysqldb_test charset utf8;'
+
 script:
   - ccache -z
   - PYSTON_RUN_ARGS=G ninja -j4 check-pyston
   - ccache -s
-  - mysql -e 'create database mysqldb_test charset utf8;'
   - PYSTON_RUN_ARGS=G python $TRAVIS_BUILD_DIR/tools/tester.py -R ./pyston -a=-S -k -t600 --exit-code-only $TRAVIS_BUILD_DIR/test/extra
 
 os:
