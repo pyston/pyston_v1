@@ -443,7 +443,8 @@ RUN_DEPS := ext_pyston
 # The set of dependencies (beyond the executable) required to do `make check` / `make check_foo`.
 # The tester bases all paths based on the executable, so in cmake mode we need to have cmake
 # build all of the shared modules.
-CHECK_DEPS :=
+check-deps:
+	$(NINJA) -C $(CMAKE_DIR_DBG) check-deps
 
 .PHONY: small_all
 small_all: pyston_dbg $(RUN_DEPS)
@@ -453,7 +454,7 @@ small_all: pyston_dbg $(RUN_DEPS)
 	# @# have to do this in a recursive make so that dependency is enforced:
 	# $(MAKE) pyston_all
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
-all: pyston_dbg pyston_release pyston_gcc unittests $(RUN_DEPS) $(CHECK_DEPS)
+all: pyston_dbg pyston_release pyston_gcc unittests check-deps $(RUN_DEPS)
 
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
@@ -513,7 +514,7 @@ cpplint:
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 
-	$(MAKE) pyston_dbg $(CHECK_DEPS)
+	$(MAKE) pyston_dbg check-deps
 	( cd $(CMAKE_DIR_DBG) && ctest -V )
 
 	$(MAKE) pyston_release
@@ -525,7 +526,7 @@ check:
 # Travis-CI do the full test.
 .PHONY: quick_check
 quick_check:
-	$(MAKE) pyston_dbg $(CHECK_DEPS)
+	$(MAKE) pyston_dbg check-deps
 	$(MAKE) check_format
 	$(MAKE) unittests
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
@@ -952,7 +953,7 @@ endef
 define make_target
 $(eval \
 .PHONY: test$1 check$1
-check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
+check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
@@ -1029,7 +1030,7 @@ $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 $(call make_search,pypyrun_%)
 
-nosearch_check_%: %.py pyston_dbg $(CHECK_DEPS)
+nosearch_check_%: %.py pyston_dbg check-deps
 	$(MAKE) check_dbg ARGS="$(patsubst %.py,%,$(notdir $<)) -K"
 $(call make_search,check_%)
 

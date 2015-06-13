@@ -247,7 +247,7 @@ add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE
 add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S --exit-code-only --skip-failing -t600 ${CMAKE_SOURCE_DIR}/test/integration)
 
 if(ENABLE_EXTRA_TESTS)
-  add_test(NAME extra_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k -t600 --exit-code-only ${CMAKE_SOURCE_DIR}/test/extra)
+  add_test(NAME pyston_defaults_extra_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S -t600 --exit-code-only ${CMAKE_SOURCE_DIR}/test/extra)
 endif()
 
 
@@ -260,7 +260,8 @@ add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-deps DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS check-deps)
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)

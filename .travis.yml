@@ -47,15 +47,17 @@ install:
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
   - cmake -GNinja -DTEST_THREADS=4 -DENABLE_EXTRA_TESTS=ON $TRAVIS_BUILD_DIR
-  - ninja libunwind ext_cpython
 
 before_script:
   - mysql -e 'create database mysqldb_test charset utf8;'
 
 script:
+  - echo 'Building Pyston' && echo -en 'travis_fold:start:compiling\\r'
   - ccache -z
-  - PYSTON_RUN_ARGS=G travis_wait ninja -j4 check-pyston
+  - PYSTON_RUN_ARGS=G ninja -j4 check-deps
   - ccache -s
+  - echo -en 'travis_fold:end:compiling\\r'
+  - ctest --output-on-failure
 
 os:
   - linux
