@@ -20,7 +20,6 @@
 
 #include "llvm/Support/LEB128.h" // for {U,S}LEB128 decoding
 
-#include "asm_writing/assembler.h"   // assembler
 #include "codegen/ast_interpreter.h" // interpreter_instr_addr
 #include "codegen/unwinding.h"       // getCFForAddress
 #include "core/ast.h"
@@ -492,7 +491,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    auto unwind_token = getUnwind();
+    auto unwind_session = getActivePythonUnwindSession();
 
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
@@ -507,7 +506,10 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             print_frame(&cursor, &pip);
         }
 
-        unwindingThroughFrame(unwind_token, &cursor);
+        // let the PythonUnwindSession know that we're in a new frame,
+        // giving it a chance to possibly add a traceback entry for
+        // it.
+        unwindingThroughFrame(unwind_session, &cursor);
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -556,8 +558,23 @@ static inline void unwind_loop(ExcInfo* exc_data) {
 
         int64_t switch_value = determine_action(&info, &entry);
         if (switch_value != CLEANUP_ACTION) {
-            endUnwind(unwind_token);
+            // we're transfering control to a non-cleanup landing pad.
+            // i.e. a catch block.  thus ends our unwind session.
+            endPythonUnwindSession(unwind_session);
         }
+        // there is a python unwinding implementation detail leaked
+        // here - that the unwind session can be ended but its
+        // exception storage is still around.
+        //
+        // this manifests itself as this short window here where we've
+        // (possibly) ended the unwind session above but we still need
+        // to pass exc_data (which is the exceptionStorage for this
+        // unwind session) to resume().
+        //
+        // the only way this could bite us is if we somehow clobber
+        // the PythonUnwindSession's storage, or cause a GC to occur, before
+        // transfering control to the landing pad in resume().
+        //
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
 
@@ -612,30 +629,10 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // we should only ever be throwing ExcInfos
     RELEASE_ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
 
-    // Instead of allocating memory for this exception, we return a pointer to a pre-allocated thread-local variable.
-    //
-    // This variable, pyston::exception_ferry, is used only while we are unwinding, and should not be used outside of
-    // the unwinder. Since it's a thread-local variable, we *cannot* throw any exceptions while it is live, otherwise we
-    // would clobber it and forget our old exception.
-    //
-    // Q: Why can't we just use cur_thread_state.curexc_{type,value,traceback}?
-    //
-    // A: Because that conflates the space used to store exceptions during C++ unwinding with the space used to store
-    // them during C-API return-code based unwinding! This actually comes up in practice - the original version *did*
-    // use curexc_{type,value,traceback}, and it had a bug.
-    //
-    // In particular, we need to unset the C API exception at an appropriate point so as not to make C-API functions
-    // *think* an exception is being thrown when one isn't. The natural place is __cxa_begin_catch, BUT we need some way
-    // to communicate the exception info to the inside of the catch block - and all we get is the return value of
-    // __cxa_begin_catch, which is a single pointer, when we need three!
-    //
-    // You might think we could get away with only unsetting the C-API information in __cxa_end_catch, but you'd be
-    // wrong! Firstly, this would prohibit calling C-API functions inside a catch-block. Secondly, __cxa_end_catch is
-    // always called when leaving a catch block, even if we're leaving it by re-raising the exception. So if we store
-    // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
-    // during unwinding!
-
-    return pyston::getExceptionStorage(pyston::beginUnwind());
+    // we begin the unwind session here rather than in __cxa_throw
+    // because we need to return the session's exception storage
+    // from this method.
+    return pyston::getPythonUnwindSessionExceptionStorage(pyston::beginPythonUnwindSession());
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our

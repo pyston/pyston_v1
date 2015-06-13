@@ -41,7 +41,6 @@
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
-#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 #ifndef NDEBUG

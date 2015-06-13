@@ -58,9 +58,7 @@ struct uw_table_entry {
 
 namespace pyston {
 
-namespace {
 static BoxedClass* unwind_session_cls;
-}
 
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
@@ -440,6 +438,9 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
 }
 
+// if the given ip/bp correspond to a jitted frame or
+// ASTInterpreter::execute_inner frame, return true and return the
+// frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
     bool jitted = cf != NULL;
@@ -474,7 +475,7 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
     return true;
 }
 
-class UnwindSession : public Box {
+class PythonUnwindSession : public Box {
     ExcInfo exc_info;
     bool skip;
     bool is_active;
@@ -482,9 +483,12 @@ class UnwindSession : public Box {
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    UnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false) {}
 
-    ExcInfo* getExcInfoStorage() { return &exc_info; }
+    ExcInfo* getExcInfoStorage() {
+        RELEASE_ASSERT(is_active, "");
+        return &exc_info;
+    }
     bool shouldSkipFrame() const { return skip; }
     void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
     bool isActive() const { return is_active; }
@@ -512,8 +516,13 @@ public:
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == unwind_session_cls);
 
-        UnwindSession* o = static_cast<UnwindSession*>(_o);
+        PythonUnwindSession* o = static_cast<PythonUnwindSession*>(_o);
 
+        // this is our hack for eventually collecting
+        // exceptions/tracebacks after the exception has been caught.
+        // If a collection happens and a given thread's
+        // PythonUnwindSession isn't active, its exception info can be
+        // collected.
         if (!o->is_active)
             return;
 
@@ -522,29 +531,29 @@ public:
         v->visitIf(o->exc_info.traceback);
     }
 };
-static __thread UnwindSession* cur_unwind;
+static __thread PythonUnwindSession* cur_unwind;
 
-UnwindSession* beginUnwind() {
+PythonUnwindSession* beginPythonUnwindSession() {
     if (!cur_unwind) {
-        cur_unwind = new UnwindSession();
+        cur_unwind = new PythonUnwindSession();
         pyston::gc::registerPermanentRoot(cur_unwind);
     }
     cur_unwind->begin();
     return cur_unwind;
 }
 
-UnwindSession* getUnwind() {
-    RELEASE_ASSERT(cur_unwind, "");
+PythonUnwindSession* getActivePythonUnwindSession() {
+    RELEASE_ASSERT(cur_unwind && cur_unwind->isActive(), "");
     return cur_unwind;
 }
 
-void endUnwind(UnwindSession* unwind) {
+void endPythonUnwindSession(PythonUnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
     unwind->end();
 }
-void* getExceptionStorage(UnwindSession* unwind) {
+void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
-    UnwindSession* state = static_cast<UnwindSession*>(unwind);
+    PythonUnwindSession* state = static_cast<PythonUnwindSession*>(unwind);
     return state->getExcInfoStorage();
 }
 
@@ -559,14 +568,14 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
 }
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
-    // basically the same as UnwindSession::addTraceback, but needs to
-    // be callable after an UnwindSession has ended.  The interpreter
+    // basically the same as PythonUnwindSession::addTraceback, but needs to
+    // be callable after an PythonUnwindSession has ended.  The interpreter
     // will call this from catch blocks if it needs to ensure that a
     // line is added.  Right now this only happens in
     // ASTInterpreter::visit_invoke.
 
     // It's basically the same except for one thing: we don't have to
-    // worry about the 'skip' (osr) state that UnwindSession handles
+    // worry about the 'skip' (osr) state that PythonUnwindSession handles
     // here, because the only way we could have gotten into the ast
     // interpreter is if the exception wasn't caught, and if there was
     // the osr frame for the one the interpreter is running, it would
@@ -578,7 +587,7 @@ void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
     BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info->traceback));
 }
 
-void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor) {
+void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor) {
     unw_word_t ip = get_cursor_ip(cursor);
     unw_word_t bp = get_cursor_bp(cursor);
 
@@ -597,7 +606,7 @@ void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor) 
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    UnwindSession* unwind_session = new UnwindSession();
+    PythonUnwindSession* unwind_session = new PythonUnwindSession();
 
     unwind_session->begin();
 
@@ -1146,8 +1155,8 @@ llvm::JITEventListener* makeTracebacksListener() {
 }
 
 void setupUnwinding() {
-    unwind_session_cls = BoxedHeapClass::create(type_cls, object_cls, UnwindSession::gcHandler, 0, 0,
-                                                sizeof(UnwindSession), false, "unwind_session");
+    unwind_session_cls = BoxedHeapClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
+                                                sizeof(PythonUnwindSession), false, "unwind_session");
     unwind_session_cls->freeze();
 }
 }

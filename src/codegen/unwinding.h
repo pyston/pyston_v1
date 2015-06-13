@@ -41,12 +41,12 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
 
-class UnwindSession;
-UnwindSession* beginUnwind();
-UnwindSession* getUnwind();
-void endUnwind(UnwindSession* unwind_session);
-void* getExceptionStorage(UnwindSession* unwind_session);
-void unwindingThroughFrame(UnwindSession* unwind_session, unw_cursor_t* cursor);
+class PythonUnwindSession;
+PythonUnwindSession* beginPythonUnwindSession();
+PythonUnwindSession* getActivePythonUnwindSession();
+void endPythonUnwindSession(PythonUnwindSession* unwind_session);
+void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind_session);
+void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor);
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
 
