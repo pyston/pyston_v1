@@ -62,11 +62,6 @@ os:
 # - osx
 
 notifications:
-  irc:
-    channels:
-      - "chat.freenode.net#pyston"
-    on_success: [change]
-
   webhooks:
     urls:
       - https://webhooks.gitter.im/e/7256425a36658faa8b9b
