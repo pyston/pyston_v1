@@ -233,7 +233,7 @@ add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 
 # test/tests
-add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S --order-by-mtime ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 # skip -O for dbg
 if(${CMAKE_BUILD_TYPE} STREQUAL "Release")

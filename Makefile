@@ -527,10 +527,7 @@ check:
 .PHONY: quick_check
 quick_check:
 	$(MAKE) pyston_dbg check-deps
-	$(MAKE) check_format
-	$(MAKE) unittests
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
+	( cd $(CMAKE_DIR_DBG) && ctest -V -R 'check-format|unittests|pyston_defaults|pyston_cpython' )
 
 
 Makefile.local:
