@@ -232,22 +232,20 @@ add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${L
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 
-# test/tests
-add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S --order-by-mtime ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
-# skip -O for dbg
+macro(add_pyston_test testname directory)
+  add_test(NAME pyston_${testname}_${directory} COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S ${ARGV2} ${ARGV3} ${ARGV4} ${CMAKE_SOURCE_DIR}/test/${directory})
+endmacro()
+
+# tests         testname directory arguments
+add_pyston_test(defaults tests --order-by-mtime)
+add_pyston_test(old_parser tests -a=-n -a=-x)
 if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
-  add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-n -a=-x -a=-S ${CMAKE_SOURCE_DIR}/test/tests)
+  add_pyston_test(max_compilation_tier tests -a=-O -a=-x)
 endif()
-
-# cpython tests - we pass -I to cpython tests and skip failing ones b/c they are slooow otherwise
-add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S --exit-code-only --skip-failing -t30 ${CMAKE_SOURCE_DIR}/test/cpython)
-
-# integration tests
-add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S --exit-code-only --skip-failing -t600 ${CMAKE_SOURCE_DIR}/test/integration)
-
+add_pyston_test(defaults cpython --exit-code-only --skip-failing -t30)
+add_pyston_test(defaults integration --exit-code-only --skip-failing -t600)
 if(ENABLE_EXTRA_TESTS)
-  add_test(NAME pyston_defaults_extra_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S -t600 --exit-code-only ${CMAKE_SOURCE_DIR}/test/extra)
+  add_pyston_test(defaults extra -t600 --exit-code-only)
 endif()
 
 
