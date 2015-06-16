@@ -165,6 +165,14 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
+    printf("Deopt!\n");
+    print_ast(expr);
+    printf("\n");
+    dump(value);
+    printf("\n");
+
+    RELEASE_ASSERT(0, "deopt is currently broken...");
+
     FrameStackState frame_state = getFrameStackState();
     auto execution_point = getExecutionPoint();
 
