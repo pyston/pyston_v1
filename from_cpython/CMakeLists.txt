@@ -20,7 +20,6 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     _codecsmodule.c
     _collectionsmodule.c
     _csv.c
-    _cursesmodule.c
     _functoolsmodule.c
     _iomodule.c
     _math.c
@@ -33,7 +32,6 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     binascii.c
     bufferedio.c
     bytesio.c
-    bz2module.c
     cache.c
     connection.c
     cStringIO.c
@@ -43,7 +41,6 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     fcntlmodule.c
     fileio.c
     getpath.c
-    grpmodule.c
     iobase.c
     itertoolsmodule.c
     mathmodule.c
@@ -66,7 +63,6 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     statement.c
     stringio.c
     stropmodule.c
-    termios.c
     textio.c
     threadmodule.c
     timemodule.c
@@ -121,6 +117,10 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/bz2.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/grp.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/termios.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_curses.so
                    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
                    DEPENDS
                        pyston
@@ -136,5 +136,9 @@ add_custom_command(OUTPUT
                        Modules/expat/xmltok_ns.c
                        Modules/pyexpat.c
                        Modules/_elementtree.c
+		       Modules/bz2module.c
+		       Modules/grpmodule.c
+		       Modules/termios.c
+		       Modules/_cursesmodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)
