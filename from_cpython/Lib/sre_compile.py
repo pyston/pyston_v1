@@ -37,7 +37,22 @@ def _compile(code, pattern, flags):
     REPEATING_CODES = _REPEATING_CODES
     SUCCESS_CODES = _SUCCESS_CODES
     ASSERT_CODES = _ASSERT_CODES
-    for op, av in pattern:
+
+    # Pyston change: iterating over a SubPattern is fairly expensive:
+    # - SubPattern defines __getitem__ but not __iter__, so we create a seqiter
+    # - for each iteration, we call instance.getitem, which looks up
+    #   SubPattern.__getitem__, and calls it
+    # - SubPattern.__getitem__ just does `return self.data[idx]`, which throws an
+    #   IndexError to signal that the iteration is done.
+    # All the exceptions and extra layers of indirection add up.
+    # Cut that out by simply iterating over pattern.data, which looks like is
+    # usually a list, and we can use our fast iteration.
+    if isinstance(pattern, sre_parse.SubPattern):
+        pattern_iter = pattern.data
+    else:
+        pattern_iter = pattern
+
+    for op, av in pattern_iter:
         if op in LITERAL_CODES:
             if flags & SRE_FLAG_IGNORECASE:
                 emit(OPCODES[OP_IGNORE[op]])

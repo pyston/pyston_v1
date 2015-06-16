@@ -58,6 +58,9 @@ void raiseRaw(const ExcInfo& e) {
     assert(gc::isValidGCObject(e.traceback));
 
 #if STAT_EXCEPTIONS
+    static StatCounter num_exceptions("num_exceptions");
+    num_exceptions.log();
+
     std::string stat_name;
     if (PyType_Check(e.type))
         stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(e.type)->tp_name);
