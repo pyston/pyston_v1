@@ -54,6 +54,9 @@ extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
+BoxedString* EmptyString;
+BoxedString* characters[UCHAR_MAX + 1];
+
 BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     if (s) {
@@ -1147,7 +1150,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     else
         return NotImplemented;
     if (n <= 0)
-        return boxString("");
+        return EmptyString;
 
     // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->size();
@@ -1948,7 +1951,7 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
 Box* strLower(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
+    BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::tolower(rtn->data()[i]);
     return rtn;
@@ -1956,7 +1959,7 @@ Box* strLower(BoxedString* self) {
 
 Box* strUpper(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
+    BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::toupper(rtn->data()[i]);
     return rtn;
@@ -1964,7 +1967,7 @@ Box* strUpper(BoxedString* self) {
 
 Box* strSwapcase(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
-    BoxedString* rtn = static_cast<BoxedString*>(boxString(self->s()));
+    BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++) {
         char c = rtn->data()[i];
         if (std::islower(c))
@@ -2208,7 +2211,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         }
 
         char c = self->s()[n];
-        return boxString(llvm::StringRef(&c, 1));
+        return characters[c & UCHAR_MAX];
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -2257,7 +2260,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return boxString(llvm::StringRef(&c, 1));
+        return characters[c & UCHAR_MAX];
     }
 };
 
@@ -2309,7 +2312,6 @@ extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** 
 }
 
 BoxedString* createUninitializedString(ssize_t n) {
-    // I *think* this should avoid doing any copies, by using move constructors:
     return new (n) BoxedString(n, 0);
 }
 
@@ -2504,7 +2506,7 @@ static PyObject* string_zfill(PyObject* self, PyObject* args) {
 
     // Pyston change:
     // s = pad(self, fill, 0, '0');
-    s = pad((BoxedString*)self, boxInt(width), boxString("0"), JUST_RIGHT);
+    s = pad((BoxedString*)self, boxInt(width), characters['0' & UCHAR_MAX], JUST_RIGHT);
 
     if (s == NULL)
         return NULL;
@@ -2724,7 +2726,8 @@ void setupStr() {
 
     str_cls->tp_richcompare = str_richcompare;
 
-    BoxedString* spaceChar = boxString(" ");
+    BoxedString* spaceChar = characters[' ' & UCHAR_MAX];
+    assert(spaceChar);
     str_cls->giveAttr("ljust",
                       new BoxedFunction(boxRTFunction((void*)strLjust, UNKNOWN, 3, 1, false, false), { spaceChar }));
     str_cls->giveAttr("rjust",

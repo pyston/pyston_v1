@@ -30,10 +30,6 @@ extern "C" Box* createList() {
     return new BoxedList();
 }
 
-BoxedString* boxString(llvm::StringRef s) {
-    return new (s.size()) BoxedString(s);
-}
-
 BoxedString* boxStringTwine(const llvm::Twine& t) {
     llvm::SmallString<256> Vec;
     return boxString(t.toStringRef(Vec));

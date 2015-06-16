@@ -739,7 +739,6 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
       *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
-BoxedString* EmptyString;
 }
 
 extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict) {
@@ -2529,8 +2528,16 @@ void setupRuntime() {
         BoxedHeapClass(object_cls, BoxedWrapperDescriptor::gcHandler, 0, 0, sizeof(BoxedWrapperDescriptor), false,
                        static_cast<BoxedString*>(boxString("wrapper_descriptor")));
 
-    EmptyString = boxString("");
-    gc::registerPermanentRoot(EmptyString);
+    EmptyString = new (0) BoxedString("");
+    // Call InternInPlace rather than InternFromString since that will
+    // probably try to return EmptyString
+    PyString_InternInPlace((Box**)&EmptyString);
+    for (int i = 0; i <= UCHAR_MAX; i++) {
+        char c = (char)i;
+        BoxedString* s = new (1) BoxedString(llvm::StringRef(&c, 1));
+        PyString_InternInPlace((Box**)&s);
+        characters[i] = s;
+    }
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
     // than try to make the MRO construction code be safe against say, tuple_cls not having

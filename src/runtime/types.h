@@ -614,6 +614,7 @@ public:
 
 extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;
+extern BoxedString* characters[UCHAR_MAX + 1];
 
 struct PyHasher {
     size_t operator()(Box*) const;
@@ -914,6 +915,15 @@ Box* codeForCLFunction(CLFunction*);
 CLFunction* clfunctionFromCode(Box* code);
 
 Box* getFrame(int depth);
+
+inline BoxedString* boxString(llvm::StringRef s) {
+    if (s.size() <= 1) {
+        if (s.size() == 0)
+            return EmptyString;
+        return characters[s.data()[0] & UCHAR_MAX];
+    }
+    return new (s.size()) BoxedString(s);
+}
 }
 
 #endif
