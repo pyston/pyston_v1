@@ -2739,6 +2739,9 @@ init_curses(void)
     /* Initialize object type */
     Py_TYPE(&PyCursesWindow_Type) = &PyType_Type;
 
+    /* Pyston change */
+    PyType_Ready(&PyCursesWindow_Type);
+
     /* Initialize the C API pointer array */
     PyCurses_API[0] = (void *)&PyCursesWindow_Type;
     PyCurses_API[1] = (void *)func_PyCursesSetupTermCalled;
