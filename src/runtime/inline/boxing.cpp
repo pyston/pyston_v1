@@ -30,15 +30,6 @@ extern "C" Box* createList() {
     return new BoxedList();
 }
 
-BoxedString* boxString(llvm::StringRef s) {
-    if (s.size() <= 1) {
-        if (s.size() == 0)
-            return EmptyString;
-        return characters[s.data()[0] & UCHAR_MAX];
-    }
-    return new (s.size()) BoxedString(s);
-}
-
 BoxedString* boxStringTwine(const llvm::Twine& t) {
     llvm::SmallString<256> Vec;
     return boxString(t.toStringRef(Vec));
