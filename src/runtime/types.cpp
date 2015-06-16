@@ -84,6 +84,10 @@ extern "C" void init_ssl();
 extern "C" void init_sqlite3();
 extern "C" void PyMarshal_Init();
 extern "C" void initstrop();
+extern "C" void initgrp();
+extern "C" void initbz2();
+extern "C" void init_curses();
+extern "C" void inittermios();
 
 namespace pyston {
 
@@ -3382,6 +3386,10 @@ void setupRuntime() {
     init_sqlite3();
     PyMarshal_Init();
     initstrop();
+    initgrp();
+    initbz2();
+    init_curses();
+    inittermios();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;

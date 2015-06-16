@@ -1064,7 +1064,7 @@ PyCursesWindow_InCh(PyCursesWindowObject *self, PyObject *args)
     case 2:
         if (!PyArg_ParseTuple(args,"ii;y,x",&y,&x))
             return NULL;
-        rtn = mvwinch(self->win,y,x);
+        rtn = (int)mvwinch(self->win,y,x);
         break;
     default:
         PyErr_SetString(PyExc_TypeError, "inch requires 0 or 2 arguments");

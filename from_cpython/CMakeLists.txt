@@ -20,6 +20,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     _codecsmodule.c
     _collectionsmodule.c
     _csv.c
+    _cursesmodule.c
     _functoolsmodule.c
     _iomodule.c
     _math.c
@@ -32,6 +33,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     binascii.c
     bufferedio.c
     bytesio.c
+    bz2module.c
     cache.c
     connection.c
     cStringIO.c
@@ -41,6 +43,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     fcntlmodule.c
     fileio.c
     getpath.c
+    grpmodule.c
     iobase.c
     itertoolsmodule.c
     mathmodule.c
@@ -63,6 +66,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     statement.c
     stringio.c
     stropmodule.c
+    termios.c
     textio.c
     threadmodule.c
     timemodule.c
