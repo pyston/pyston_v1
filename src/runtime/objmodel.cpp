@@ -4668,7 +4668,8 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
         if (!ok && (cls == int_cls || cls == float_cls || cls == long_cls)) {
             if (npassed_args == 1)
                 ok = true;
-            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls))
+            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == &PyUnicode_Type
+                                           || arg2->cls == float_cls))
                 ok = true;
         }
 

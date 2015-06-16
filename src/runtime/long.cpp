@@ -604,19 +604,43 @@ extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) noexce
     return rtn;
 }
 
+#ifdef Py_USING_UNICODE
+extern "C" PyObject* PyLong_FromUnicode(Py_UNICODE* u, Py_ssize_t length, int base) noexcept {
+    PyObject* result;
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
+
+    if (buffer == NULL)
+        return NULL;
+
+    if (PyUnicode_EncodeDecimal(u, length, buffer, NULL)) {
+        PyMem_FREE(buffer);
+        return NULL;
+    }
+    result = PyLong_FromString(buffer, NULL, base);
+    PyMem_FREE(buffer);
+    return result;
+}
+#endif
+
 BoxedLong* _longNew(Box* val, Box* _base) {
-    BoxedLong* rtn = new BoxedLong();
     if (_base) {
         if (!isSubclass(_base->cls, int_cls))
             raiseExcHelper(TypeError, "an integer is required");
         int base = static_cast<BoxedInt*>(_base)->n;
 
-        if (!isSubclass(val->cls, str_cls))
+        if (!isSubclass(val->cls, str_cls) && !PyUnicode_Check(val))
             raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
-        BoxedString* s = static_cast<BoxedString*>(val);
 
-        rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
+        BoxedLong* rtn;
+        if (isSubclass(val->cls, str_cls)) {
+            BoxedString* s = static_cast<BoxedString*>(val);
+            rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
+        } else {
+            assert(PyUnicode_Check(val));
+            rtn = (BoxedLong*)PyLong_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base);
+        }
         checkAndThrowCAPIException();
+        return rtn;
     } else {
         if (isSubclass(val->cls, long_cls)) {
             BoxedLong* l = static_cast<BoxedLong*>(val);
@@ -626,14 +650,24 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             mpz_init_set(rtn->n, l->n);
             return rtn;
         } else if (isSubclass(val->cls, int_cls)) {
+            BoxedLong* rtn = new BoxedLong();
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
+            return rtn;
         } else if (val->cls == str_cls) {
+            BoxedLong* rtn = new BoxedLong();
             llvm::StringRef s = static_cast<BoxedString*>(val)->s();
             assert(s.data()[s.size()] == '\0');
             int r = mpz_init_set_str(rtn->n, s.data(), 10);
             RELEASE_ASSERT(r == 0, "");
+            return rtn;
+#ifdef Py_USING_UNICODE
+        } else if (PyUnicode_Check(val)) {
+            return static_cast<BoxedLong*>(PyLong_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), 10));
+#endif
         } else if (val->cls == float_cls) {
+            BoxedLong* rtn = new BoxedLong();
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
+            return rtn;
         } else {
             static BoxedString* long_str = static_cast<BoxedString*>(PyString_InternFromString("__long__"));
             Box* r = callattr(val, long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -646,7 +680,9 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             }
 
             if (isSubclass(r->cls, int_cls)) {
+                BoxedLong* rtn = new BoxedLong();
                 mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(r)->n);
+                return rtn;
             } else if (!isSubclass(r->cls, long_cls)) {
                 raiseExcHelper(TypeError, "__long__ returned non-long (type %s)", r->cls->tp_name);
             } else {
@@ -654,7 +690,6 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             }
         }
     }
-    return rtn;
 }
 
 extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {

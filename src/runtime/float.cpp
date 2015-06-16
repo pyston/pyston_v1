@@ -40,7 +40,64 @@ extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
 }
 
 extern "C" PyObject* PyFloat_FromString(PyObject* v, char** pend) noexcept {
-    Py_FatalError("unimplemented");
+    const char* s, *last, *end;
+    double x;
+    char buffer[256]; /* for errors */
+#ifdef Py_USING_UNICODE
+    char* s_buffer = NULL;
+#endif
+    Py_ssize_t len;
+    PyObject* result = NULL;
+
+    if (pend)
+        *pend = NULL;
+    if (PyString_Check(v)) {
+        s = PyString_AS_STRING(v);
+        len = PyString_GET_SIZE(v);
+    }
+#ifdef Py_USING_UNICODE
+    else if (PyUnicode_Check(v)) {
+        // Pyston change: use malloc instead so we don't allocate from the gc heap
+        s_buffer = (char*)malloc(PyUnicode_GET_SIZE(v) + 1);
+        if (s_buffer == NULL)
+            return PyErr_NoMemory();
+        if (PyUnicode_EncodeDecimal(PyUnicode_AS_UNICODE(v), PyUnicode_GET_SIZE(v), s_buffer, NULL))
+            goto error;
+        s = s_buffer;
+        len = strlen(s);
+    }
+#endif
+    else if (PyObject_AsCharBuffer(v, &s, &len)) {
+        PyErr_SetString(PyExc_TypeError, "float() argument must be a string or a number");
+        return NULL;
+    }
+    last = s + len;
+
+    while (Py_ISSPACE(*s))
+        s++;
+    /* We don't care about overflow or underflow.  If the platform
+     * supports them, infinities and signed zeroes (on underflow) are
+     * fine. */
+    x = PyOS_string_to_double(s, (char**)&end, NULL);
+    if (x == -1.0 && PyErr_Occurred())
+        goto error;
+    while (Py_ISSPACE(*end))
+        end++;
+    if (end == last)
+        result = PyFloat_FromDouble(x);
+    else {
+        PyOS_snprintf(buffer, sizeof(buffer), "invalid literal for float(): %.200s", s);
+        PyErr_SetString(PyExc_ValueError, buffer);
+        result = NULL;
+    }
+
+error:
+#ifdef Py_USING_UNICODE
+    if (s_buffer)
+        // Pyston change: use free()
+        free(s_buffer);
+#endif
+    return result;
 }
 
 extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
@@ -622,9 +679,6 @@ std::string floatFmt(double x, int precision, char code) {
 }
 
 BoxedFloat* _floatNew(Box* a) {
-    // FIXME CPython uses PyUnicode_EncodeDecimal:
-    a = coerceUnicodeToStr(a);
-
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
     } else if (isSubclass(a->cls, float_cls)) {
@@ -632,24 +686,15 @@ BoxedFloat* _floatNew(Box* a) {
     } else if (isSubclass(a->cls, int_cls)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
-        llvm::StringRef s = static_cast<BoxedString*>(a)->s();
-        if (s == "nan")
-            return new BoxedFloat(NAN);
-        if (s == "-nan")
-            return new BoxedFloat(-NAN);
-        if (s == "inf")
-            return new BoxedFloat(INFINITY);
-        if (s == "-inf")
-            return new BoxedFloat(-INFINITY);
-
-        // TODO this should just use CPython's implementation:
-        char* endptr;
-        assert(s.data()[s.size()] == '\0');
-        const char* startptr = s.data();
-        double r = strtod(startptr, &endptr);
-        if (endptr != startptr + s.size())
-            raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
-        return new BoxedFloat(r);
+        auto rtn = static_cast<BoxedFloat*>(PyFloat_FromString(a, NULL));
+        checkAndThrowCAPIException();
+        return rtn;
+#ifdef Py_USING_UNICODE
+    } else if (PyUnicode_Check(a)) {
+        auto rtn = static_cast<BoxedFloat*>(PyFloat_FromString(a, NULL));
+        checkAndThrowCAPIException();
+        return rtn;
+#endif
     } else {
         static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
         Box* r = callattr(a, float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
