@@ -54,6 +54,9 @@ extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
+BoxedString* EmptyString;
+BoxedString* characters[UCHAR_MAX + 1];
+
 BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     if (s) {

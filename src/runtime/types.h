@@ -614,6 +614,7 @@ public:
 
 extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;
+extern BoxedString* characters[UCHAR_MAX + 1];
 
 struct PyHasher {
     size_t operator()(Box*) const;
