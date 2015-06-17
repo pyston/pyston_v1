@@ -42,6 +42,12 @@ struct ExecutionPoint {
 };
 ExecutionPoint getExecutionPoint();
 
+// debugging/stat helper, returns python filename:linenumber, or "unknown:-1" if it fails
+std::string getCurrentPythonLine();
+
+// doesn't really belong in unwinding.h, since it's stats related, but it needs to unwind to get the current line...
+void logByCurrentPythonLine(std::string& stat_name);
+
 // Adds stack locals and closure locals into the locals dict, and returns it.
 Box* fastLocalsToBoxedLocals();
 

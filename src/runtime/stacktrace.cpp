@@ -67,6 +67,9 @@ void raiseRaw(const ExcInfo& e) {
     else
         stat_name = "num_exceptions_" + std::string(e.value->cls->tp_name);
     Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_EXCEPTIONS_LOCATION
+    logByCurrentPythonLine(stat_name);
+#endif
 #endif
 
     throw e;
