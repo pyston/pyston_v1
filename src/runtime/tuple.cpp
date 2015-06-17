@@ -286,6 +286,15 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
                 raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->data());
         }
 
+        if (cls == tuple_cls) {
+            // Call PySequence_Tuple since it has some perf special-cases
+            // that can make it quite a bit faster than the generic pyElements iteration:
+            Box* r = PySequence_Tuple(elements);
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
+
         std::vector<Box*, StlCompatAllocator<Box*>> elts;
         for (auto e : elements->pyElements())
             elts.push_back(e);
