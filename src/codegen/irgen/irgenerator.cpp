@@ -179,16 +179,11 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // The "normal" case
 
             // frame_info.exc.type = NULL
-            // frame_info.exc.value = NULL
-            // frame_info.exc.traceback = NULL
             llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
             llvm::Value* exc_info = getExcinfoGep(builder, al);
             builder.CreateStore(
                 null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
-            builder.CreateStore(
-                null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, value) / sizeof(Box*)));
-            builder.CreateStore(null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, traceback)
-                                                                                                / sizeof(Box*)));
+
             // frame_info.boxedLocals = NULL
             llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
             builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
