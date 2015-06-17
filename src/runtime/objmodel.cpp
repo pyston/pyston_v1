@@ -1573,6 +1573,14 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                     // Have to abort because we're about to call now, but there will be before more
                     // guards between this call and the next...
                     if (for_call) {
+#if STAT_CALLATTR_DESCR_ABORTS
+                        if (rewrite_args) {
+                            std::string attr_name = "num_callattr_descr_abort";
+                            Stats::log(Stats::getStatCounter(attr_name));
+                            logByCurrentPythonLine(attr_name);
+                        }
+#endif
+
                         rewrite_args = NULL;
                         REWRITE_ABORTED("");
                     }
@@ -1678,6 +1686,14 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                     Box* res;
 
                     if (for_call) {
+#if STAT_CALLATTR_DESCR_ABORTS
+                        if (rewrite_args) {
+                            std::string attr_name = "num_callattr_descr_abort";
+                            Stats::log(Stats::getStatCounter(attr_name));
+                            logByCurrentPythonLine(attr_name);
+                        }
+#endif
+
                         rewrite_args = NULL;
                         REWRITE_ABORTED("");
                     }
@@ -1725,6 +1741,14 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
         if (descr_get) {
             // this could happen for the callattr path...
             if (for_call) {
+#if STAT_CALLATTR_DESCR_ABORTS
+                if (rewrite_args) {
+                    std::string attr_name = "num_callattr_descr_abort";
+                    Stats::log(Stats::getStatCounter(attr_name));
+                    logByCurrentPythonLine(attr_name);
+                }
+#endif
+
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
             }
