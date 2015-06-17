@@ -135,7 +135,7 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
 
     BoxedTuple* resized = new (newsize)
         BoxedTuple(newsize); // we want an uninitialized tuple, but this will memset it with 0.
-    memmove(resized->elts, t->elts, t->size());
+    memmove(resized->elts, t->elts, sizeof(Box*) * t->size());
 
     *pv = resized;
     return 0;
@@ -284,6 +284,15 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
                 elements = seq.second;
             else
                 raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->data());
+        }
+
+        if (cls == tuple_cls) {
+            // Call PySequence_Tuple since it has some perf special-cases
+            // that can make it quite a bit faster than the generic pyElements iteration:
+            Box* r = PySequence_Tuple(elements);
+            if (!r)
+                throwCAPIException();
+            return r;
         }
 
         std::vector<Box*, StlCompatAllocator<Box*>> elts;
