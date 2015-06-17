@@ -15,6 +15,7 @@
 #include "codegen/unwinding.h"
 
 #include <dlfcn.h>
+#include <sstream>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -987,6 +988,28 @@ PythonFrameIterator PythonFrameIterator::back() {
 
     RELEASE_ASSERT(found, "this wasn't a valid frame?");
     return PythonFrameIterator(std::move(rtn));
+}
+
+std::string getCurrentPythonLine() {
+    auto frame_iter = getTopPythonFrame();
+
+    if (frame_iter.get()) {
+        std::ostringstream stream;
+
+        auto* cf = frame_iter->getCF();
+        auto source = cf->clfunc->source.get();
+
+        auto current_stmt = frame_iter->getCurrentStatement();
+
+        stream << source->fn << ":" << current_stmt->lineno;
+        return stream.str();
+    }
+    return "unknown:-1";
+}
+
+void logByCurrentPythonLine(std::string& stat_name) {
+    std::string stat = stat_name + "<" + getCurrentPythonLine() + ">";
+    Stats::log(Stats::getStatCounter(stat));
 }
 
 llvm::JITEventListener* makeTracebacksListener() {

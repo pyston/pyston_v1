@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "asm_writing/icinfo.h"
+#include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
 
@@ -1446,6 +1447,64 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
     }
 }
 
+#define IC_ATTEMPTS_NAME "ic_attempts"
+#define IC_ATTEMPTS_NOPATCH_NAME "ic_attempts_nopatch"
+#define IC_ATTEMPTS_SKIPPED_NAME "ic_attempts_skipped"
+#define IC_ATTEMPTS_SKIPPED_MEGAMORPHIC_NAME "ic_attempts_skipped_megamorphic"
+#define IC_ATTEMPTS_STARTED_NAME "ic_attempts_started"
+
+static StatCounter ic_attempts(IC_ATTEMPTS_NAME);
+static StatCounter ic_attempts_nopatch(IC_ATTEMPTS_NOPATCH_NAME);
+static StatCounter ic_attempts_skipped(IC_ATTEMPTS_SKIPPED_NAME);
+static StatCounter ic_attempts_skipped_megamorphic(IC_ATTEMPTS_SKIPPED_MEGAMORPHIC_NAME);
+static StatCounter ic_attempts_started(IC_ATTEMPTS_STARTED_NAME);
+
+static inline void log_ic_attempts(const char* debug_name) {
+    ic_attempts.log();
+#if STAT_ICS
+    StatCounter per_type_count(std::string(IC_ATTEMPTS_NAME) + "." + debug_name);
+    per_type_count.log();
+#endif
+}
+
+static inline void log_ic_attempts_nopatch(const char* debug_name) {
+    ic_attempts_nopatch.log();
+#if STAT_ICS
+    StatCounter per_type_count(std::string(IC_ATTEMPTS_NOPATCH_NAME) + "." + debug_name);
+    per_type_count.log();
+#endif
+}
+
+static inline void log_ic_attempts_skipped(const char* debug_name) {
+    ic_attempts_skipped.log();
+#if STAT_ICS
+    std::string stat_name = std::string(IC_ATTEMPTS_SKIPPED_NAME) + "." + debug_name;
+    Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_ICS_LOCATION
+    logByCurrentPythonLine(stat_name);
+#endif
+#endif
+}
+
+static inline void log_ic_attempts_skipped_megamorphic(const char* debug_name) {
+    ic_attempts_skipped_megamorphic.log();
+#if STAT_ICS
+    std::string stat_name = std::string(IC_ATTEMPTS_SKIPPED_MEGAMORPHIC_NAME) + "." + debug_name;
+    Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_ICS_LOCATION
+    logByCurrentPythonLine(stat_name);
+#endif
+#endif
+}
+
+static inline void log_ic_attempts_started(const char* debug_name) {
+    ic_attempts_started.log();
+#if STAT_ICS
+    StatCounter per_type_count(std::string(IC_ATTEMPTS_STARTED_NAME) + "." + debug_name);
+    per_type_count.log();
+#endif
+}
+
 Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
     ICInfo* ic = NULL;
 
@@ -1457,28 +1516,22 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
         assert(!getICInfo(rtn_addr));
     }
 
-    static StatCounter ic_attempts("ic_attempts");
-    static StatCounter ic_attempts_nopatch("ic_attempts_nopatch");
-    static StatCounter ic_attempts_skipped("ic_attempts_skipped");
-    static StatCounter ic_attempts_skipped_megamorphic("ic_attempts_skipped_megamorphic");
-    static StatCounter ic_attempts_started("ic_attempts_started");
-
-    ic_attempts.log();
+    log_ic_attempts(debug_name);
 
     if (!ic) {
-        ic_attempts_nopatch.log();
+        log_ic_attempts_nopatch(debug_name);
         return NULL;
     }
 
     if (!ic->shouldAttempt()) {
-        ic_attempts_skipped.log();
+        log_ic_attempts_skipped(debug_name);
 
         if (ic->isMegamorphic())
-            ic_attempts_skipped_megamorphic.log();
+            log_ic_attempts_skipped_megamorphic(debug_name);
         return NULL;
     }
 
-    ic_attempts_started.log();
+    log_ic_attempts_started(debug_name);
     return new Rewriter(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
 }
 
