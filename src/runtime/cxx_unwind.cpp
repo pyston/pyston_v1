@@ -562,6 +562,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             // i.e. a catch block.  thus ends our unwind session.
             endPythonUnwindSession(unwind_session);
         }
+        static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
         // there is a python unwinding implementation detail leaked
         // here - that the unwind session can be ended but its
         // exception storage is still around.
