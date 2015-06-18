@@ -55,6 +55,26 @@ namespace {
 
 static BoxedClass* astinterpreter_cls;
 
+class ASTInterpreter;
+
+// Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
+// them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
+// (sys._getframe & co), and for GC scanning.
+static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
+static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
+
+class RegisterHelper {
+private:
+    void* frame_addr;
+    ASTInterpreter* interpreter;
+
+public:
+    RegisterHelper();
+    ~RegisterHelper();
+    void doRegister(void* frame_addr, ASTInterpreter* interpreter);
+    static void deregister(void* frame_addr);
+};
+
 union Value {
     bool b;
     int64_t n;
@@ -68,20 +88,6 @@ union Value {
         if (DEBUG >= 2)
             ASSERT(gc::isValidGCObject(o), "%p", o);
     }
-};
-
-class ASTInterpreter;
-
-class RegisterHelper {
-private:
-    void* frame_addr;
-    ASTInterpreter* interpreter;
-
-public:
-    RegisterHelper();
-    ~RegisterHelper();
-    void doRegister(void* frame_addr, ASTInterpreter* interpreter);
-    static void deregister(void* frame_addr);
 };
 
 class ASTInterpreter : public Box {
@@ -310,12 +316,6 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
         doStore(source_info->getInternedStrings().get(param_names.kwarg), argsArray[i++]);
     }
 }
-
-// Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
-// them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
-// (sys._getframe & co), and for GC scanning.
-static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
-static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 
 RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) {
 }
