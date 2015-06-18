@@ -3751,6 +3751,19 @@ static bool convert3wayCompareResultToBool(Box* v, int op_type) {
     };
 }
 
+Box* nonzeroAndBox(Box* b, bool negate) {
+    if (likely(b->cls == bool_cls)) {
+        if (negate)
+            return boxBool(b != True);
+        return b;
+    }
+
+    bool t = b->nonzeroIC();
+    if (negate)
+        t = !t;
+    return boxBool(t);
+}
+
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args) {
     if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
         bool neg = (op_type == AST_TYPE::IsNot);
@@ -3766,16 +3779,39 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
-        // TODO do rewrite
-
         static BoxedString* contains_str = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
-        Box* contained = callattrInternal1(rhs, contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+
+        Box* contained;
+        RewriterVar* r_contained;
+        if (rewrite_args) {
+            CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->rhs, rewrite_args->destination);
+            crewrite_args.arg1 = rewrite_args->lhs;
+            contained = callattrInternal1(rhs, contains_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), lhs);
+
+            if (!crewrite_args.out_success)
+                rewrite_args = NULL;
+            else if (contained)
+                r_contained = crewrite_args.out_rtn;
+        } else {
+            contained = callattrInternal1(rhs, contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+        }
+
         if (contained == NULL) {
+            rewrite_args = NULL;
+
             int result = _PySequence_IterSearch(rhs, lhs, PY_ITERSEARCH_CONTAINS);
             if (result < 0)
                 throwCAPIException();
             assert(result == 0 || result == 1);
             return boxBool(result);
+        }
+
+        if (rewrite_args) {
+            auto r_negate = rewrite_args->rewriter->loadConst((int)(op_type == AST_TYPE::NotIn));
+            RewriterVar* r_contained_box
+                = rewrite_args->rewriter->call(true, (void*)nonzeroAndBox, r_contained, r_negate);
+            rewrite_args->out_rtn = r_contained_box;
+            rewrite_args->out_success = true;
         }
 
         bool b;

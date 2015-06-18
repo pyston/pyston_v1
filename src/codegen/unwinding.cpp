@@ -1007,7 +1007,7 @@ std::string getCurrentPythonLine() {
     return "unknown:-1";
 }
 
-void logByCurrentPythonLine(std::string& stat_name) {
+void logByCurrentPythonLine(const std::string& stat_name) {
     std::string stat = stat_name + "<" + getCurrentPythonLine() + ">";
     Stats::log(Stats::getStatCounter(stat));
 }

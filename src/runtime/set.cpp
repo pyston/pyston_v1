@@ -410,7 +410,7 @@ Box* setPop(BoxedSet* self) {
 
 Box* setContains(BoxedSet* self, Box* v) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
-    return boxBool(self->s.count(v) != 0);
+    return boxBool(self->s.find(v) != self->s.end());
 }
 
 Box* setEq(BoxedSet* self, BoxedSet* rhs) {
