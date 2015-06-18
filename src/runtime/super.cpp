@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -38,7 +39,7 @@ public:
     DEFAULT_CLASS(super_cls);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == super_cls);
+        assert(isSubclass(_o->cls, super_cls));
         BoxedSuper* o = static_cast<BoxedSuper*>(_o);
 
         boxGCHandler(v, o);
@@ -54,7 +55,7 @@ public:
 static const char* class_str = "__class__";
 
 Box* superGetattribute(Box* _s, Box* _attr) {
-    RELEASE_ASSERT(_s->cls == super_cls, "");
+    RELEASE_ASSERT(isSubclass(_s->cls, super_cls), "");
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
 
     RELEASE_ASSERT(_attr->cls == str_cls, "");
@@ -128,10 +129,10 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, std::string(attr->s()), NULL);
-    // TODO implement this
-    RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
-    return processDescriptor(r, s, s->cls);
+    Box* rtn = PyObject_GenericGetAttr(_s, _attr);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 Box* superRepr(Box* _s) {
@@ -148,26 +149,63 @@ Box* superRepr(Box* _s) {
 }
 
 
-// Ported from the CPython version:
-BoxedClass* supercheck(BoxedClass* type, Box* obj) {
-    if (isSubclass(obj->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(obj), type))
-        return static_cast<BoxedClass*>(obj);
+static PyTypeObject* supercheck(PyTypeObject* type, PyObject* obj) {
+    /* Check that a super() call makes sense.  Return a type object.
 
-    if (isSubclass(obj->cls, type)) {
-        return obj->cls;
+       obj can be a new-style class, or an instance of one:
+
+       - If it is a class, it must be a subclass of 'type'.      This case is
+         used for class methods; the return value is obj.
+
+       - If it is an instance, it must be an instance of 'type'.  This is
+         the normal case; the return value is obj.__class__.
+
+       But... when obj is an instance, we want to allow for the case where
+       Py_TYPE(obj) is not a subclass of type, but obj.__class__ is!
+       This will allow using super() with a proxy for obj.
+    */
+
+    /* Check for first bullet above (special case) */
+    if (PyType_Check(obj) && PyType_IsSubtype((PyTypeObject*)obj, type)) {
+        Py_INCREF(obj);
+        return (PyTypeObject*)obj;
     }
 
-    Box* class_attr = obj->getattr(class_str);
-    if (class_attr && isSubclass(class_attr->cls, type_cls) && class_attr != obj->cls) {
-        Py_FatalError("warning: this path never tested"); // blindly copied from CPython
-        return static_cast<BoxedClass*>(class_attr);
-    }
+    /* Normal case */
+    if (PyType_IsSubtype(Py_TYPE(obj), type)) {
+        Py_INCREF(Py_TYPE(obj));
+        return Py_TYPE(obj);
+    } else {
+        /* Try the slow way */
+        static PyObject* class_str = NULL;
+        PyObject* class_attr;
 
-    raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
+        if (class_str == NULL) {
+            class_str = PyString_FromString("__class__");
+            if (class_str == NULL)
+                return NULL;
+        }
+
+        class_attr = PyObject_GetAttr(obj, class_str);
+
+        if (class_attr != NULL && PyType_Check(class_attr) && (PyTypeObject*)class_attr != Py_TYPE(obj)) {
+            int ok = PyType_IsSubtype((PyTypeObject*)class_attr, type);
+            if (ok)
+                return (PyTypeObject*)class_attr;
+        }
+
+        if (class_attr == NULL)
+            PyErr_Clear();
+        else
+            Py_DECREF(class_attr);
+    }
+    PyErr_SetString(PyExc_TypeError, "super(type, obj): "
+                                     "obj must be an instance or subtype of type");
+    return NULL;
 }
 
 Box* superInit(Box* _self, Box* _type, Box* obj) {
-    RELEASE_ASSERT(_self->cls == super_cls, "");
+    RELEASE_ASSERT(isSubclass(_self->cls, super_cls), "");
     BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
     if (!isSubclass(_type->cls, type_cls))
@@ -187,6 +225,36 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     return None;
 }
 
+static PyObject* super_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    BoxedSuper* su = static_cast<BoxedSuper*>(self);
+    BoxedSuper* newobj;
+
+    if (obj == NULL || obj == None || su->obj != NULL) {
+        /* Not binding to an object, or already bound */
+        Py_INCREF(self);
+        return self;
+    }
+    if (su->cls != super_cls) {
+        /* If su is an instance of a (strict) subclass of super,
+           call its type */
+        return PyObject_CallFunctionObjArgs((PyObject*)Py_TYPE(su), su->type, obj, NULL);
+    } else {
+        /* Inline the common case */
+        BoxedClass* obj_type = supercheck(su->type, obj);
+        if (obj_type == NULL)
+            return NULL;
+        newobj = new (su->cls) BoxedSuper(NULL, NULL, NULL);
+        if (newobj == NULL)
+            return NULL;
+        Py_INCREF(su->type);
+        Py_INCREF(obj);
+        newobj->type = su->type;
+        newobj->obj = obj;
+        newobj->obj_type = obj_type;
+        return (PyObject*)newobj;
+    }
+}
+
 void setupSuper() {
     super_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false,
                                        "super");
@@ -204,6 +272,8 @@ void setupSuper() {
     super_cls->giveAttr("__self_class__",
                         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj_type)));
 
+    super_cls->tp_descr_get = super_descr_get;
+    add_operators(super_cls);
     super_cls->freeze();
 }
 }
