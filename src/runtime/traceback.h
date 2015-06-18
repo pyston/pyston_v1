@@ -27,25 +27,22 @@ class GCVisitor;
 extern "C" BoxedClass* traceback_cls;
 class BoxedTraceback : public Box {
 public:
-    typedef llvm::SmallVector<LineInfo, 1> LinesVector;
     Box* tb_next;
-    LinesVector lines;
+    bool has_line;
+    LineInfo line;
     Box* py_lines;
 
-    BoxedTraceback(LinesVector&& lines) : tb_next(None), lines(std::move(lines)), py_lines(NULL) {}
-    BoxedTraceback(BoxedTraceback* tb_next) : tb_next(tb_next), py_lines(NULL) {}
-    BoxedTraceback() : tb_next(None), py_lines(NULL) {}
+    BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), has_line(true), line(line), py_lines(NULL) {}
+    BoxedTraceback() : tb_next(None), has_line(false), line(-1, -1, "", ""), py_lines(NULL) {}
 
     DEFAULT_CLASS(traceback_cls);
-
-    void addLine(const LineInfo line);
 
     static Box* getLines(Box* b);
 
     static void gcHandler(gc::GCVisitor* v, Box* b);
 
     // somewhat equivalent to PyTraceBack_Here
-    static void Here(LineInfo lineInfo, BoxedTraceback** tb);
+    static void here(LineInfo lineInfo, Box** tb);
 };
 
 void printTraceback(Box* b);

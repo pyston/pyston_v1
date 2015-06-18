@@ -518,7 +518,7 @@ public:
             exc_info.reraise = false;
             return;
         }
-        BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info.traceback));
+        BoxedTraceback::here(line_info, &exc_info.traceback);
     }
 
     void logException() {
@@ -614,7 +614,7 @@ void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
         exc_info->reraise = false;
         return;
     }
-    BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info->traceback));
+    BoxedTraceback::here(line_info, &exc_info->traceback);
 }
 
 void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor) {
@@ -754,18 +754,16 @@ BoxedTraceback* getTraceback() {
 
     Timer _t("getTraceback", 1000);
 
-    BoxedTraceback::LinesVector entries;
+    Box* tb = new BoxedTraceback();
     unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        entries.push_back(lineInfoForFrame(frame_iter));
+        BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb);
         return false;
     });
-
-    std::reverse(entries.begin(), entries.end());
 
     long us = _t.end();
     us_gettraceback.log(us);
 
-    return new BoxedTraceback(std::move(entries));
+    return static_cast<BoxedTraceback*>(tb);
 }
 
 ExcInfo* getFrameExcInfo() {

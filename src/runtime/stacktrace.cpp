@@ -55,8 +55,7 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    auto tb = new BoxedTraceback();
-    tb->addLine(LineInfo(lineno, col_offset, file, func));
+    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
     throw ExcInfo(exc->cls, exc, tb);
 }
 
