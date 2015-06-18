@@ -54,7 +54,6 @@ ETAGS := ctags-exuberant -e
 # to disk space concerns.
 FORCE_TRUNK_BINARIES := 0
 
-USE_CMAKE := 1
 NINJA := ninja
 
 CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
@@ -440,17 +439,12 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 # ext_pyston (building test/test_extension) is required even in cmake mode since
 # we manually add test/test_extension to the path
 RUN_DEPS := ext_pyston
-ifneq ($(USE_CMAKE),1)
-	RUN_DEPS := $(RUN_DEPS) sharedmods
-endif
 
 # The set of dependencies (beyond the executable) required to do `make check` / `make check_foo`.
 # The tester bases all paths based on the executable, so in cmake mode we need to have cmake
 # build all of the shared modules.
-CHECK_DEPS :=
-ifneq ($(USE_CMAKE),1)
-	CHECK_DEPS := ext_pyston ext_python sharedmods
-endif
+check-deps:
+	$(NINJA) -C $(CMAKE_DIR_DBG) check-deps
 
 .PHONY: small_all
 small_all: pyston_dbg $(RUN_DEPS)
@@ -460,7 +454,7 @@ small_all: pyston_dbg $(RUN_DEPS)
 	# @# have to do this in a recursive make so that dependency is enforced:
 	# $(MAKE) pyston_all
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
-all: pyston_dbg pyston_release pyston_gcc unittests $(RUN_DEPS) $(CHECK_DEPS)
+all: pyston_dbg pyston_release pyston_gcc unittests check-deps $(RUN_DEPS)
 
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
@@ -475,16 +469,10 @@ NON_ENTRY_OBJS := $(filter-out src/jit.o,$(OBJS))
 
 define add_unittest
 $(eval \
-ifneq ($(USE_CMAKE),1)
-$1_unittest: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
-	$(ECHO) Linking $$@
-	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
-else
 .PHONY: $1_unittest
 $1_unittest:
 	$(NINJA) -C $(CMAKE_DIR_DBG) $1_unittest $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG)/$1_unittest .
-endif
 dbg_$1_unittests: $1_unittest
 	zsh -c 'ulimit -m $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
 unittests:: $1_unittest
@@ -525,28 +513,12 @@ cpplint:
 .PHONY: check
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
-	$(MAKE) lint
-	$(MAKE) check_format
-	$(MAKE) pyston_dbg $(CHECK_DEPS)
 
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
-	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
-	@# skip -O for dbg
-
-	$(MAKE) run_unittests ARGS=
+	$(MAKE) pyston_dbg check-deps
+	( cd $(CMAKE_DIR_DBG) && ctest -V )
 
 	$(MAKE) pyston_release
-	@# It can be useful to test release mode, since it actually exposes different functionality
-	@# since we can make different decisions about which internal functions to inline or not.
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
-	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t120 $(TEST_DIR)/integration $(ARGS)
-	@# skip -n for dbg
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-O -a=-x -a=-S $(TESTS_DIR) $(ARGS)
+	( cd $(CMAKE_DIR_RELEASE) && ctest -V -R pyston )
 
 	echo "All tests passed"
 
@@ -554,29 +526,9 @@ check:
 # Travis-CI do the full test.
 .PHONY: quick_check
 quick_check:
-	$(MAKE) pyston_dbg $(CHECK_DEPS)
-	$(MAKE) check_format
-	$(MAKE) unittests
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --order-by-mtime $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
+	$(MAKE) pyston_dbg check-deps
+	( cd $(CMAKE_DIR_DBG) && ctest -V -R 'check-format|unittests|pyston_defaults_tests|pyston_defaults_cpython' )
 
-# A comprehensive test that checks that all three build formats (makefile, makefile->cmake shim, cmake) work.
-# This should only be necessary when doing work on the build system; it shouldn't be necessary for normal development.
-.PHONY: full_check
-full_check:
-	$(MAKE) clean
-	rm -rfv $(CMAKE_DIR_DBG)
-	$(MAKE) llvm_quick llvm_release USE_CMAKE=0
-	$(MAKE) check_dbg USE_CMAKE=0
-	\
-	$(MAKE) clean
-	rm -rfv $(CMAKE_DIR_DBG)
-	$(MAKE) check_dbg USE_CMAKE=0
-	\
-	$(MAKE) clean
-	rm -rfv $(CMAKE_DIR_DBG)
-	$(MAKE) $(CMAKE_SETUP_DBG)
-	ninja -C $(CMAKE_DIR_DBG) check-pyston
 
 Makefile.local:
 	echo "Creating default Makefile.local"
@@ -824,18 +776,10 @@ endef
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
-ifneq ($(USE_CMAKE),1)
-$(call make_compile_config,,$(CXXFLAGS_DBG))
-$(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
-$(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
-$(call make_compile_config,.grwl_dbg,$(CXXFLAGS_DBG) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl_dbg -UBINARY_STRIPPED_SUFFIX -DBINARY_STRIPPED_SUFFIX=)
-$(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
-else
 %.o: %.cpp $(CMAKE_SETUP_DBG)
 	$(NINJA) -C $(CMAKE_DIR_DBG) src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.o,%.cpp.o,$@) $(NINJAFLAGS)
 %.release.o: %.cpp $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) src/CMakeFiles/PYSTON_OBJECTS.dir/$(patsubst src/%.release.o,%.cpp.o,$@) $(NINJAFLAGS)
-endif
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
 
@@ -927,12 +871,6 @@ cmake_check:
 	@cmake --version >/dev/null || (echo "cmake not available"; false)
 	@ninja --version >/dev/null || (echo "ninja not available"; false)
 
-ifneq ($(USE_CMAKE),1)
-$(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
-$(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
-$(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
-
-else
 .PHONY: cmake_check clang_check
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
@@ -956,7 +894,7 @@ pyston_dbg: $(CMAKE_SETUP_DBG)
 pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
-endif
+
 CMAKE_DIR_GCC := $(CMAKE_DIR_DBG_GCC)
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
@@ -969,18 +907,10 @@ pyston_gcc: $(CMAKE_SETUP_GCC)
 	ln -sf $(CMAKE_DIR_DBG_GCC)/pyston pyston_gcc
 
 .PHONY: format check_format
-ifneq ($(USE_CMAKE),1)
-format:
-	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
-check_format:
-	$(ECHO) checking formatting...
-	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
-else
 format: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) format
 check_format: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) check-format
-endif
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
@@ -1020,7 +950,7 @@ endef
 define make_target
 $(eval \
 .PHONY: test$1 check$1
-check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 $(CHECK_DEPS)
+check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t30 $(TEST_DIR)/cpython $(ARGS)
@@ -1097,7 +1027,7 @@ $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 $(call make_search,pypyrun_%)
 
-nosearch_check_%: %.py pyston_dbg $(CHECK_DEPS)
+nosearch_check_%: %.py pyston_dbg check-deps
 	$(MAKE) check_dbg ARGS="$(patsubst %.py,%,$(notdir $<)) -K"
 $(call make_search,check_%)
 

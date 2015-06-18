@@ -18,6 +18,7 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
 endif()
 
 option(ENABLE_CCACHE "enable caching compiler output" ON)
+option(ENABLE_EXTRA_TESTS "pyston extra tests" OFF)
 option(ENABLE_GIL "threading use GIL" ON)
 option(ENABLE_GOLD "enable the gold linker" ON)
 option(ENABLE_GPERFTOOLS "enable the google performance tools" OFF)
@@ -230,12 +231,23 @@ add_test(NAME lint COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKI
 add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
-add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
-# we pass -I to cpython tests and skip failing ones b/c they are slooow otherwise
-add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t30 ${CMAKE_SOURCE_DIR}/test/cpython)
-add_test(NAME pyston_defaults_integration_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k --exit-code-only --skip-failing -t600 ${CMAKE_SOURCE_DIR}/test/integration)
-add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-O -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
+
+macro(add_pyston_test testname directory)
+  add_test(NAME pyston_${testname}_${directory} COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S ${ARGV2} ${ARGV3} ${ARGV4} ${CMAKE_SOURCE_DIR}/test/${directory})
+endmacro()
+
+# tests         testname directory arguments
+add_pyston_test(defaults tests --order-by-mtime)
+add_pyston_test(old_parser tests -a=-n -a=-x)
+if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
+  add_pyston_test(max_compilation_tier tests -a=-O -a=-x)
+endif()
+add_pyston_test(defaults cpython --exit-code-only --skip-failing -t30)
+add_pyston_test(defaults integration --exit-code-only --skip-failing -t600)
+if(ENABLE_EXTRA_TESTS)
+  add_pyston_test(defaults extra -t600 --exit-code-only)
+endif()
+
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -246,7 +258,8 @@ add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-deps DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS check-deps)
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)
