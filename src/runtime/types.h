@@ -105,7 +105,7 @@ extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *t
 }
 
 extern "C" Box* boxBool(bool);
-extern "C" Box* boxInt(i64);
+extern "C" Box* boxInt(i64) __attribute__((visibility("default")));
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func, Box* type);
@@ -923,6 +923,15 @@ inline BoxedString* boxString(llvm::StringRef s) {
         return characters[s.data()[0] & UCHAR_MAX];
     }
     return new (s.size()) BoxedString(s);
+}
+
+#define NUM_INTERNED_INTS 100
+extern BoxedInt* interned_ints[NUM_INTERNED_INTS];
+extern "C" inline Box* boxInt(int64_t n) {
+    if (0 <= n && n < NUM_INTERNED_INTS) {
+        return interned_ints[n];
+    }
+    return new BoxedInt(n);
 }
 }
 

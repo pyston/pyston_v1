@@ -47,12 +47,5 @@ i64 unboxInt(Box* b) {
     return ((BoxedInt*)b)->n;
 }
 
-Box* boxInt(int64_t n) {
-    if (0 <= n && n < NUM_INTERNED_INTS) {
-        return interned_ints[n];
-    }
-    return new BoxedInt(n);
-}
-
 // BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}
 }

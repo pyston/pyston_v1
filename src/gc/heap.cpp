@@ -107,43 +107,22 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free fr
     }
 }
 
-static unsigned bytesAllocatedSinceCollection;
-static __thread unsigned thread_bytesAllocatedSinceCollection;
-#define ALLOCBYTES_PER_COLLECTION 10000000
-
+unsigned bytesAllocatedSinceCollection;
 static StatCounter gc_registered_bytes("gc_registered_bytes");
+void _bytesAllocatedTripped() {
+    gc_registered_bytes.log(bytesAllocatedSinceCollection);
+    bytesAllocatedSinceCollection = 0;
 
-void registerGCManagedBytes(size_t bytes) {
-    thread_bytesAllocatedSinceCollection += bytes;
-    if (unlikely(thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4)) {
-        gc_registered_bytes.log(thread_bytesAllocatedSinceCollection);
-        bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
-        thread_bytesAllocatedSinceCollection = 0;
+    if (!gcIsEnabled())
+        return;
 
-        if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-            if (!gcIsEnabled())
-                return;
-
-            // bytesAllocatedSinceCollection = 0;
-            // threading::GLPromoteRegion _lock;
-            // runCollection();
-
-            threading::GLPromoteRegion _lock;
-            if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-                runCollection();
-                bytesAllocatedSinceCollection = 0;
-            }
-        }
-    }
+    threading::GLPromoteRegion _lock;
+    runCollection();
 }
-
 
 Heap global_heap;
 
-bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
-    if (VERBOSITY() >= 4)
-        printf("Freeing %p\n", al->user_data);
-
+__attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -459,6 +438,12 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
         for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
              atom_idx += atoms_per_obj) {
 
+            // Note(kmod): it seems like there's some optimizations that could happen in this
+            // function -- isSet() and set() do roughly the same computation, and set() will
+            // load the value again before or'ing it and storing it back.
+            // I tried looking into a bunch of that and it didn't seem to make that much
+            // of a difference; my guess is that this function is memory-bound so a few
+            // extra shifts doesn't hurt.
             if (b->isfree.isSet(atom_idx))
                 continue;
 
