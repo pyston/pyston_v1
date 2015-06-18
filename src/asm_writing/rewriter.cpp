@@ -90,9 +90,6 @@ bool Location::isClobberedByCall() const {
     if (type == Scratch)
         return false;
 
-    if (type == Constant)
-        return false;
-
     if (type == Stack)
         return false;
 
@@ -115,13 +112,23 @@ void Location::dump() const {
         return;
     }
 
-    if (type == Constant) {
-        printf("imm(%d)\n", constant_val);
+    if (type == Stack) {
+        printf("stack(%d)\n", stack_offset);
         return;
     }
 
-    if (type == Stack) {
-        printf("stack(%d)\n", stack_offset);
+    if (type == AnyReg) {
+        printf("anyreg\n");
+        return;
+    }
+
+    if (type == None) {
+        printf("none\n");
+        return;
+    }
+
+    if (type == Uninitialized) {
+        printf("uninitialized\n");
         return;
     }
 
@@ -132,16 +139,111 @@ static bool isLargeConstant(int64_t val) {
     return (val < (-1L << 31) || val >= (1L << 31) - 1);
 }
 
-void RewriterVar::addGuard(uint64_t val) {
-    rewriter->addAction([=]() { rewriter->_addGuard(this, val); }, { this }, ActionType::GUARD);
+Rewriter::ConstLoader::ConstLoader(Rewriter* rewriter) : rewriter(rewriter) {
 }
 
-void Rewriter::_addGuard(RewriterVar* var, uint64_t val) {
+bool Rewriter::ConstLoader::tryRegRegMove(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
+    // copy the value if there is a register which contains already the value
+    bool found_value = false;
+    assembler::Register src_reg = findConst(val, found_value);
+    if (found_value) {
+        if (src_reg != dst_reg)
+            rewriter->assembler->mov(src_reg, dst_reg);
+        return true;
+    }
+    return false;
+}
+
+bool Rewriter::ConstLoader::tryLea(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
+    // for large constants it maybe beneficial to create the value with a LEA from a known const value
+    if (isLargeConstant(val)) {
+        for (int reg_num = 0; reg_num < assembler::Register::numRegs(); ++reg_num) {
+            RewriterVar* var = rewriter->vars_by_location[assembler::Register(reg_num)];
+            if (var == NULL)
+                continue;
+            if (!var->is_constant)
+                continue;
+
+            int64_t offset = val - var->constant_value;
+            if (isLargeConstant(offset))
+                continue; // LEA can only handle small offsets
+
+            rewriter->assembler->lea(assembler::Indirect(assembler::Register(reg_num), offset), dst_reg);
+            return true;
+        }
+        // TODO: maybe add RIP relative LEA
+    }
+    return false;
+}
+
+void Rewriter::ConstLoader::moveImmediate(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
+    // fallback use a normal: mov reg, imm
+    rewriter->assembler->mov(assembler::Immediate(val), dst_reg);
+}
+
+assembler::Register Rewriter::ConstLoader::findConst(uint64_t val, bool& found_value) {
+    assert(rewriter->phase_emitting);
+
+    if (constToVar.count(val) > 0) {
+        RewriterVar* var = constToVar[val];
+        for (Location l : var->locations) {
+            if (l.type == Location::Register) {
+                found_value = true;
+                return l.asRegister();
+            }
+        }
+    }
+
+    found_value = false;
+    return assembler::Register(0);
+}
+
+void Rewriter::ConstLoader::loadConstIntoReg(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
+    if (tryRegRegMove(val, dst_reg))
+        return;
+
+    if (tryLea(val, dst_reg))
+        return;
+
+    moveImmediate(val, dst_reg);
+}
+
+assembler::Register Rewriter::ConstLoader::loadConst(uint64_t val, Location otherThan) {
+    assert(rewriter->phase_emitting);
+
+    bool found_value = false;
+    assembler::Register reg = findConst(val, found_value);
+    if (found_value)
+        return reg;
+
+    reg = rewriter->allocReg(Location::any(), otherThan);
+    if (tryLea(val, reg))
+        return reg;
+
+    moveImmediate(val, reg);
+    return reg;
+}
+
+void RewriterVar::addGuard(uint64_t val) {
+    RewriterVar* val_var = rewriter->loadConst(val);
+    rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
+}
+
+void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
+    assert(val_constant->is_constant);
+    uint64_t val = val_constant->constant_value;
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
-        assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
-        assert(reg != var_reg);
-        assembler->mov(assembler::Immediate(val), reg);
+        assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
         assembler->cmp(var_reg, reg);
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
@@ -149,20 +251,23 @@ void Rewriter::_addGuard(RewriterVar* var, uint64_t val) {
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+    val_constant->bumpUse();
 
     assertConsistent();
 }
 
 void RewriterVar::addGuardNotEq(uint64_t val) {
-    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val); }, { this }, ActionType::GUARD);
+    RewriterVar* val_var = rewriter->loadConst(val);
+    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
 
-void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
+void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
+    assert(val_constant->is_constant);
+    uint64_t val = val_constant->constant_value;
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
-        assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
-        assert(var_reg != reg);
-        assembler->mov(assembler::Immediate(val), reg);
+        assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
         assembler->cmp(var_reg, reg);
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
@@ -170,6 +275,7 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+    val_constant->bumpUse();
 
     assertConsistent();
 }
@@ -177,10 +283,15 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
-    rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val, negate); }, { this }, ActionType::GUARD);
+    RewriterVar* val_var = rewriter->loadConst(val);
+    rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val_var, negate); }, { this, val_var },
+                        ActionType::GUARD);
 }
 
-void Rewriter::_addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate) {
+void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate) {
+    assert(val_constant->is_constant);
+    uint64_t val = val_constant->constant_value;
+
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
     //   cmp $0x10(%rax), %rdi
@@ -189,9 +300,17 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool ne
     assembler::Register var_reg = var->getInReg(Location::any(), /* allow_constant_in_reg */ true);
 
     if (isLargeConstant(val)) {
-        assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
-        assert(reg != var_reg);
-        assembler->mov(assembler::Immediate(val), reg);
+        assembler::Register reg(0);
+
+        if (val_constant == var) {
+            // TODO This case actually shows up, but it's stuff like guarding that type_cls->cls == type_cls
+            // I think we can optimize this case out, and in general, we can probably optimize out
+            // any case where var is constant.
+            reg = var_reg;
+        } else {
+            reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
+        }
+
         assembler->cmp(assembler::Indirect(var_reg, offset), reg);
     } else {
         assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
@@ -202,6 +321,7 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool ne
         assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+    val_constant->bumpUse();
 
     assertConsistent();
 }
@@ -356,30 +476,32 @@ void RewriterVar::dump() {
 }
 
 assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
-    for (Location l : locations) {
-        if (l.type == Location::Constant) {
-            *is_immediate = true;
-            return assembler::Immediate(l.constant_val);
-        }
+    if (this->is_constant && !isLargeConstant(this->constant_value)) {
+        *is_immediate = true;
+        return assembler::Immediate(this->constant_value);
+    } else {
+        *is_immediate = false;
+        return assembler::Immediate((uint64_t)0);
     }
-    *is_immediate = false;
-    return assembler::Immediate((uint64_t)0);
 }
 
 assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_reg, Location otherThan) {
     assert(dest.type == Location::Register || dest.type == Location::AnyReg);
 
-    // assembler::Register reg = var->rewriter->allocReg(l);
-    // var->rewriter->addLocationToVar(var, reg);
-    // return reg;
-    assert(locations.size());
 #ifndef NDEBUG
     if (!allow_constant_in_reg) {
-        for (Location l : locations) {
-            ASSERT(l.type != Location::Constant, "why do you want this in a register?");
-        }
+        assert(!is_constant || isLargeConstant(constant_value));
     }
 #endif
+
+    if (locations.size() == 0 && this->is_constant) {
+        assembler::Register reg = rewriter->allocReg(dest, otherThan);
+        rewriter->const_loader.loadConstIntoReg(this->constant_value, reg);
+        rewriter->addLocationToVar(this, reg);
+        return reg;
+    }
+
+    assert(locations.size());
 
     // Not sure if this is worth it,
     // but first try to see if we're already in this specific register
@@ -415,9 +537,7 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
     assembler::Register reg = rewriter->allocReg(dest, otherThan);
     assert(rewriter->vars_by_location.count(reg) == 0);
 
-    if (l.type == Location::Constant) {
-        rewriter->assembler->mov(assembler::Immediate(l.constant_val), reg);
-    } else if (l.type == Location::Scratch || l.type == Location::Stack) {
+    if (l.type == Location::Scratch || l.type == Location::Stack) {
         assembler::Indirect mem = rewriter->indirectFor(l);
         rewriter->assembler->mov(mem, reg);
     } else {
@@ -431,12 +551,8 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
 assembler::XMMRegister RewriterVar::getInXMMReg(Location dest) {
     assert(dest.type == Location::XMMRegister || dest.type == Location::AnyReg);
 
+    assert(!this->is_constant);
     assert(locations.size());
-#ifndef NDEBUG
-    for (Location l : locations) {
-        ASSERT(l.type != Location::Constant, "why do you want this in a register?");
-    }
-#endif
 
     // Not sure if this is worth it,
     // but first try to see if we're already in this specific register
@@ -498,28 +614,11 @@ void Rewriter::_trap() {
 }
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
-    if (!isLargeConstant(val)) {
-        Location l(Location::Constant, val);
-        RewriterVar*& var = vars_by_location[l];
-        if (!var) {
-            var = createNewVar();
-            var->locations.insert(l);
-        }
-        return var;
-    } else {
-        RewriterVar* result = createNewVar();
-        addAction([=]() { this->_loadConst(result, val, dest); }, {}, ActionType::NORMAL);
-        return result;
+    RewriterVar*& const_loader_var = const_loader.constToVar[val];
+    if (!const_loader_var) {
+        const_loader_var = createNewConstantVar(val);
     }
-}
-
-void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
-    assembler::Register reg = allocReg(dest);
-    assembler->mov(assembler::Immediate(val), reg);
-    result->initializeInReg(reg);
-
-    result->releaseIfNoUses();
-    assertConsistent();
+    return const_loader_var;
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {
@@ -731,7 +830,7 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     }
 #endif
 
-    assembler->mov(assembler::Immediate(func_addr), r);
+    const_loader.loadConstIntoReg((uint64_t)func_addr, r);
     assembler->callq(r);
 
     assert(vars_by_location.count(assembler::RAX) == 0);
@@ -1179,7 +1278,8 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
     assert(var);
 
     // There may be no need to spill if the var is held in a different location already.
-    if (var->locations.size() > 1) {
+    // There is no need to spill if it is a constant
+    if (var->locations.size() > 1 || var->is_constant) {
         removeLocationFromVar(var, reg);
         return;
     }
@@ -1194,6 +1294,7 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
             continue;
 
         assembler->mov(reg, new_reg);
+
         addLocationToVar(var, new_reg);
         removeLocationFromVar(var, reg);
         return;
@@ -1234,6 +1335,8 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         int best = -1;
         bool found = false;
         assembler::Register best_reg(0);
+
+        // TODO prioritize spilling a constant register?
         for (assembler::Register reg : allocatable_regs) {
             if (Location(reg) != otherThan) {
                 if (vars_by_location.count(reg) == 0) {
@@ -1307,14 +1410,19 @@ void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
     var->locations.insert(l);
     vars_by_location[l] = var;
 
+#ifndef NDEBUG
     // Check that the var is not in more than one of: stack, scratch, const
     int count = 0;
+    if (var->is_constant && !isLargeConstant(var->constant_value)) {
+        count++;
+    }
     for (Location l : var->locations) {
-        if (l.type == Location::Stack || l.type == Location::Scratch || l.type == Location::Constant) {
+        if (l.type == Location::Stack || l.type == Location::Scratch) {
             count++;
         }
     }
     assert(count <= 1);
+#endif
 }
 
 void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
@@ -1330,6 +1438,13 @@ RewriterVar* Rewriter::createNewVar() {
 
     RewriterVar* var = new RewriterVar(this);
     vars.push_back(var);
+    return var;
+}
+
+RewriterVar* Rewriter::createNewConstantVar(uint64_t val) {
+    RewriterVar* var = createNewVar();
+    var->is_constant = true;
+    var->constant_value = val;
     return var;
 }
 
@@ -1382,6 +1497,7 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite),
       assembler(rewrite->getAssembler()),
+      const_loader(this),
       return_location(rewrite->returnRegister()),
       added_changing_action(false),
       marked_inside_ic(false),

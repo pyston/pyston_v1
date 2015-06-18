@@ -19,6 +19,7 @@
 #include <memory>
 #include <tuple>
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 
 #include "asm_writing/assembler.h"
@@ -45,7 +46,6 @@ public:
         Scratch, // stack location, relative to the scratch start
 
         // For representing constants that fit in 32-bits, that can be encoded as immediates
-        Constant,
         AnyReg,        // special type for use when specifying a location as a destination
         None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
         Uninitialized, // special type for an uninitialized (and invalid) location
@@ -63,9 +63,6 @@ public:
         int32_t stack_offset;
         // only valid if type == Scratch; offset from the beginning of the scratch area
         int32_t scratch_offset;
-
-        // only valid if type==Constant
-        int32_t constant_val;
 
         int32_t _data;
     };
@@ -121,8 +118,8 @@ namespace pyston {
 // Replacement for unordered_map<Location, T>
 template <class T> class LocMap {
 private:
-    static const int N_REGS = 16;
-    static const int N_XMM = 16;
+    static const int N_REGS = assembler::Register::numRegs();
+    static const int N_XMM = assembler::XMMRegister::numRegs();
     static const int N_SCRATCH = 32;
     static const int N_STACK = 16;
 
@@ -130,7 +127,6 @@ private:
     T map_xmm[N_XMM];
     T map_scratch[N_SCRATCH];
     T map_stack[N_STACK];
-    std::unordered_map<int32_t, T> map_const;
 
 public:
     LocMap() {
@@ -158,8 +154,6 @@ public:
                 assert(0 <= l.scratch_offset / 8);
                 assert(l.scratch_offset / 8 < N_SCRATCH);
                 return map_scratch[l.scratch_offset / 8];
-            case Location::Constant:
-                return map_const[l.constant_val];
             default:
                 RELEASE_ASSERT(0, "%d", l.type);
         }
@@ -194,11 +188,6 @@ public:
         for (int i = 0; i < N_STACK; i++) {
             if (map_stack[i] != NULL) {
                 m.emplace(Location(Location::Stack, i * 8), map_stack[i]);
-            }
-        }
-        for (std::pair<int32_t, RewriterVar*> p : map_const) {
-            if (p.second != NULL) {
-                m.emplace(Location(Location::Constant, p.first), p.second);
             }
         }
         return m;
@@ -253,6 +242,9 @@ private:
     bool is_arg;
     Location arg_loc;
 
+    bool is_constant;
+    uint64_t constant_value;
+
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
@@ -278,7 +270,7 @@ public:
     static int nvars;
 #endif
 
-    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false) {
+    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
 #ifndef NDEBUG
         nvars++;
 #endif
@@ -306,9 +298,36 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 
 class Rewriter : public ICSlotRewrite::CommitHook {
 private:
+    // Helps generating the best code for loading a const integer value.
+    // By keeping track of the last known value of every register and reusing it.
+    class ConstLoader {
+    private:
+        const uint64_t unknown_value = 0;
+        Rewriter* rewriter;
+
+        bool tryRegRegMove(uint64_t val, assembler::Register dst_reg);
+        bool tryLea(uint64_t val, assembler::Register dst_reg);
+        void moveImmediate(uint64_t val, assembler::Register dst_reg);
+
+    public:
+        ConstLoader(Rewriter* rewriter);
+
+        // Searches if the specified value is already loaded into a register and if so it return the register
+        assembler::Register findConst(uint64_t val, bool& found_value);
+
+        // Loads the constant into the specified register
+        void loadConstIntoReg(uint64_t val, assembler::Register reg);
+
+        // Loads the constant into any register or if already in a register just return it
+        assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
+
+        llvm::DenseMap<uint64_t, RewriterVar*> constToVar;
+    };
+
+
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
-
+    ConstLoader const_loader;
     std::vector<RewriterVar*> vars;
 
     const Location return_location;
@@ -379,6 +398,8 @@ private:
 
     // Create a new var with no location.
     RewriterVar* createNewVar();
+    RewriterVar* createNewConstantVar(uint64_t val);
+
     // Do the bookkeeping to say that var is now also in location l
     void addLocationToVar(RewriterVar* var, Location l);
     // Do the bookkeeping to say that var is no longer in location l
@@ -387,7 +408,7 @@ private:
     bool finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
     void _trap();
-    void _loadConst(RewriterVar* result, int64_t val, Location loc);
+    void _loadConst(RewriterVar* result, int64_t val);
     void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
                const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
@@ -396,9 +417,9 @@ private:
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // The public versions of these are in RewriterVar
-    void _addGuard(RewriterVar* var, uint64_t val);
-    void _addGuardNotEq(RewriterVar* var, uint64_t val);
-    void _addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate = false);
+    void _addGuard(RewriterVar* var, RewriterVar* val_constant);
+    void _addGuardNotEq(RewriterVar* var, RewriterVar* val_constant);
+    void _addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate = false);
     void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
                   assembler::MovType type = assembler::MovType::Q);
     void _getAttrFloat(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
