@@ -20,6 +20,8 @@
 #include <list>
 #include <sys/mman.h>
 
+#include "llvm/ADT/SmallPtrSet.h"
+
 #include "core/common.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -171,7 +173,6 @@ inline void clearOrderingState(GCAllocation* header) {
 #undef ORDERING_BITS
 
 bool hasOrderedFinalizer(Box* b);
-bool heapObjectHasCallableFinalizer(GCAllocation* al);
 void finalize(Box* b);
 void finalizeIfUnordered(Box* b);
 bool isWeaklyReferenced(Box* b);
@@ -224,7 +225,6 @@ constexpr uintptr_t SMALL_ARENA_START = 0x1270000000L;
 constexpr uintptr_t LARGE_ARENA_START = 0x2270000000L;
 constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
 
-
 //
 // The SmallArena allocates objects <= 3584 bytes.
 //
@@ -270,7 +270,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getOrderedFinalizers(std::vector<Box*>& objs);
+    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -403,7 +403,7 @@ private:
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
     Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
-    void _getOrderedFinalizersFromBlock(std::vector<Box*>& objs, Block** head);
+    void _traverseForFinalizersFromBlock(std::vector<Box*>& objs, GCVisitor& visitor, Block** head);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -477,7 +477,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getOrderedFinalizers(std::vector<Box*>& objs);
+    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -496,7 +496,7 @@ public:
 
     GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void getOrderedFinalizers(std::vector<Box*>& objs);
+    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -614,10 +614,10 @@ public:
         huge_arena.freeUnmarked(weakly_referenced);
     }
 
-    void getOrderedFinalizers(std::vector<Box*>& objs) {
-        small_arena.getOrderedFinalizers(objs);
-        large_arena.getOrderedFinalizers(objs);
-        huge_arena.getOrderedFinalizers(objs);
+    void traverseForFinalizers(std::vector<Box*>& objs_with_ordered_finalizers, GCVisitor& visitor) {
+        small_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
+        large_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
+        huge_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
     }
 
     void dumpHeapStatistics(int level);

@@ -402,33 +402,7 @@ void visitByGCKind(void* p, GCVisitor& visitor) {
     }
 }
 
-void markPhase() {
-    static StatCounter sc_marked_objs("gc_marked_object_count_mark_phase");
-    static StatCounter sc_us("us_gc_mark_phase");
-    Timer _t("collecting", /*min_usec=*/10000);
-
-#ifndef NVALGRIND
-    // Have valgrind close its eyes while we do the conservative stack and data scanning,
-    // since we'll be looking at potentially-uninitialized values:
-    VALGRIND_DISABLE_ERROR_REPORTING;
-#endif
-
-#if TRACE_GC_MARKING
-#if 1 // separate log file per collection
-    char tracefn_buf[80];
-    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%03d.txt", ncollections);
-    trace_fp = fopen(tracefn_buf, "w");
-#else // overwrite previous log file with each collection
-    trace_fp = fopen("gc_trace.txt", "w");
-#endif
-#endif
-    GC_TRACE_LOG("Starting collection %d\n", ncollections);
-
-    GC_TRACE_LOG("Looking at roots\n");
-
-    std::shared_ptr<MarkStack> stack = std::make_shared<MarkStack>(roots);
-    GCVisitor visitor(stack);
-
+static void getMarkPhaseRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
@@ -442,13 +416,31 @@ void markPhase() {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
+    GC_TRACE_LOG("Looking at pending finalization list\n");
     for (auto box : pending_finalization_list) {
         visitor.visit(box);
     }
 
+    GC_TRACE_LOG("Looking at weakrefs needing callbacks list\n");
     for (auto weakref : weakrefs_needing_callback_list) {
         visitor.visit(weakref);
     }
+}
+
+static void traverseHeapForFinalizers(std::vector<Box*>& objs_with_ordered_finalizers, GCVisitor& visitor) {
+    static StatCounter sc_us("us_gc_traverse_heap");
+    Timer _t("traverseHeap", /*min_usec=*/10000);
+
+    global_heap.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
+
+    long us = _t.end();
+    sc_us.log(us);
+}
+
+static void graphTraversalMarking(std::shared_ptr<MarkStack> stack, GCVisitor& visitor) {
+    static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
+    static StatCounter sc_marked_objs("gc_marked_object_count");
+    Timer _t("traversing", /*min_usec=*/10000);
 
     while (void* p = stack->pop()) {
         sc_marked_objs.log();
@@ -465,20 +457,11 @@ void markPhase() {
         visitByGCKind(p, visitor);
     }
 
-#if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
-#endif
-
-#ifndef NVALGRIND
-    VALGRIND_ENABLE_ERROR_REPORTING;
-#endif
-
     long us = _t.end();
     sc_us.log(us);
 }
 
-void finalizationOrderingFirstPass(Box* obj) {
+static void finalizationOrderingFirstPass(Box* obj) {
     static StatCounter sc_marked_objs("gc_marked_object_count_finalizer_ordering");
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_1");
     Timer _t("finalizationOrderingFirstPass", /*min_usec=*/10000);
@@ -497,7 +480,7 @@ void finalizationOrderingFirstPass(Box* obj) {
     sc_us.log(us);
 }
 
-void finalizationOrderingSecondPass(Box* obj) {
+static void finalizationOrderingSecondPass(Box* obj) {
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_2");
     Timer _t("finalizationOrderingSecondPass", /*min_usec=*/10000);
 
@@ -517,17 +500,13 @@ void finalizationOrderingSecondPass(Box* obj) {
 
 // Implementation of PyPy's finalization ordering algorithm:
 // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
-void finalizationOrderingPhase() {
+static void finalizationOrderingPhase(std::vector<Box*>& objects_with_ordered_finalizers) {
     static StatCounter sc_us("us_gc_finalization_ordering_phase");
     Timer _t("finalizationOrderingPhase", /*min_usec=*/10000);
 
-    // TODO: Replace with iterator or something that takes a lambda for memory efficiency?.
-    std::vector<Box*> objects_with_finalizers;
     std::vector<Box*> finalizer_marked;
 
-    global_heap.getOrderedFinalizers(objects_with_finalizers);
-
-    for (Box* obj : objects_with_finalizers) {
+    for (Box* obj : objects_with_ordered_finalizers) {
         GCAllocation* al = GCAllocation::fromUserData(obj);
 
         // We are only interested in object with finalizers that need to be
@@ -551,6 +530,63 @@ void finalizationOrderingPhase() {
             pending_finalization_list.push_back(marked);
         }
     }
+
+    long us = _t.end();
+    sc_us.log(us);
+}
+
+static void markPhase() {
+    static StatCounter sc_us("us_gc_mark_phase");
+    Timer _t("marking", /*min_usec=*/10000);
+
+    std::shared_ptr<MarkStack> stack = std::make_shared<MarkStack>(roots);
+    GCVisitor visitor(stack);
+    std::vector<Box*> objects_with_ordered_finalizers;
+
+#ifndef NVALGRIND
+    // Have valgrind close its eyes while we do the conservative stack and data scanning,
+    // since we'll be looking at potentially-uninitialized values:
+    VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+
+#if TRACE_GC_MARKING
+#if 1 // separate log file per collection
+    char tracefn_buf[80];
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%03d.txt", ncollections);
+    trace_fp = fopen(tracefn_buf, "w");
+#else // overwrite previous log file with each collection
+    trace_fp = fopen("gc_trace.txt", "w");
+#endif
+#endif
+    GC_TRACE_LOG("Starting collection %d\n", ncollections);
+
+    // Starting points of graph traversal.
+    GC_TRACE_LOG("Looking at roots\n");
+    getMarkPhaseRoots(visitor);
+
+    // This is different from vanilla mark-and-sweep. We need to do a full heap traversal:
+    // 1) In Python, all classes are themselves objects. We want to mark the class objects
+    //    of any object on the heap, even if the object isn't reachable - this is because
+    //    when we free and object, we might still need to look at it's class.
+    // 2) Objects that have finalizers have special constraints so we need a list of them.
+    traverseHeapForFinalizers(objects_with_ordered_finalizers, visitor);
+
+    graphTraversalMarking(stack, visitor);
+
+    // Objects with finalizers cannot be freed in any order. During the call to a finalizer
+    // of an object, the finalizer expects the object's references to still point to valid
+    // memory. So we root objects whose finalizers need to be called by placing them in a
+    // pending finalization list.
+    finalizationOrderingPhase(objects_with_ordered_finalizers);
+
+#if TRACE_GC_MARKING
+    fclose(trace_fp);
+    trace_fp = NULL;
+#endif
+
+#ifndef NVALGRIND
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
 
     long us = _t.end();
     sc_us.log(us);
@@ -667,12 +703,6 @@ void runCollection() {
 
     markPhase();
 
-    // Objects with finalizers cannot be freed in any order. During the call to a finalizer
-    // of an object, the finalizer expects the object's references to still point to valid
-    // memory. So we root objects whose finalizers need to be called by placing them in a
-    // pending finalization list.
-    finalizationOrderingPhase();
-
     // The sweep phase will not free weakly-referenced objects, so that we can inspect their
     // weakrefs_list.  We want to defer looking at those lists until the end of the sweep phase,
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
@@ -698,10 +728,10 @@ void runCollection() {
             }
         }
 
-        global_heap.free(GCAllocation::fromUserData(o));
-
         // We didn't finalize these objects because we skipped them during sweep phase.
         finalizeIfUnordered(o);
+
+        global_heap.free(GCAllocation::fromUserData(o));
     }
 
     should_not_reenter_gc = false; // end non-reentrant section
