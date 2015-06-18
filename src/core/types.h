@@ -685,12 +685,11 @@ public:
 
 struct ExcInfo {
     Box* type, *value, *traceback;
-    bool reraise;
 
 #ifndef NDEBUG
     ExcInfo(Box* type, Box* value, Box* traceback);
 #else
-    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback), reraise(false) {}
+    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
 #endif
     bool matches(BoxedClass* cls) const;
     void printExcAndTraceback() const;

@@ -176,14 +176,12 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
-    exc_info->reraise = true;
     assert(!PyErr_Occurred());
-    throw * exc_info;
+    throwReraise(*exc_info);
 }
 
 #ifndef NDEBUG
-ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback)
-    : type(type), value(value), traceback(traceback), reraise(false) {
+ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
 }
 #endif
 
@@ -258,9 +256,11 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
-    exc_info.reraise = reraise;
     assert(!PyErr_Occurred());
-    throw exc_info;
+    if (reraise)
+        throwReraise(exc_info);
+    else
+        throw exc_info;
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {
