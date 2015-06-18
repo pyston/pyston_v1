@@ -46,37 +46,8 @@ void showBacktrace() {
     }
 }
 
-void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
-void raiseRaw(const ExcInfo& e) {
-    STAT_TIMER(t0, "us_timer_raiseraw");
-    // Should set these to None rather than null before getting here:
-    assert(e.type);
-    assert(e.value);
-    assert(e.traceback);
-    assert(gc::isValidGCObject(e.type));
-    assert(gc::isValidGCObject(e.value));
-    assert(gc::isValidGCObject(e.traceback));
-
-#if STAT_EXCEPTIONS
-    static StatCounter num_exceptions("num_exceptions");
-    num_exceptions.log();
-
-    std::string stat_name;
-    if (PyType_Check(e.type))
-        stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(e.type)->tp_name);
-    else
-        stat_name = "num_exceptions_" + std::string(e.value->cls->tp_name);
-    Stats::log(Stats::getStatCounter(stat_name));
-#if STAT_EXCEPTIONS_LOCATION
-    logByCurrentPythonLine(stat_name);
-#endif
-#endif
-
-    throw e;
-}
-
 void raiseExc(Box* exc_obj) {
-    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback()));
+    throw ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback());
 }
 
 // Have a special helper function for syntax errors, since we want to include the location

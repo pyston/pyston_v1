@@ -670,6 +670,9 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
 
     pyston::ExcInfo* exc_data = (pyston::ExcInfo*)exc_obj;
     checkExcInfo(exc_data);
+
+    // let unwinding.cpp know we've started unwinding
+    pyston::throwingException(pyston::getActivePythonUnwindSession());
     pyston::unwind(exc_data);
 }
 

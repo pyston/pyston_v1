@@ -44,6 +44,7 @@ BoxedTraceback* getTraceback();
 class PythonUnwindSession;
 PythonUnwindSession* beginPythonUnwindSession();
 PythonUnwindSession* getActivePythonUnwindSession();
+void throwingException(PythonUnwindSession* unwind_session);
 void endPythonUnwindSession(PythonUnwindSession* unwind_session);
 void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind_session);
 void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor);

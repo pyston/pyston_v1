@@ -521,6 +521,23 @@ public:
         BoxedTraceback::Here(line_info, reinterpret_cast<BoxedTraceback**>(&exc_info.traceback));
     }
 
+    void logException() {
+#if STAT_EXCEPTIONS
+        static StatCounter num_exceptions("num_exceptions");
+        num_exceptions.log();
+
+        std::string stat_name;
+        if (PyType_Check(exc_info.type))
+            stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(exc_info.type)->tp_name);
+        else
+            stat_name = "num_exceptions_" + std::string(exc_info.value->cls->tp_name);
+        Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_EXCEPTIONS_LOCATION
+        logByCurrentPythonLine(stat_name);
+#endif
+#endif
+    }
+
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == unwind_session_cls);
 
@@ -563,6 +580,11 @@ void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
     PythonUnwindSession* state = static_cast<PythonUnwindSession*>(unwind);
     return state->getExcInfoStorage();
+}
+
+void throwingException(PythonUnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    unwind->logException();
 }
 
 static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
