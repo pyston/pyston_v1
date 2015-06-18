@@ -479,11 +479,12 @@ class PythonUnwindSession : public Box {
     ExcInfo exc_info;
     bool skip;
     bool is_active;
+    Timer t;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() {
         RELEASE_ASSERT(is_active, "");
@@ -498,10 +499,17 @@ public:
         exc_info = ExcInfo(NULL, NULL, NULL);
         skip = false;
         is_active = true;
+        t.restart();
+
+        static StatCounter stat("unwind_sessions");
+        stat.log();
     }
     void end() {
         RELEASE_ASSERT(is_active, "");
         is_active = false;
+
+        static StatCounter stat("us_unwind_session");
+        stat.log(t.end());
     }
 
     void addTraceback(const LineInfo& line_info) {
