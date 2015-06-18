@@ -90,9 +90,6 @@ bool Location::isClobberedByCall() const {
     if (type == Scratch)
         return false;
 
-    if (type == Constant)
-        return false;
-
     if (type == Stack)
         return false;
 
@@ -112,11 +109,6 @@ void Location::dump() const {
 
     if (type == Scratch) {
         printf("scratch(%d)\n", scratch_offset);
-        return;
-    }
-
-    if (type == Constant) {
-        printf("imm(%d)\n", constant_val);
         return;
     }
 
@@ -484,14 +476,13 @@ void RewriterVar::dump() {
 }
 
 assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
-    for (Location l : locations) {
-        if (l.type == Location::Constant) {
-            *is_immediate = true;
-            return assembler::Immediate(l.constant_val);
-        }
+    if (this->is_constant && !isLargeConstant(this->constant_value)) {
+        *is_immediate = true;
+        return assembler::Immediate(this->constant_value);
+    } else {
+        *is_immediate = false;
+        return assembler::Immediate((uint64_t)0);
     }
-    *is_immediate = false;
-    return assembler::Immediate((uint64_t)0);
 }
 
 assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_reg, Location otherThan) {
@@ -499,9 +490,7 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
 
 #ifndef NDEBUG
     if (!allow_constant_in_reg) {
-        for (Location l : locations) {
-            ASSERT(l.type != Location::Constant, "why do you want this in a register?");
-        }
+        assert(!is_constant || isLargeConstant(constant_value));
     }
 #endif
 
@@ -548,9 +537,7 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
     assembler::Register reg = rewriter->allocReg(dest, otherThan);
     assert(rewriter->vars_by_location.count(reg) == 0);
 
-    if (l.type == Location::Constant) {
-        rewriter->assembler->mov(assembler::Immediate(l.constant_val), reg);
-    } else if (l.type == Location::Scratch || l.type == Location::Stack) {
+    if (l.type == Location::Scratch || l.type == Location::Stack) {
         assembler::Indirect mem = rewriter->indirectFor(l);
         rewriter->assembler->mov(mem, reg);
     } else {
@@ -564,12 +551,8 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
 assembler::XMMRegister RewriterVar::getInXMMReg(Location dest) {
     assert(dest.type == Location::XMMRegister || dest.type == Location::AnyReg);
 
+    assert(!this->is_constant);
     assert(locations.size());
-#ifndef NDEBUG
-    for (Location l : locations) {
-        ASSERT(l.type != Location::Constant, "why do you want this in a register?");
-    }
-#endif
 
     // Not sure if this is worth it,
     // but first try to see if we're already in this specific register
@@ -632,23 +615,10 @@ void Rewriter::_trap() {
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     RewriterVar*& const_loader_var = const_loader.constToVar[val];
-    if (const_loader_var)
-        return const_loader_var;
-
-    if (!isLargeConstant(val)) {
-        Location l(Location::Constant, val);
-        RewriterVar*& var = vars_by_location[l];
-        if (!var) {
-            var = createNewConstantVar(val);
-            var->locations.insert(l);
-        }
-        const_loader_var = var;
-        return var;
-    } else {
-        RewriterVar* result = createNewConstantVar(val);
-        const_loader_var = result;
-        return result;
+    if (!const_loader_var) {
+        const_loader_var = createNewConstantVar(val);
     }
+    return const_loader_var;
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {
@@ -1440,14 +1410,19 @@ void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
     var->locations.insert(l);
     vars_by_location[l] = var;
 
+#ifndef NDEBUG
     // Check that the var is not in more than one of: stack, scratch, const
     int count = 0;
+    if (var->is_constant && !isLargeConstant(var->constant_value)) {
+        count++;
+    }
     for (Location l : var->locations) {
-        if (l.type == Location::Stack || l.type == Location::Scratch || l.type == Location::Constant) {
+        if (l.type == Location::Stack || l.type == Location::Scratch) {
             count++;
         }
     }
     assert(count <= 1);
+#endif
 }
 
 void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {

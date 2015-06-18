@@ -46,7 +46,6 @@ public:
         Scratch, // stack location, relative to the scratch start
 
         // For representing constants that fit in 32-bits, that can be encoded as immediates
-        Constant,
         AnyReg,        // special type for use when specifying a location as a destination
         None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
         Uninitialized, // special type for an uninitialized (and invalid) location
@@ -64,9 +63,6 @@ public:
         int32_t stack_offset;
         // only valid if type == Scratch; offset from the beginning of the scratch area
         int32_t scratch_offset;
-
-        // only valid if type==Constant
-        int32_t constant_val;
 
         int32_t _data;
     };
@@ -131,7 +127,6 @@ private:
     T map_xmm[N_XMM];
     T map_scratch[N_SCRATCH];
     T map_stack[N_STACK];
-    std::unordered_map<int32_t, T> map_const;
 
 public:
     LocMap() {
@@ -159,8 +154,6 @@ public:
                 assert(0 <= l.scratch_offset / 8);
                 assert(l.scratch_offset / 8 < N_SCRATCH);
                 return map_scratch[l.scratch_offset / 8];
-            case Location::Constant:
-                return map_const[l.constant_val];
             default:
                 RELEASE_ASSERT(0, "%d", l.type);
         }
@@ -195,11 +188,6 @@ public:
         for (int i = 0; i < N_STACK; i++) {
             if (map_stack[i] != NULL) {
                 m.emplace(Location(Location::Stack, i * 8), map_stack[i]);
-            }
-        }
-        for (std::pair<int32_t, RewriterVar*> p : map_const) {
-            if (p.second != NULL) {
-                m.emplace(Location(Location::Constant, p.first), p.second);
             }
         }
         return m;
