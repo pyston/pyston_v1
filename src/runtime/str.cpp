@@ -1141,7 +1141,6 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
 }
 
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
-    STAT_TIMER(t0, "us_timer_strMul");
     assert(isSubclass(lhs->cls, str_cls));
 
     int n;
@@ -1526,7 +1525,6 @@ failed:
 }
 
 extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
-    STAT_TIMER(t0, "us_timer_unicodeHashUnboxed");
     if (self->hash != -1)
         return self->hash;
 
@@ -1537,7 +1535,6 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
-    STAT_TIMER(t0, "us_timer_strHash");
     assert(isSubclass(self->cls, str_cls));
 
     StringHash<char> H;

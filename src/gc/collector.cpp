@@ -400,7 +400,7 @@ void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
 
-    STAT_TIMER(t0, "us_timer_gc_collection");
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_gc_collection");
 
     ncollections++;
 

@@ -59,8 +59,10 @@ static int hackcheck(PyObject* self, setattrofunc func, const char* what) noexce
     return 1;
 }
 
+#define WRAP_AVOIDABILITY(obj) ((obj)->cls->is_user_defined ? 10 : 20)
+
 static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_setattr");
+    STAT_TIMER(t0, "us_timer_wrap_setattr", WRAP_AVOIDABILITY(self));
     setattrofunc func = (setattrofunc)wrapped;
     int res;
     PyObject* name, *value;
@@ -77,7 +79,7 @@ static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_delattr");
+    STAT_TIMER(t0, "us_timer_wrap_delattr", WRAP_AVOIDABILITY(self));
     setattrofunc func = (setattrofunc)wrapped;
     int res;
     PyObject* name;
@@ -95,7 +97,7 @@ static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_hashfunc");
+    STAT_TIMER(t0, "us_timer_wrap_hashfunc", WRAP_AVOIDABILITY(self));
     hashfunc func = (hashfunc)wrapped;
     long res;
 
@@ -108,14 +110,14 @@ static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) no
 }
 
 static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_call");
+    STAT_TIMER(t0, "us_timer_wrap_call", WRAP_AVOIDABILITY(self));
     ternaryfunc func = (ternaryfunc)wrapped;
 
     return (*func)(self, args, kwds);
 }
 
 static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_richcmpfunc");
+    STAT_TIMER(t0, "us_timer_wrap_richcmpfunc", WRAP_AVOIDABILITY(self));
     richcmpfunc func = (richcmpfunc)wrapped;
     PyObject* other;
 
@@ -139,7 +141,7 @@ RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
 static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
-    STAT_TIMER(t0, "us_timer_wrap_next");
+    STAT_TIMER(t0, "us_timer_wrap_next", WRAP_AVOIDABILITY(self));
     unaryfunc func = (unaryfunc)wrapped;
     PyObject* res;
 
@@ -152,7 +154,7 @@ static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
 }
 
 static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_descr_get");
+    STAT_TIMER(t0, "us_timer_wrap_descr_get", WRAP_AVOIDABILITY(self));
     descrgetfunc func = (descrgetfunc)wrapped;
     PyObject* obj;
     PyObject* type = NULL;
@@ -171,7 +173,7 @@ static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) n
 }
 
 static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_coercefunc");
+    STAT_TIMER(t0, "us_timer_wrap_coercefunc", WRAP_AVOIDABILITY(self));
     coercion func = (coercion)wrapped;
     PyObject* other, *res;
     int ok;
@@ -198,7 +200,7 @@ static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc");
+    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc", WRAP_AVOIDABILITY(self));
     ternaryfunc func = (ternaryfunc)wrapped;
     PyObject* other;
     PyObject* third = Py_None;
@@ -211,7 +213,7 @@ static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped)
 }
 
 static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc_r");
+    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc_r", WRAP_AVOIDABILITY(self));
     ternaryfunc func = (ternaryfunc)wrapped;
     PyObject* other;
     PyObject* third = Py_None;
@@ -224,7 +226,7 @@ static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrappe
 }
 
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_unaryfunc");
+    STAT_TIMER(t0, "us_timer_wrap_unaryfunc", WRAP_AVOIDABILITY(self));
     unaryfunc func = (unaryfunc)wrapped;
 
     if (!check_num_args(args, 0))
@@ -233,7 +235,7 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) n
 }
 
 static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_inquirypred");
+    STAT_TIMER(t0, "us_timer_wrap_inquirypred", WRAP_AVOIDABILITY(self));
     inquiry func = (inquiry)wrapped;
     int res;
 
@@ -246,7 +248,7 @@ static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped)
 }
 
 static PyObject* wrapInquirypred(PyObject* self, PyObject* args, void* wrapped) {
-    STAT_TIMER(t0, "us_timer_wrapInquirypred");
+    STAT_TIMER(t0, "us_timer_wrapInquirypred", WRAP_AVOIDABILITY(self));
     inquiry func = (inquiry)wrapped;
     int res;
 
@@ -259,7 +261,7 @@ static PyObject* wrapInquirypred(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_binaryfunc");
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc", WRAP_AVOIDABILITY(self));
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -270,7 +272,7 @@ static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_l");
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_l", WRAP_AVOIDABILITY(self));
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -285,7 +287,7 @@ static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped
 }
 
 static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_r");
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_r", WRAP_AVOIDABILITY(self));
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -318,7 +320,7 @@ static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
 }
 
 static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_lenfunc");
+    STAT_TIMER(t0, "us_timer_wrap_lenfunc", WRAP_AVOIDABILITY(self));
     lenfunc func = (lenfunc)wrapped;
     Py_ssize_t res;
 
@@ -331,7 +333,7 @@ static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_indexargfunc");
+    STAT_TIMER(t0, "us_timer_wrap_indexargfunc", WRAP_AVOIDABILITY(self));
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* o;
     Py_ssize_t i;
@@ -345,7 +347,7 @@ static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped
 }
 
 static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_sq_item");
+    STAT_TIMER(t0, "us_timer_wrap_sq_item", WRAP_AVOIDABILITY(self));
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* arg;
     Py_ssize_t i;
@@ -363,7 +365,7 @@ static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_ssizessizeargfunc");
+    STAT_TIMER(t0, "us_timer_wrap_ssizessizeargfunc", WRAP_AVOIDABILITY(self));
     ssizessizeargfunc func = (ssizessizeargfunc)wrapped;
     Py_ssize_t i, j;
 
@@ -373,7 +375,7 @@ static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wr
 }
 
 static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_sq_setitem");
+    STAT_TIMER(t0, "us_timer_wrap_sq_setitem", WRAP_AVOIDABILITY(self));
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -392,7 +394,7 @@ static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_sq_delitem");
+    STAT_TIMER(t0, "us_timer_wrap_sq_delitem", WRAP_AVOIDABILITY(self));
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -412,7 +414,7 @@ static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_ssizessizeobjargproc");
+    STAT_TIMER(t0, "us_timer_wrap_ssizessizeobjargproc", WRAP_AVOIDABILITY(self));
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -428,7 +430,7 @@ static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void*
 }
 
 static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_delslice");
+    STAT_TIMER(t0, "us_timer_wrap_delslice", WRAP_AVOIDABILITY(self));
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -444,7 +446,7 @@ static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) no
 
 /* XXX objobjproc is a misnomer; should be objargpred */
 static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_objobjproc");
+    STAT_TIMER(t0, "us_timer_wrap_objobjproc", WRAP_AVOIDABILITY(self));
     objobjproc func = (objobjproc)wrapped;
     int res;
     PyObject* value;
@@ -460,7 +462,7 @@ static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_objobjargproc");
+    STAT_TIMER(t0, "us_timer_wrap_objobjargproc", WRAP_AVOIDABILITY(self));
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key, *value;
@@ -475,7 +477,7 @@ static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrappe
 }
 
 static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_delitem");
+    STAT_TIMER(t0, "us_timer_wrap_delitem", WRAP_AVOIDABILITY(self));
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key;
@@ -491,7 +493,7 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_cmpfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_cmpfunc");
+    STAT_TIMER(t0, "us_timer_wrap_cmpfunc", WRAP_AVOIDABILITY(self));
     cmpfunc func = (cmpfunc)wrapped;
     int res;
     PyObject* other;
@@ -512,7 +514,7 @@ static PyObject* wrap_cmpfunc(PyObject* self, PyObject* args, void* wrapped) noe
 
 
 static PyObject* wrap_init(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
-    STAT_TIMER(t0, "us_timer_wrap_init");
+    STAT_TIMER(t0, "us_timer_wrap_init", WRAP_AVOIDABILITY(self));
     initproc func = (initproc)wrapped;
 
     if (func(self, args, kwds) < 0)
@@ -666,8 +668,10 @@ extern "C" int _PyObject_SlotCompare(PyObject* self, PyObject* other) noexcept {
     return (void*)self < (void*)other ? -1 : (void*)self > (void*)other ? 1 : 0;
 }
 
+#define SLOT_AVOIDABILITY(obj) ((obj)->cls->is_user_defined ? 10 : 20)
+
 static PyObject* slot_tp_repr(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tprepr");
+    STAT_TIMER(t0, "us_timer_slot_tprepr", SLOT_AVOIDABILITY(self));
 
     try {
         return repr(self);
@@ -678,7 +682,7 @@ static PyObject* slot_tp_repr(PyObject* self) noexcept {
 }
 
 static PyObject* slot_tp_str(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpstr");
+    STAT_TIMER(t0, "us_timer_slot_tpstr", SLOT_AVOIDABILITY(self));
 
     try {
         return str(self);
@@ -689,7 +693,7 @@ static PyObject* slot_tp_str(PyObject* self) noexcept {
 }
 
 static long slot_tp_hash(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tphash");
+    STAT_TIMER(t0, "us_timer_slot_tphash", SLOT_AVOIDABILITY(self));
 
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
@@ -728,7 +732,7 @@ static long slot_tp_hash(PyObject* self) noexcept {
 }
 
 PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpcall");
+    STAT_TIMER(t0, "us_timer_slot_tpcall", SLOT_AVOIDABILITY(self));
 
     try {
         Py_FatalError("this function is untested");
@@ -767,7 +771,7 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
 }
 
 /* Pyston change: static*/ PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tprichcompare");
+    STAT_TIMER(t0, "us_timer_slot_tprichcompare", SLOT_AVOIDABILITY(self));
 
     static StatCounter slowpath_richcompare("slowpath_richcompare");
     slowpath_richcompare.log();
@@ -797,7 +801,7 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
 }
 
 static PyObject* slot_tp_iter(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpiter");
+    STAT_TIMER(t0, "us_timer_slot_tpiter", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *res;
     static PyObject* iter_str, *getitem_str;
@@ -824,14 +828,14 @@ static PyObject* slot_tp_iter(PyObject* self) noexcept {
 }
 
 static PyObject* slot_tp_iternext(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpiternext");
+    STAT_TIMER(t0, "us_timer_slot_tpiternext", SLOT_AVOIDABILITY(self));
 
     static PyObject* next_str;
     return call_method(self, "next", &next_str, "()");
 }
 
 static bool slotTppHasnext(PyObject* self) {
-    STAT_TIMER(t0, "us_timer_slot_tpphasnext");
+    STAT_TIMER(t0, "us_timer_slot_tpphasnext", SLOT_AVOIDABILITY(self));
 
     static PyObject* hasnext_str;
     Box* r = self->hasnextOrNullIC();
@@ -840,7 +844,7 @@ static bool slotTppHasnext(PyObject* self) {
 }
 
 static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpdescrget");
+    STAT_TIMER(t0, "us_timer_slot_tpdescrget", SLOT_AVOIDABILITY(self));
 
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
@@ -861,7 +865,7 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
 }
 
 static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tppdescrget");
+    STAT_TIMER(t0, "us_timer_slot_tppdescrget", SLOT_AVOIDABILITY(self));
 
     assert(self->cls->tpp_descr_get);
     try {
@@ -873,14 +877,14 @@ static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* 
 }
 
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpgetattro");
+    STAT_TIMER(t0, "us_timer_slot_tpgetattro", SLOT_AVOIDABILITY(self));
 
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
 }
 
 static int slot_tp_setattro(PyObject* self, PyObject* name, PyObject* value) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpsetattro");
+    STAT_TIMER(t0, "us_timer_slot_tpsetattro", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
     static PyObject* delattr_str, *setattr_str;
@@ -918,7 +922,7 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 }
 
 static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpgetattrhook");
+    STAT_TIMER(t0, "us_timer_slot_tpgetattrhook", SLOT_AVOIDABILITY(self));
 
     PyObject* getattr, *getattribute, * res = NULL;
 
@@ -954,7 +958,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
 }
 
 static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpnew");
+    STAT_TIMER(t0, "us_timer_slot_tpnew", SLOT_AVOIDABILITY(self));
 
     try {
         // TODO: runtime ICs?
@@ -970,7 +974,7 @@ static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds)
 }
 
 static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_tpinit");
+    STAT_TIMER(t0, "us_timer_slot_tpinit", SLOT_AVOIDABILITY(self));
 
     static PyObject* init_str;
     PyObject* meth = lookup_method(self, "__init__", &init_str);
@@ -992,7 +996,7 @@ static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept
 }
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqitem");
+    STAT_TIMER(t0, "us_timer_slot_sqitem", SLOT_AVOIDABILITY(self));
 
     try {
         return getitem(self, boxInt(i));
@@ -1003,7 +1007,7 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
 }
 
 static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqlength");
+    STAT_TIMER(t0, "us_timer_slot_sqlength", SLOT_AVOIDABILITY(self));
 
     static PyObject* len_str;
     PyObject* res = call_method(self, "__len__", &len_str, "()");
@@ -1022,7 +1026,7 @@ static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
 }
 
 static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqslice");
+    STAT_TIMER(t0, "us_timer_slot_sqslice", SLOT_AVOIDABILITY(self));
 
     static PyObject* getslice_str;
 
@@ -1034,7 +1038,7 @@ static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexc
 }
 
 static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqassitem");
+    STAT_TIMER(t0, "us_timer_slot_sqassitem", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
@@ -1050,7 +1054,7 @@ static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) n
 }
 
 static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObject* value) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqassslice");
+    STAT_TIMER(t0, "us_timer_slot_sqassslice", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
     static PyObject* delslice_str, *setslice_str;
@@ -1075,7 +1079,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
 }
 
 static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_sqcontains");
+    STAT_TIMER(t0, "us_timer_slot_sqcontains", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *res, *args;
     int result = -1;
@@ -1189,7 +1193,7 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
 
 static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_mpasssubscript");
+    STAT_TIMER(t0, "us_timer_slot_mpasssubscript", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
@@ -1216,7 +1220,7 @@ static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*) noexcept;
 SLOT1BINFULL(slot_nb_power_binary, slot_nb_power, nb_power, "__pow__", "__rpow__")
 
 static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_nbpower");
+    STAT_TIMER(t0, "us_timer_slot_nbpower", SLOT_AVOIDABILITY(self));
 
     static PyObject* pow_str;
 
@@ -1237,7 +1241,7 @@ SLOT0(slot_nb_positive, "__pos__")
 SLOT0(slot_nb_absolute, "__abs__")
 
 static int slot_nb_nonzero(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_nbnonzero");
+    STAT_TIMER(t0, "us_timer_slot_nbnonzero", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *args;
     static PyObject* nonzero_str, *len_str;
@@ -1274,7 +1278,7 @@ static int slot_nb_nonzero(PyObject* self) noexcept {
 }
 
 static PyObject* slot_nb_index(PyObject* self) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_nbindex");
+    STAT_TIMER(t0, "us_timer_slot_nbindex", SLOT_AVOIDABILITY(self));
 
     static PyObject* index_str;
     return call_method(self, "__index__", &index_str, "()");
@@ -1289,7 +1293,7 @@ SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
 SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
 
 static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept {
-    STAT_TIMER(t0, "us_timer_slot_nbcoerce");
+    STAT_TIMER(t0, "us_timer_slot_nbcoerce", std::min(SLOT_AVOIDABILITY(*a), SLOT_AVOIDABILITY(*b)));
 
     static PyObject* coerce_str;
     PyObject* self = *a, * other = *b;
@@ -1351,7 +1355,7 @@ SLOT1(slot_nb_inplace_divide, "__idiv__", PyObject*, "O")
 SLOT1(slot_nb_inplace_remainder, "__imod__", PyObject*, "O")
 /* Can't use SLOT1 here, because nb_inplace_power is ternary */
 static PyObject* slot_nb_inplace_power(PyObject* self, PyObject* arg1, PyObject* arg2) {
-    STAT_TIMER(t0, "us_timer_slot_nbinplacepower");
+    STAT_TIMER(t0, "us_timer_slot_nbinplacepower", SLOT_AVOIDABILITY(self));
 
     static PyObject* cache_str;
     return call_method(self, "__ipow__", &cache_str, "("

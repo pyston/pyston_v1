@@ -56,7 +56,7 @@ public:
     }
 
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
-        STAT_TIMER(t0, "us_timer_boxedcapifunction__call__");
+        STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", (self->cls->is_user_defined ? 10 : 20));
         assert(self->cls == capifunc_cls);
         assert(varargs->cls == tuple_cls);
         assert(kwargs->cls == dict_cls);
@@ -164,7 +164,7 @@ public:
     DEFAULT_CLASS(wrapperobject_cls);
 
     static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
-        STAT_TIMER(t0, "us_timer_boxedwrapperobject__call__");
+        STAT_TIMER(t0, "us_timer_boxedwrapperobject__call__", (self->cls->is_user_defined ? 1 : 2));
 
         assert(self->cls == wrapperobject_cls);
         assert(args->cls == tuple_cls);

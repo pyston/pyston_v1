@@ -692,7 +692,7 @@ template <typename Func> void unwindPythonStack(Func func) {
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
-    STAT_TIMER(t0, "us_timer_getTopPythonFrame");
+    STAT_TIMER(t0, "us_timer_getTopPythonFrame", 10);
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     unwindPythonStack([&](PythonFrameIteratorImpl* iter) {
         rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*iter));
@@ -733,7 +733,7 @@ static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
 //
 static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
-    STAT_TIMER(t0, "us_timer_gettraceback");
+    STAT_TIMER(t0, "us_timer_gettraceback", 20);
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
         if (!printed_warning) {

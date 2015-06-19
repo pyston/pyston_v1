@@ -169,7 +169,6 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleMul(BoxedTuple* self, Box* rhs) {
-    STAT_TIMER(t0, "us_timer_tupleMul");
     if (rhs->cls != int_cls) {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
