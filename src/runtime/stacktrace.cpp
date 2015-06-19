@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,14 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <dlfcn.h>
 
-#include "llvm/DebugInfo/DIContext.h"
-
-#include "codegen/codegen.h"
-#include "codegen/llvm_interpreter.h"
+#include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "core/options.h"
+#include "gc/collector.h"
 #include "runtime/objmodel.h"
+#include "runtime/traceback.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -42,151 +43,228 @@ void showBacktrace() {
         unw_get_reg(&cursor, UNW_REG_IP, &ip);
         unw_get_reg(&cursor, UNW_REG_SP, &sp);
         printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-
-        std::string py_info = getPythonFuncAt((void*)ip, (void*)sp);
-        if (py_info.size()) {
-            printf("Which is: %s\n", py_info.c_str());
-        }
     }
-}
-
-// Currently-unused libunwind-based unwinding:
-void unwindExc(Box* exc_obj) __attribute__((noreturn));
-void unwindExc(Box* exc_obj) {
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, sp;
-
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
-
-    int code;
-    unw_proc_info_t pip;
-
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_get_reg(&cursor, UNW_REG_SP, &sp);
-        printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-
-        code = unw_get_proc_info(&cursor, &pip);
-        RELEASE_ASSERT(code == 0, "");
-
-        // printf("%lx %lx %lx %lx %lx %lx %d %d %p\n", pip.start_ip, pip.end_ip, pip.lsda, pip.handler, pip.gp,
-        // pip.flags, pip.format, pip.unwind_info_size, pip.unwind_info);
-
-        assert((pip.lsda == 0) == (pip.handler == 0));
-        assert(pip.flags == 0);
-
-        if (pip.handler == 0) {
-            if (VERBOSITY())
-                printf("Skipping frame without handler\n");
-
-            continue;
-        }
-
-        printf("%lx %lx %lx\n", pip.lsda, pip.handler, pip.flags);
-        // assert(pip.handler == (uintptr_t)__gxx_personality_v0 || pip.handler == (uintptr_t)__py_personality_v0);
-
-        // auto handler_fn = (int (*)(int, int, uint64_t, void*, void*))pip.handler;
-        ////handler_fn(1, 1 /* _UA_SEARCH_PHASE */, 0 /* exc_class */, NULL, NULL);
-        // handler_fn(2, 2 /* _UA_SEARCH_PHASE */, 0 /* exc_class */, NULL, NULL);
-        unw_set_reg(&cursor, UNW_REG_IP, 1);
-
-        // TODO testing:
-        // unw_resume(&cursor);
-    }
-
-    abort();
 }
 
 void raiseExc(Box* exc_obj) {
-    // Using libgcc:
-    throw exc_obj;
-
-    // Using libunwind
-    // unwindExc(exc_obj);
-
-    abort();
+    throw ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback());
 }
 
-static std::vector<const LineInfo*> last_tb;
-void printLastTraceback() {
-    fprintf(stderr, "Traceback (most recent call last):\n");
+// Have a special helper function for syntax errors, since we want to include the location
+// of the syntax error in the traceback, even though it is not part of the execution:
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
+    Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    for (auto line : last_tb) {
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
+    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
+    throw ExcInfo(exc->cls, exc, tb);
+}
 
-        FILE* f = fopen(line->file.c_str(), "r");
-        if (f) {
-            for (int i = 1; i < line->line; i++) {
-                char* buf = NULL;
-                size_t size;
-                size_t r = getline(&buf, &size, f);
-                if (r != -1)
-                    free(buf);
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+
+    char buf[1024];
+    vsnprintf(buf, sizeof(buf), msg, ap);
+
+
+    // TODO I'm not sure that it's safe to raise an exception here, since I think
+    // there will be things that end up not getting cleaned up.
+    // Then again, there are a huge number of things that don't get cleaned up even
+    // if an exception doesn't get thrown...
+
+    // TODO output is still a little wrong, should be, for example
+    //
+    //  File "../test/tests/future_non_existent.py", line 1
+    //    from __future__ import rvalue_references # should cause syntax error
+    //
+    // but instead it is
+    //
+    // Traceback (most recent call last):
+    //  File "../test/tests/future_non_existent.py", line -1, in :
+    //    from __future__ import rvalue_references # should cause syntax error
+    raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
+}
+
+void _printStacktrace() {
+    static bool recursive = false;
+
+    if (recursive) {
+        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
+        return;
+    }
+
+    recursive = true;
+    printTraceback(getTraceback());
+    recursive = false;
+}
+
+// where should this go...
+extern "C" void abort() {
+    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
+
+    // In case displaying the traceback recursively calls abort:
+    static bool recursive = false;
+
+    if (!recursive) {
+        recursive = true;
+        Stats::dump();
+        fprintf(stderr, "Someone called abort!\n");
+
+        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
+        if (traceback_cls) {
+
+            // If we call abort(), things may be seriously wrong.  Set an alarm() to
+            // try to handle cases that we would just hang.
+            // (Ex if we abort() from a static constructor, and _printStackTrace uses
+            // that object, _printStackTrace will hang waiting for the first construction
+            // to finish.)
+            alarm(1);
+            try {
+                _printStacktrace();
+            } catch (ExcInfo) {
+                fprintf(stderr, "error printing stack trace during abort()");
             }
-            char* buf = NULL;
-            size_t size;
-            size_t r = getline(&buf, &size, f);
-            if (r != -1) {
-                while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
-                    r--;
 
-                char* ptr = buf;
-                while (*ptr == ' ' || *ptr == '\t') {
-                    ptr++;
-                    r--;
-                }
-
-                fprintf(stderr, "    %.*s\n", (int)r, ptr);
-                free(buf);
-            }
+            // Cancel the alarm.
+            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
+            // abort and let you investigate, but the alarm will still come back to kill the program.
+            alarm(0);
         }
     }
+
+    if (PAUSE_AT_ABORT) {
+        printf("PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+        while (true) {
+            sleep(1);
+        }
+    }
+    libc_abort();
+    __builtin_unreachable();
 }
 
-static std::vector<const LineInfo*> getTracebackEntries() {
-    std::vector<const LineInfo*> entries;
+#if 0
+extern "C" void exit(int code) {
+    static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
 
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, bp;
+    if (code == 0) {
+        libc_exit(0);
+        __builtin_unreachable();
+    }
 
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
+    fprintf(stderr, "Someone called exit with code=%d!\n", code);
 
-    int code;
-    unw_proc_info_t pip;
+    // In case something calls exit down the line:
+    static bool recursive = false;
+    if (!recursive) {
+        recursive = true;
 
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+        _printStacktrace();
+    }
 
-        const LineInfo* line = getLineInfoFor((uint64_t)ip);
-        if (line) {
-            entries.push_back(line);
+    libc_exit(code);
+    __builtin_unreachable();
+}
+#endif
+
+extern "C" void raise0() {
+    ExcInfo* exc_info = getFrameExcInfo();
+    assert(exc_info->type);
+
+    // TODO need to clean up when we call normalize, do_raise, etc
+    if (exc_info->type == None)
+        raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
+
+    exc_info->reraise = true;
+    throw * exc_info;
+}
+
+#ifndef NDEBUG
+ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback)
+    : type(type), value(value), traceback(traceback), reraise(false) {
+}
+#endif
+
+void ExcInfo::printExcAndTraceback() const {
+    PyErr_Display(type, value, traceback);
+}
+
+bool ExcInfo::matches(BoxedClass* cls) const {
+    assert(this->type);
+    RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
+                   getTypeName(this->type));
+    return isSubclass(static_cast<BoxedClass*>(this->type), cls);
+}
+
+// takes the three arguments of a `raise' and produces the ExcInfo to throw
+ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
+    assert(type && value && tb); // use None for default behavior, not nullptr
+    // TODO switch this to PyErr_Normalize
+
+    if (tb == None) {
+        tb = NULL;
+    } else if (tb != NULL && !PyTraceBack_Check(tb)) {
+        raiseExcHelper(TypeError, "raise: arg 3 must be a traceback or None");
+    }
+
+
+    /* Next, repeatedly, replace a tuple exception with its first item */
+    while (PyTuple_Check(type) && PyTuple_Size(type) > 0) {
+        PyObject* tmp = type;
+        type = PyTuple_GET_ITEM(type, 0);
+        Py_INCREF(type);
+        Py_DECREF(tmp);
+    }
+
+    if (PyExceptionClass_Check(type)) {
+        PyErr_NormalizeException(&type, &value, &tb);
+
+        if (!PyExceptionInstance_Check(value)) {
+            raiseExcHelper(TypeError, "calling %s() should have returned an instance of "
+                                      "BaseException, not '%s'",
+                           ((PyTypeObject*)type)->tp_name, Py_TYPE(value)->tp_name);
+        }
+    } else if (PyExceptionInstance_Check(type)) {
+        /* Raising an instance.  The value should be a dummy. */
+        if (value != Py_None) {
+            raiseExcHelper(TypeError, "instance exception may not have a separate value");
         } else {
-            unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
-
-            unw_proc_info_t pip;
-            code = unw_get_proc_info(&cursor, &pip);
-            RELEASE_ASSERT(code == 0, "%d", code);
-
-            if (pip.start_ip == (intptr_t)interpretFunction) {
-                line = getLineInfoForInterpretedFrame((void*)bp);
-                assert(line);
-                entries.push_back(line);
-            }
+            /* Normalize to raise <class>, <instance> */
+            Py_DECREF(value);
+            value = type;
+            type = PyExceptionInstance_Class(type);
+            Py_INCREF(type);
         }
+    } else {
+        /* Not something you can raise.  You get an exception
+           anyway, just not what you specified :-) */
+        raiseExcHelper(TypeError, "exceptions must be old-style classes or "
+                                  "derived from BaseException, not %s",
+                       type->cls->tp_name);
     }
-    std::reverse(entries.begin(), entries.end());
 
-    return entries;
+    assert(PyExceptionClass_Check(type));
+
+    if (tb == NULL) {
+        tb = new BoxedTraceback();
+    }
+
+    return ExcInfo(type, value, tb);
+}
+
+extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
+    bool reraise = arg2 != NULL && arg2 != None;
+    auto exc_info = excInfoForRaise(arg0, arg1, arg2);
+
+    exc_info.reraise = reraise;
+    throw exc_info;
+}
+
+void raiseExcHelper(BoxedClass* cls, Box* arg) {
+    Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
+    raiseExc(exc_obj);
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
-
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);
@@ -201,28 +279,12 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
         va_end(ap);
 
-        BoxedString* message = boxStrConstant(buf);
-        Box* exc_obj = exceptionNew2(cls, message);
+        BoxedString* message = boxString(buf);
+        Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), message, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     } else {
-        Box* exc_obj = exceptionNew1(cls);
+        Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     }
-}
-
-std::string formatException(Box* b) {
-    const std::string* name = getTypeName(b);
-
-    Box* attr = b->getattr("message");
-    if (attr == nullptr)
-        return *name;
-
-    BoxedString* r = strOrNull(attr);
-    if (!r)
-        return *name;
-
-    assert(r->cls == str_cls);
-    const std::string* msg = &r->s;
-    return *name + ": " + *msg;
 }
 }

@@ -6,7 +6,7 @@ import sys
 def test(rev, args):
     subprocess.check_call(["make", "llvm_up", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev])
     subprocess.check_call(["make", "llvm_release", "llvm_quick", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev])
-    code = subprocess.call(["make", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev] + args)
+    code = subprocess.call(["make", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev] + args, stdout=open("%s.out" % rev, "w"), stderr=subprocess.STDOUT)
     return code == 0
 
 def efficiency(rid):
@@ -22,9 +22,15 @@ def efficiency(rid):
     return learnt/effort
 
 if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print "Usage: python find_problem.py GOOD_REV BAD_REV make args"
+        print "    (anything after BAD_REV gets passed as arguments to a 'make' invocation)"
+        sys.exit(1)
+
     good_rev, bad_rev = sys.argv[1:3]
     good_rev = int(good_rev)
     bad_rev = int(bad_rev)
+    assert good_rev < bad_rev
 
     args = sys.argv[3:]
     assert args
@@ -37,22 +43,30 @@ if __name__ == "__main__":
     # b = test(bad_rev, args)
     # assert not b, "bad_rev must not work"
 
+    f = open("find_problem.status", "w")
+    f.write("%d %d\n" % (good_rev, bad_rev))
+    f.flush()
+
     while bad_rev > good_rev + 1:
         print "%d is good, %d is bad" % (good_rev, bad_rev)
-        open("find_problem.status", "w").write("%d %d\n" % (good_rev, bad_rev))
         middle = (good_rev + bad_rev + 1) / 2
         revs = range(good_rev+1, middle+1)
         revs.sort(reverse=True, key=efficiency)
         # print good_rev, bad_rev, (good_rev + bad_rev) / 2, revs[0]
         next_rev = revs[0]
+        print >>f, "Testing revision %d (p=%.1f%%)" % (next_rev, 100.0 * (next_rev - good_rev) / (bad_rev - good_rev))
+        f.flush()
         print "Testing revision %d (p=%.1f%%)" % (next_rev, 100.0 * (next_rev - good_rev) / (bad_rev - good_rev))
         b = test(next_rev, args)
 
         print "Revision", next_rev, "works" if b else "failed"
+        print >>f, "Revision", next_rev, "works" if b else "failed"
+        f.flush()
         if b:
             good_rev = next_rev
         else:
             bad_rev = next_rev
 
-    open("find_problem.status", "w").write("%d %d\n" % (good_rev, bad_rev))
     print "Rev %d is good, rev %d is bad" % (good_rev, bad_rev)
+    print >>f, "Rev %d is good, rev %d is bad" % (good_rev, bad_rev)
+    f.close()

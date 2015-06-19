@@ -24,3 +24,14 @@ the JIT'd code.
 
 There's a gprof-based profile, but that doesn't support any JIT'd code.  It can be quite handy for profiling the Pyston
 codegen + LLVM cost.
+
+
+We also have a few internal timers that log important sections of code.  You can see their totals by passing '-s' to
+the executable (ARGS=-s to a Make recipe).
+Some common ones are:
+- us_compiling: total amount of time (in microseconds) spent in 'codegen', from
+        the time we decide we want to run some Python code to the point that we can
+        start executing it
+  - us_compiling_irgen: total time creating the LLVM IR.  includes some analysis time
+  - us_compiling_jitting: subset of us_compiling which is spent in LLVM
+        compilation (time from giving LLVM its IR to when we get machine code back)

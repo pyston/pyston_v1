@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -24,16 +22,8 @@ namespace pyston {
 
 Box* True, *False;
 
-extern "C" Box* boolInvert(BoxedBool* v) {
-    return boxInt(~v->b);
-}
-
-extern "C" Box* boolPos(BoxedBool* v) {
-    return boxInt(v->b ? 1 : 0);
-}
-
-extern "C" Box* boolNeg(BoxedBool* v) {
-    return boxInt(v->b ? -1 : 0);
+extern "C" PyObject* PyBool_FromLong(long n) noexcept {
+    return boxBool(n != 0);
 }
 
 extern "C" Box* boolNonzero(BoxedBool* v) {
@@ -41,9 +31,16 @@ extern "C" Box* boolNonzero(BoxedBool* v) {
 }
 
 extern "C" Box* boolRepr(BoxedBool* v) {
-    if (v->b)
-        return boxStrConstant("True");
-    return boxStrConstant("False");
+    static BoxedString* true_str = static_cast<BoxedString*>(PyString_InternFromString("True"));
+    static BoxedString* false_str = static_cast<BoxedString*>(PyString_InternFromString("False"));
+
+    if (v == True)
+        return true_str;
+    return false_str;
+}
+
+extern "C" Box* boolHash(BoxedBool* v) {
+    return boxInt(v == True);
 }
 
 extern "C" Box* boolNew(Box* cls, Box* val) {
@@ -53,27 +50,52 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
     return boxBool(b);
 }
 
-void setupBool() {
-    bool_cls->giveAttr("__name__", boxStrConstant("bool"));
+extern "C" Box* boolAnd(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'bool' object but received a '%s'",
+                       getTypeName(lhs));
 
-    bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1)));
-    bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1)));
-    bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, BOXED_INT, 1)));
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n && rhs->n);
+}
+
+extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'bool' object but received a '%s'", getTypeName(lhs));
+
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n || rhs->n);
+}
+
+extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'bool' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n ^ rhs->n);
+}
+
+
+void setupBool() {
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
-    bool_cls->giveAttr("__str__", bool_cls->getattr("__repr__"));
+    bool_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)boolHash, BOXED_INT, 1)));
 
     bool_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None }));
 
+    bool_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)boolAnd, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)boolOr, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)boolXor, BOXED_BOOL, 2)));
 
     bool_cls->freeze();
-
-    True = new BoxedBool(true);
-    False = new BoxedBool(false);
-
-    gc::registerStaticRootObj(True);
-    gc::registerStaticRootObj(False);
 }
 
 void teardownBool() {

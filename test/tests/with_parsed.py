@@ -20,8 +20,18 @@ def bad_exit(type, val, tb):
 
 c = C(1)
 with c as n:
+    print n
+print n
+
+# With targets can be arbitrary l values:
+l = [0]
+with C(2) as l[0]:
+    pass
+print l
+
+c = C(3)
+with c as n:
     C.__exit__ = new_exit # this shouldn't have any effect
     c.__exit__ = bad_exit
     print n
 print n
-

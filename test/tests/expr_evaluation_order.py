@@ -18,4 +18,7 @@ def f2(y):
         return x
     return y
 
-print g2(f2(2))
+try:
+    print g2(f2(2))
+except NameError, e:
+    print e

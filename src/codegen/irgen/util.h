@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 
 #include <string>
 
+#include "llvm/ADT/StringRef.h"
+
 namespace llvm {
 class Constant;
 class Function;
@@ -25,11 +27,15 @@ class Type;
 
 namespace pyston {
 
-llvm::Constant* getStringConstantPtr(const std::string& str);
-llvm::Constant* getStringConstantPtr(const char* str);
+llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type*, llvm::StringRef shared_name = llvm::StringRef());
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);
-llvm::Constant* getConstantInt(int val);
-llvm::Constant* getConstantInt(int val, llvm::Type*);
+llvm::Constant* getConstantInt(int64_t val);
+llvm::Constant* getConstantDouble(double val);
+llvm::Constant* getConstantInt(int64_t val, llvm::Type*);
+llvm::Constant* getNullPtr(llvm::Type* t);
+
+void clearRelocatableSymsMap();
+const void* getValueOfRelocatableSym(const std::string& str);
 
 void dumpPrettyIR(llvm::Function* f);
 }

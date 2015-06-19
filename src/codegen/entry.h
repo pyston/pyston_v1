@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ namespace pyston {
 
 class AST_Module;
 class BoxedModule;
-class CompiledFunction;
 
 void initCodegen();
 void teardownCodegen();

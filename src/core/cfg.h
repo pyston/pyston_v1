@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@
 
 #include "core/ast.h"
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
@@ -55,6 +56,7 @@ public:
     void unconnectFrom(CFGBlock* successor);
 
     void push_back(AST_stmt* node) { body.push_back(node); }
+    void print();
 };
 
 // Control Flow Graph
@@ -78,6 +80,9 @@ public:
         return block;
     }
 
+    // Creates a block which must be placed later, using placeBlock().
+    // Must be placed on same CFG it was created on.
+    // You can also safely delete it without placing it.
     CFGBlock* addDeferredBlock() {
         CFGBlock* block = new CFGBlock(this, -1);
         return block;
@@ -93,7 +98,8 @@ public:
     void print();
 };
 
-CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body);
+class SourceInfo;
+CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
 }
 
 #endif

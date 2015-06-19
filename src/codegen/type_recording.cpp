@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ BoxedClass* TypeRecorder::predict() {
     if (!ENABLE_TYPE_FEEDBACK)
         return NULL;
 
-    if (last_count > 100)
+    if (last_count > SPECULATION_THRESHOLD)
         return last_seen;
 
     return NULL;

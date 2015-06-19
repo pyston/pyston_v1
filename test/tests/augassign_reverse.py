@@ -9,5 +9,8 @@ def f():
     # Augassigns can change the type of the variable:
     i += IntLike()
     print i
-    i + 1
+    try:
+        i + 1
+    except TypeError, e:
+        print e
 f()

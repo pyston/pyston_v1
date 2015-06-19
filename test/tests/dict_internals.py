@@ -28,3 +28,13 @@ d.__setitem__(c2, 2)
 d.__setitem__(c3, 3)
 
 print d
+
+
+# dicts need to check identify and not just equality.
+# This is important for sqlalchemy where equality constructs a sql equals clause and doesn't
+# do comparison of the objects at hand.
+d = {}
+nan = float('nan')
+d[nan] = "hello world"
+print d[nan]
+

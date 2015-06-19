@@ -4,8 +4,8 @@ import sys
 from types import NoneType
 
 def _print_str(s, f):
-    assert len(s) < 2**16
-    f.write(struct.pack(">H", len(s)))
+    assert len(s) < 2**32
+    f.write(struct.pack(">L", len(s)))
     f.write(s)
 
 TYPE_MAP = {
@@ -93,6 +93,9 @@ TYPE_MAP = {
         _ast.Invert: 84,
         _ast.UAdd: 85,
         _ast.FloorDiv: 86,
+        _ast.Ellipsis: 87,
+        _ast.Expression: 88,
+        _ast.SetComp: 89,
     }
 
 if sys.version_info >= (2,7):
@@ -113,17 +116,29 @@ def convert(n, f):
     if isinstance(n, _ast.Num):
         if isinstance(n.n, int):
             f.write('\x10')
+        elif isinstance(n.n, long):
+            f.write('\x30')
         elif isinstance(n.n, float):
             f.write('\x20')
+        elif isinstance(n.n, complex):
+            f.write('\x40')
         else:
             raise Exception(type(n.n))
+
+    if isinstance(n, _ast.Str):
+        if isinstance(n.s, str):
+            f.write('\x10')
+        elif isinstance(n.s, unicode):
+            f.write('\x20')
+        else:
+            raise Exception(type(n.s))
 
     # print >>sys.stderr, n, sorted(n.__dict__.items())
     for k, v in sorted(n.__dict__.items()):
         if k.startswith('_'):
             continue
 
-        if k in ("vararg", "kwarg", "asname") and v is None:
+        if k in ("vararg", "kwarg", "asname", "module") and v is None:
             v = ""
         # elif k in ('col_offset', 'lineno'):
             # continue
@@ -140,12 +155,21 @@ def convert(n, f):
                     convert(el, f)
         elif isinstance(v, str):
             _print_str(v, f)
+        elif isinstance(v, unicode):
+            _print_str(v.encode("utf8"), f)
         elif isinstance(v, bool):
             f.write(struct.pack("B", v))
         elif isinstance(v, int):
             f.write(struct.pack(">q", v))
+        elif isinstance(v, long):
+            _print_str(str(v), f)
         elif isinstance(v, float):
             f.write(struct.pack(">d", v))
+        elif isinstance(v, complex):
+            # Complex constants can only be pure imaginary
+            # (e.g., in 1+0j, 1 and 0j are separate literals)
+            assert v.real == 0.0
+            f.write(struct.pack(">d", v.imag))
         elif v is None or isinstance(v, _ast.AST):
             convert(v, f)
         else:

@@ -17,4 +17,7 @@ class C(object):
 def f(a, b, c):
     print a, b, c
 
-f(*C())
+try:
+    f(*C())
+except TypeError, e:
+    print e

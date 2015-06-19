@@ -1,6 +1,3 @@
-# expected: fail
-# - need to support closures
-
 import sys
 
 P = 1000000007

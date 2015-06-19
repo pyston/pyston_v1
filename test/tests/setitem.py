@@ -17,4 +17,7 @@ def si(k, v):
 c.__setitem__ = si
 c[3] = 4
 
-1[2] = 3
+try:
+    1[2] = 3
+except TypeError, e:
+    print e

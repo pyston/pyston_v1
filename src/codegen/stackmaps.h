@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,13 +16,18 @@
 #define PYSTON_CODEGEN_STACKMAPS_H
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
+
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
 class JITEventListener;
 }
 
 namespace pyston {
+
+class CompilerType;
 
 struct StackMap {
     struct __attribute__((__packed__)) StackSizeRecord {
@@ -32,10 +37,19 @@ struct StackMap {
 
     struct Record {
         struct __attribute__((__packed__)) Location {
-            uint8_t type;
+            enum LocationType : uint8_t {
+                Register = 0x1,
+                Direct = 0x2,
+                Indirect = 0x3,
+                Constant = 0x4,
+                ConstIndex = 0x5,
+            } type;
+
             uint8_t flags;
             uint16_t regnum;
             int32_t offset;
+
+            bool operator==(const Location& rhs);
         };
 
         struct __attribute__((__packed__)) LiveOut {
@@ -55,6 +69,29 @@ struct StackMap {
     uint32_t header;
     std::vector<uint64_t> constants;
     std::vector<Record*> records;
+};
+
+// TODO this belongs somewhere else?
+class LocationMap {
+public:
+    std::vector<uint64_t> constants;
+
+    StackMap::Record::Location frame_info_location;
+    bool frameInfoFound() { return frame_info_location.type != 0; }
+
+    struct LocationTable {
+        struct LocationEntry {
+            uint64_t _debug_pp_id;
+
+            unsigned offset;
+            int length;
+            CompilerType* type;
+            llvm::SmallVector<StackMap::Record::Location, 1> locations;
+        };
+        std::vector<LocationEntry> locations;
+    };
+
+    std::unordered_map<std::string, LocationTable> names;
 };
 
 StackMap* parseStackMap();

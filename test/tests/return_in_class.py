@@ -1,5 +1,3 @@
-# expected: fail
-# - arbitrary stuff in classes
-
+# should_error
 class C(object):
     return

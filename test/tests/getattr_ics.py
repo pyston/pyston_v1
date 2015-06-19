@@ -1,12 +1,13 @@
 # run_args: -n
-# statcheck: stats['slowpath_getattr'] <= 10
+# statcheck: noninit_count('slowpath_getattr') <= 20
 
 class C(object):
     def f(self):
-        print self.n
+        self.n
 
 c = C()
 c.n = 1
 
-for i in xrange(100):
+for i in xrange(11000):
     c.f()
+    c.n

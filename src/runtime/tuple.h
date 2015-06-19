@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,9 +26,10 @@ public:
     BoxedTuple* t;
     int pos;
     BoxedTupleIterator(BoxedTuple* t);
+
+    DEFAULT_CLASS(tuple_iterator_cls);
 };
 
-extern "C" const ObjectFlavor tuple_iterator_flavor;
 Box* tupleIter(Box* self);
 Box* tupleIterIter(Box* self);
 Box* tupleiterHasnext(Box* self);

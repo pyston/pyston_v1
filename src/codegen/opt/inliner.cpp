@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,11 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#if LLVMREV < 229094
 #include "llvm/PassManager.h"
+#else
+#include "llvm/IR/LegacyPassManager.h"
+#endif
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -56,7 +60,11 @@ public:
         } else if (llvm::GlobalVariable* gv = llvm::dyn_cast<llvm::GlobalVariable>(v)) {
             // llvm::errs() << " is gv\n";
             assert(gv->getLinkage() != llvm::GlobalVariable::PrivateLinkage);
-            r = new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType());
+            llvm::GlobalVariable* new_gv = llvm::cast<llvm::GlobalVariable>(
+                new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType()));
+            RELEASE_ASSERT(!gv->isThreadLocal(), "I don't think MCJIT supports thread-local variables yet");
+            new_gv->setThreadLocalMode(gv->getThreadLocalMode());
+            r = new_gv;
         } else if (llvm::GlobalAlias* alias = llvm::dyn_cast<llvm::GlobalAlias>(v)) {
 #if LLVMREV < 209040
             llvm::Value* addressee = llvm::cast<llvm::Constant>(materializeValueFor(alias->getAliasedGlobal()));
@@ -95,8 +103,11 @@ public:
         if (!initialized) {
             llvm::initializeInlineCostAnalysisPass(*llvm::PassRegistry::getPassRegistry());
             llvm::initializeSimpleInlinerPass(*llvm::PassRegistry::getPassRegistry());
+#if LLVMREV < 227669
             llvm::initializeTargetTransformInfoAnalysisGroup(*llvm::PassRegistry::getPassRegistry());
-
+#else
+            llvm::initializeTargetTransformInfoWrapperPassPass(*llvm::PassRegistry::getPassRegistry());
+#endif
             fake_module = new llvm::Module("fake", g.context);
 
             initialized = true;
@@ -115,7 +126,11 @@ public:
 
         llvm::Module* cur_module = f.getParent();
 
+#if LLVMREV < 217548
         llvm::PassManager fake_pm;
+#else
+        llvm::legacy::PassManager fake_pm;
+#endif
         llvm::InlineCostAnalysis* cost_analysis = new llvm::InlineCostAnalysis();
         fake_pm.add(cost_analysis);
         // llvm::errs() << "doing fake run\n";
@@ -159,7 +174,7 @@ public:
                     continue;
                 llvm::Function* f = g.func_addr_registry.getLLVMFuncAtAddress((void*)addr);
                 if (f == NULL) {
-                    if (VERBOSITY()) {
+                    if (VERBOSITY() >= 3) {
                         printf("Giving up on inlining %s:\n",
                                g.func_addr_registry.getFuncNameAtAddress((void*)addr, true).c_str());
                         call->dump();
@@ -168,8 +183,13 @@ public:
                 }
 
                 // We load the bitcode lazily, so check if we haven't yet fully loaded the function:
-                if (f->isMaterializable())
+                if (f->isMaterializable()) {
+#if LLVMREV < 220600
                     f->Materialize();
+#else
+                    f->materialize();
+#endif
+                }
 
                 // It could still be a declaration, though I think the code won't generate this case any more:
                 if (f->isDeclaration())
@@ -213,16 +233,16 @@ public:
                 llvm::InlineCost IC = cost_analysis->getInlineCost(cs, threshold);
                 bool do_inline = false;
                 if (IC.isAlways()) {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "always inline\n";
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "always inline\n";
                     do_inline = true;
                 } else if (IC.isNever()) {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "never inline\n";
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "never inline\n";
                     do_inline = false;
                 } else {
-                    if (VERBOSITY("irgen.inlining") >= 2)
-                        llvm::errs() << "Inline cost: " << IC.getCost() << '\n';
+                    // if (VERBOSITY("irgen.inlining") >= 2)
+                    // llvm::errs() << "Inline cost: " << IC.getCost() << '\n';
                     do_inline = (bool)IC;
                 }
 

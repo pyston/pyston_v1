@@ -1,6 +1,6 @@
 # run_args: -n
-# statcheck: stats.get('slowpath_getitem', 0) <= 20
-# statcheck: stats['slowpath_setitem'] <= 20
+# statcheck: noninit_count('slowpath_getitem') <= 20
+# statcheck: noninit_count('slowpath_setitem') <= 20
 
 def sort(l):
     n = len(l)

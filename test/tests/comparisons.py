@@ -1,12 +1,12 @@
 def f(a, b):
-    print a, b, "<", a < b
-    print a, b, "<=", a <= b
-    print a, b, ">", a > b
-    print a, b, ">=", a >= b
-    print a, b, "==", a == b
-    print a, b, "!=", a != b
-    print a, b, "is", a is b
-    print a, b, "is not", a is not b
+    print repr(a), repr(b), "<", a < b
+    print repr(a), repr(b), "<=", a <= b
+    print repr(a), repr(b), ">", a > b
+    print repr(a), repr(b), ">=", a >= b
+    print repr(a), repr(b), "==", a == b
+    print repr(a), repr(b), "!=", a != b
+    print repr(a), repr(b), "is", a is b
+    print repr(a), repr(b), "is not", a is not b
 
 class C(object):
     pass
@@ -14,7 +14,7 @@ class C(object):
 class Z(object):
     pass
 
-args = [0, 1, 0.1, 1.1, "hello", float('nan'), float('inf'), float('-inf')]#, C(), Z()]
+args = [0, 1, 0.1, 1.1, "hello", float('nan'), float('inf'), float('-inf'), 0L, 1L]#, C(), Z()]
 
 for i in xrange(len(args)):
     for j in xrange(i):
@@ -59,6 +59,9 @@ class C(object):
     def __ge__(self, rhs):
         print "ge"
         return False
+    def __cmp__(self, rhs):
+        print "cmp"
+        assert False
 
 for i in xrange(2):
     print C("") > 2
@@ -74,3 +77,73 @@ print (1, 2) < (1, 3)
 print (1, 4) < (1, 3)
 print [1, 2] < [1, 3]
 print {1:2} < {1:3}
+
+class Reverse(object):
+    def __init__(self, n):
+        self.n = n
+
+    def __lt__(self, rhs):
+        print "lt"
+        return self.n < rhs.n
+
+    def __le__(self, rhs):
+        print "le"
+        return self.n <= rhs.n
+
+print Reverse(4) > Reverse(3), Reverse(4) > Reverse(4)
+
+class EqOnly(object):
+    def __eq__(self, rhs):
+        print "eq"
+        return False
+
+print EqOnly() == 1
+print EqOnly() != 1
+
+
+class NonboolEq(object):
+    def __init__(self, n):
+        self.n = n
+    def __eq__(self, rhs):
+        return 2 if self.n == rhs.n else ()
+    def __hash__(self):
+        return 0
+
+print NonboolEq(1) == NonboolEq(2)
+print NonboolEq(1) == NonboolEq(True)
+
+d = {}
+for i in xrange(20):
+    d[NonboolEq(i % 10)] = i
+print len(d), sorted(d.values())
+
+class C(object):
+    def __init__(self, n):
+        self.n = n
+    
+    def __eq__(self, rhs):
+        print "eq"
+        if isinstance(rhs, C):
+            return self.n == rhs.n
+        return self.n == int(rhs)
+
+    def __cmp__(self, rhs):
+        print "cmp"
+        v = 0
+        if isinstance(rhs, C):
+            v = rhs.n
+        else:
+            v = int(rhs)
+        if self.n < v:
+            return -2L
+        elif self.n > v:
+            return 2L
+        return 0L
+
+for lhs in (C(0), C(1), 0, 1):
+    for rhs in (C(0), C(1), 0, 1):
+        print lhs < rhs, lhs == rhs, lhs != rhs, lhs > rhs, lhs <= rhs, lhs >= rhs
+del C.__eq__
+for lhs in (C(0), C(1), 0, 1):
+    for rhs in (C(0), C(1), 0, 1):
+        print lhs < rhs, lhs == rhs, lhs != rhs, lhs > rhs, lhs <= rhs, lhs >= rhs

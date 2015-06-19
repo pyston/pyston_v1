@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,18 @@
 #ifndef PYSTON_ASMWRITING_TYPES_H
 #define PYSTON_ASMWRITING_TYPES_H
 
+#include "core/common.h"
+
 namespace pyston {
 
 struct StackInfo {
-    int stack_size;
+    int scratch_size;
+    int scratch_rsp_offset;
 
-    bool has_scratch;
-    int scratch_bytes;
-    int scratch_rbp_offset;
+    StackInfo(int scratch_size, int scratch_rsp_offset)
+        : scratch_size(scratch_size), scratch_rsp_offset(scratch_rsp_offset) {
+        assert(scratch_rsp_offset >= 0);
+    }
 };
 
 namespace assembler {
@@ -41,6 +45,10 @@ struct Register {
     bool operator!=(const Register& rhs) const { return !(*this == rhs); }
 
     void dump() const;
+
+    static Register fromDwarf(int dwarf_regnum);
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const Register RAX(0);
@@ -67,9 +75,9 @@ inline bool Register::isCalleeSave() {
 struct Indirect {
 public:
     const Register base;
-    const int offset;
+    const int64_t offset;
 
-    Indirect(const Register base, int offset) : base(base), offset(offset) {}
+    Indirect(const Register base, int64_t offset) : base(base), offset(offset) {}
 };
 
 struct XMMRegister {
@@ -80,6 +88,10 @@ struct XMMRegister {
     bool operator==(const XMMRegister& rhs) const { return regnum == rhs.regnum; }
 
     bool operator!=(const XMMRegister& rhs) const { return !(*this == rhs); }
+
+    void dump() const { printf("XMM%d\n", regnum); }
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const XMMRegister XMM0(0);
@@ -128,6 +140,15 @@ struct GenericRegister {
     explicit constexpr GenericRegister() : gp(0), type(None) {}
     constexpr GenericRegister(const Register r) : gp(r), type(GP) {}
     constexpr GenericRegister(const XMMRegister r) : xmm(r), type(XMM) {}
+
+    void dump() const {
+        if (type == GP)
+            gp.dump();
+        else if (type == XMM)
+            xmm.dump();
+        else
+            abort();
+    }
 
     static GenericRegister fromDwarf(int dwarf_regnum);
 };

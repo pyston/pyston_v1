@@ -45,7 +45,7 @@ def find_rev(svn_id, fetch_if_necessary=True):
 if __name__ == "__main__":
     repo, svn_rev, patch_dir = sys.argv[1:]
     svn_rev = int(svn_rev)
-    assert os.path.isdir(repo)
+    assert os.path.isdir(repo), "Expected to find repo directory at %s" % (repo,)
 
     commit, rid = find_rev(svn_rev)
 
@@ -80,6 +80,16 @@ if __name__ == "__main__":
         if patch_fn.startswith("LICENSE"):
             continue
         if "Update-TailCallElim" in patch_fn and svn_rev >= 208017:
+            continue
+        if "Update-IntelJITEvents" in patch_fn and svn_rev >= 209989:
+            continue
+        if "stackmap-sections-for-ELF" in patch_fn and svn_rev >= 214538:
+            continue
+        if "Enable-invoking-the-patchpoint-intrinsic" in patch_fn and svn_rev >= 220055:
+            continue
+        if "support-varargs-intrinsics" in patch_fn and svn_rev >= 220205:
+            continue
+        if "Expose-getSymbolLoadAddress" in patch_fn and svn_rev <= 222840:
             continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))

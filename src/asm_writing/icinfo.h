@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 #ifndef PYSTON_ASMWRITING_ICINFO_H
 #define PYSTON_ASMWRITING_ICINFO_H
 
+#include <memory>
 #include <unordered_set>
 #include <vector>
 
@@ -29,12 +30,15 @@ class TypeRecorder;
 class ICInfo;
 class ICInvalidator;
 
+#define IC_INVALDITION_HEADER_SIZE 6
+
 struct ICSlotInfo {
 public:
-    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx) {}
+    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
 
     ICInfo* ic;
-    int idx;
+    int idx;        // the index inside the ic
+    int num_inside; // the number of stack frames that are currently inside this slot
 
     void clear();
 };
@@ -44,7 +48,7 @@ public:
     class CommitHook {
     public:
         virtual ~CommitHook() {}
-        virtual void finishAssembly(int fastpath_offset) = 0;
+        virtual bool finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
     };
 
 private:
@@ -54,7 +58,7 @@ private:
 
     uint8_t* buf;
 
-    std::vector<std::pair<ICInvalidator*, int64_t> > dependencies;
+    std::vector<std::pair<ICInvalidator*, int64_t>> dependencies;
 
     ICSlotRewrite(ICInfo* ic, const char* debug_name);
 
@@ -63,34 +67,30 @@ public:
 
     assembler::Assembler* getAssembler() { return assembler; }
     int getSlotSize();
-    int getFuncStackSize();
-    int getScratchRbpOffset();
-    int getScratchBytes();
+    int getScratchRspOffset();
+    int getScratchSize();
 
     TypeRecorder* getTypeRecorder();
 
     assembler::GenericRegister returnRegister();
 
     void addDependenceOn(ICInvalidator&);
-    void commit(uint64_t decision_path, CommitHook* hook);
+    void commit(CommitHook* hook);
+    void abort();
+
+    const ICInfo* getICInfo() { return ic; }
 
     friend class ICInfo;
 };
 
 class ICInfo {
 private:
-    struct SlotInfo {
-        bool is_patched;
-        uint64_t decision_path;
-        ICSlotInfo entry;
-
-        SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
-    };
-    std::vector<SlotInfo> slots;
+    std::vector<ICSlotInfo> slots;
     // For now, just use a round-robin eviction policy.
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy
     // that it's replacing.
+    // TODO: experiment with different IC eviction strategies.
     int next_slot_to_try;
 
     const StackInfo stack_info;
@@ -100,17 +100,17 @@ private:
     const std::vector<int> live_outs;
     const assembler::GenericRegister return_register;
     TypeRecorder* const type_recorder;
+    int retry_in, retry_backoff;
+    int times_rewritten;
 
     // for ICSlotRewrite:
-    ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
-
-    void* getSlowpathStart();
+    ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 
 public:
-    ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size,
-           llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+    ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
+           int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
            assembler::GenericRegister return_register, TypeRecorder* type_recorder);
-    void* const start_addr, *const continue_addr;
+    void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
     int getSlotSize() { return slot_size; }
     int getNumSlots() { return num_slots; }
@@ -120,12 +120,19 @@ public:
     ICSlotRewrite* startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
 
+    bool shouldAttempt();
+    bool isMegamorphic();
+
     friend class ICSlotRewrite;
 };
 
-class PatchpointSetupInfo;
-void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info,
-                                std::unordered_set<int> live_outs);
+class ICSetupInfo;
+struct CompiledFunction;
+std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
+                                                   uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
+                                                   const ICSetupInfo*, StackInfo stack_info,
+                                                   std::unordered_set<int> live_outs);
+void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);
 }

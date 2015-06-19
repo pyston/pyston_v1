@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
 
 #include "runtime/inline/boxing.h"
 
-#include "runtime/gc_runtime.h"
+#include "llvm/ADT/SmallString.h"
+
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -29,34 +30,21 @@ extern "C" Box* createList() {
     return new BoxedList();
 }
 
-extern "C" BoxedString* boxStrConstant(const char* chars) {
-    return new BoxedString(chars);
+BoxedString* boxStringTwine(const llvm::Twine& t) {
+    llvm::SmallString<256> Vec;
+    return boxString(t.toStringRef(Vec));
 }
 
-extern "C" Box* boxStringPtr(const std::string* s) {
-    return new BoxedString(*s);
-}
-
-Box* boxString(const std::string& s) {
-    return new BoxedString(s);
-}
 
 extern "C" double unboxFloat(Box* b) {
-    ASSERT(b->cls == float_cls, "%s", getTypeName(b)->c_str());
+    ASSERT(b->cls == float_cls, "%s", getTypeName(b));
     BoxedFloat* f = (BoxedFloat*)b;
     return f->d;
 }
 
 i64 unboxInt(Box* b) {
-    ASSERT(b->cls == int_cls, "%s", getTypeName(b)->c_str());
+    ASSERT(b->cls == int_cls, "%s", getTypeName(b));
     return ((BoxedInt*)b)->n;
-}
-
-Box* boxInt(int64_t n) {
-    if (0 <= n && n < NUM_INTERNED_INTS) {
-        return interned_ints[n];
-    }
-    return new BoxedInt(int_cls, n);
 }
 
 // BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}

@@ -1,3 +1,5 @@
+# statcheck: '-O' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
+
 # Try to trick the JIT into OSR'ing into an optimized version with a speculation
 # that has already failed.
 # In the f() function, y will have type int, but when we OSR from the while loop,
@@ -10,7 +12,7 @@ def xrange(n):
 def f(x):
     y = xrange(x)
 
-    n = 100000
+    n = 10000
     while n:
         n -= 1
 

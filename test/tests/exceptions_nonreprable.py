@@ -1,6 +1,4 @@
-# expected: fail
-# - inheritance
-
+# should_error
 class BadException(Exception):
     def __str__(self):
         print "str"
@@ -10,7 +8,7 @@ try:
     # This will raise:
     print BadException()
     assert 0
-except NotImplementedError:
-    pass
+except NotImplementedError, e:
+    print e
 
 raise BadException()

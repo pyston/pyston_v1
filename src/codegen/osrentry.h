@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
 #ifndef PYSTON_CODEGEN_OSRENTRY_H
 #define PYSTON_CODEGEN_OSRENTRY_H
 
+#include <map>
 #include <vector>
+
+#include "core/stringpool.h"
 
 namespace llvm {
 class Function;
@@ -24,7 +27,7 @@ class Function;
 
 namespace pyston {
 
-class StackMap;
+struct StackMap;
 
 class OSREntryDescriptor {
 private:
@@ -33,7 +36,7 @@ private:
 public:
     CompiledFunction* const cf;
     AST_Jump* const backedge;
-    typedef std::map<std::string, ConcreteCompilerType*> ArgMap;
+    typedef std::map<InternedString, ConcreteCompilerType*> ArgMap;
     ArgMap args;
 
     static OSREntryDescriptor* create(CompiledFunction* from_cf, AST_Jump* backedge) {
@@ -45,9 +48,9 @@ class OSRExit {
 private:
 public:
     CompiledFunction* const parent_cf;
-    OSREntryDescriptor* entry;
+    const OSREntryDescriptor* entry;
 
-    OSRExit(CompiledFunction* parent_cf, OSREntryDescriptor* entry) : parent_cf(parent_cf), entry(entry) {}
+    OSRExit(CompiledFunction* parent_cf, const OSREntryDescriptor* entry) : parent_cf(parent_cf), entry(entry) {}
 };
 }
 

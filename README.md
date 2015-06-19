@@ -1,113 +1,129 @@
-# Pyston
+# Pyston [![Build Status](https://travis-ci.org/dropbox/pyston.svg?branch=master)](https://travis-ci.org/dropbox/pyston/builds) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/dropbox/pyston?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Pyston is a new, under-development Python implementation built using LLVM and modern JIT techniques with the goal of achieving good performance.
 
+We have a small website [pyston.org](http://pyston.org/), which for now just hosts the mailing lists and the [blog](http://blog.pyston.org/).  We have two mailing lists: [pyston-dev@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) for development-related discussions, and [pyston-announce@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-announce) which is for wider announcements (new releases, major project changes).  We also have a [gitter chat room](https://gitter.im/dropbox/pyston) where most discussion takes place.
+
 ### Current state
 
-Pyston "works", though doesn't support very much of the Python language, and currently is not very useful for end-users.
+Pyston should be considered in alpha: it "works" in that it can successfully run Python code, but it is still quite far from being useful for end-users.
 
-Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is planned for the future, but this is the initial target due to the fact that Dropbox is on this setup internally.
+Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is desired but currently not on the roadmap.
 
-> Note: Pyston does not currently work on Mac OSX, but is being actively worked on; stay tuned on [pyston-dev](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) to hear when it does.
-
-Benchmarks are not currently that meaningful since the supported set of benchmarks is too small to be representative; with that caveat, Pyston seems to have better performance than CPython but lags behind PyPy.
+> Note: Pyston does not currently work on Mac OSX, and it is not clear when it will.
 
 ##### Contributing
 
 Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
+> tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
 
 ### Roadmap
 
-Pyston is still an early-stage project so it is hard to project with much certainty, but here's what we're planning at the moment:
+##### v0.1: [released 4/2/2014](https://tech.dropbox.com/2014/04/introducing-pyston-an-upcoming-jit-based-python-implementation/)
+- Focus was on building and validating the core Python-to-LLVM JIT infrastructure.
+- Many core parts of the language were missing.
 
-##### Current focus: more language features
-- Exceptions
-- Class inheritance, metaclasses
-- Default arguments, keywords, \*args, **kwargs
-- Closures
-- Generators
-- Integer promotion
+##### v0.2: [released 9/11/2014](http://blog.pyston.org/2014/09/11/9/)
+- Focus was on improving language compatibility to the point that we can start running "real code" in the form of existing benchmarks.
+- Many new features:
+ - Exceptions
+ - Class inheritance, metaclasses
+ - Basic native C API support
+ - Closures, generators, lambdas, generator expressions
+ - Default arguments, keywords, \*args, \*\*kwargs
+ - Longs, and integer promotion
+ - Multithreading support
+- We have allowed performance to regress, sometimes considerably, but (hopefully) in places that allow for more efficient implementations as we have time.
 
-##### After that
-- More optimization work
- - Custom LLVM code generator that can very quickly produce bad machine code?
- - Making class-level slots for double-underscore functions (like \_\_str__) so runtime code can be as fast as Python code.
- - Change deopt strategy?
-- Extension module support
+##### v0.3: [released 2/24/2015](http://blog.pyston.org/2015/02/24/pyston-0-3-self-hosting-sufficiency/)
+- Better language support
+ - Can self-host all of our internal Python scripts
+- Better performance
+ - Match CPython's performance on our small benchmark suite
 
-##### Some time later:
-- Threading (hopefully without a GIL)
-- Adding support for Python 3, for non-x86_64 platforms
-
-### Contributing
-
-To contribute to Pyston, you need to to sign the [Dropbox Contributor License Agreement](https://opensource.dropbox.com/cla/), if you haven't already.
+##### v0.4: Coming soon
 
 ### Getting started
 
-To get a full development environment for Pyston, you need pretty recent versions of various tools, since self-modifying code tends to be less well supported.  The docs/INSTALLING.md file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
+We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
 
-To simply build and run Pyston, a smaller set of dependencies is required; see docs/INSTALLING.md, but skip the "OPTIONAL DEPENDENCIES" section. Once all the dependencies are installed, you should be able to do
+Once you've followed those instructions, you should be able to do
 ```
-$ make check -j4
+$ make check
 ```
 
-And see that hopefully all of the tests will pass.
+And see that hopefully all of the tests pass.  (If they don't, please let us know.)
+
+All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
+See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
 
 ### Running Pyston
 
-Pyston builds in a few different configurations; right now there is `pyston_dbg`, which is the debug configuration and contains assertions and debug symbols, and `pyston`, the release configuration which has no assertions or debug symbols, and has full optimizations.  You can build them by saying `make pyston_dbg` or `make pyston`, respectively.  If you are interested in seeing how fast Pyston can go, you should try the release configuration, but there is a good chance that it will crash, in which case you can run the debug configuration to see what is happening.
+Pyston builds in a few different configurations; right now there is `pyston_dbg`, which is the debug configuration and contains assertions and debug symbols, and `pyston_release`, the release configuration which has no assertions or debug symbols, and has full optimizations.  You can build them by saying `make pyston_dbg` or `make pyston_release`, respectively.  If you are interested in seeing how fast Pyston can go, you should try the release configuration, but there is a good chance that it will crash, in which case you can run the debug configuration to see what is happening.
 
-> There are a number of other configurations useful for development: "pyston_debug" contains full LLVM debug information, but can be over 100MB.  "pyston_prof" contains gprof-style profiling instrumentation; gprof can't profile JIT'd code, reducing it's usefulness in this case, but the configuration has stuck around since it gets compiled with gcc, and can expose issues with the normal clang-based build.
+> There are a number of other configurations useful for development: "pyston_debug" contains full LLVM debug information, but will weigh in at a few hundred MB.  "pyston_prof" contains gprof-style profiling instrumentation; gprof can't profile JIT'd code, reducing it's usefulness in this case, but the configuration has stuck around since it gets compiled with gcc, and can expose issues with the normal clang-based build.
 
-You can get a simple REPL by simply typing `./pyston`; it is not very robust right now, and only supports single-line statements, but can give you an interactive view into how Pyston works.  To get more functionality, you can do `./pyston -i [your_source_file.py]`, which will go into the REPL after executing the given file, letting you access all the variables you had defined.
+You can get a simple REPL by simply typing `make run`; it is not very robust right now, and only supports single-line statements, but can give you an interactive view into how Pyston works.  To get more functionality, you can do `./pyston_dbg -i [your_source_file.py]`, which will go into the REPL after executing the given file, letting you access all the variables you had defined.
 
-To run the tests, run `make test`.
+#### Makefile targets
 
-#### Command-line options:
+- `make check`: run the tests
+- `make run`: run the REPL
+- `make format`: run clang-format over the codebase
+- We have a number of helpers of the form `make VERB_TESTNAME`, where `TESTNAME` can be any of the tests/benchmarks, and `VERB` can be one of:
+ - `make run_TESTNAME`: runs the file under pyston_dbg.
+ - `make run_release_TESTNAME`: runs the file under pyston_release.
+ - `make dbg_TESTNAME`: same as `run`, but runs pyston under gdb.
+ - `make check_TESTNAME`: checks that the script has the same behavior under pyston_dbg as it does under CPython.  See tools/tester.py for information about test annotations.
+ - `make perf_TESTNAME`: runs the script in pyston_release, and uses perf to record and display performance statistics.
+ - A few lesser used ones; see the Makefile for details.
+- `make watch_cmd`: meta-command which uses inotifywait to run `make cmd` every time a source file changes.
+ - For example, `make watch_pyston_dbg` will rebuild pyston_dbg every time you save a source file.  This is handy enough to have the alias `make watch`.
+ - `make watch_run_TESTNAME` will rebuild pyston_dbg and run TESTNAME every time you change a file.
+ - `make wdbg_TESTNAME` is mostly an alias for `make watch_dbg_TESTNAME`, but will automatically quit GDB for you.  This is handy if pyston is crashing and you want to get a C-level stacktrace.
+
+There are a number of common flags you can pass to your make invocations:
+- `V=1` or `VERBOSE=1`: display the full commands being executed
+- `ARGS=-v`: pass the given args (in this example, `-v`) to the executable.
+ - Note: these will usually end up before the script name, and so apply to the pyston runtime as opposed to appearing in sys.argv.  For example, `make run_test ARGS=-v` will execute `./pyston_dbg -v test.py`.
+- `BR=breakpoint`: when running under gdb, automatically set a breakpoint at the given location.
+- `SELF_HOST=1`: run all of our Python scripts using pyston_dbg.
+
+For a full list, please check out the [Makefile](https://github.com/dropbox/pyston/blob/master/Makefile).
+
+#### Pyston command-line options:
+
+Pyston-specific flags:
 <dl>
-<dt>-n</dt>
-  <dd>Disable the Pyston interpreter.  The interpreter doesn't support certain features, such as inline caches, so disabling it can expose additional bugs.</dd>
-  
-<dt>-O</dt>
-  <dd>Force Pyston to always run at the highest compilation tier.  This doesn't always produce the fastest running time due to the lack of type recording from lower compilation tiers, but can help stress-test the code generator.</dd>
-  
 <dt>-q</dt>
   <dd>Set verbosity to 0</dd>
 <dt>-v</dt>
   <dd>Increase verbosity by 1</dd>
   
-  <dd>Pyston by default runs at verbosity 1, which contains a good amount of debugging information.  Verbosity 0 contains no debugging information (such as the LLVM IR generated) and should produce the same results as other runtimes.</dd>
+<dt>-s</dt>
+  <dd>Print out the internal stats at exit.</dd>
   
-<dt>-d</dt>
-  <dd>In addition to showing the generated LLVM IR, show the generated assembly code.</dd>
+<dt>-n</dt>
+  <dd>Disable the Pyston interpreter.  This is mostly used for debugging, to force the use of higher compilation tiers in situations they wouldn't typically be used.</dd>
   
-<dt>-i</dt>
-  <dd>Go into the repl after executing the given script.</dd>
+<dt>-O</dt>
+  <dd>Force Pyston to always run at the highest compilation tier.  This doesn't always produce the fastest running time due to the lack of type recording from lower compilation tiers, but similar to -n can help test the code generator.</dd>
   
-<dt>-b</dt>
-  <dd>Benchmark mode: do whatever it would have been done, but do it 1000 times.</dd>
-  
-<dt>-p</dt>
-  <dd>Emit profiling information: at exit, Pyston will emit a dump of the code it generated for consumption by other tools.</dd>
-  
+<dt>-I</dt>
+  <dd>Force always using the Pyston interpreter.  This is mostly used for debugging / testing. (Takes precedence over -n and -O)</dd>
+
 <dt>-r</dt>
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
 
-### Version History
+<dt>-x</dt>
+  <dd>Disable the pypa parser.</dd>
 
-##### v0.1: 4/2/2014
+Standard Python flags:
+<dt>-i</dt>
+  <dd>Go into the repl after executing the given script.</dd>
+</dl>
 
-Initial Release.
-- Working system; proof of concept of major JIT techniques.
-- Fairly promising initial performance, though not fully validated.
-- Missing large parts of the language
-  - Exceptions (planned for 0.2)
-  - Class inheritance (planned for 0.2)
-  - Default arguments, keywords, starargs, kwargs (planned for 0.2)
-  - Generators (planned for 0.2)
-  - Integer promotion (planned for 0.2)
-  - Threads
+There are also some lesser-used flags; see src/jit.cpp for more details.
 
 ---
 ## Technical features
@@ -116,18 +132,22 @@ Initial Release.
 
 Pyston currently features four compilation tiers.  In increasing order of speed, but also compilation time:
 
-1. An LLVM-IR interpreter.  LLVM IR is not designed for interpretation, and isn't very well suited for the task -- it is too low level, and the interpreter spends too much time dispatching for each instruction.  The interpreter is currently used for the first three times that a function is called, or the first ten iterations of a loop, before switching to the next level.
-2. Baseline LLVM compilation.  Runs no LLVM optimizations, and no type speculation, and simply hands off the generated code to the LLVM code generator.  This tier does type recording for the final tier.
-3. Improved LLVM compilation.  Behaves very similarly to baseline LLVM compilation, so this tier will probably be removed in the near future.
-4. Full LLVM optimization + compilation.  This tier runs full LLVM optimizations, and uses type feedback from lower tiers.  This tier kicks in after 10000 loop iterations, or 10000 calls to a function. (exact numbers subject to change).
+0. An AST interpreter.  We do some basic transformations on the AST beforehand, to make it easier and faster to interpret.
+1. Baseline LLVM compilation.  Runs no LLVM optimizations, and no type speculation, and simply hands off the generated code to the LLVM code generator.  This tier does type recording for the final tier.  We are thinking of replacing this with a simple non-LLVM JIT tier at some point.
+2. Improved LLVM compilation.  Behaves very similarly to baseline LLVM compilation, so this tier will probably be removed in the near future.
+3. Full LLVM optimization + compilation.  This tier runs full LLVM optimizations, and uses type feedback from lower tiers.  This tier currently kicks in after 10000 loop iterations, or 10000 calls to a function.
 
 There are two main ways that Pyston can move up to higher tiers:
 - If a function gets called often, it will get recompiled at a higher tier and the new version will be called instead.
 - If a loop gets iterated enough times, Pyston will OSR to a higher tier within the same function.
 
-Currently Pyston only moves to higher tiers, and doesn't move back down to lower tiers.  This will be important to add, in order to support doing additional type recording if types change.
+Pyston can move back down to the AST interpreter by using our frame introspection machinery to do a deoptimization.
 
-The current plan is to replace the interpreter with a quick code generator that doesn't use LLVM's machinery; in theory it should be possible to build a simple code generator that just uses the LLVM IR as an input.
+#### Frame introspection
+
+Pyston uses LLVM's [patchpoint](http://llvm.org/docs/StackMaps.html) functionality to convey information from the LLVM code generator to the runtime.  By attaching all local variables as stackmap arguments, at any callsite we can access all of the frame's local variables.  We use this to implement user-level features such as eval() and locals(), and also to implement internal features such as deoptimization.
+
+We have a [blog post](http://blog.pyston.org/2014/11/06/frame-introspection-in-pyston/) that goes into more detail.
 
 #### OSR
 
@@ -172,7 +192,7 @@ int square_osrentry(int n, int i, int r) {
 }
 ```
 
-The pseudo-C shown above doesn't look that different; the benefit of this approach is that the square() function can be compiled at a low compilation tier, but the square_osrentry can be compiled at a higher one since the compilation time is much more likely to pay off.
+The pseudo-C shown above doesn't look that different; the benefit of this approach is that the square() function can be compiled at a low (cheap) compilation tier or even interpreted, but the square_osrentry can be compiled at a higher one since the compilation time is much more likely to pay off.
 
 This approach seems to work, but has a couple drawbacks:
 - It's currently tracked per backedge rather than per backedge-target, which can lead to more OSR compilations than necessary.
@@ -204,20 +224,14 @@ Pyston currently utilizes a *conservative* garbage collector -- this means that 
 
 Currently, the Pyston's GC is a non-copying, non-generational, stop-the-world GC.  ie it is a simple implementation that will need to be improved in the future.
 
-### Aspiration: Extension modules
+### Native extension module support
 
 CPython-style C extension modules can be difficult in a system that doesn't use refcounting, since a GC-managed runtime is forced to provide a refcounted API.  PyPy handles this by using a compatibility layer to create refcounted objects; our hope is to do the reverse, and instead of making the runtime refcount-aware, to make the extension module GC-aware.
 
-To do this without requiring modifications to extension modules, the plan would be to apply the existing conservative GC to the extension module's stack and memory.  In theory this should be possible to do, but requires some technical trickiness to track allocations done by the extension module.  It may not even be more performant -- if the extension module uses large binary buffers, the GC will be forced to scan the buffer for pointers, whereas obeying the refcount contract would add only a size-independent overhead.  If this turns out to be the case, it might be possible to do some static analysis of the extension modules, and see where GC-managed pointers can escape to.
+We have a basic implementation of this that is able to run a number of the CPython standard modules (from the Modules/ directory), and so far seems to be working.  The C API is quite large and will take some time to cover.
 
-As the section heading says, though, this is all just a thought right now.  Whether or not this works, and is performant, still remains to be seen.
+### Parallelism support
 
-### Aspiration: Thread-level Parallelism
+Pyston currently uses a GIL to protect threaded code.  The codebase still contains an experimental "GRWL" configuration, which replaces the GIL with a read-write lock.  This allows Python code to execute in parallel but still allow for critical sections (recompilation, C API calls, etc), and seems to work ok.  It doesn't provide the same memory-ordering guarantees that CPython provides.
 
-Many runtimes for dynamic languages -- including CPython and PyPy -- use a Global Interpreter Lock (GIL) to protect internal structures against concurrent modification.  This works, but has the drawback of only allowing one thread at a time to run.
-
-The number of cores you can obtain in a single machine keeps growing, which means the performance deficit of single-threaded programs is falling vs multi-threaded ones.  There has been some work to support multi-process parallelism in Python, though many people prefer multi-threaded paralellism for its (relative) ease of use.
-
-We have no concrete ideas or plans for how to implement this, so this section is all optimistic, but our hope is that it will be possible to implement true parallelism.
-
-One of the biggest challenges for this is not just protecting the internal runtime structures, but also providing the higher-level guarantees that Python programmers have become accustomed to.  One example is that all builtin datastructures must be thread-safe, since they currently are.  A slightly more sinister one is that Python has a very straightforward memory model, where no operations can be viewed in different orders on different threads, because all thread switching involves a lock release-then-acquire which serializes the memory accesses; performantly maintaining this memory model is likely to be a challenge.
+This approach has mostly been abandoned as infeasible, but you can test it by doing `make pyston_grwl`.

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
 
 #include <cstring>
 
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/tuple.h"
 
 namespace pyston {
 
-BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : Box(&tuple_iterator_flavor, tuple_iterator_cls), t(t), pos(0) {
+BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : t(t), pos(0) {
 }
 
 Box* tupleIterIter(Box* s) {
@@ -28,7 +27,7 @@ Box* tupleIterIter(Box* s) {
 }
 
 Box* tupleIter(Box* s) {
-    assert(s->cls == tuple_cls);
+    assert(isSubclass(s->cls, tuple_cls));
     BoxedTuple* self = static_cast<BoxedTuple*>(s);
     return new BoxedTupleIterator(self);
 }
@@ -41,14 +40,14 @@ i1 tupleiterHasnextUnboxed(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
-    return self->pos < self->t->elts.size();
+    return self->pos < self->t->size();
 }
 
 Box* tupleiterNext(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
-    if (!(self->pos >= 0 && self->pos < self->t->elts.size())) {
+    if (!(self->pos >= 0 && self->pos < self->t->size())) {
         raiseExcHelper(StopIteration, "");
     }
 

@@ -1,6 +1,3 @@
-# expected: fail
-# - not supported yet
-
 class C(object):
     def __len__(self):
         print "__len__"
@@ -26,3 +23,20 @@ def f(a, b, c):
     print a, b, c
 
 f(**C())
+
+
+class MyDict(dict):
+    pass
+
+d = MyDict(a=1, b=2, c=3)
+print f(**d)
+
+
+# Django does this:
+class C(object):
+    pass
+c = C()
+c.a = 1
+c.b = 3
+c.c = 7
+print f(**c.__dict__)

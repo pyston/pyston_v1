@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,67 +22,54 @@
 namespace pyston {
 namespace gc {
 
-#define MARK_BIT 0x1
+// Mark this gc-allocated object as being a root, even if there are no visible references to it.
+// (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use
+// a GCRootHandle)
+void registerPermanentRoot(void* root_obj, bool allow_duplicates = false);
+void deregisterPermanentRoot(void* root_obj);
 
-inline void setMark(GCObjectHeader* header) {
-    header->gc_flags |= MARK_BIT;
-}
+// Register an object that was not allocated through this collector, as a root for this collector.
+// The motivating usecase is statically-allocated PyTypeObject objects, which are full Python objects
+// even if they are not heap allocated.
+// This memory will be scanned conservatively.
+void registerNonheapRootObject(void* obj, int size);
 
-inline void clearMark(GCObjectHeader* header) {
-    header->gc_flags &= ~MARK_BIT;
-}
+void registerPotentialRootRange(void* start, void* end);
 
-inline bool isMarked(GCObjectHeader* header) {
-    return (header->gc_flags & MARK_BIT) != 0;
-}
-
-#undef MARK_BIT
-
-class TraceStack {
-private:
-    std::vector<void*> v;
-
+// If you want to have a static root "location" where multiple values could be stored, use this:
+class GCRootHandle {
 public:
-    void pushall(void* const* start, void* const* end) { v.insert(v.end(), start, end); }
+    Box* value;
 
-    void push(void* p) { v.push_back(p); }
+    GCRootHandle();
+    ~GCRootHandle();
 
-    int size() { return v.size(); }
+    void operator=(Box* b) { value = b; }
 
-    void reserve(int num) { v.reserve(num + v.size()); }
-
-    void* pop() {
-        if (v.size()) {
-            void* r = v.back();
-            v.pop_back();
-            return r;
-        }
-        return NULL;
-    }
+    operator Box*() { return value; }
+    Box* operator->() { return value; }
 };
 
-class TraceStackGCVisitor : public GCVisitor {
-private:
-    bool isValid(void* p);
-
-    void _visit(void* p);
-
-public:
-    TraceStack* stack;
-    TraceStackGCVisitor(TraceStack* stack) : stack(stack) {}
-
-    void visit(void* p) override;
-    void visitRange(void* const* start, void* const* end) override;
-    void visitPotential(void* p) override;
-    void visitPotentialRange(void* const* start, void* const* end) override;
-};
-
-// Call it a "root obj" because this function takes the pointer to the object, not a pointer
-// to a storage location where we might store different objects.
-// ie this only works for constant roots, and not out-of-gc-knowledge storage locations
-// (that should be registerStaticRootPtr)
-void registerStaticRootObj(void* root_obj);
 void runCollection();
+
+// Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,
+// but does not seem to pause manual calls to gc.collect().  So, callers should check gcIsEnabled(),
+// if appropriate, before calling runCollection().
+bool gcIsEnabled();
+void disableGC();
+void enableGC();
+
+// These are mostly for debugging:
+bool isValidGCMemory(void* p); // if p is a valid gc-allocated pointer (or a non-heap root)
+bool isValidGCObject(void* p); // whether p is valid gc memory and is set to have Python destructor semantics applied
+bool isNonheapRoot(void* p);
+void setIsPythonObject(Box* b);
+
+// Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
+// use these functions to mark that.  This is different from disableGC/enableGC, since it causes an
+// assert rather than delaying of the next GC.
+void startGCUnexpectedRegion();
+void endGCUnexpectedRegion();
 }
 }
 

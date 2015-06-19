@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,26 @@
 #ifndef PYSTON_RUNTIME_CAPI_H
 #define PYSTON_RUNTIME_CAPI_H
 
+#include <string>
+
 namespace pyston {
 
+class Box;
 class BoxedModule;
-BoxedModule* getTestModule();
+BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path);
+
+void checkAndThrowCAPIException();
+void throwCAPIException() __attribute__((noreturn));
+struct ExcInfo;
+void setCAPIException(const ExcInfo& e);
+
+#define fatalOrError(exception, message)                                                                               \
+    do {                                                                                                               \
+        if (CONTINUE_AFTER_FATAL)                                                                                      \
+            PyErr_SetString((exception), (message));                                                                   \
+        else                                                                                                           \
+            Py_FatalError((message));                                                                                  \
+    } while (0)
 }
 
 #endif

@@ -1,6 +1,3 @@
-# expected: fail
-# - arbitrary stuff in classdefs
-
 # objmodel classattrs (like __add__) can be non-functions, so might not get bound into instancemethods:
 
 class Adder(object):
@@ -10,6 +7,8 @@ class Adder(object):
 
 class C(object):
     __add__ = Adder()
+    def __repr__(self):
+        return "<C>"
 
 c = C()
 print c + c

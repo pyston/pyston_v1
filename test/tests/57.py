@@ -1,15 +1,16 @@
-# expected: fail
-# - lambdas, varargs
-
 # Testing im-boxing:
 
 class C(object):
+    def __repr__(self):
+        return "<C>"
     def __call__(*args):
         print args
         return args
 def mul(*args):
     return args
 class C1(object):
+    def __repr__(self):
+        return "<C1>"
     __add__ = C()
     __sub__ = lambda *args: args
     __mul__ = mul

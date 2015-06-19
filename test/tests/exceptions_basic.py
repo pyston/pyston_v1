@@ -51,3 +51,53 @@ def f():
     except:
         print True
 f()
+
+
+def f11():
+    print "f11"
+    # old style exception syntax"
+
+    try:
+        raise KeyError, 12345
+    except KeyError, e:
+        print e
+
+    try:
+        raise KeyError(), 12345
+    except TypeError, e:
+        print e
+f11()
+
+def f12():
+    try:
+        raise IndexError
+    except (KeyError, IndexError), e:
+        print e
+f12()
+
+def f13():
+    try:
+        raise IndexError
+    except Exception, e:
+        print repr(e.message)
+
+    try:
+        raise IndexError()
+    except Exception, e:
+        print repr(e.message)
+
+    try:
+        raise IndexError(1)
+    except Exception, e:
+        print repr(e.message)
+f13()
+
+def f14():
+    # Multiple non-bare except clauses:
+    try:
+        1/0
+    except ZeroDivisionError:
+        pass
+    except Exception:
+        pass
+f14()

@@ -1,6 +1,3 @@
-# expected: fail
-# - metaclasses
-
 # attr-getting resolution.
 
 class M(type):

@@ -1,6 +1,13 @@
 import math
+try:
+    print math.sqrt(-1)
+except ValueError, e:
+    print e
 
-print max(range(5))
-print min(range(5))
-
-print math.sqrt(-1)
+s = math.sqrt
+for i in xrange(5):
+    print s(1.0)
+    try:
+        print s(-1)
+    except ValueError, e:
+        print e

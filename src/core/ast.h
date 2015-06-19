@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,9 @@
 
 #include "llvm/ADT/StringRef.h"
 
+#include "analysis/scoping_analysis.h"
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
@@ -116,6 +118,10 @@ enum AST_TYPE {
     FloorDiv = 86,
     DictComp = 15,
     Set = 43,
+    Ellipsis = 87,
+    Expression = 88, // like Module, but used for eval.
+    SetComp = 89,
+    Suite = 90,
 
     // Pseudo-nodes that are specific to this compiler:
     Branch = 200,
@@ -124,7 +130,13 @@ enum AST_TYPE {
     AugBinOp = 203,
     Invoke = 204,
     LangPrimitive = 205,
-    Unreachable = 206,
+    MakeClass = 206,    // wraps a ClassDef to make it an expr
+    MakeFunction = 207, // wraps a FunctionDef to make it an expr
+
+    // These aren't real AST types, but since we use AST types to represent binexp types
+    // and divmod+truediv are essentially types of binops, we add them here (at least for now):
+    DivMod = 250,
+    TrueDiv = 251,
 };
 };
 
@@ -142,7 +154,20 @@ public:
 
     virtual void accept(ASTVisitor* v) = 0;
 
-    AST(AST_TYPE::AST_TYPE type) : type(type) {}
+// #define DEBUG_LINE_NUMBERS 1
+#ifdef DEBUG_LINE_NUMBERS
+private:
+    // Initialize lineno to something unique, so that if we see something ridiculous
+    // appear in the traceback, we can isolate the allocation which created it.
+    static int next_lineno;
+
+public:
+    AST(AST_TYPE::AST_TYPE type);
+#else
+    AST(AST_TYPE::AST_TYPE type) : type(type), lineno(0), col_offset(0) {}
+#endif
+    AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
+        : type(type), lineno(lineno), col_offset(col_offset) {}
 };
 
 class AST_expr : public AST {
@@ -150,6 +175,7 @@ public:
     virtual void* accept_expr(ExprVisitor* v) = 0;
 
     AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
+    AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
 };
 
 class AST_stmt : public AST {
@@ -163,11 +189,11 @@ public:
 
 class AST_alias : public AST {
 public:
-    const std::string name, asname;
+    InternedString name, asname;
 
     virtual void accept(ASTVisitor* v);
 
-    AST_alias(const std::string& name, const std::string& asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
+    AST_alias(InternedString name, InternedString asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::alias;
 };
@@ -179,7 +205,7 @@ public:
 
     // These are represented as strings, not names; not sure why.
     // If they don't exist, the string is empty.
-    std::string kwarg, vararg;
+    InternedString kwarg, vararg;
 
     virtual void accept(ASTVisitor* v);
 
@@ -244,12 +270,15 @@ class AST_Attribute : public AST_expr {
 public:
     AST_expr* value;
     AST_TYPE::AST_TYPE ctx_type;
-    std::string attr;
+    InternedString attr;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
+
+    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, InternedString attr)
+        : AST_expr(AST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Attribute;
 };
@@ -338,7 +367,7 @@ public:
 
     std::vector<AST_expr*> bases, decorator_list;
     std::vector<AST_stmt*> body;
-    std::string name;
+    InternedString name;
 
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
@@ -386,9 +415,19 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
+    AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
+};
+
+class AST_Ellipsis : public AST_expr {
+public:
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Ellipsis() : AST_expr(AST_TYPE::Ellipsis) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
 };
 
 class AST_Expr : public AST_stmt {
@@ -416,6 +455,47 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
 };
 
+class AST_Exec : public AST_stmt {
+public:
+    AST_expr* body;
+    AST_expr* globals;
+    AST_expr* locals;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void accept_stmt(StmtVisitor* v);
+
+    AST_Exec() : AST_stmt(AST_TYPE::Exec) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Exec;
+};
+
+// (Alternative to AST_Module, used for, e.g., eval)
+class AST_Expression : public AST {
+public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
+    AST_expr* body;
+
+    virtual void accept(ASTVisitor* v);
+
+    AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Expression), interned_strings(std::move(interned_strings)) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expression;
+};
+
+class AST_ExtSlice : public AST_expr {
+public:
+    std::vector<AST_expr*> dims;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_ExtSlice() : AST_expr(AST_TYPE::ExtSlice) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExtSlice;
+};
+
 class AST_For : public AST_stmt {
 public:
     std::vector<AST_stmt*> body, orelse;
@@ -433,7 +513,7 @@ class AST_FunctionDef : public AST_stmt {
 public:
     std::vector<AST_stmt*> body;
     std::vector<AST_expr*> decorator_list;
-    std::string name;
+    InternedString name;
     AST_arguments* args;
 
     virtual void accept(ASTVisitor* v);
@@ -444,9 +524,22 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::FunctionDef;
 };
 
+class AST_GeneratorExp : public AST_expr {
+public:
+    std::vector<AST_comprehension*> generators;
+    AST_expr* elt;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
+
+    const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::GeneratorExp;
+};
+
 class AST_Global : public AST_stmt {
 public:
-    std::vector<std::string> names;
+    std::vector<InternedString> names;
 
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
@@ -495,7 +588,7 @@ public:
 
 class AST_ImportFrom : public AST_stmt {
 public:
-    std::string module;
+    InternedString module;
     std::vector<AST_alias*> names;
     int level;
 
@@ -523,13 +616,26 @@ class AST_keyword : public AST {
 public:
     // no lineno, col_offset attributes
     AST_expr* value;
-    std::string arg;
+    InternedString arg;
 
     virtual void accept(ASTVisitor* v);
 
     AST_keyword() : AST(AST_TYPE::keyword) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::keyword;
+};
+
+class AST_Lambda : public AST_expr {
+public:
+    AST_arguments* args;
+    AST_expr* body;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Lambda;
 };
 
 class AST_List : public AST_expr {
@@ -560,25 +666,51 @@ public:
 
 class AST_Module : public AST {
 public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
 
     virtual void accept(ASTVisitor* v);
 
-    AST_Module() : AST(AST_TYPE::Module) {}
+    AST_Module(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Module), interned_strings(std::move(interned_strings)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
+};
+
+class AST_Suite : public AST {
+public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
+    std::vector<AST_stmt*> body;
+
+    virtual void accept(ASTVisitor* v);
+
+    AST_Suite(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Suite), interned_strings(std::move(interned_strings)) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Suite;
 };
 
 class AST_Name : public AST_expr {
 public:
     AST_TYPE::AST_TYPE ctx_type;
-    std::string id;
+    InternedString id;
+
+    // The resolved scope of this name.  Kind of hacky to be storing it in the AST node;
+    // in CPython it ends up getting "cached" by being translated into one of a number of
+    // different bytecodes.
+    ScopeInfo::VarScopeType lookup_type;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Name() : AST_expr(AST_TYPE::Name) {}
+    AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
+        : AST_expr(AST_TYPE::Name, lineno, col_offset),
+          ctx_type(ctx_type),
+          id(id),
+          lookup_type(ScopeInfo::VarScopeType::UNKNOWN) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
@@ -589,12 +721,17 @@ public:
         // These values must correspond to the values in parse_ast.py
         INT = 0x10,
         FLOAT = 0x20,
+        LONG = 0x30,
+
+        // for COMPLEX, n_float is the imaginary part, real part is 0
+        COMPLEX = 0x40,
     } num_type;
 
     union {
         int64_t n_int;
         double n_float;
     };
+    std::string n_long;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -668,6 +805,31 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Return;
 };
 
+class AST_Set : public AST_expr {
+public:
+    std::vector<AST_expr*> elts;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Set() : AST_expr(AST_TYPE::Set) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Set;
+};
+
+class AST_SetComp : public AST_expr {
+public:
+    std::vector<AST_comprehension*> generators;
+    AST_expr* elt;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_SetComp() : AST_expr(AST_TYPE::SetComp) {}
+
+    const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::SetComp;
+};
+
 class AST_Slice : public AST_expr {
 public:
     AST_expr* lower, *upper, *step;
@@ -682,12 +844,21 @@ public:
 
 class AST_Str : public AST_expr {
 public:
-    std::string s;
+    enum StrType {
+        UNSET = 0x00,
+        STR = 0x10,
+        UNICODE = 0x20,
+    } str_type;
+
+    // The meaning of str_data depends on str_type.  For STR, it's just the bytes value.
+    // For UNICODE, it's the utf-8 encoded value.
+    std::string str_data;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Str() : AST_expr(AST_TYPE::Str) {}
+    AST_Str() : AST_expr(AST_TYPE::Str), str_type(UNSET) {}
+    AST_Str(std::string s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
@@ -782,6 +953,43 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::With;
 };
 
+class AST_Yield : public AST_expr {
+public:
+    AST_expr* value;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Yield() : AST_expr(AST_TYPE::Yield) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
+};
+
+class AST_MakeFunction : public AST_expr {
+public:
+    AST_FunctionDef* function_def;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_MakeFunction(AST_FunctionDef* fd)
+        : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeFunction;
+};
+
+class AST_MakeClass : public AST_expr {
+public:
+    AST_ClassDef* class_def;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeClass;
+};
+
 
 // AST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input AST, but adding them in
 // lets us avoid creating a completely new IR for this phase
@@ -819,7 +1027,7 @@ public:
 class AST_ClsAttribute : public AST_expr {
 public:
     AST_expr* value;
-    std::string attr;
+    InternedString attr;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -845,13 +1053,23 @@ public:
 
 // "LangPrimitive" represents operations that "primitive" to the language,
 // but aren't directly *exactly* representable as normal Python.
-// ClsAttribute would fall into this category, as would isinstance (which
-// is not the same as the "isinstance" name since that could get redefined).
+// ClsAttribute would fall into this category.
+// These are basically bytecodes, framed as pseudo-AST-nodes.
 class AST_LangPrimitive : public AST_expr {
 public:
     enum Opcodes {
-        ISINSTANCE,
-        LANDINGPAD,
+        LANDINGPAD, // grabs the info about the last raised exception
+        LOCALS,
+        GET_ITER,
+        IMPORT_FROM,
+        IMPORT_NAME,
+        IMPORT_STAR,
+        NONE,
+        NONZERO, // determines whether something is "true" for purposes of `if' and so forth
+        CHECK_EXC_MATCH,
+        SET_EXC_INFO,
+        UNCACHE_EXC_INFO,
+        HASNEXT,
     } opcode;
     std::vector<AST_expr*> args;
 
@@ -861,16 +1079,6 @@ public:
     AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
-};
-
-class AST_Unreachable : public AST_stmt {
-public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    AST_Unreachable() : AST_stmt(AST_TYPE::Unreachable) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Unreachable;
 };
 
 template <typename T> T* ast_cast(AST* node) {
@@ -904,10 +1112,16 @@ public:
     virtual bool visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_expression(AST_Expression* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_suite(AST_Suite* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_global(AST_Global* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_if(AST_If* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
@@ -916,6 +1130,7 @@ public:
     virtual bool visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_invoke(AST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_keyword(AST_keyword* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
@@ -927,6 +1142,8 @@ public:
     virtual bool visit_raise(AST_Raise* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_repr(AST_Repr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_return(AST_Return* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_set(AST_Set* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_setcomp(AST_SetComp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_slice(AST_Slice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_str(AST_Str* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_subscript(AST_Subscript* node) { RELEASE_ASSERT(0, ""); }
@@ -934,10 +1151,12 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
 
+    virtual bool visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
 };
@@ -966,10 +1185,16 @@ public:
     virtual bool visit_delete(AST_Delete* node) { return false; }
     virtual bool visit_dict(AST_Dict* node) { return false; }
     virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
+    virtual bool visit_exec(AST_Exec* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
+    virtual bool visit_expr(AST_Expression* node) { return false; }
+    virtual bool visit_suite(AST_Suite* node) { return false; }
+    virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     virtual bool visit_functiondef(AST_FunctionDef* node) { return false; }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) { return false; }
     virtual bool visit_global(AST_Global* node) { return false; }
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
@@ -978,6 +1203,7 @@ public:
     virtual bool visit_index(AST_Index* node) { return false; }
     virtual bool visit_invoke(AST_Invoke* node) { return false; }
     virtual bool visit_keyword(AST_keyword* node) { return false; }
+    virtual bool visit_lambda(AST_Lambda* node) { return false; }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
@@ -989,6 +1215,8 @@ public:
     virtual bool visit_raise(AST_Raise* node) { return false; }
     virtual bool visit_repr(AST_Repr* node) { return false; }
     virtual bool visit_return(AST_Return* node) { return false; }
+    virtual bool visit_set(AST_Set* node) { return false; }
+    virtual bool visit_setcomp(AST_SetComp* node) { return false; }
     virtual bool visit_slice(AST_Slice* node) { return false; }
     virtual bool visit_str(AST_Str* node) { return false; }
     virtual bool visit_subscript(AST_Subscript* node) { return false; }
@@ -996,12 +1224,14 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { return false; }
     virtual bool visit_tuple(AST_Tuple* node) { return false; }
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
-    virtual bool visit_unreachable(AST_Unreachable* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
+    virtual bool visit_yield(AST_Yield* node) { return false; }
 
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }
+    virtual bool visit_makeclass(AST_MakeClass* node) { return false; }
+    virtual bool visit_makefunction(AST_MakeFunction* node) { return false; }
 };
 
 class ExprVisitor {
@@ -1018,19 +1248,28 @@ public:
     virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_name(AST_Name* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_num(AST_Num* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_repr(AST_Repr* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_set(AST_Set* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_setcomp(AST_SetComp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_slice(AST_Slice* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_str(AST_Str* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_subscript(AST_Subscript* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
 };
 
 class StmtVisitor {
@@ -1045,6 +1284,7 @@ public:
     virtual void visit_classdef(AST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_continue(AST_Continue* node) { RELEASE_ASSERT(0, ""); }
+    virtual void visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
@@ -1059,7 +1299,6 @@ public:
     virtual void visit_return(AST_Return* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryexcept(AST_TryExcept* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
 
@@ -1096,10 +1335,16 @@ public:
     virtual bool visit_delete(AST_Delete* node);
     virtual bool visit_dict(AST_Dict* node);
     virtual bool visit_dictcomp(AST_DictComp* node);
+    virtual bool visit_ellipsis(AST_Ellipsis* node);
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
+    virtual bool visit_exec(AST_Exec* node);
     virtual bool visit_expr(AST_Expr* node);
+    virtual bool visit_expression(AST_Expression* node);
+    virtual bool visit_suite(AST_Suite* node);
+    virtual bool visit_extslice(AST_ExtSlice* node);
     virtual bool visit_for(AST_For* node);
     virtual bool visit_functiondef(AST_FunctionDef* node);
+    virtual bool visit_generatorexp(AST_GeneratorExp* node);
     virtual bool visit_global(AST_Global* node);
     virtual bool visit_if(AST_If* node);
     virtual bool visit_ifexp(AST_IfExp* node);
@@ -1108,6 +1353,7 @@ public:
     virtual bool visit_index(AST_Index* node);
     virtual bool visit_invoke(AST_Invoke* node);
     virtual bool visit_keyword(AST_keyword* node);
+    virtual bool visit_lambda(AST_Lambda* node);
     virtual bool visit_langprimitive(AST_LangPrimitive* node);
     virtual bool visit_list(AST_List* node);
     virtual bool visit_listcomp(AST_ListComp* node);
@@ -1119,6 +1365,8 @@ public:
     virtual bool visit_raise(AST_Raise* node);
     virtual bool visit_repr(AST_Repr* node);
     virtual bool visit_return(AST_Return* node);
+    virtual bool visit_set(AST_Set* node);
+    virtual bool visit_setcomp(AST_SetComp* node);
     virtual bool visit_slice(AST_Slice* node);
     virtual bool visit_str(AST_Str* node);
     virtual bool visit_subscript(AST_Subscript* node);
@@ -1126,12 +1374,14 @@ public:
     virtual bool visit_tryexcept(AST_TryExcept* node);
     virtual bool visit_tryfinally(AST_TryFinally* node);
     virtual bool visit_unaryop(AST_UnaryOp* node);
-    virtual bool visit_unreachable(AST_Unreachable* node);
     virtual bool visit_while(AST_While* node);
     virtual bool visit_with(AST_With* node);
+    virtual bool visit_yield(AST_Yield* node);
 
     virtual bool visit_branch(AST_Branch* node);
     virtual bool visit_jump(AST_Jump* node);
+    virtual bool visit_makefunction(AST_MakeFunction* node);
+    virtual bool visit_makeclass(AST_MakeClass* node);
 };
 
 // Given an AST node, return a vector of the node plus all its descendents.
@@ -1150,9 +1400,10 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
 }
 
 llvm::StringRef getOpSymbol(int op_type);
-const std::string& getOpName(int op_type);
-std::string getReverseOpName(int op_type);
-std::string getInplaceOpName(int op_type);
+BoxedString* getOpName(int op_type);
+int getReverseCmpOp(int op_type, bool& success);
+BoxedString* getReverseOpName(int op_type);
+BoxedString* getInplaceOpName(int op_type);
 std::string getInplaceOpSymbol(int op_type);
 };
 

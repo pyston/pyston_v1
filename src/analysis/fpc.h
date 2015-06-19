@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,10 @@
 
 #include <queue>
 
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
+
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"
@@ -25,8 +29,8 @@ namespace pyston {
 
 template <typename T> class BBAnalyzer {
 public:
-    typedef std::unordered_map<std::string, T> Map;
-    typedef std::unordered_map<CFGBlock*, Map> AllMap;
+    typedef llvm::DenseMap<InternedString, T> Map;
+    typedef llvm::DenseMap<CFGBlock*, Map> AllMap;
 
     virtual ~BBAnalyzer() {}
 
@@ -41,27 +45,34 @@ public:
 };
 
 template <typename T>
-typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& analyzer, bool reverse) {
+void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* initial_block,
+                       const BBAnalyzer<T>& analyzer, bool reverse, typename BBAnalyzer<T>::AllMap& starting_states,
+                       typename BBAnalyzer<T>::AllMap& ending_states) {
     assert(!reverse);
 
     typedef typename BBAnalyzer<T>::Map Map;
     typedef typename BBAnalyzer<T>::AllMap AllMap;
-    AllMap states;
 
-    std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> q;
+    assert(!starting_states.size());
+    assert(!ending_states.size());
 
-    states.insert(make_pair(cfg->getStartingBlock(), Map()));
-    q.push(cfg->getStartingBlock());
+    llvm::SmallPtrSet<CFGBlock*, 32> in_queue;
+    std::priority_queue<CFGBlock*, llvm::SmallVector<CFGBlock*, 32>, CFGBlockMinIndex> q;
+
+    starting_states.insert(make_pair(initial_block, std::move(initial_map)));
+    q.push(initial_block);
+    in_queue.insert(initial_block);
 
     int num_evaluations = 0;
-    while (q.size()) {
+    while (!q.empty()) {
         num_evaluations++;
         CFGBlock* block = q.top();
         q.pop();
+        in_queue.erase(block);
 
-        Map initial = states[block];
+        Map& initial = starting_states[block];
         if (VERBOSITY("analysis") >= 2)
-            printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
+            printf("fpc on block %d - %d entries\n", block->idx, initial.size());
 
         Map ending = Map(initial);
 
@@ -71,12 +82,12 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
             CFGBlock* next_block = block->successors[i];
             bool changed = false;
             bool initial = false;
-            if (states.count(next_block) == 0) {
+            if (starting_states.count(next_block) == 0) {
                 changed = true;
                 initial = true;
             }
 
-            Map& next = states[next_block];
+            Map& next = starting_states[next_block];
             for (const auto& p : ending) {
                 if (next.count(p.first) == 0) {
                     changed = true;
@@ -107,21 +118,18 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
                 }
             }
 
-            if (changed)
+            if (changed && in_queue.insert(next_block).second) {
                 q.push(next_block);
+            }
         }
 
-        states.erase(block);
-        states.insert(make_pair(block, ending));
+        ending_states[block] = std::move(ending);
     }
 
     if (VERBOSITY("analysis")) {
-        printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
-               1.0 * num_evaluations / cfg->blocks.size());
+        printf("%d BBs, %d evaluations = %.1f evaluations/block\n", starting_states.size(), num_evaluations,
+               1.0 * num_evaluations / starting_states.size());
     }
-
-
-    return states;
 }
 }
 

@@ -1,9 +1,13 @@
+build
+
 Makefile.local
+tools/astprint
 tools/demangle
 tools/mcjitcache
 tools/mcjitcache_release
 tools/publicize
 tools/publicize_release
+
 pyston
 pyston_opt
 pyston_noasserts
@@ -15,6 +19,13 @@ pyston_debug
 pyston_prof
 pyston_profile
 pyston_release
+pyston_grwl
+pyston_grwl_dbg
+pyston_nosync
+pyston_gcc
+pystontmp*/
+/*_unittest
+
 *.cache
 tests/t.py
 tests/t2.py
@@ -28,6 +39,7 @@ stdlib*.ll
 oprofile_data
 pprof.jit
 tags
+TAGS
 *.pyc
 
 perf.data
@@ -38,7 +50,16 @@ gmon.out
 find_problem.status
 *.expected_cache
 
+plugins/clang_capi
+
 *.so
 *.pch
 
 compile.log
+
+*.swp
+*.swo
+
+*.out
+
+*~

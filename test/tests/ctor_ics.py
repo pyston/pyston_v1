@@ -1,6 +1,6 @@
 # run_args: -n
-# statcheck: stats['slowpath_runtimecall'] < 40
-# statcheck: stats['slowpath_typecall'] < 30
+# statcheck: noninit_count('slowpath_runtimecall') < 40
+# statcheck: noninit_count('slowpath_typecall') < 30
 def f():
     class B(object):
         def __init__(self):

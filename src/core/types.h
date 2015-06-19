@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,16 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
-#include <llvm/ADT/iterator_range.h>
+#include <memory>
+#include <stddef.h>
+#include <vector>
+
+#include "llvm/ADT/iterator_range.h"
+#include "Python.h"
 
 #include "core/common.h"
 #include "core/stats.h"
+#include "core/stringpool.h"
 
 namespace llvm {
 class Function;
@@ -51,65 +57,66 @@ struct ArgPassSpec {
         assert(num_keywords <= MAX_KEYWORDS);
     }
 
+    bool operator==(ArgPassSpec rhs) {
+        return has_starargs == rhs.has_starargs && has_kwargs == rhs.has_kwargs && num_keywords == rhs.num_keywords
+               && num_args == rhs.num_args;
+    }
+
+    bool operator!=(ArgPassSpec rhs) { return !(*this == rhs); }
+
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
-    uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
-};
-static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
+    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
 
+    void dump() {
+        printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
+               has_kwargs ? "true" : "false", num_keywords, num_args);
+    }
+};
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register! (CC is probably wrong)");
+static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
+
+namespace gc {
+
+class TraceStack;
 class GCVisitor {
+private:
+    bool isValid(void* p);
+
 public:
-    virtual ~GCVisitor() {}
-    virtual void visit(void* p) = 0;
-    virtual void visitRange(void* const* start, void* const* end) = 0;
-    virtual void visitPotential(void* p) = 0;
-    virtual void visitPotentialRange(void* const* start, void* const* end) = 0;
+    TraceStack* stack;
+    GCVisitor(TraceStack* stack) : stack(stack) {}
+
+    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
+    void visitIf(void* p) {
+        if (p)
+            visit(p);
+    }
+    void visit(void* p);
+    void visitRange(void* const* start, void* const* end);
+    void visitPotential(void* p);
+    void visitPotentialRange(void* const* start, void* const* end);
 };
 
-typedef int kindid_t;
-class AllocationKind;
-extern "C" kindid_t registerKind(const AllocationKind*);
-class AllocationKind {
-public:
-#ifndef NDEBUG
-    static const int64_t COOKIE = 0x1234abcd0c00c1e;
-    const int64_t _cookie = COOKIE;
-#endif
+} // namespace gc
+using gc::GCVisitor;
 
-    typedef void (*GCHandler)(GCVisitor*, void*);
-    GCHandler gc_handler;
-
-    typedef void (*FinalizationFunc)(void*);
-    FinalizationFunc finalizer;
-
-    const kindid_t kind_id;
-
-public:
-    AllocationKind(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
-    : gc_handler(gc_handler), finalizer(finalizer), kind_id(registerKind(this)) {}
-};
-extern "C" const AllocationKind untracked_kind, conservative_kind;
-
-class ObjectFlavor;
-class ObjectFlavor : public AllocationKind {
-public:
-    ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
-    : AllocationKind(gc_handler, finalizer) {}
-};
-
-
-
-namespace EffortLevel {
-enum EffortLevel {
+enum class EffortLevel {
     INTERPRETED = 0,
-    MINIMAL,
-    MODERATE,
-    MAXIMAL,
+    MINIMAL = 1,
+    MODERATE = 2,
+    MAXIMAL = 3,
 };
-}
 
+class CompilerType;
 template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
+ConcreteCompilerType* typeFromClass(BoxedClass*);
+
+extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST,
+    *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX,
+    *FRAME_INFO;
+extern CompilerType* UNDEF;
 
 class CompilerVariable;
 template <class V> class ValuedCompilerVariable;
@@ -118,10 +125,10 @@ typedef ValuedCompilerVariable<llvm::Value*> ConcreteCompilerVariable;
 class Box;
 class BoxedClass;
 class BoxedModule;
-class BoxedFunction;
+class BoxedFunctionBase;
 
 class ICGetattr;
-class ICSlotInfo;
+struct ICSlotInfo;
 
 class CFG;
 class AST;
@@ -155,15 +162,17 @@ public:
 struct FunctionSpecialization {
     ConcreteCompilerType* rtn_type;
     std::vector<ConcreteCompilerType*> arg_types;
+    bool boxed_return_value;
+    bool accepts_all_inputs;
 
-    FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2)
-        : rtn_type(rtn_type), arg_types({ arg1, arg2 }) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types)
-        : rtn_type(rtn_type), arg_types(arg_types) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type);
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);
 };
+
+class BoxedClosure;
+class BoxedGenerator;
+class ICInfo;
+class LocationMap;
 
 struct CompiledFunction {
 private:
@@ -176,91 +185,185 @@ public:
 
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
+        Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
+        Box* (*closure_generator_call)(BoxedClosure*, BoxedGenerator*, Box*, Box*, Box*, Box**);
+        Box* (*generator_call)(BoxedGenerator*, Box*, Box*, Box*, Box**);
         void* code;
+        uintptr_t code_start;
     };
-    llvm::Value* llvm_code; // the llvm callable.
+    int code_size;
 
-    EffortLevel::EffortLevel effort;
+    EffortLevel effort;
 
-    int64_t times_called;
+    int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
 
+    LocationMap* location_map; // only meaningful if this is a compiled frame
+
+    std::vector<ICInfo*> ics;
+
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                     llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
-                     const OSREntryDescriptor* entry_descriptor)
-        : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0) {}
+                     EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
+        : clfunc(NULL),
+          func(func),
+          spec(spec),
+          entry_descriptor(entry_descriptor),
+          is_interpreted(is_interpreted),
+          code(code),
+          effort(effort),
+          times_called(0),
+          times_speculation_failed(0),
+          location_map(nullptr) {
+        assert((spec != NULL) + (entry_descriptor != NULL) == 1);
+    }
+
+    ConcreteCompilerType* getReturnType();
+
+    // TODO this will need to be implemented eventually; things to delete:
+    // - line_table if it exists
+    // - location_map if it exists
+    // - all entries in ics (after deregistering them)
+    ~CompiledFunction();
+
+    // Call this when a speculation inside this version failed
+    void speculationFailed();
 };
 
+struct ParamNames {
+    bool takes_param_names;
+    std::vector<llvm::StringRef> args;
+    llvm::StringRef vararg, kwarg;
+
+    explicit ParamNames(AST* ast, InternedStringPool& pool);
+    ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
+    static ParamNames empty() { return ParamNames(); }
+
+    int totalParameters() const {
+        return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
+    }
+
+private:
+    ParamNames() : takes_param_names(false) {}
+};
+
+typedef int FutureFlags;
+
 class BoxedModule;
+class ScopeInfo;
+class InternedStringPool;
 class SourceInfo {
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
+    FutureFlags future_flags;
     AST* ast;
     CFG* cfg;
-    LivenessAnalysis* liveness;
-    PhiAnalysis* phis;
+    bool is_generator;
+    std::string fn; // equivalent of code.co_filename
+
+    InternedStringPool& getInternedStrings();
+
+    ScopeInfo* getScopeInfo();
+
+    // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
+    // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
+    const std::vector<AST_stmt*> body;
 
     const std::string getName();
-    AST_arguments* getArgsAST();
-    const std::vector<AST_expr*>& getArgNames();
-    const std::vector<AST_stmt*>& getBody();
+    InternedString mangleName(InternedString id);
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
-        : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
+    Box* getDocString();
+
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
+               std::vector<AST_stmt*> body, std::string fn);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
-class CallRewriteArgs;
-struct CLFunction {
+struct CallRewriteArgs;
+class BoxedCode;
+class CLFunction {
+public:
     int num_args;
     int num_defaults;
     bool takes_varargs, takes_kwargs;
 
-    SourceInfo* source;
+    std::unique_ptr<SourceInfo> source;
+    ParamNames param_names;
+
     FunctionList
-    versions; // any compiled versions along with their type parameters; in order from most preferred to least
+        versions; // any compiled versions along with their type parameters; in order from most preferred to least
+    CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
+
+    // Please use codeForFunction() to access this:
+    BoxedCode* code_obj;
 
     // Functions can provide an "internal" version, which will get called instead
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                     const std::vector<const std::string*>*);
+    typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+                                     const std::vector<BoxedString*>*);
     InternalCallable internal_callable = NULL;
 
-    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
-        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(source) {
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+               std::unique_ptr<SourceInfo> source)
+        : num_args(num_args),
+          num_defaults(num_defaults),
+          takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs),
+          source(std::move(source)),
+          param_names(this->source->ast, this->source->getInternedStrings()),
+          always_use_version(NULL),
+          code_obj(NULL) {
+        assert(num_args >= num_defaults);
+    }
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
+        : num_args(num_args),
+          num_defaults(num_defaults),
+          takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs),
+          source(nullptr),
+          param_names(param_names),
+          always_use_version(NULL),
+          code_obj(NULL) {
         assert(num_args >= num_defaults);
     }
 
     int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
 
-    const std::vector<AST_expr*>* getArgNames();
-
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
-        assert((source == NULL) == (compiled->func == NULL));
-        assert(compiled->spec);
-        assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
+        assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
         assert(compiled->clfunc == NULL);
         assert(compiled->is_interpreted == (compiled->code == NULL));
-        assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
         compiled->clfunc = this;
-        if (compiled->entry_descriptor == NULL)
+
+        if (compiled->entry_descriptor == NULL) {
+            if (versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL && compiled->spec->accepts_all_inputs
+                && compiled->spec->boxed_return_value)
+                always_use_version = compiled;
+
+            assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
             versions.push_back(compiled);
-        else
+        } else {
             osr_versions[compiled->entry_descriptor] = compiled;
+        }
+    }
+
+    bool isGenerator() const {
+        if (source)
+            return source->is_generator;
+        return false;
     }
 };
 
-CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+                             const ParamNames& param_names = ParamNames::empty());
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs);
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs);
+                          bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
+                          const ParamNames& param_names = ParamNames::empty());
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
                    const std::vector<ConcreteCompilerType*>& arg_types);
@@ -268,188 +371,365 @@ CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry);
-EffortLevel::EffortLevel initialEffort();
+EffortLevel initialEffort();
 
 typedef bool i1;
 typedef int64_t i64;
 
-extern "C" void* rt_alloc(size_t);
-extern "C" void rt_free(void*);
-extern "C" void* rt_realloc(void* ptr, size_t new_size);
-
-extern "C" const std::string* getNameOfClass(BoxedClass* cls);
+const char* getNameOfClass(BoxedClass* cls);
+std::string getFullNameOfClass(BoxedClass* cls);
 
 class Rewriter;
 class RewriterVar;
-
-struct GCObjectHeader {
-    kindid_t kind_id;
-    uint16_t kind_data; // this part of the header is free for the kind to set as it wishes.
-    uint8_t gc_flags;
-
-    constexpr GCObjectHeader(const AllocationKind* kind) : kind_id(kind->kind_id), kind_data(0), gc_flags(0) {}
-};
-static_assert(sizeof(GCObjectHeader) <= sizeof(void*), "");
-
-class GCObject {
-public:
-    GCObjectHeader gc_header;
-
-    constexpr GCObject(const AllocationKind* kind) : gc_header(kind) {}
-
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return rt_alloc(size); }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { rt_free(ptr); }
-};
-
-extern "C" const AllocationKind hc_kind;
-class HiddenClass : public GCObject {
-private:
-    HiddenClass() : GCObject(&hc_kind) {}
-    HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind), attr_offsets(parent->attr_offsets) {}
-
-public:
-    static HiddenClass* getRoot();
-    std::unordered_map<std::string, int> attr_offsets;
-    std::unordered_map<std::string, HiddenClass*> children;
-
-    HiddenClass* getOrMakeChild(const std::string& attr);
-
-    int getOffset(const std::string& attr) {
-        std::unordered_map<std::string, int>::iterator it = attr_offsets.find(attr);
-        if (it == attr_offsets.end())
-            return -1;
-        return it->second;
-    }
-};
+class RuntimeIC;
+class CallattrIC;
+class NonzeroIC;
+class BinopIC;
 
 class Box;
-class BoxIterator {
-public:
-    BoxIterator(Box* iter) : iter(iter), value(nullptr) {}
 
-    bool operator==(BoxIterator const& rhs) const { return (iter == rhs.iter && value == rhs.value); }
-    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
+namespace gc {
 
-    BoxIterator& operator++();
-    BoxIterator operator++(int) {
-        BoxIterator tmp(*this);
-        operator++();
-        return tmp;
-    }
-
-    Box* operator*() const { return value; }
-    Box* operator*() { return value; }
-
-private:
-    Box* iter;
-    Box* value;
+enum class GCKind : uint8_t {
+    PYTHON = 1,
+    CONSERVATIVE = 2,
+    PRECISE = 3,
+    UNTRACKED = 4,
+    HIDDEN_CLASS = 5,
+    CONSERVATIVE_PYTHON = 6,
 };
 
+extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
+extern "C" void gc_free(void* ptr);
+}
 
-class SetattrRewriteArgs2;
-class GetattrRewriteArgs;
-class GetattrRewriteArgs2;
+template <gc::GCKind gc_kind> class GCAllocated {
+public:
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc::gc_alloc(size, gc_kind); }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { gc::gc_free(ptr); }
+};
+
+class BoxIteratorImpl : public GCAllocated<gc::GCKind::CONSERVATIVE> {
+public:
+    virtual ~BoxIteratorImpl() = default;
+    virtual void next() = 0;
+    virtual Box* getValue() = 0;
+    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+};
+
+class BoxIterator {
+public:
+    BoxIteratorImpl* impl;
+
+    BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
+    ~BoxIterator() = default;
+
+    static llvm::iterator_range<BoxIterator> getRange(Box* container);
+    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
+    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
+
+    BoxIterator& operator++() {
+        impl->next();
+        return *this;
+    }
+
+    Box* operator*() const { return impl->getValue(); }
+    Box* operator*() { return impl->getValue(); }
+
+    void gcHandler(GCVisitor* v) { v->visitPotential(impl); }
+};
+
+class HiddenClass;
+extern HiddenClass* root_hcls;
+
+struct SetattrRewriteArgs;
+struct GetattrRewriteArgs;
+struct DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : GCObject {
+    struct AttrList {
         Box* attrs[0];
     };
 
     HiddenClass* hcls;
     AttrList* attr_list;
 
-    HCAttrs() : hcls(HiddenClass::getRoot()), attr_list(nullptr) {}
+    HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
 };
 
-class Box : public GCObject {
+class BoxedDict;
+class BoxedString;
+
+class Box {
+private:
+    BoxedDict** getDictPtr();
+
+    // Appends a new value to the hcattrs array.
+    void appendNewHCAttr(Box* val, SetattrRewriteArgs* rewrite_args);
+
 public:
+    // Add a no-op constructor to make sure that we don't zero-initialize cls
+    Box() {}
+
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+
+    // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
 
     llvm::iterator_range<BoxIterator> pyElements();
 
-    Box(const ObjectFlavor* flavor, BoxedClass* cls);
+    size_t getHCAttrsOffset();
+    HCAttrs* getHCAttrsPtr();
+    void setDict(BoxedDict* d);
+    BoxedDict* getDict();
 
-    HCAttrs* getAttrsPtr();
 
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2);
-    void giveAttr(const std::string& attr, Box* val) {
-        assert(this->getattr(attr) == NULL);
+    void setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    void giveAttr(llvm::StringRef attr, Box* val) {
+        assert(!this->hasattr(attr));
         this->setattr(attr, val, NULL);
     }
 
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-    Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
+    // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
+    // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
+    Box* getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
+    Box* getattr(llvm::StringRef attr) { return getattr(attr, NULL); }
+    bool hasattr(llvm::StringRef attr) { return getattr(attr) != NULL; }
+    void delattr(llvm::StringRef attr, DelattrRewriteArgs* rewrite_args);
+
+    // Only valid for hc-backed instances:
+    Box* getAttrWrapper();
+
+    Box* reprIC();
+    BoxedString* reprICAsString();
+    bool nonzeroIC();
+    Box* hasnextOrNullIC();
+    Box* nextIC();
+
+    friend class AttrWrapper;
 };
+static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
+// Our default for tp_alloc:
+extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 
-
-class BoxedClass : public Box {
-public:
-    HCAttrs attrs;
-
-    // If the user sets __getattribute__ or __getattr__, we will have to invalidate
-    // all getattr IC entries that relied on the fact that those functions didn't exist.
-    // Doing this via invalidation means that instance attr lookups don't have
-    // to guard on anything about the class.
-    ICInvalidator dependent_icgetattrs;
-
-    // Only a single base supported for now.
-    // Is NULL iff this is object_cls
-    BoxedClass* const base;
-
-    // Offset of the HCAttrs object or 0 if there are no hcattrs.
-    // Analogous to tp_dictoffset
-    const int attrs_offset;
-    // Analogous to tp_basicsize
-    const int instance_size;
-
-    bool instancesHaveAttrs() { return attrs_offset != 0; }
-
-    // Whether this class object is constant or not, ie whether or not class-level
-    // attributes can be changed or added.
-    // Does not necessarily imply that the instances of this class are constant,
-    // though for now (is_constant && !hasattrs) does imply that the instances are constant.
-    bool is_constant;
-
-    // Whether this class was defined by the user or is a builtin type.
-    // this is used mostly for debugging.
-    const bool is_user_defined;
-
-    // will need to update this once we support tp_getattr-style overriding:
-    bool hasGenericGetattr() { return true; }
-
-    BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined);
-    void freeze() {
-        assert(!is_constant);
-        is_constant = true;
+#define DEFAULT_CLASS(default_cls)                                                                                     \
+    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        assert(cls->tp_itemsize == 0);                                                                                 \
+        return Box::operator new(size, cls);                                                                           \
+    }                                                                                                                  \
+    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        assert(default_cls->tp_itemsize == 0);                                                                         \
+        return Box::operator new(size, default_cls);                                                                   \
     }
+
+#if STAT_ALLOCATIONS
+#define ALLOC_STATS(cls)                                                                                               \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
+        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
+    }
+#define ALLOC_STATS_VAR(cls)                                                                                           \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
+        static StatCounter alloc_name(per_name_alloc_name);                                                            \
+        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
+        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
+        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
+        if (nitems == 0) {                                                                                             \
+            alloc_name0.log();                                                                                         \
+            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
+        } else {                                                                                                       \
+            alloc_name.log();                                                                                          \
+            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
+        }                                                                                                              \
+    }
+#else
+#define ALLOC_STATS(cls)
+#define ALLOC_STATS_VAR(cls)
+#endif
+
+
+// The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
+// asserts in the 1-arg operator new function:
+#define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
+    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        return Box::operator new(size, cls);                                                                           \
+    }                                                                                                                  \
+    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        ALLOC_STATS(default_cls);                                                                                      \
+        /* In the simple cases, we can inline the following methods and simplify things a lot:                         \
+         * - Box::operator new                                                                                         \
+         * - cls->tp_alloc                                                                                             \
+         * - PystonType_GenericAlloc                                                                                   \
+         * - PyObject_Init                                                                                             \
+         */                                                                                                            \
+        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_itemsize == 0);                                                                         \
+        assert(default_cls->tp_basicsize == size);                                                                     \
+        assert(default_cls->is_pyston_class);                                                                          \
+        assert(default_cls->attrs_offset == 0);                                                                        \
+                                                                                                                       \
+        /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
+        void* mem = gc_alloc(size, gc::GCKind::PYTHON);                                                                \
+        assert(mem);                                                                                                   \
+                                                                                                                       \
+        Box* rtn = static_cast<Box*>(mem);                                                                             \
+                                                                                                                       \
+        rtn->cls = default_cls;                                                                                        \
+        return rtn;                                                                                                    \
+        /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
+    }
+
+#define DEFAULT_CLASS_VAR(default_cls, itemsize)                                                                       \
+    static_assert(itemsize > 0, "");                                                                                   \
+    /* asserts that the class in question is a subclass of BoxVar */                                                   \
+    inline void _base_check() {                                                                                        \
+        static_assert(std::is_base_of<BoxVar, std::remove_pointer<decltype(this)>::type>::value, "");                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        assert(cls->tp_itemsize == itemsize);                                                                          \
+        return BoxVar::operator new(size, cls, nitems);                                                                \
+    }                                                                                                                  \
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
+        assert(default_cls->tp_itemsize == itemsize);                                                                  \
+        return BoxVar::operator new(size, default_cls, nitems);                                                        \
+    }
+
+#define DEFAULT_CLASS_VAR_SIMPLE(default_cls, itemsize)                                                                \
+    static_assert(itemsize > 0, "");                                                                                   \
+    inline void _base_check() {                                                                                        \
+        static_assert(std::is_base_of<BoxVar, std::remove_pointer<decltype(this)>::type>::value, "");                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        assert(cls->tp_itemsize == itemsize);                                                                          \
+        return BoxVar::operator new(size, cls, nitems);                                                                \
+    }                                                                                                                  \
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
+        ALLOC_STATS_VAR(default_cls)                                                                                   \
+        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_itemsize == itemsize);                                                                  \
+        assert(default_cls->tp_basicsize == size);                                                                     \
+        assert(default_cls->is_pyston_class);                                                                          \
+        assert(default_cls->attrs_offset == 0);                                                                        \
+                                                                                                                       \
+        void* mem = gc_alloc(size + nitems * itemsize, gc::GCKind::PYTHON);                                            \
+        assert(mem);                                                                                                   \
+                                                                                                                       \
+        BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
+        rtn->cls = default_cls;                                                                                        \
+        rtn->ob_size = nitems;                                                                                         \
+        return rtn;                                                                                                    \
+    }
+
+// CPython C API compatibility class:
+class BoxVar : public Box {
+public:
+    // This field gets initialized in operator new.
+    Py_ssize_t ob_size;
+
+    BoxVar() {}
+
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
 };
+static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
+
+std::string getFullTypeName(Box* o);
+const char* getTypeName(Box* b);
+
+class BoxedClass;
 
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-BoxedModule* createModule(const std::string& name, const std::string& fn);
-
-std::string getPythonFuncAt(void* ip, void* sp);
+Box* createAndRunModule(const std::string& name, const std::string& fn);
+BoxedModule* createModule(const std::string& name, const char* fn = NULL, const char* doc = NULL);
+Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this
-void addToSysPath(const std::string& path);
+void appendToSysPath(llvm::StringRef path);
+void prependToSysPath(llvm::StringRef path);
 void addToSysArgv(const char* str);
 
-std::string formatException(Box* e);
-void printLastTraceback();
+// Raise a SyntaxError that occurs at a specific location.
+// The traceback given to the user will include this,
+// even though the execution didn't actually arrive there.
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func);
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...);
 
 struct LineInfo {
 public:
-    const int line, column;
+    int line, column;
     std::string file, func;
 
-    LineInfo(int line, int column, const std::string& file, const std::string& func)
+    LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)
         : line(line), column(column), file(file), func(func) {}
 };
+
+struct ExcInfo {
+    Box* type, *value, *traceback;
+    bool reraise;
+
+#ifndef NDEBUG
+    ExcInfo(Box* type, Box* value, Box* traceback);
+#else
+    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback), reraise(false) {}
+#endif
+    bool matches(BoxedClass* cls) const;
+    void printExcAndTraceback() const;
+};
+
+class BoxedFrame;
+struct FrameInfo {
+    // Note(kmod): we have a number of fields here that all have independent
+    // initialization rules.  We could potentially save time on every function-entry
+    // by having an "initialized" variable (or condition) that guards all of them.
+
+    // *Not the same semantics as CPython's frame->f_exc*
+    // In CPython, f_exc is the saved exc_info from the previous frame.
+    // In Pyston, exc is the frame-local value of sys.exc_info.
+    // - This makes frame entering+leaving faster at the expense of slower exceptions.
+    //
+    // TODO: do we want exceptions to be slower? benchmark this!
+    //
+    // exc.type is initialized to NULL at function entry, and exc.value and exc.tb are left
+    // uninitialized.  When one wants to access any of the values, you need to check if exc.type
+    // is NULL, and if so crawl up the stack looking for the first frame with a non-null exc.type
+    // and copy that.
+    ExcInfo exc;
+
+    // This field is always initialized:
+    Box* boxedLocals;
+
+    BoxedFrame* frame_obj;
+
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
+
+    void gcVisit(GCVisitor* visitor);
+};
+
+struct CallattrFlags {
+    bool cls_only : 1;
+    bool null_on_nonexistent : 1;
+
+    char asInt() { return (cls_only << 0) + (null_on_nonexistent << 1); }
+};
+}
+
+namespace std {
+template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept;
+template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p);
 }
 
 #endif

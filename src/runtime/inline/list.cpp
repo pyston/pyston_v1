@@ -1,5 +1,5 @@
 
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,24 +15,22 @@
 
 #include <cstring>
 
-#include "runtime/gc_runtime.h"
 #include "runtime/list.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
 
-BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(&list_iterator_flavor, list_iterator_cls), l(l), pos(0) {
+BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
 }
-
 
 Box* listIterIter(Box* s) {
     return s;
 }
 
 Box* listIter(Box* s) {
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new BoxedListIterator(self);
+    return new BoxedListIterator(self, 0);
 }
 
 Box* listiterHasnext(Box* s) {
@@ -62,6 +60,41 @@ Box* listiterNext(Box* s) {
     return rtn;
 }
 
+
+Box* listReversed(Box* s) {
+    assert(isSubclass(s->cls, list_cls));
+    BoxedList* self = static_cast<BoxedList*>(s);
+    return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
+}
+
+Box* listreviterHasnext(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    return boxBool(self->pos >= 0);
+}
+
+i1 listreviterHasnextUnboxed(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    return self->pos >= 0;
+}
+
+Box* listreviterNext(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        raiseExcHelper(StopIteration, "");
+    }
+
+    Box* rtn = self->l->elts->elts[self->pos];
+    self->pos--;
+    return rtn;
+}
+
+
 const int BoxedList::INITIAL_CAPACITY = 8;
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 void BoxedList::shrink() {
@@ -72,7 +105,7 @@ void BoxedList::shrink() {
             elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
-            rt_free(elts);
+            delete elts;
             capacity = 0;
         }
     }
@@ -97,7 +130,9 @@ void BoxedList::ensure(int space) {
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 extern "C" void listAppendInternal(Box* s, Box* v) {
-    assert(s->cls == list_cls);
+    // Lock must be held!
+
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);
@@ -110,7 +145,9 @@ extern "C" void listAppendInternal(Box* s, Box* v) {
 
 
 extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
-    assert(s->cls == list_cls);
+    // Lock must be held!
+
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);
@@ -124,8 +161,10 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 extern "C" Box* listAppend(Box* s, Box* v) {
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
+
+    LOCK_REGION(self->lock.asWrite());
 
     listAppendInternal(self, v);
 

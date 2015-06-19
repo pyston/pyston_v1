@@ -26,9 +26,24 @@ class C(object):
     def __repr__(self):
         return "<C object>"
 
+print hash(True) == hash(False)
+print int(True), int(False)
+
 c = C("hello") # This object has an invalid __nonzero__ return type
 if 0:
     print bool(c) # this will fail
 print 1 and c # Note: nonzero isn't called on the second argument!
 print C(True) or 1 # prints the object repr, not the nonzero repr
-print c and 1
+
+print
+# nonzero should fall back on __len__ if that exists but __nonzero__ doesn't:
+class D(object):
+    def __init__(self, n):
+        self.n = n
+
+    def __len__(self):
+        print "__len__"
+        return self.n
+
+for i in xrange(0, 3):
+    print i, bool(D(i))

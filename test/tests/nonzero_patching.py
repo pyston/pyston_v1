@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats.get('slowpath_nonzero', 0) <= 10
+# statcheck: noninit_count('slowpath_nonzero') <= 10
 
 def f():
     for i in xrange(-10, 10):

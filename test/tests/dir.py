@@ -13,7 +13,8 @@ def fake():
 
 class TestClass(object):
     def __init__(self):
-        self.__dict__ = {n: n for n in fake()}
+        for n in fake():
+            setattr(self, n, n)
 
     def __dir__(self):
         return fake()
@@ -21,7 +22,8 @@ class TestClass(object):
 
 class TestClass2(object):
     def __init__(self):
-        self.__dict__ = {'dictAttr': False, 'attribute1': None}
+        self.dictAttr = False
+        self.attribute1 = None
         self.other_attribute = False
 
     def method1(self):
@@ -40,7 +42,7 @@ dir(int())
 dir(dir)
 dir(fake)
 dir(None)
-dir()
+# dir()
 
 dir(TestClass)
 dir(TestClass2)
@@ -63,9 +65,61 @@ test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__init__',
 test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__init__',
              '__module__', 'method1', 'dictAttr', 'attribute1'], TestClass2)
 test_in_dir(['attribute1', 'dictAttr', '__init__', '__module__', 'method1',
-             'other_attribute', '__dict__'], TestClass2())
+             'other_attribute'], TestClass2())
 test_in_dir(fake(), TestClass())
 print len(fake()) == len(dir(TestClass()))
 
 for t in [str, int, list, set, dict]:
     test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__module__'], t)
+
+class C1(object):
+    a = 1
+    b = 2
+class C2(C1):
+    b = 3
+    c = 4
+print sorted([s for s in dir(C2) if s[0] != '_'])
+
+c = C1()
+c.d = 2
+d1 = c.__dict__
+d2 = d1.copy()
+c.e = 3
+print sorted(d1.items())
+print sorted(d2.items())
+
+l = []
+for x in d1:
+    l.append(x)
+l.sort()
+print l
+
+c = C1()
+c.__dict__.update(dict(a=1, b=5), d=4)
+print sorted(c.__dict__.items())
+
+class TestClass3: # old-style
+    def __init__(self):
+        self.a = 1
+
+    def foo(self):
+        pass
+
+    def bar(self):
+        pass
+
+print sorted([d for d in dir(TestClass3) if not d.startswith('_')])
+print sorted([d for d in dir(TestClass3()) if not d.startswith('_')])
+
+c = C1()
+c.__dict__.update([('a', 1), ('b', 2)])
+print c.a, c.b
+
+i = c.__dict__.iteritems()
+l = []
+while True:
+    try:
+        l.append(i.next())
+    except StopIteration:
+        break
+print sorted(l)

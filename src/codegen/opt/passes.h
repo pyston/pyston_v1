@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 #define PYSTON_CODEGEN_OPT_PASSES_H
 
 namespace llvm {
+class BasicBlockPass;
 class FunctionPass;
 class ImmutablePass;
 }
@@ -25,6 +26,8 @@ llvm::ImmutablePass* createPystonAAPass();
 llvm::FunctionPass* createMallocsNonNullPass();
 llvm::FunctionPass* createConstClassesPass();
 llvm::FunctionPass* createDeadAllocsPass();
+llvm::FunctionPass* createRemoveUnnecessaryBoxingPass();
+llvm::BasicBlockPass* createRemoveDuplicateBoxingPass();
 }
 
 #endif

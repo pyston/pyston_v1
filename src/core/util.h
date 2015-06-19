@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,36 +20,77 @@
 #include <sys/time.h>
 
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
+inline uint64_t getCPUTicks() {
+    unsigned long lo, hi;
+    asm("rdtsc" : "=a"(lo), "=d"(hi));
+    return (lo | (hi << 32));
+}
+
+#define DISABLE_TIMERS 0
+
+#if !DISABLE_TIMERS
 class Timer {
 private:
     static int level;
-    timeval start_time;
+    uint64_t start_time;
     const char* desc;
-    int min_usec;
+    long min_usec;
     bool ended;
+    std::function<void(uint64_t)> exit_callback;
 
 public:
-    Timer(const char* desc, int min_usec = -1);
+    // Timers with non-NULL desc will print times longer than min_usec for debugging when VERBOSITY("time") >= 2
+    Timer(const char* desc = NULL, long min_usec = -1);
+    Timer(long min_usec); // doesn't start the timer
     ~Timer();
 
-    void restart(const char* newdesc, int min_usec = -1);
-    long end();
-    long split(const char* newdesc, int min_usec = -1) {
-        long rtn = end();
-        restart(newdesc, min_usec);
+    void setExitCallback(std::function<void(uint64_t)> _exit_callback) { exit_callback = _exit_callback; }
+
+    void restart(const char* newdesc, long new_min_usec);
+    void restart(const char* newdesc = NULL);
+
+    // returns the duration.  if @ended_at is non-null, it's filled in
+    // with the tick the timer stopped at.
+    uint64_t end(uint64_t* ended_at = NULL);
+    uint64_t split(const char* newdesc = NULL) {
+        uint64_t rtn = end();
+        restart(newdesc);
         return rtn;
     }
+
+    uint64_t getStartTime() const { return start_time; }
 };
 
+#else // DISABLE_TIMERS
+class Timer {
+public:
+    Timer(const char* desc = NULL, long min_usec = -1) {}
+    Timer(long min_usec) {}
+
+    void setExitCallback(std::function<void(uint64_t)> _exit_callback) {}
+
+    void restart(const char* newdesc, long new_min_usec) {}
+    void restart(const char* newdesc = NULL) {}
+
+    long end() { return 0; }
+    long split(const char* newdesc = NULL) { return 0; }
+};
+
+#endif // #else DISABLE_TIMERS
+
 bool startswith(const std::string& s, const std::string& pattern);
+bool endswith(const std::string& s, const std::string& pattern);
 
 void removeDirectoryIfExists(const std::string& path);
 
-template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
-    std::vector<std::string> lv, rv;
+// Checks that lhs and rhs, which are iterables of InternedStrings, have the
+// same set of names in them.
+template <class T1, class T2> bool sameKeyset(T1* lhs, T2* rhs) {
+    std::vector<InternedString> lv, rv;
     for (typename T1::iterator it = lhs->begin(); it != lhs->end(); it++) {
         lv.push_back(it->first);
     }
@@ -60,8 +101,8 @@ template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
     std::sort(lv.begin(), lv.end());
     std::sort(rv.begin(), rv.end());
 
-    std::vector<std::string> lextra(lv.size());
-    std::vector<std::string>::iterator diffend
+    std::vector<InternedString> lextra(lv.size());
+    std::vector<InternedString>::iterator diffend
         = std::set_difference(lv.begin(), lv.end(), rv.begin(), rv.end(), lextra.begin());
     lextra.resize(diffend - lextra.begin());
 
@@ -74,7 +115,7 @@ template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
         good = false;
     }
 
-    std::vector<std::string> rextra(rv.size());
+    std::vector<InternedString> rextra(rv.size());
     diffend = std::set_difference(rv.begin(), rv.end(), lv.begin(), lv.end(), rextra.begin());
     rextra.resize(diffend - rextra.begin());
 
@@ -85,7 +126,7 @@ template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
         }
         good = false;
     }
-    assert(good);
+    return good;
 }
 }
 

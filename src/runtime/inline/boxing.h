@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 #ifndef PYSTON_RUNTIME_INLINE_BOXING_H
 #define PYSTON_RUNTIME_INLINE_BOXING_H
 
-#include "runtime/gc_runtime.h"
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -25,6 +24,11 @@ namespace pyston {
 extern "C" inline Box* boxFloat(double d) __attribute__((visibility("default")));
 extern "C" inline Box* boxFloat(double d) {
     return new BoxedFloat(d);
+}
+
+extern "C" inline Box* boxComplex(double r, double i) __attribute__((visibility("default")));
+extern "C" inline Box* boxComplex(double r, double i) {
+    return new BoxedComplex(r, i);
 }
 
 extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,22 @@
 #include <cstring>
 #include <stdint.h>
 
-#include "core/cfg.h"
+#include "Python.h"
 
-#define FUTURE_DIVISION 0
+#include "core/cfg.h"
+#include "runtime/types.h"
 
 namespace pyston {
+
+#ifdef DEBUG_LINE_NUMBERS
+int AST::next_lineno = 100000;
+
+AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
+    // if (lineno == 100644)
+    // raise(SIGTRAP);
+}
+
+#endif
 
 llvm::StringRef getOpSymbol(int op_type) {
     switch (op_type) {
@@ -37,7 +48,10 @@ llvm::StringRef getOpSymbol(int op_type) {
         case AST_TYPE::BitXor:
             return "^";
         case AST_TYPE::Div:
+        case AST_TYPE::TrueDiv:
             return "/";
+        case AST_TYPE::DivMod:
+            return "divmod()";
         case AST_TYPE::Eq:
             return "==";
         case AST_TYPE::FloorDiv:
@@ -90,15 +104,44 @@ std::string getInplaceOpSymbol(int op_type) {
     return std::string(getOpSymbol(op_type)) + '=';
 }
 
-const static std::string strAdd("__add__"), strBitAnd("__and__"), strBitOr("__or__"), strBitXor("__xor__"),
-    strDiv("__div__"), strTrueDiv("__truediv__"), strEq("__eq__"), strFloorDiv("__floordiv__"), strLShift("__lshift__"),
-    strLt("__lt__"), strLtE("__le__"), strGt("__gt__"), strGtE("__ge__"), strIn("__contains__"),
-    strInvert("__invert__"), strMod("__mod__"), strMult("__mul__"), strNot("__nonzero__"), strNotEq("__ne__"),
-    strPow("__pow__"), strRShift("__rshift__"), strSub("__sub__"), strUAdd("__pos__"), strUSub("__neg__");
-
-const std::string& getOpName(int op_type) {
+BoxedString* getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
+
+    static BoxedString* strAdd, *strBitAnd, *strBitOr, *strBitXor, *strDiv, *strTrueDiv, *strDivMod, *strEq,
+        *strFloorDiv, *strLShift, *strLt, *strLtE, *strGt, *strGtE, *strIn, *strInvert, *strMod, *strMult, *strNot,
+        *strNotEq, *strPow, *strRShift, *strSub, *strUAdd, *strUSub;
+
+    static bool initialized = false;
+    if (!initialized) {
+        strAdd = static_cast<BoxedString*>(PyString_InternFromString("__add__"));
+        strBitAnd = static_cast<BoxedString*>(PyString_InternFromString("__and__"));
+        strBitOr = static_cast<BoxedString*>(PyString_InternFromString("__or__"));
+        strBitXor = static_cast<BoxedString*>(PyString_InternFromString("__xor__"));
+        strDiv = static_cast<BoxedString*>(PyString_InternFromString("__div__"));
+        strTrueDiv = static_cast<BoxedString*>(PyString_InternFromString("__truediv__"));
+        strDivMod = static_cast<BoxedString*>(PyString_InternFromString("__divmod__"));
+        strEq = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
+        strFloorDiv = static_cast<BoxedString*>(PyString_InternFromString("__floordiv__"));
+        strLShift = static_cast<BoxedString*>(PyString_InternFromString("__lshift__"));
+        strLt = static_cast<BoxedString*>(PyString_InternFromString("__lt__"));
+        strLtE = static_cast<BoxedString*>(PyString_InternFromString("__le__"));
+        strGt = static_cast<BoxedString*>(PyString_InternFromString("__gt__"));
+        strGtE = static_cast<BoxedString*>(PyString_InternFromString("__ge__"));
+        strIn = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
+        strInvert = static_cast<BoxedString*>(PyString_InternFromString("__invert__"));
+        strMod = static_cast<BoxedString*>(PyString_InternFromString("__mod__"));
+        strMult = static_cast<BoxedString*>(PyString_InternFromString("__mul__"));
+        strNot = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
+        strNotEq = static_cast<BoxedString*>(PyString_InternFromString("__ne__"));
+        strPow = static_cast<BoxedString*>(PyString_InternFromString("__pow__"));
+        strRShift = static_cast<BoxedString*>(PyString_InternFromString("__rshift__"));
+        strSub = static_cast<BoxedString*>(PyString_InternFromString("__sub__"));
+        strUAdd = static_cast<BoxedString*>(PyString_InternFromString("__pos__"));
+        strUSub = static_cast<BoxedString*>(PyString_InternFromString("__neg__"));
+
+        initialized = true;
+    }
 
     switch (op_type) {
         case AST_TYPE::Add:
@@ -110,10 +153,11 @@ const std::string& getOpName(int op_type) {
         case AST_TYPE::BitXor:
             return strBitXor;
         case AST_TYPE::Div:
-            if (FUTURE_DIVISION)
-                return strTrueDiv;
-            else
-                return strDiv;
+            return strDiv;
+        case AST_TYPE::TrueDiv:
+            return strTrueDiv;
+        case AST_TYPE::DivMod:
+            return strDivMod;
         case AST_TYPE::Eq:
             return strEq;
         case AST_TYPE::FloorDiv:
@@ -156,30 +200,41 @@ const std::string& getOpName(int op_type) {
     }
 }
 
-std::string getInplaceOpName(int op_type) {
-    const std::string& normal_name = getOpName(op_type);
-    return "__i" + normal_name.substr(2);
+BoxedString* getInplaceOpName(int op_type) {
+    BoxedString* normal_name = getOpName(op_type);
+    // TODO inefficient
+    return static_cast<BoxedString*>(PyString_InternFromString(("__i" + normal_name->s().substr(2).str()).c_str()));
 }
 
 // Maybe better name is "swapped" -- it's what the runtime will try if the normal op
 // name fails, it will switch the order of the lhs/rhs and call the reverse op.
 // Calling it "reverse" because that's what I'm assuming the 'r' stands for in ex __radd__
-std::string getReverseOpName(int op_type) {
+int getReverseCmpOp(int op_type, bool& success) {
+    success = true;
     if (op_type == AST_TYPE::Lt)
-        return getOpName(AST_TYPE::GtE);
+        return AST_TYPE::Gt;
     if (op_type == AST_TYPE::LtE)
-        return getOpName(AST_TYPE::Gt);
+        return AST_TYPE::GtE;
     if (op_type == AST_TYPE::Gt)
-        return getOpName(AST_TYPE::LtE);
+        return AST_TYPE::Lt;
     if (op_type == AST_TYPE::GtE)
-        return getOpName(AST_TYPE::Lt);
+        return AST_TYPE::LtE;
     if (op_type == AST_TYPE::NotEq)
-        return getOpName(AST_TYPE::NotEq);
+        return AST_TYPE::NotEq;
     if (op_type == AST_TYPE::Eq)
-        return getOpName(AST_TYPE::Eq);
+        return AST_TYPE::Eq;
+    success = false;
+    return op_type;
+}
 
-    const std::string& normal_name = getOpName(op_type);
-    return "__r" + normal_name.substr(2);
+BoxedString* getReverseOpName(int op_type) {
+    bool reversed = false;
+    op_type = getReverseCmpOp(op_type, reversed);
+    if (reversed)
+        return getOpName(op_type);
+    BoxedString* normal_name = getOpName(op_type);
+    // TODO inefficient
+    return static_cast<BoxedString*>(PyString_InternFromString(("__r" + normal_name->s().substr(2).str()).c_str()));
 }
 
 template <class T> static void visitVector(const std::vector<T*>& vec, ASTVisitor* v) {
@@ -420,6 +475,16 @@ void* AST_DictComp::accept_expr(ExprVisitor* v) {
     return v->visit_dictcomp(this);
 }
 
+void AST_Ellipsis::accept(ASTVisitor* v) {
+    bool skip = v->visit_ellipsis(this);
+    if (skip)
+        return;
+}
+
+void* AST_Ellipsis::accept_expr(ExprVisitor* v) {
+    return v->visit_ellipsis(this);
+}
+
 void AST_ExceptHandler::accept(ASTVisitor* v) {
     bool skip = v->visit_excepthandler(this);
     if (skip)
@@ -432,6 +497,23 @@ void AST_ExceptHandler::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
+void AST_Exec::accept(ASTVisitor* v) {
+    bool skip = v->visit_exec(this);
+    if (skip)
+        return;
+
+    if (body)
+        body->accept(v);
+    if (globals)
+        globals->accept(v);
+    if (locals)
+        locals->accept(v);
+}
+
+void AST_Exec::accept_stmt(StmtVisitor* v) {
+    v->visit_exec(this);
+}
+
 void AST_Expr::accept(ASTVisitor* v) {
     bool skip = v->visit_expr(this);
     if (skip)
@@ -442,6 +524,18 @@ void AST_Expr::accept(ASTVisitor* v) {
 
 void AST_Expr::accept_stmt(StmtVisitor* v) {
     v->visit_expr(this);
+}
+
+
+void AST_ExtSlice::accept(ASTVisitor* v) {
+    bool skip = v->visit_extslice(this);
+    if (skip)
+        return;
+    visitVector(dims, v);
+}
+
+void* AST_ExtSlice::accept_expr(ExprVisitor* v) {
+    return v->visit_extslice(this);
 }
 
 void AST_For::accept(ASTVisitor* v) {
@@ -471,6 +565,22 @@ void AST_FunctionDef::accept(ASTVisitor* v) {
 
 void AST_FunctionDef::accept_stmt(StmtVisitor* v) {
     v->visit_functiondef(this);
+}
+
+void AST_GeneratorExp::accept(ASTVisitor* v) {
+    bool skip = v->visit_generatorexp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_GeneratorExp::accept_expr(ExprVisitor* v) {
+    return v->visit_generatorexp(this);
 }
 
 void AST_Global::accept(ASTVisitor* v) {
@@ -567,6 +677,19 @@ void AST_keyword::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
+void AST_Lambda::accept(ASTVisitor* v) {
+    bool skip = v->visit_lambda(this);
+    if (skip)
+        return;
+
+    args->accept(v);
+    body->accept(v);
+}
+
+void* AST_Lambda::accept_expr(ExprVisitor* v) {
+    return v->visit_lambda(this);
+}
+
 void AST_LangPrimitive::accept(ASTVisitor* v) {
     bool skip = v->visit_langprimitive(this);
     if (skip)
@@ -609,6 +732,22 @@ void* AST_ListComp::accept_expr(ExprVisitor* v) {
 
 void AST_Module::accept(ASTVisitor* v) {
     bool skip = v->visit_module(this);
+    if (skip)
+        return;
+
+    visitVector(body, v);
+}
+
+void AST_Expression::accept(ASTVisitor* v) {
+    bool skip = v->visit_expression(this);
+    if (skip)
+        return;
+
+    body->accept(v);
+}
+
+void AST_Suite::accept(ASTVisitor* v) {
+    bool skip = v->visit_suite(this);
     if (skip)
         return;
 
@@ -674,6 +813,8 @@ void AST_Repr::accept(ASTVisitor* v) {
     bool skip = v->visit_repr(this);
     if (skip)
         return;
+
+    value->accept(v);
 }
 
 void* AST_Repr::accept_expr(ExprVisitor* v) {
@@ -691,6 +832,34 @@ void AST_Return::accept(ASTVisitor* v) {
 
 void AST_Return::accept_stmt(StmtVisitor* v) {
     v->visit_return(this);
+}
+
+void AST_Set::accept(ASTVisitor* v) {
+    bool skip = v->visit_set(this);
+    if (skip)
+        return;
+
+    visitVector(elts, v);
+}
+
+void* AST_Set::accept_expr(ExprVisitor* v) {
+    return v->visit_set(this);
+}
+
+void AST_SetComp::accept(ASTVisitor* v) {
+    bool skip = v->visit_setcomp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_SetComp::accept_expr(ExprVisitor* v) {
+    return v->visit_setcomp(this);
 }
 
 void AST_Slice::accept(ASTVisitor* v) {
@@ -784,16 +953,6 @@ void* AST_UnaryOp::accept_expr(ExprVisitor* v) {
     return v->visit_unaryop(this);
 }
 
-void AST_Unreachable::accept(ASTVisitor* v) {
-    bool skip = v->visit_unreachable(this);
-    if (skip)
-        return;
-}
-
-void AST_Unreachable::accept_stmt(StmtVisitor* v) {
-    v->visit_unreachable(this);
-}
-
 void AST_While::accept(ASTVisitor* v) {
     bool skip = v->visit_while(this);
     if (skip)
@@ -823,6 +982,18 @@ void AST_With::accept_stmt(StmtVisitor* v) {
     v->visit_with(this);
 }
 
+void AST_Yield::accept(ASTVisitor* v) {
+    bool skip = v->visit_yield(this);
+    if (skip)
+        return;
+
+    if (value)
+        value->accept(v);
+}
+
+void* AST_Yield::accept_expr(ExprVisitor* v) {
+    return v->visit_yield(this);
+}
 
 void AST_Branch::accept(ASTVisitor* v) {
     bool skip = v->visit_branch(this);
@@ -835,7 +1006,6 @@ void AST_Branch::accept(ASTVisitor* v) {
 void AST_Branch::accept_stmt(StmtVisitor* v) {
     v->visit_branch(this);
 }
-
 
 void AST_Jump::accept(ASTVisitor* v) {
     bool skip = v->visit_jump(this);
@@ -859,7 +1029,29 @@ void* AST_ClsAttribute::accept_expr(ExprVisitor* v) {
     return v->visit_clsattribute(this);
 }
 
+void AST_MakeFunction::accept(ASTVisitor* v) {
+    bool skip = v->visit_makefunction(this);
+    if (skip)
+        return;
 
+    function_def->accept(v);
+}
+
+void* AST_MakeFunction::accept_expr(ExprVisitor* v) {
+    return v->visit_makefunction(this);
+}
+
+void AST_MakeClass::accept(ASTVisitor* v) {
+    bool skip = v->visit_makeclass(this);
+    if (skip)
+        return;
+
+    class_def->accept(v);
+}
+
+void* AST_MakeClass::accept_expr(ExprVisitor* v) {
+    return v->visit_makeclass(this);
+}
 
 void print_ast(AST* ast) {
     PrintVisitor v;
@@ -874,7 +1066,7 @@ void PrintVisitor::printIndent() {
 
 bool PrintVisitor::visit_alias(AST_alias* node) {
     printf("%s", node->name.c_str());
-    if (node->asname.size())
+    if (node->asname.s().size())
         printf(" as %s", node->asname.c_str());
     return true;
 }
@@ -1138,6 +1330,11 @@ bool PrintVisitor::visit_dictcomp(AST_DictComp* node) {
     return true;
 }
 
+bool PrintVisitor::visit_ellipsis(AST_Ellipsis*) {
+    printf("...");
+    return true;
+}
+
 bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     printf("except");
     if (node->type) {
@@ -1160,8 +1357,34 @@ bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     return true;
 }
 
+bool PrintVisitor::visit_exec(AST_Exec* node) {
+    printf("exec ");
+
+    node->body->accept(this);
+    if (node->globals) {
+        printf(" in ");
+        node->globals->accept(this);
+
+        if (node->locals) {
+            printf(", ");
+            node->locals->accept(this);
+        }
+    }
+    printf("\n");
+    return true;
+}
+
 bool PrintVisitor::visit_expr(AST_Expr* node) {
     return false;
+}
+
+bool PrintVisitor::visit_extslice(AST_ExtSlice* node) {
+    for (int i = 0; i < node->dims.size(); ++i) {
+        if (i > 0)
+            printf(", ");
+        node->dims[i]->accept(this);
+    }
+    return true;
 }
 
 bool PrintVisitor::visit_for(AST_For* node) {
@@ -1170,7 +1393,13 @@ bool PrintVisitor::visit_for(AST_For* node) {
 }
 
 bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
-    assert(node->decorator_list.size() == 0);
+    for (auto d : node->decorator_list) {
+        printf("@");
+        d->accept(this);
+        printf("\n");
+        printIndent();
+    }
+
     printf("def %s(", node->name.c_str());
     node->args->accept(this);
     printf(")");
@@ -1182,6 +1411,17 @@ bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
         node->body[i]->accept(this);
     }
     indent -= 4;
+    return true;
+}
+
+bool PrintVisitor::visit_generatorexp(AST_GeneratorExp* node) {
+    printf("[");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
+    printf("]");
     return true;
 }
 
@@ -1272,14 +1512,52 @@ bool PrintVisitor::visit_invoke(AST_Invoke* node) {
     return true;
 }
 
+bool PrintVisitor::visit_lambda(AST_Lambda* node) {
+    printf("lambda ");
+    node->args->accept(this);
+    printf(": ");
+    node->body->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     printf(":");
     switch (node->opcode) {
-        case AST_LangPrimitive::ISINSTANCE:
-            printf("isinstance");
+        case AST_LangPrimitive::CHECK_EXC_MATCH:
+            printf("CHECK_EXC_MATCH");
             break;
         case AST_LangPrimitive::LANDINGPAD:
-            printf("landingpad");
+            printf("LANDINGPAD");
+            break;
+        case AST_LangPrimitive::LOCALS:
+            printf("LOCALS");
+            break;
+        case AST_LangPrimitive::GET_ITER:
+            printf("GET_ITER");
+            break;
+        case AST_LangPrimitive::IMPORT_FROM:
+            printf("IMPORT_FROM");
+            break;
+        case AST_LangPrimitive::IMPORT_NAME:
+            printf("IMPORT_NAME");
+            break;
+        case AST_LangPrimitive::IMPORT_STAR:
+            printf("IMPORT_STAR");
+            break;
+        case AST_LangPrimitive::NONE:
+            printf("NONE");
+            break;
+        case AST_LangPrimitive::NONZERO:
+            printf("NONZERO");
+            break;
+        case AST_LangPrimitive::SET_EXC_INFO:
+            printf("SET_EXC_INFO");
+            break;
+        case AST_LangPrimitive::UNCACHE_EXC_INFO:
+            printf("UNCACHE_EXC_INFO");
+            break;
+        case AST_LangPrimitive::HASNEXT:
+            printf("HASNEXT");
             break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
@@ -1331,6 +1609,21 @@ bool PrintVisitor::visit_module(AST_Module* node) {
     return true;
 }
 
+bool PrintVisitor::visit_expression(AST_Expression* node) {
+    node->body->accept(this);
+    printf("\n");
+    return true;
+}
+
+bool PrintVisitor::visit_suite(AST_Suite* node) {
+    for (int i = 0; i < node->body.size(); i++) {
+        printIndent();
+        node->body[i]->accept(this);
+        printf("\n");
+    }
+    return true;
+}
+
 bool PrintVisitor::visit_name(AST_Name* node) {
     printf("%s", node->id.c_str());
     // printf("%s(%d)", node->id.c_str(), node->ctx_type);
@@ -1340,8 +1633,12 @@ bool PrintVisitor::visit_name(AST_Name* node) {
 bool PrintVisitor::visit_num(AST_Num* node) {
     if (node->num_type == AST_Num::INT) {
         printf("%ld", node->n_int);
+    } else if (node->num_type == AST_Num::LONG) {
+        printf("%sL", node->n_long.c_str());
     } else if (node->num_type == AST_Num::FLOAT) {
         printf("%f", node->n_float);
+    } else if (node->num_type == AST_Num::COMPLEX) {
+        printf("%fj", node->n_float);
     } else {
         RELEASE_ASSERT(0, "");
     }
@@ -1399,6 +1696,39 @@ bool PrintVisitor::visit_return(AST_Return* node) {
     return false;
 }
 
+bool PrintVisitor::visit_set(AST_Set* node) {
+    // An empty set literal is not writeable in Python (it's a dictionary),
+    // but we sometimes generate it (ex in set comprehension lowering).
+    // Just to make it clear when printing, print empty set literals as "SET{}".
+    if (!node->elts.size())
+        printf("SET");
+
+    printf("{");
+
+    bool first = true;
+    for (auto e : node->elts) {
+        if (!first)
+            printf(", ");
+        first = false;
+
+        e->accept(this);
+    }
+
+    printf("}");
+    return true;
+}
+
+bool PrintVisitor::visit_setcomp(AST_SetComp* node) {
+    printf("{");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
+    printf("}");
+    return true;
+}
+
 bool PrintVisitor::visit_slice(AST_Slice* node) {
     printf("<slice>(");
     if (node->lower)
@@ -1416,7 +1746,13 @@ bool PrintVisitor::visit_slice(AST_Slice* node) {
 }
 
 bool PrintVisitor::visit_str(AST_Str* node) {
-    printf("\"%s\"", node->s.c_str());
+    if (node->str_type == AST_Str::STR) {
+        printf("\"%s\"", node->str_data.c_str());
+    } else if (node->str_type == AST_Str::UNICODE) {
+        printf("<unicode value>");
+    } else {
+        RELEASE_ASSERT(0, "%d", node->str_type);
+    }
     return false;
 }
 
@@ -1521,15 +1857,10 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
             printf("-");
             break;
         default:
-            RELEASE_ASSERT(0, "%s", getOpName(node->op_type).c_str());
+            RELEASE_ASSERT(0, "%s", getOpName(node->op_type)->c_str());
             break;
     }
     node->operand->accept(this);
-    return true;
-}
-
-bool PrintVisitor::visit_unreachable(AST_Unreachable* node) {
-    printf("<unreachable>");
     return true;
 }
 
@@ -1581,6 +1912,13 @@ bool PrintVisitor::visit_with(AST_With* node) {
     return true;
 }
 
+bool PrintVisitor::visit_yield(AST_Yield* node) {
+    printf("yield ");
+    if (node->value)
+        node->value->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_branch(AST_Branch* node) {
     printf("if ");
     node->test->accept(this);
@@ -1602,13 +1940,25 @@ bool PrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
     return true;
 }
 
+bool PrintVisitor::visit_makefunction(AST_MakeFunction* node) {
+    printf("make_");
+    return false;
+}
+
+bool PrintVisitor::visit_makeclass(AST_MakeClass* node) {
+    printf("make_");
+    return false;
+}
+
 class FlattenVisitor : public ASTVisitor {
 private:
     std::vector<AST*>* output;
     bool expand_scopes;
 
 public:
-    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {}
+    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {
+        assert(expand_scopes && "not sure if this works properly");
+    }
 
     virtual bool visit_alias(AST_alias* node) {
         output->push_back(node);
@@ -1686,7 +2036,15 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_exec(AST_Exec* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_expr(AST_Expr* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_extslice(AST_ExtSlice* node) {
         output->push_back(node);
         return false;
     }
@@ -1695,6 +2053,10 @@ public:
         return !expand_scopes;
     }
     virtual bool visit_functiondef(AST_FunctionDef* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) {
         output->push_back(node);
         return !expand_scopes;
     }
@@ -1722,9 +2084,17 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_invoke(AST_Invoke* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_keyword(AST_keyword* node) {
         output->push_back(node);
         return false;
+    }
+    virtual bool visit_lambda(AST_Lambda* node) {
+        output->push_back(node);
+        return !expand_scopes;
     }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) {
         output->push_back(node);
@@ -1770,6 +2140,14 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_set(AST_Set* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_setcomp(AST_SetComp* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_slice(AST_Slice* node) {
         output->push_back(node);
         return false;
@@ -1798,15 +2176,15 @@ public:
         output->push_back(node);
         return false;
     }
-    virtual bool visit_unreachable(AST_Unreachable* node) {
-        output->push_back(node);
-        return false;
-    }
     virtual bool visit_while(AST_While* node) {
         output->push_back(node);
         return false;
     }
     virtual bool visit_with(AST_With* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_yield(AST_Yield* node) {
         output->push_back(node);
         return false;
     }
@@ -1820,6 +2198,15 @@ public:
         return false;
     }
     virtual bool visit_clsattribute(AST_ClsAttribute* node) {
+        output->push_back(node);
+        return false;
+    }
+
+    virtual bool visit_makeclass(AST_MakeClass* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_makefunction(AST_MakeFunction* node) {
         output->push_back(node);
         return false;
     }

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,26 +16,45 @@
 #define PYSTON_ANALYSIS_FUNCTIONANALYSIS_H
 
 #include <memory>
-#include <unordered_map>
-#include <unordered_set>
+
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+
+#include "core/stringpool.h"
+#include "core/types.h"
 
 namespace pyston {
 
 class AST_arguments;
 class AST_Jump;
+class AST_Name;
 class CFG;
 class CFGBlock;
 class ScopeInfo;
 class LivenessBBVisitor;
 
 class LivenessAnalysis {
-public:
-    bool isLiveAtEnd(const std::string& name, CFGBlock* block);
-
 private:
-    typedef std::unordered_map<CFGBlock*, std::unique_ptr<LivenessBBVisitor> > LivenessCacheMap;
-    LivenessCacheMap livenessCache;
+    CFG* cfg;
+
+    friend class LivenessBBVisitor;
+    typedef llvm::DenseMap<CFGBlock*, std::unique_ptr<LivenessBBVisitor>> LivenessCacheMap;
+    LivenessCacheMap liveness_cache;
+
+    llvm::DenseMap<InternedString, llvm::DenseMap<CFGBlock*, bool>> result_cache;
+
+public:
+    LivenessAnalysis(CFG* cfg);
+    ~LivenessAnalysis();
+
+    // we don't keep track of node->parent_block relationships, so you have to pass both:
+    bool isKill(AST_Name* node, CFGBlock* parent_block);
+
+    bool isLiveAtEnd(InternedString name, CFGBlock* block);
 };
+
+class PhiAnalysis;
+
 class DefinednessAnalysis {
 public:
     enum DefinitionLevel {
@@ -43,40 +62,53 @@ public:
         PotentiallyDefined,
         Defined,
     };
-    typedef std::unordered_set<std::string> RequiredSet;
+    typedef llvm::DenseSet<InternedString> RequiredSet;
 
 private:
-    std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel> > results;
-    std::unordered_map<CFGBlock*, const RequiredSet> defined;
-    ScopeInfo* scope_info;
+    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
+    llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
 
 public:
-    DefinednessAnalysis(AST_arguments* args, CFG* cfg, ScopeInfo* scope_info);
+    DefinednessAnalysis() {}
 
-    DefinitionLevel isDefinedAt(const std::string& name, CFGBlock* block);
-    const RequiredSet& getDefinedNamesAt(CFGBlock* block);
+    void run(llvm::DenseMap<InternedString, DefinitionLevel> initial_map, CFGBlock* initial_block,
+             ScopeInfo* scope_info);
+
+    DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
+    const RequiredSet& getDefinedNamesAtEnd(CFGBlock* block);
+
+    friend class PhiAnalysis;
 };
+
 class PhiAnalysis {
 public:
-    typedef std::unordered_set<std::string> RequiredSet;
+    typedef llvm::DenseSet<InternedString> RequiredSet;
+
+    DefinednessAnalysis definedness;
 
 private:
-    DefinednessAnalysis definedness;
     LivenessAnalysis* liveness;
-    std::unordered_map<CFGBlock*, const RequiredSet> required_phis;
+    llvm::DenseMap<CFGBlock*, RequiredSet> required_phis;
 
 public:
-    PhiAnalysis(AST_arguments*, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+    // Initials_need_phis specifies that initial_map should count as an additional entry point
+    // that may require phis.
+    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
+                CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
-    bool isRequired(const std::string& name, CFGBlock* block);
-    bool isRequiredAfter(const std::string& name, CFGBlock* block);
+    bool isRequired(InternedString name, CFGBlock* block);
+    bool isRequiredAfter(InternedString name, CFGBlock* block);
     const RequiredSet& getAllRequiredAfter(CFGBlock* block);
-    const RequiredSet& getAllDefinedAt(CFGBlock* block);
-    bool isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block);
+    const RequiredSet& getAllRequiredFor(CFGBlock* block);
+    // If "name" may be undefined at the beginning of any immediate successor block of "block":
+    bool isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block);
+    // If "name" may be undefined at the beginning of "block"
+    bool isPotentiallyUndefinedAt(InternedString name, CFGBlock* block);
 };
 
-LivenessAnalysis* computeLivenessInfo(CFG*);
-PhiAnalysis* computeRequiredPhis(AST_arguments*, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
+std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_info);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*, ScopeInfo* scope_info);
 }
 
 #endif

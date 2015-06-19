@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #include <cstring>
 
 #include "core/common.h"
+#include "core/options.h"
 
 namespace pyston {
 namespace assembler {
@@ -31,14 +32,14 @@ void Register::dump() const {
 
 const int dwarf_to_gp[] = {
     // http://www.x86-64.org/documentation/abi.pdf#page=57
-    0,  // 0
-    2,  // 1
+    0,  // 0 -> rax
+    2,  // 1 -> rdx
     1,  // 2 -> rcx
     3,  // 3 -> rbx
-    6,  // 4
-    7,  // 5
+    6,  // 4 -> rsi
+    7,  // 5 -> rdi
     5,  // 6 -> rbp
-    4,  // 7
+    4,  // 7 -> rsp
     8,  // 8 -> r8
     9,  // 9 -> r9
     10, // 10 -> r10
@@ -52,6 +53,12 @@ const int dwarf_to_gp[] = {
     // 16 -> ReturnAddress RA (??)
     // 17-32: xmm0-xmm15
 };
+
+Register Register::fromDwarf(int dwarf_regnum) {
+    assert(dwarf_regnum >= 0 && dwarf_regnum <= 16);
+
+    return Register(dwarf_to_gp[dwarf_regnum]);
+}
 
 GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
     assert(dwarf_regnum >= 0);
@@ -98,6 +105,11 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
 
 
 void Assembler::emitByte(uint8_t b) {
+    if (addr >= end_addr) {
+        failed = true;
+        return;
+    }
+
     assert(addr < end_addr);
     *addr = b;
     ++addr;
@@ -105,7 +117,9 @@ void Assembler::emitByte(uint8_t b) {
 
 void Assembler::emitInt(int64_t n, int bytes) {
     assert(bytes > 0 && bytes <= 8);
-    assert((-1L << (8 * bytes - 1)) <= n && n <= ((1L << (8 * bytes - 1)) - 1));
+    if (bytes < 8)
+        assert((-1L << (8 * bytes - 1)) <= n && n <= ((1L << (8 * bytes - 1)) - 1));
+
     for (int i = 0; i < bytes; i++) {
         emitByte(n & 0xff);
         n >>= 8;
@@ -130,8 +144,6 @@ void Assembler::emitSIB(uint8_t scalebits, uint8_t index, uint8_t base) {
     assert(base < 8);
     emitByte((scalebits << 6) | (index << 3) | base);
 }
-
-
 
 void Assembler::mov(Immediate val, Register dest) {
     int rex = REX_W;
@@ -254,7 +266,67 @@ void Assembler::mov(Register src, Indirect dest) {
 }
 
 void Assembler::mov(Indirect src, Register dest) {
-    int rex = REX_W;
+    mov_generic(src, dest, MovType::Q);
+}
+void Assembler::movq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::Q);
+}
+void Assembler::movl(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::L);
+}
+void Assembler::movb(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::B);
+}
+void Assembler::movzbl(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::ZBL);
+}
+void Assembler::movsbl(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::SBL);
+}
+void Assembler::movzwl(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::ZBL);
+}
+void Assembler::movswl(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::SBL);
+}
+void Assembler::movzbq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::ZBQ);
+}
+void Assembler::movsbq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::SBQ);
+}
+void Assembler::movzwq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::ZWQ);
+}
+void Assembler::movswq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::SWQ);
+}
+void Assembler::movslq(Indirect src, Register dest) {
+    mov_generic(src, dest, MovType::SLQ);
+}
+
+void Assembler::mov_generic(Indirect src, Register dest, MovType type) {
+    int rex;
+    switch (type) {
+        case MovType::Q:
+        case MovType::ZBQ:
+        case MovType::SBQ:
+        case MovType::ZWQ:
+        case MovType::SWQ:
+        case MovType::SLQ:
+            rex = REX_W;
+            break;
+        case MovType::L:
+        case MovType::B:
+        case MovType::ZBL:
+        case MovType::SBL:
+        case MovType::ZWL:
+        case MovType::SWL:
+            rex = 0;
+            break;
+        default:
+            RELEASE_ASSERT(false, "unrecognized MovType");
+    }
 
     int src_idx = src.base.regnum;
     int dest_idx = dest.regnum;
@@ -268,8 +340,44 @@ void Assembler::mov(Indirect src, Register dest) {
         dest_idx -= 8;
     }
 
-    emitRex(rex);
-    emitByte(0x8b); // opcode
+    if (rex)
+        emitRex(rex);
+
+    // opcode
+    switch (type) {
+        case MovType::Q:
+        case MovType::L:
+            emitByte(0x8b);
+            break;
+        case MovType::B:
+            emitByte(0x8a);
+            break;
+        case MovType::ZBQ:
+        case MovType::ZBL:
+            emitByte(0x0f);
+            emitByte(0xb6);
+            break;
+        case MovType::SBQ:
+        case MovType::SBL:
+            emitByte(0x0f);
+            emitByte(0xbe);
+            break;
+        case MovType::ZWQ:
+        case MovType::ZWL:
+            emitByte(0x0f);
+            emitByte(0xb7);
+            break;
+        case MovType::SWQ:
+        case MovType::SWL:
+            emitByte(0x0f);
+            emitByte(0xbf);
+            break;
+        case MovType::SLQ:
+            emitByte(0x63);
+            break;
+        default:
+            RELEASE_ASSERT(false, "unrecognized MovType");
+    }
 
     bool needssib = (src_idx == 0b100);
 
@@ -324,7 +432,6 @@ void Assembler::movsd(XMMRegister src, Indirect dest) {
     int dest_idx = dest.base.regnum;
 
     if (src_idx >= 8) {
-        trap();
         rex |= REX_R;
         src_idx -= 8;
     }
@@ -406,6 +513,74 @@ void Assembler::movsd(Indirect src, XMMRegister dest) {
     }
 }
 
+void Assembler::movss(Indirect src, XMMRegister dest) {
+    int rex = 0;
+    int src_idx = src.base.regnum;
+    int dest_idx = dest.regnum;
+
+    if (src_idx >= 8) {
+        trap();
+        rex |= REX_R;
+        src_idx -= 8;
+    }
+    if (dest_idx >= 8) {
+        trap();
+        rex |= REX_B;
+        dest_idx -= 8;
+    }
+
+    emitByte(0xf3);
+    if (rex)
+        emitRex(rex);
+    emitByte(0x0f);
+    emitByte(0x10);
+
+    bool needssib = (src_idx == 0b100);
+
+    int mode;
+    if (src.offset == 0)
+        mode = 0b00;
+    else if (-0x80 <= src.offset && src.offset < 0x80)
+        mode = 0b01;
+    else
+        mode = 0b10;
+
+    emitModRM(mode, dest_idx, src_idx);
+
+    if (needssib)
+        emitSIB(0b00, 0b100, src_idx);
+
+    if (mode == 0b01) {
+        emitByte(src.offset);
+    } else if (mode == 0b10) {
+        emitInt(src.offset, 4);
+    }
+}
+
+void Assembler::cvtss2sd(XMMRegister src, XMMRegister dest) {
+    int rex = 0;
+    int src_idx = src.regnum;
+    int dest_idx = dest.regnum;
+
+    if (src_idx >= 8) {
+        trap();
+        rex |= REX_R;
+        src_idx -= 8;
+    }
+    if (dest_idx >= 8) {
+        trap();
+        rex |= REX_B;
+        dest_idx -= 8;
+    }
+
+    emitByte(0xf3);
+    if (rex)
+        emitRex(rex);
+    emitByte(0x0f);
+    emitByte(0x5a);
+
+    emitModRM(0b11, src_idx, dest_idx);
+}
 
 void Assembler::push(Register reg) {
     // assert(0 && "This breaks unwinding, please don't use.");
@@ -447,12 +622,52 @@ void Assembler::sub(Immediate imm, Register reg) {
     emitArith(imm, reg, OPCODE_SUB);
 }
 
-void Assembler::inc(Register reg) {
-    UNIMPLEMENTED();
+void Assembler::incl(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 0, src_idx);
+    } else {
+        emitModRM(0b01, 0, src_idx);
+        emitByte(mem.offset);
+    }
 }
 
-void Assembler::inc(Indirect mem) {
-    UNIMPLEMENTED();
+void Assembler::decl(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 1, src_idx);
+    } else {
+        emitModRM(0b01, 1, src_idx);
+        emitByte(mem.offset);
+    }
 }
 
 
@@ -465,6 +680,9 @@ void Assembler::callq(Register r) {
     emitByte(0xd3);
 }
 
+void Assembler::retq() {
+    emitByte(0xc3);
+}
 
 
 void Assembler::cmp(Register reg1, Register reg2) {
@@ -477,7 +695,6 @@ void Assembler::cmp(Register reg1, Register reg2) {
         reg1_idx -= 8;
     }
     if (reg2_idx >= 8) {
-        trap();
         rex |= REX_B;
         reg2_idx -= 8;
     }
@@ -497,7 +714,7 @@ void Assembler::cmp(Register reg, Immediate imm) {
     int reg_idx = reg.regnum;
 
     int rex = REX_W;
-    if (reg_idx > 8) {
+    if (reg_idx >= 8) {
         rex |= REX_B;
         reg_idx -= 8;
     }
@@ -526,12 +743,15 @@ void Assembler::cmp(Indirect mem, Immediate imm) {
     emitRex(rex);
     emitByte(0x81);
 
-    assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, 7, src_idx);
-    } else {
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, 7, src_idx);
         emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, 7, src_idx);
+        emitInt(mem.offset, 4);
     }
 
     emitInt(val, 4);
@@ -557,12 +777,47 @@ void Assembler::cmp(Indirect mem, Register reg) {
     emitRex(rex);
     emitByte(0x3B);
 
-    assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, reg_idx, mem_idx);
-    } else {
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, reg_idx, mem_idx);
         emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, reg_idx, mem_idx);
+        emitInt(mem.offset, 4);
+    }
+}
+
+void Assembler::lea(Indirect mem, Register reg) {
+    int mem_idx = mem.base.regnum;
+    int reg_idx = reg.regnum;
+
+    int rex = REX_W;
+    if (mem_idx >= 8) {
+        rex |= REX_B;
+        mem_idx -= 8;
+    }
+    if (reg_idx >= 8) {
+        rex |= REX_R;
+        reg_idx -= 8;
+    }
+
+    assert(mem_idx >= 0 && mem_idx < 8);
+    assert(reg_idx >= 0 && reg_idx < 8);
+
+    emitRex(rex);
+    emitByte(0x8D);
+
+    if (mem.offset == 0) {
+        emitModRM(0b00, reg_idx, mem_idx);
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
+        emitModRM(0b01, reg_idx, mem_idx);
+        emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, reg_idx, mem_idx);
+        emitInt(mem.offset, 4);
     }
 }
 
@@ -639,6 +894,20 @@ void Assembler::je(JumpDestination dest) {
     jmp_cond(dest, COND_EQUAL);
 }
 
+void Assembler::jmpq(Register dest) {
+    int reg_idx = dest.regnum;
+
+    if (reg_idx >= 8) {
+        emitRex(REX_B);
+        reg_idx -= 8;
+    }
+
+    assert(0 <= reg_idx && reg_idx < 8);
+
+    emitByte(0xff);
+    emitModRM(0b11, 0b100, reg_idx);
+}
+
 
 
 void Assembler::set_cond(Register reg, ConditionCode condition) {
@@ -671,21 +940,21 @@ uint8_t* Assembler::emitCall(void* ptr, Register scratch) {
     return addr;
 }
 
-void Assembler::emitBatchPush(StackInfo stack_info, const std::vector<GenericRegister>& to_push) {
-    assert(stack_info.has_scratch);
+void Assembler::emitBatchPush(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push) {
     int offset = 0;
 
     for (const GenericRegister& r : to_push) {
-        assert(stack_info.scratch_bytes >= offset + 8);
-        Indirect next_slot(RBP, offset + stack_info.scratch_rbp_offset);
+        Indirect next_slot(RBP, offset + scratch_rbp_offset);
 
         if (r.type == GenericRegister::GP) {
             Register gp = r.gp;
             assert(gp.regnum >= 0 && gp.regnum < 16);
+            assert(scratch_size >= offset + 8);
             mov(gp, next_slot);
             offset += 8;
         } else if (r.type == GenericRegister::XMM) {
             XMMRegister reg = r.xmm;
+            assert(scratch_size >= offset + 8);
             movsd(reg, next_slot);
             offset += 8;
         } else {
@@ -694,18 +963,17 @@ void Assembler::emitBatchPush(StackInfo stack_info, const std::vector<GenericReg
     }
 }
 
-void Assembler::emitBatchPop(StackInfo stack_info, const std::vector<GenericRegister>& to_push) {
-    assert(stack_info.has_scratch);
+void Assembler::emitBatchPop(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push) {
     int offset = 0;
 
     for (const GenericRegister& r : to_push) {
-        assert(stack_info.scratch_bytes >= offset + 8);
-        Indirect next_slot(RBP, offset + stack_info.scratch_rbp_offset);
+        assert(scratch_size >= offset + 8);
+        Indirect next_slot(RBP, offset + scratch_rbp_offset);
 
         if (r.type == GenericRegister::GP) {
             Register gp = r.gp;
             assert(gp.regnum >= 0 && gp.regnum < 16);
-            mov(next_slot, gp);
+            movq(next_slot, gp);
             offset += 8;
         } else if (r.type == GenericRegister::XMM) {
             XMMRegister reg = r.xmm;
@@ -733,72 +1001,6 @@ void Assembler::emitAnnotation(int num) {
     nop();
     cmp(RAX, Immediate(num));
     nop();
-}
-
-
-
-uint8_t* initializePatchpoint2(uint8_t* start_addr, uint8_t* slowpath_start, uint8_t* end_addr, StackInfo stack_info,
-                               const std::unordered_set<int>& live_outs) {
-    assert(start_addr < slowpath_start);
-    static const int INITIAL_CALL_SIZE = 13;
-    assert(end_addr > slowpath_start + INITIAL_CALL_SIZE);
-#ifndef NDEBUG
-    // if (VERBOSITY()) printf("initializing patchpoint at %p - %p\n", addr, addr + size);
-    // for (int i = 0; i < size; i++) {
-    // printf("%02x ", *(addr + i));
-    //}
-    // printf("\n");
-
-    // Check the exact form of the patchpoint call.
-    // It's important to make sure that the only live registers
-    // are the ones that are used as arguments; ie it wouldn't
-    // matter if the call happened on %r10 instead of %r11,
-    // but it would matter if there wasn't a mov immediately before
-    // the call, since then %r11 would be live and we couldn't
-    // use it as a temporary.
-
-    // mov $imm, %r11:
-    ASSERT(start_addr[0] == 0x49, "%x", start_addr[0]);
-    assert(start_addr[1] == 0xbb);
-    // 8 bytes of the addr
-
-    // callq *%r11:
-    assert(start_addr[10] == 0x41);
-    assert(start_addr[11] == 0xff);
-    assert(start_addr[12] == 0xd3);
-
-    int i = INITIAL_CALL_SIZE;
-    while (*(start_addr + i) == 0x66 || *(start_addr + i) == 0x0f || *(start_addr + i) == 0x2e)
-        i++;
-    assert(*(start_addr + i) == 0x90 || *(start_addr + i) == 0x1f);
-#endif
-
-    void* call_addr = *(void**)&start_addr[2];
-
-    Assembler(start_addr, slowpath_start - start_addr).fillWithNops();
-
-    std::vector<GenericRegister> regs_to_spill;
-    for (int dwarf_regnum : live_outs) {
-        GenericRegister ru = GenericRegister::fromDwarf(dwarf_regnum);
-
-        if (ru.type == GenericRegister::GP) {
-            if (ru.gp == RSP || ru.gp.isCalleeSave())
-                continue;
-        }
-
-        regs_to_spill.push_back(ru);
-    }
-
-    Assembler assem(slowpath_start, end_addr - slowpath_start);
-
-    // if (regs_to_spill.size())
-    // assem.trap();
-    assem.emitBatchPush(stack_info, regs_to_spill);
-    uint8_t* rtn = assem.emitCall(call_addr, R11);
-    assem.emitBatchPop(stack_info, regs_to_spill);
-    assem.fillWithNops();
-
-    return rtn;
 }
 }
 }

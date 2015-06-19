@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 #include <sstream>
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/Object/ObjectFile.h"
 
 #include "codegen/profiling/profiling.h"
 #include "core/common.h"
@@ -26,12 +26,13 @@ namespace pyston {
 class DumpJITEventListener : public llvm::JITEventListener {
 private:
 public:
-    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj, const llvm::RuntimeDyld::LoadedObjectInfo& L);
 };
 
 static int num = 0;
-void DumpJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
-    llvm::error_code code;
+void DumpJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                               const llvm::RuntimeDyld::LoadedObjectInfo& L) {
+    llvm_error_code code;
 
     std::ostringstream os("");
     os << "jit" << ++num << ".o";

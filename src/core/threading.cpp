@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,118 +18,269 @@
 #include <cstdio>
 #include <cstdlib>
 #include <err.h>
+#include <setjmp.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "Python.h"
+
+#include "codegen/codegen.h" // sigprof_pending
 #include "core/common.h"
 #include "core/options.h"
+#include "core/stats.h"
 #include "core/thread_utils.h"
-
-extern "C" int start_thread(void* arg);
+#include "core/util.h"
+#include "gc/collector.h"
+#include "runtime/objmodel.h" // _printStacktrace
 
 namespace pyston {
 namespace threading {
 
-// Linux specific: TODO should be in a plat/linux/ directory?
-pid_t gettid() {
-    pid_t tid = syscall(SYS_gettid);
-    assert(tid > 0);
-    return tid;
+extern "C" {
+__thread PyThreadState cur_thread_state
+    = { 0, NULL, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
 }
-int tgkill(int tgid, int tid, int sig) {
-    return syscall(SYS_tgkill, tgid, tid, sig);
-}
+
+PthreadFastMutex threading_lock;
 
 // Certain thread examination functions won't be valid for a brief
 // period while a thread is starting up.
 // To handle this, track the number of threads in an uninitialized state,
 // and wait until they start up.
+// As a minor optimization, this is not a std::atomic since it should only
+// be checked while the threading_lock is held; might not be worth it.
 int num_starting_threads(0);
 
-struct ThreadStartArgs {
-    void* (*start_func)(Box*, Box*, Box*);
-    Box* arg1, *arg2, *arg3;
-};
+class ThreadStateInternal {
+private:
+    bool saved;
+    ucontext_t ucontext;
 
-static pthread_mutex_t threading_lock = PTHREAD_MUTEX_INITIALIZER;
-struct ThreadInfo {
-    // "bottom" in the sense of a stack, which in a down-growing stack is the highest address:
-    void* stack_bottom;
+public:
+    void* stack_start;
+
+    struct StackInfo {
+        BoxedGenerator* next_generator;
+        void* stack_start;
+        void* stack_limit;
+
+        StackInfo(BoxedGenerator* next_generator, void* stack_start, void* stack_limit)
+            : next_generator(next_generator), stack_start(stack_start), stack_limit(stack_limit) {
+#if STACK_GROWS_DOWN
+            assert(stack_start > stack_limit);
+            assert((char*)stack_start - (char*)stack_limit < (1L << 30));
+#else
+            assert(stack_start < stack_limit);
+            assert((char*)stack_limit - (char*)stack_start < (1L << 30));
+#endif
+        }
+    };
+
+    std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
-};
-static std::unordered_map<pid_t, ThreadInfo> current_threads;
 
-void* getStackBottom() {
-    return current_threads[gettid()].stack_bottom;
+    PyThreadState* public_thread_state;
+
+    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
+        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
+
+    void saveCurrent() {
+        assert(!saved);
+        getcontext(&ucontext);
+        saved = true;
+    }
+
+    void popCurrent() {
+        assert(saved);
+        saved = false;
+    }
+
+    bool isValid() { return saved; }
+
+    ucontext_t* getContext() { return &ucontext; }
+
+    void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+        previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
+        this->stack_start = new_stack_start;
+    }
+
+    void popGenerator() {
+        assert(previous_stacks.size());
+        StackInfo& stack = previous_stacks.back();
+        stack_start = stack.stack_start;
+        previous_stacks.pop_back();
+    }
+
+    void assertNoGenerators() { assert(previous_stacks.size() == 0); }
+
+    void accept(gc::GCVisitor* v) {
+        auto pub_state = public_thread_state;
+        if (pub_state->curexc_type)
+            v->visit(pub_state->curexc_type);
+        if (pub_state->curexc_value)
+            v->visit(pub_state->curexc_value);
+        if (pub_state->curexc_traceback)
+            v->visit(pub_state->curexc_traceback);
+        if (pub_state->dict)
+            v->visit(pub_state->dict);
+
+        for (auto& stack_info : previous_stacks) {
+            v->visit(stack_info.next_generator);
+#if STACK_GROWS_DOWN
+            v->visitPotentialRange((void**)stack_info.stack_limit, (void**)stack_info.stack_start);
+#else
+            v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
+#endif
+        }
+    }
+};
+static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
+static __thread ThreadStateInternal* current_internal_thread_state = 0;
+
+void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+    assert(new_stack_start);
+    assert(old_stack_limit);
+    assert(current_internal_thread_state);
+    current_internal_thread_state->pushGenerator(g, new_stack_start, old_stack_limit);
 }
 
+void popGenerator() {
+    assert(current_internal_thread_state);
+    current_internal_thread_state->popGenerator();
+}
+
+// These are guarded by threading_lock
 static int signals_waiting(0);
-static std::vector<ThreadState> thread_states;
-std::vector<ThreadState> getAllThreadStates() {
+static gc::GCVisitor* cur_visitor = NULL;
+
+// This function should only be called with the threading_lock held:
+static void pushThreadState(ThreadStateInternal* thread_state, ucontext_t* context) {
+    assert(cur_visitor);
+    cur_visitor->visitPotentialRange((void**)context, (void**)(context + 1));
+
+#if STACK_GROWS_DOWN
+    void* stack_low = (void*)context->uc_mcontext.gregs[REG_RSP];
+    void* stack_high = thread_state->stack_start;
+#else
+    void* stack_low = thread_state->stack_start;
+    void* stack_high = (void*)context->uc_mcontext.gregs[REG_RSP];
+#endif
+
+    assert(stack_low < stack_high);
+    cur_visitor->visitPotentialRange((void**)stack_low, (void**)stack_high);
+
+    thread_state->accept(cur_visitor);
+}
+
+// This better not get inlined:
+void* getCurrentStackLimit() __attribute__((noinline));
+void* getCurrentStackLimit() {
+    return __builtin_frame_address(0);
+}
+
+static void visitLocalStack(gc::GCVisitor* v) {
+    // force callee-save registers onto the stack:
+    jmp_buf registers __attribute__((aligned(sizeof(void*))));
+    setjmp(registers);
+    assert(sizeof(registers) % 8 == 0);
+    v->visitPotentialRange((void**)&registers, (void**)((&registers) + 1));
+
+    assert(current_internal_thread_state);
+#if STACK_GROWS_DOWN
+    void* stack_low = getCurrentStackLimit();
+    void* stack_high = current_internal_thread_state->stack_start;
+#else
+    void* stack_low = current_thread_state->stack_start;
+    void* stack_high = getCurrentStackLimit();
+#endif
+
+    assert(stack_low < stack_high);
+    v->visitPotentialRange((void**)stack_low, (void**)stack_high);
+
+    current_internal_thread_state->accept(v);
+}
+
+void visitAllStacks(gc::GCVisitor* v) {
+    visitLocalStack(v);
+
     // TODO need to prevent new threads from starting,
     // though I suppose that will have been taken care of
     // by the caller of this function.
 
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
+
+    assert(cur_visitor == NULL);
+    cur_visitor = v;
 
     while (true) {
         // TODO shouldn't busy-wait:
         if (num_starting_threads) {
-            pthread_mutex_unlock(&threading_lock);
+            threading_lock.unlock();
             sleep(0);
-            pthread_mutex_lock(&threading_lock);
+            threading_lock.lock();
         } else {
             break;
         }
     }
 
     signals_waiting = (current_threads.size() - 1);
-    thread_states.clear();
 
-    pid_t tgid = getpid();
-    pid_t mytid = gettid();
+    // Current strategy:
+    // Let the other threads decide whether they want to cooperate and save their state before we get here.
+    // If they did save their state (as indicated by current_threads[tid]->isValid), then we use that.
+    // Otherwise, we send them a signal and use the signal handler to look at their thread state.
+
+    pthread_t mytid = pthread_self();
     for (auto& pair : current_threads) {
-        pid_t tid = pair.first;
+        pthread_t tid = pair.first;
+
         if (tid == mytid)
             continue;
-        tgkill(tgid, tid, SIGUSR2);
+
+        ThreadStateInternal* state = pair.second;
+        if (state->isValid()) {
+            pushThreadState(state, state->getContext());
+            signals_waiting--;
+            continue;
+        }
+
+        pthread_kill(tid, SIGUSR2);
     }
 
     // TODO shouldn't busy-wait:
     while (signals_waiting) {
-        pthread_mutex_unlock(&threading_lock);
+        threading_lock.unlock();
+        // printf("Waiting for %d threads\n", signals_waiting);
         sleep(0);
-        pthread_mutex_lock(&threading_lock);
+        threading_lock.lock();
     }
 
     assert(num_starting_threads == 0);
 
-    return std::move(thread_states);
+    cur_visitor = NULL;
 }
 
 static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
 
     ucontext_t* context = static_cast<ucontext_t*>(_context);
 
-    pid_t tid = gettid();
+    pthread_t tid = pthread_self();
     if (VERBOSITY() >= 2) {
-        printf("in thread_context_dump, tid=%d\n", tid);
+        printf("in thread_context_dump, tid=%ld\n", tid);
         printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
-        printf("old rip: 0x%lx\n", context->uc_mcontext.gregs[REG_RIP]);
+        printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
 
-#if STACK_GROWS_DOWN
-    void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
-    void* stack_end = current_threads[tid].stack_bottom;
-#else
-    void* stack_start = current_threads[tid].stack_bottom;
-    void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
-#endif
-    assert(stack_start < stack_end);
-    thread_states.push_back(ThreadState(tid, context, stack_start, stack_end));
+    assert(current_internal_thread_state == current_threads[tid]);
+    pushThreadState(current_threads[tid], context);
     signals_waiting--;
 }
+
+struct ThreadStartArgs {
+    void* (*start_func)(Box*, Box*, Box*);
+    Box* arg1, *arg2, *arg3;
+};
 
 static void* _thread_start(void* _arg) {
     ThreadStartArgs* arg = static_cast<ThreadStartArgs*>(_arg);
@@ -139,15 +290,15 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    {
-        LockedRegion _lock(&threading_lock);
+    pthread_t current_thread = pthread_self();
 
-        pid_t tid = gettid();
-        pthread_t current_thread = pthread_self();
+    {
+        LOCK_REGION(&threading_lock);
 
         pthread_attr_t thread_attrs;
         int code = pthread_getattr_np(current_thread, &thread_attrs);
-        RELEASE_ASSERT(code == 0, "");
+        if (code)
+            err(1, NULL);
 
         void* stack_start;
         size_t stack_size;
@@ -156,49 +307,59 @@ static void* _thread_start(void* _arg) {
 
         pthread_attr_destroy(&thread_attrs);
 
-        current_threads[tid] = ThreadInfo {
 #if STACK_GROWS_DOWN
-            .stack_bottom = static_cast<char*>(stack_start) + stack_size,
+        void* stack_bottom = static_cast<char*>(stack_start) + stack_size;
 #else
-            .stack_bottom = stack_start,
+        void* stack_bottom = stack_start;
 #endif
-            .pthread_id = current_thread,
-        };
+        current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+        current_threads[current_thread] = current_internal_thread_state;
 
         num_starting_threads--;
 
         if (VERBOSITY() >= 2)
-            printf("child initialized; tid=%d\n", gettid());
+            printf("child initialized; tid=%ld\n", current_thread);
     }
 
     threading::GLReadRegion _glock;
+    assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
+    current_internal_thread_state->assertNoGenerators();
 
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
 
-        current_threads.erase(gettid());
+        current_threads.erase(current_thread);
         if (VERBOSITY() >= 2)
-            printf("thread tid=%d exited\n", gettid());
+            printf("thread tid=%ld exited\n", current_thread);
     }
+    current_internal_thread_state = 0;
 
     return rtn;
 }
 
+static bool thread_was_started = false;
+bool threadWasStarted() {
+    return thread_was_started;
+}
+
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3) {
+    thread_was_started = true;
+
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
         num_starting_threads++;
     }
 
-    ThreadStartArgs* args = new ThreadStartArgs({ .start_func = start_func, .arg1 = arg1, .arg2 = arg2, .arg3 = arg3 });
+    ThreadStartArgs* args = new ThreadStartArgs({.start_func = start_func, .arg1 = arg1, .arg2 = arg2, .arg3 = arg3 });
 
     pthread_t thread_id;
     int code = pthread_create(&thread_id, NULL, &_thread_start, args);
     RELEASE_ASSERT(code == 0, "");
     if (VERBOSITY() >= 2)
         printf("pthread thread_id: 0x%lx\n", thread_id);
+    pthread_detach(thread_id);
 
     static_assert(sizeof(pthread_t) <= sizeof(intptr_t), "");
     return thread_id;
@@ -248,20 +409,15 @@ static void* find_stack() {
     return NULL; /* not found =^P */
 }
 
-intptr_t call_frame_base;
 void registerMainThread() {
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
 
-    // Would be nice if we could set this to the pthread start_thread,
-    // since _thread_start doesn't always show up in the traceback.
-    // call_frame_base = (intptr_t)::start_thread;
-    call_frame_base = (intptr_t)_thread_start;
-
-    current_threads[gettid()] = ThreadInfo{
-        .stack_bottom = find_stack(), .pthread_id = pthread_self(),
-    };
+    assert(!current_internal_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    current_threads[pthread_self()] = current_internal_thread_state;
 
     struct sigaction act;
+    memset(&act, 0, sizeof(act));
     act.sa_flags = SA_SIGINFO;
     act.sa_sigaction = _thread_context_dump;
     struct sigaction oldact;
@@ -269,20 +425,242 @@ void registerMainThread() {
     int code = sigaction(SIGUSR2, &act, &oldact);
     if (code)
         err(1, NULL);
+
+    assert(!PyErr_Occurred());
+}
+
+void finishMainThread() {
+    assert(current_internal_thread_state);
+    current_internal_thread_state->assertNoGenerators();
+
+    // TODO maybe this is the place to wait for non-daemon threads?
 }
 
 
+// For the "AllowThreads" regions, let's save the thread state at the beginning of the region.
+// This means that the thread won't get interrupted by the signals we would otherwise need to
+// send to get the GC roots.
+// It adds some perf overhead I suppose, though I haven't measured it.
+// It also means that you're not allowed to do that much inside an AllowThreads region...
+// TODO maybe we should let the client decide which way to handle it
+extern "C" void beginAllowThreads() noexcept {
+    // I don't think it matters whether the GL release happens before or after the state
+    // saving; do it before, then, to reduce the amount we hold the GL:
+    releaseGLRead();
+
+    {
+        LOCK_REGION(&threading_lock);
+
+        assert(current_internal_thread_state);
+        current_internal_thread_state->saveCurrent();
+    }
+}
+
+extern "C" void endAllowThreads() noexcept {
+    {
+        LOCK_REGION(&threading_lock);
+
+        assert(current_internal_thread_state);
+        current_internal_thread_state->popCurrent();
+    }
+
+
+    acquireGLRead();
+}
+
 #if THREADING_USE_GIL
+#if THREADING_USE_GRWL
+#error "Can't turn on both the GIL and the GRWL!"
+#endif
+
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
+static std::atomic<int> threads_waiting_on_gil(0);
+static pthread_cond_t gil_acquired = PTHREAD_COND_INITIALIZER;
+
+extern "C" void PyEval_ReInitThreads() noexcept {
+    pthread_t current_thread = pthread_self();
+    assert(current_threads.count(pthread_self()));
+
+    auto it = current_threads.begin();
+    while (it != current_threads.end()) {
+        if (it->second->pthread_id == current_thread) {
+            ++it;
+        } else {
+            it = current_threads.erase(it);
+        }
+    }
+
+    // We need to make sure the threading lock is released, so we unconditionally unlock it. After a fork, we are the
+    // only thread, so this won't race; and since it's a "fast" mutex (see `man pthread_mutex_lock`), this works even
+    // if it isn't locked. If we needed to avoid unlocking a non-locked mutex, though, we could trylock it first:
+    //
+    //     int err = pthread_mutex_trylock(&threading_lock.mutex);
+    //     ASSERT(!err || err == EBUSY, "pthread_mutex_trylock failed, but not with EBUSY");
+    //
+    threading_lock.unlock();
+
+    num_starting_threads = 0;
+    threads_waiting_on_gil = 0;
+
+    // TODO we should clean up all created PerThreadSets, such as the one used in the heap for thread-local-caches.
+}
+
 void acquireGLWrite() {
+    threads_waiting_on_gil++;
     pthread_mutex_lock(&gil);
+    threads_waiting_on_gil--;
+
+    pthread_cond_signal(&gil_acquired);
 }
 
 void releaseGLWrite() {
     pthread_mutex_unlock(&gil);
 }
+
+#define GIL_CHECK_INTERVAL 1000
+// Note: this doesn't need to be an atomic, since it should
+// only be accessed by the thread that holds the gil:
+int gil_check_count = 0;
+
+// TODO: this function is fair in that it forces a thread to give up the GIL
+// after a bounded amount of time, but currently we have no guarantees about
+// who it will release the GIL to.  So we could have two threads that are
+// switching back and forth, and a third that never gets run.
+// We could enforce fairness by having a FIFO of events (implementd with mutexes?)
+// and make sure to always wake up the longest-waiting one.
+void allowGLReadPreemption() {
+#if ENABLE_SAMPLING_PROFILER
+    if (unlikely(sigprof_pending)) {
+        // Output multiple stacktraces if we received multiple signals
+        // between being able to handle it (such as being in LLVM or the GC),
+        // to try to fully account for that time.
+        while (sigprof_pending) {
+            _printStacktrace();
+            sigprof_pending--;
+        }
+    }
 #endif
+
+    // Double-checked locking: first read with no ordering constraint:
+    if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
+        return;
+
+    gil_check_count++;
+    if (gil_check_count >= GIL_CHECK_INTERVAL) {
+        gil_check_count = 0;
+
+        // Double check this, since if we are wrong about there being a thread waiting on the gil,
+        // we're going to get stuck in the following pthread_cond_wait:
+        if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
+            return;
+
+        threads_waiting_on_gil++;
+        pthread_cond_wait(&gil_acquired, &gil);
+        threads_waiting_on_gil--;
+        pthread_cond_signal(&gil_acquired);
+    }
+}
+#elif THREADING_USE_GRWL
+static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
+
+enum class GRWLHeldState {
+    N,
+    R,
+    W,
+};
+static __thread GRWLHeldState grwl_state = GRWLHeldState::N;
+
+static std::atomic<int> writers_waiting(0);
+
+void acquireGLRead() {
+    assert(grwl_state == GRWLHeldState::N);
+    pthread_rwlock_rdlock(&grwl);
+    grwl_state = GRWLHeldState::R;
+}
+
+void releaseGLRead() {
+    assert(grwl_state == GRWLHeldState::R);
+    pthread_rwlock_unlock(&grwl);
+    grwl_state = GRWLHeldState::N;
+}
+
+void acquireGLWrite() {
+    assert(grwl_state == GRWLHeldState::N);
+
+    writers_waiting++;
+    pthread_rwlock_wrlock(&grwl);
+    writers_waiting--;
+
+    grwl_state = GRWLHeldState::W;
+}
+
+void releaseGLWrite() {
+    assert(grwl_state == GRWLHeldState::W);
+    pthread_rwlock_unlock(&grwl);
+    grwl_state = GRWLHeldState::N;
+}
+
+void promoteGL() {
+    Timer _t2("promoting", /*min_usec=*/10000);
+
+    // Note: this is *not* the same semantics as normal promoting, on purpose.
+    releaseGLRead();
+    acquireGLWrite();
+
+    long promote_us = _t2.end();
+    static thread_local StatPerThreadCounter sc_promoting_us("grwl_promoting_us");
+    sc_promoting_us.log(promote_us);
+}
+
+void demoteGL() {
+    releaseGLWrite();
+    acquireGLRead();
+}
+
+static __thread int gl_check_count = 0;
+void allowGLReadPreemption() {
+    assert(grwl_state == GRWLHeldState::R);
+
+    // gl_check_count++;
+    // if (gl_check_count < 10)
+    // return;
+    // gl_check_count = 0;
+
+    if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
+        return;
+
+    Timer _t2("preempted", /*min_usec=*/10000);
+    pthread_rwlock_unlock(&grwl);
+    // The GRWL is a writer-prefered rwlock, so this next statement will block even
+    // if the lock is in read mode:
+    pthread_rwlock_rdlock(&grwl);
+
+    long preempt_us = _t2.end();
+    static thread_local StatPerThreadCounter sc_preempting_us("grwl_preempt_us");
+    sc_preempting_us.log(preempt_us);
+}
+#endif
+
+// We don't support CPython's TLS (yet?)
+extern "C" void PyThread_ReInitTLS(void) noexcept {
+    // don't have to do anything since we don't support TLS
+}
+extern "C" int PyThread_create_key(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyThread_delete_key(int) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" int PyThread_set_key_value(int, void*) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void* PyThread_get_key_value(int) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyThread_delete_key_value(int key) noexcept {
+    Py_FatalError("unimplemented");
+}
 
 } // namespace threading
 } // namespace pyston

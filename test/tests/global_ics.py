@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats["slowpath_getglobal"] <= 10
+# statcheck: noninit_count("slowpath_getglobal") <= 10
 
 def f():
     print True

@@ -104,7 +104,7 @@ def run(node):
     visit(InterpVisitor(), node)
 
 prog = [
-        AstAssign("x", 1000),
+        AstAssign("x", 500),
         AstAssign("t", 0),
         AstWhile("x", [
             AstAssign("t", AstBinop("t", "x", '+')),
@@ -117,7 +117,7 @@ run(prog)
 prog = [
         AstAssign("i", 2),
         AstAssign("t", 0),
-        AstWhile(AstBinop("i", 100, '<'), [
+        AstWhile(AstBinop("i", 60, '<'), [
             AstAssign("j", 2),
             AstAssign("good", 1),
             AstWhile(AstBinop(AstBinop("j", "j", '*'), "i", "<="), [

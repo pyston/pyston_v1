@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,16 @@ namespace pyston {
 
 class BoxedSlice;
 
-void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end);
+void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end, i64* out_length = nullptr);
+
+template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
+    assert(dst != src);
+    if (step == 1) {
+        memcpy(dst, &src[start], length * sizeof(T));
+    } else {
+        for (i64 curr = start, i = 0; i < length; curr += step, ++i)
+            dst[i] = src[curr];
+    }
+}
 }
 #endif

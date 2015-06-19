@@ -1,6 +1,4 @@
-# expected: fail
-# - type.__name__ is a descriptor
-
+# should_error
 class C(object):
     pass
 

@@ -12,3 +12,38 @@ print range(5, 10)
 
 print list(xrange(5))
 print list(xrange(5, 10))
+
+def f1(f):
+    def f(x=f):
+        return x
+
+    print f()
+    print f(2)
+f1(1)
+f1(3)
+
+def f2():
+    x = 0
+    def f(x, y=1, z=x):
+        print x, y, z
+    f(1)
+    f(2, 3)
+    x = 2
+    f(4, 5, 6)
+f2()
+
+def f3():
+    def f(x, l=[]):
+        l.append(x)
+        print l
+
+    f(0)
+    f(1)
+    f(2)
+    f(4, [])
+    f(5, [])
+f3()
+
+def f4(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=8):
+    print a, b, c, d, e, f, g, h
+f4()

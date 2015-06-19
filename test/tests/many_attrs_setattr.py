@@ -1,5 +1,7 @@
+# skip-if: True
+# - this test just runs until it times out and bloats test time
 # expected: fail
-# - setattr() not supported
+# - memory explosion
 
 class C(object):
     pass

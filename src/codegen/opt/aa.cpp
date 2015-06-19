@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ public:
     AliasResult _alias(const Location& LocA, const Location& LocB) {
         AliasResult base = AliasAnalysis::alias(LocA, LocB);
 
-        if (VERBOSITY("opt.aa") >= 2) {
+        if (VERBOSITY("opt.aa") >= 4) {
             indent();
             errs() << "_alias():\n";
             // cast<Instruction>(LocA.Ptr)->getParent()->dump();
@@ -97,12 +97,12 @@ public:
                 continue;
 
             const Value* bc_base = *BI->op_begin();
-            if (VERBOSITY("opt.aa") >= 2) {
+            if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 errs() << "loc " << i << " is bitcast, recursing\n";
             }
             AliasResult bc_base_aliases = alias(locs[i ^ 1], Location(bc_base, locs[i].Size));
-            if (VERBOSITY("opt.aa") >= 2) {
+            if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 bc_base->dump();
                 indent();
@@ -122,12 +122,12 @@ public:
                 assert(baseA);
                 assert(baseB);
 
-                if (VERBOSITY("opt.aa") >= 2) {
+                if (VERBOSITY("opt.aa") >= 4) {
                     indent();
                     errs() << "2 geps, recursing\n";
                 }
                 AliasResult bases_alias = alias(Location(baseA), Location(baseB));
-                if (VERBOSITY("opt.aa") >= 2) {
+                if (VERBOSITY("opt.aa") >= 4) {
                     indent();
                     errs() << "2gep base aliases: " << bases_alias << '\n';
                     indent();
@@ -146,7 +146,7 @@ public:
                     bool accumA = GIa->accumulateConstantOffset(*DL, offsetA);
                     bool accumB = GIb->accumulateConstantOffset(*DL, offsetB);
                     if (accumA && accumB) {
-                        if (VERBOSITY("opt.aa") >= 2) {
+                        if (VERBOSITY("opt.aa") >= 4) {
                             indent();
                             errs() << offsetA << ' ' << LocA.Size << ' ' << offsetB << ' ' << LocB.Size << '\n';
                         }
@@ -184,12 +184,12 @@ public:
 
             const Value* gep_base = GI->getPointerOperand();
             assert(gep_base);
-            if (VERBOSITY("opt.aa") >= 2) {
+            if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 errs() << "loc " << i << " is gep, recursing\n";
             }
             AliasResult gep_base_aliases = alias(locs[i ^ 1], Location(gep_base));
-            if (VERBOSITY("opt.aa") >= 2) {
+            if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 gep_base->dump();
                 indent();
@@ -212,13 +212,6 @@ public:
             if (isAllocCall(F->getName()))
                 return NoAlias;
 
-            // if (F->getName() == "malloc")
-            // return NoAlias;
-            //
-            // if (F->getName() == "_ZN6pyston2gc4Heap10allocSmallEmPPNS0_5BlockES4_") {
-            // return NoAlias;
-            //}
-
             if (F->getName() == "_ZN6pyston2gc13runCollectionEv") {
                 assert(0);
                 return NoAlias;
@@ -228,14 +221,14 @@ public:
         return MayAlias;
     }
 
-    virtual AliasResult alias(const Location& LocA, const Location& LocB) {
-        if (VERBOSITY("opt.aa") >= 2 && depth == 0) {
+    AliasResult alias(const Location& LocA, const Location& LocB) override {
+        if (VERBOSITY("opt.aa") >= 4 && depth == 0 && isa<Instruction>(LocA.Ptr)) {
             cast<Instruction>(LocA.Ptr)->getParent()->dump();
         }
 
         depth++;
         AliasResult rtn = _alias(LocA, LocB);
-        if (VERBOSITY("opt.aa") >= 2) {
+        if (VERBOSITY("opt.aa") >= 4) {
             indent();
             errs() << "alias():\n";
             indent();
@@ -252,12 +245,12 @@ public:
     // There are multiple (overloaded) "getModRefInfo" functions in AliasAnalysis, and apparently
     // this means you need to add this line:
     using AliasAnalysis::getModRefInfo;
-    virtual ModRefResult getModRefInfo(ImmutableCallSite CS, const Location& Loc) {
+    ModRefResult getModRefInfo(ImmutableCallSite CS, const Location& Loc) override {
         ModRefResult base = AliasAnalysis::getModRefInfo(CS, Loc);
         if (!CS.getCalledFunction())
             return base;
 
-        if (VERBOSITY("opt.aa") >= 2) {
+        if (VERBOSITY("opt.aa") >= 4) {
             errs() << "getModRefInfo():\n";
             CS->dump();
             Loc.Ptr->dump();
@@ -276,7 +269,7 @@ public:
         if (escapes != EscapeAnalysis::Escaped) {
             StatCounter num_improved("opt_modref_noescape");
             num_improved.log();
-            if (VERBOSITY("opt.aa") >= 2) {
+            if (VERBOSITY("opt.aa") >= 4) {
                 errs() << "Was able to show that " << *CS.getInstruction() << " can't modify " << *Loc.Ptr << '\n';
             }
             return NoModRef;
@@ -315,7 +308,7 @@ public:
         return ModRefResult(mask & base);
     }
 
-    virtual void* getAdjustedAnalysisPointer(const void* ID) {
+    void* getAdjustedAnalysisPointer(const void* ID) override {
         if (ID == &AliasAnalysis::ID)
             return (AliasAnalysis*)this;
         return this;

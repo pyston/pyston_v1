@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 #include "codegen/codegen.h"
 #include "codegen/irgen/util.h"
@@ -49,8 +50,6 @@ private:
     }
     BoxedClass* getClassFromGV(GlobalVariable* gv) { return *(BoxedClass**)getGVAddr(gv); }
 
-    ObjectFlavor* getFlavorFromGV(GlobalVariable* gv) { return (ObjectFlavor*)getGVAddr(gv); }
-
     void replaceUsesWithConstant(llvm::Value* v, uintptr_t val) {
         if (isa<PointerType>(v->getType()))
             v->replaceAllUsesWith(embedConstantPtr((void*)val, v->getType()));
@@ -67,31 +66,6 @@ private:
         else
             li->replaceAllUsesWith(embedConstantPtr(False, g.llvm_bool_type_ptr));
         return true;
-    }
-
-    bool handleFlavor(LoadInst* li, ConstantExpr* gepce) {
-        if (VERBOSITY("opt") >= 1) {
-            errs() << "\nFound this load of a flavor attr:\n" << *li << '\n';
-        }
-
-        GetElementPtrInst* gep = cast<GetElementPtrInst>(gepce->getAsInstruction());
-        APInt ap_offset(64, 0, true);
-        bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
-        delete gep;
-        assert(success);
-        int64_t offset = ap_offset.getSExtValue();
-
-        if (offset == offsetof(ObjectFlavor, kind_id)) {
-            ObjectFlavor* flavor = getFlavorFromGV(cast<GlobalVariable>(gepce->getOperand(0)));
-            replaceUsesWithConstant(li, flavor->kind_id);
-            return true;
-        } else {
-            ASSERT(0, "%ld", offset);
-            return false;
-        }
-
-        assert(0);
-        return false;
     }
 
     bool handleCls(LoadInst* li, GlobalVariable* gv) {
@@ -113,14 +87,6 @@ private:
         std::vector<Instruction*> to_remove;
         for (User* user : li->users()) {
             if (CallInst* call = dyn_cast<CallInst>(user)) {
-                if (call->getCalledFunction()->getName() == "_maybeDecrefCls") {
-                    errs() << "Found decrefcls call: " << *call << '\n';
-                    if (!isUserDefined(cls)) {
-                        // Don't delete right away; I think that invalidates the iterator
-                        // we're currently iterating over
-                        to_remove.push_back(call);
-                    }
-                }
                 continue;
             }
 
@@ -131,11 +97,18 @@ private:
             }
 
             APInt ap_offset(64, 0, true);
+#if LLVMREV < 214781
             bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+#elif LLVMREV < 227113
+            bool success = gep->accumulateConstantOffset(*g.tm->getSubtargetImpl()->getDataLayout(), ap_offset);
+#else
+            bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+#endif
             assert(success);
             int64_t offset = ap_offset.getSExtValue();
 
-            errs() << "Found a gep at offset " << offset << ": " << *gep << '\n';
+            if (VERBOSITY("opt") >= 1)
+                errs() << "Found a gep at offset " << offset << ": " << *gep << '\n';
 
             for (User* gep_user : gep->users()) {
                 LoadInst* gep_load = dyn_cast<LoadInst>(gep_user);
@@ -145,15 +118,18 @@ private:
                 }
 
 
-                errs() << "Found a load: " << *gep_load << '\n';
+                if (VERBOSITY("opt") >= 1)
+                    errs() << "Found a load: " << *gep_load << '\n';
 
                 if (offset == offsetof(BoxedClass, attrs_offset)) {
-                    errs() << "attrs_offset; replacing with " << cls->attrs_offset << "\n";
+                    if (VERBOSITY("opt") >= 1)
+                        errs() << "attrs_offset; replacing with " << cls->attrs_offset << "\n";
                     replaceUsesWithConstant(gep_load, cls->attrs_offset);
                     changed = true;
-                } else if (offset == offsetof(BoxedClass, instance_size)) {
-                    errs() << "instance_size; replacing with " << cls->instance_size << "\n";
-                    replaceUsesWithConstant(gep_load, cls->instance_size);
+                } else if (offset == offsetof(BoxedClass, tp_basicsize)) {
+                    if (VERBOSITY("opt") >= 1)
+                        errs() << "tp_basicsize; replacing with " << cls->tp_basicsize << "\n";
+                    replaceUsesWithConstant(gep_load, cls->tp_basicsize);
                     changed = true;
                 }
             }
@@ -190,9 +166,6 @@ public:
             ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0));
             // Not 100% sure what the isGEPWithNoNotionalOverIndexing() means, but
             // at least it checks if it's a gep:
-            if (ce && ce->isGEPWithNoNotionalOverIndexing() && ce->getOperand(0)->getType() == g.llvm_flavor_type_ptr) {
-                changed = handleFlavor(li, ce);
-            }
 
             GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0));
             if (!gv)
@@ -222,5 +195,5 @@ FunctionPass* createConstClassesPass() {
 }
 
 static RegisterPass<pyston::ConstClassesPass>
-X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded", true,
-  false);
+    X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded",
+      true, false);

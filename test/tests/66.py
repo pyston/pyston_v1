@@ -1,3 +1,4 @@
+# should_error
 # Make sure that overriding __file__ doesn't change the traceback
 # TODO the tester doesn't currently check the traceback
 

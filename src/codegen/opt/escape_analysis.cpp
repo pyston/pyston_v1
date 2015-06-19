@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,6 +53,8 @@ void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage& info) const {
 }
 
 bool EscapeAnalysis::runOnFunction(Function& F) {
+    return false; // This analysis is currently broken and not maintained
+
     if (VERBOSITY("opt") >= 1)
         outs() << "Running escape analysis on " << F.getName() << '\n';
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 #include "asm_writing/types.h"
+#include "codegen/stackmaps.h"
 #include "core/ast.h"
 
 namespace pyston {
@@ -47,10 +48,28 @@ enum ConditionCode {
     COND_GREATER = 0xF,     // ZF=0 && SF==OF: NLE/G
 };
 
+enum class MovType {
+    Q,
+    L,
+    B,
+    ZBL,
+    SBL,
+    ZWL,
+    SWL,
+    ZBQ,
+    SBQ,
+    ZWQ,
+    SWQ,
+    SLQ,
+
+    ZLQ = L,
+};
+
 class Assembler {
 private:
     uint8_t* const start_addr, *const end_addr;
     uint8_t* addr;
+    bool failed; // if the rewrite failed at the assembly-generation level for some reason
 
     static const uint8_t OPCODE_ADD = 0b000, OPCODE_SUB = 0b101;
     static const uint8_t REX_B = 1, REX_X = 2, REX_R = 4, REX_W = 8;
@@ -64,7 +83,9 @@ private:
     void emitArith(Immediate imm, Register reg, int opcode);
 
 public:
-    Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr) {}
+    Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
+
+    bool hasFailed() { return failed; }
 
     void nop() { emitByte(0x90); }
     void trap() { emitByte(0xcc); }
@@ -76,30 +97,52 @@ public:
     void movq(Immediate imm, Indirect dest);
     void mov(Register src, Register dest);
     void mov(Register src, Indirect dest);
-    void mov(Indirect src, Register dest);
     void movsd(XMMRegister src, XMMRegister dest);
     void movsd(XMMRegister src, Indirect dest);
     void movsd(Indirect src, XMMRegister dest);
+
+    void movss(Indirect src, XMMRegister dest);
+    void cvtss2sd(XMMRegister src, XMMRegister dest);
+
+    void mov(Indirect scr, Register dest);
+    void movq(Indirect scr, Register dest);
+    void movl(Indirect scr, Register dest);
+    void movb(Indirect scr, Register dest);
+    void movzbl(Indirect scr, Register dest);
+    void movsbl(Indirect scr, Register dest);
+    void movzwl(Indirect scr, Register dest);
+    void movswl(Indirect scr, Register dest);
+    void movzbq(Indirect scr, Register dest);
+    void movsbq(Indirect scr, Register dest);
+    void movzwq(Indirect scr, Register dest);
+    void movswq(Indirect scr, Register dest);
+    void movslq(Indirect scr, Register dest);
+
+    void mov_generic(Indirect src, Register dest, MovType type);
 
     void push(Register reg);
     void pop(Register reg);
 
     void add(Immediate imm, Register reg);
     void sub(Immediate imm, Register reg);
-    void inc(Register reg);
-    void inc(Indirect mem);
+    void incl(Indirect mem);
+    void decl(Indirect mem);
 
     void callq(Register reg);
+    void retq();
 
     void cmp(Register reg1, Register reg2);
     void cmp(Register reg, Immediate imm);
     void cmp(Indirect mem, Immediate imm);
     void cmp(Indirect mem, Register reg);
 
+    void lea(Indirect mem, Register reg);
+
     void test(Register reg1, Register reg2);
 
     void jmp_cond(JumpDestination dest, ConditionCode condition);
     void jmp(JumpDestination dest);
+    void jmpq(Register dest);
     void je(JumpDestination dest);
     void jne(JumpDestination dest);
 
@@ -112,12 +155,14 @@ public:
 
     // Macros:
     uint8_t* emitCall(void* func_addr, Register scratch);
-    void emitBatchPop(StackInfo stack_info, const std::vector<GenericRegister>& to_push);
-    void emitBatchPush(StackInfo stack_info, const std::vector<GenericRegister>& to_push);
+    void emitBatchPop(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push);
+    void emitBatchPush(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push);
     void fillWithNops();
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
 
+    int bytesWritten() { return addr - start_addr; }
+    uint8_t* curInstPointer() { return addr; }
     bool isExactlyFull() { return addr == end_addr; }
 };
 

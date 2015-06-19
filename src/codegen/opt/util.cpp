@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,17 +14,18 @@
 
 #include "codegen/opt/util.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 
 namespace pyston {
 
-bool isAllocCall(const std::string& name) {
+bool isAllocCall(const llvm::StringRef name) {
     if (name == "malloc")
         return true;
 
-    if (name == "_ZN6pyston2gc4Heap10allocSmallEmPPNS0_5BlockES4_")
+    if (name == "_ZN6pyston2gc4Heap10allocSmallEmi")
         return true;
 
     return false;
@@ -39,5 +40,14 @@ bool isAllocCall(const llvm::CallInst* CI) {
         return false;
 
     return isAllocCall(Callee->getName());
+}
+
+void* getCalledFuncAddr(const llvm::CallInst* CI) {
+    if (const llvm::ConstantExpr* CE = llvm::dyn_cast<const llvm::ConstantExpr>(CI->getCalledValue())) {
+        llvm::PointerType* PT = llvm::dyn_cast<llvm::PointerType>(CE->getType());
+        if (CE->isCast() && CE->getOpcode() == llvm::Instruction::IntToPtr && PT)
+            return (void*)llvm::cast<llvm::ConstantInt>(CE->getOperand(0))->getSExtValue();
+    }
+    return 0;
 }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,20 @@
 // This file is for forcing the inclusion of function declarations into the stdlib.
 // This is so that the types of the functions are available to the compiler.
 
+#include "codegen/irgen/hooks.h"
+#include "core/ast.h"
 #include "core/types.h"
 #include "gc/heap.h"
+#include "runtime/complex.h"
 #include "runtime/float.h"
-#include "runtime/gc_runtime.h"
+#include "runtime/generator.h"
+#include "runtime/import.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/list.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -31,22 +37,21 @@ static void forceLink(void* x) {
     printf("%p\n", x);
 }
 
-extern "C" void __py_personality_v0() {
-    RELEASE_ASSERT(0, "not used");
-}
-
-
 namespace _force {
+
+// Create dummy objects of these types to make sure the types make it into the stdlib:
+FrameInfo* _frameinfo_forcer;
+AST_stmt* _asttmt_forcer;
 
 #define FORCE(name) forceLink((void*)name)
 void force() {
+    FORCE(softspace);
     FORCE(my_assert);
 
     FORCE(boxInt);
     FORCE(unboxInt);
     FORCE(boxFloat);
     FORCE(unboxFloat);
-    FORCE(boxStringPtr);
     FORCE(boxCLFunction);
     FORCE(unboxCLFunction);
     FORCE(boxInstanceMethod);
@@ -57,10 +62,16 @@ void force() {
     FORCE(createList);
     FORCE(createSlice);
     FORCE(createUserClass);
+    FORCE(createClosure);
+    FORCE(createGenerator);
+    FORCE(createLong);
+    FORCE(createPureImaginary);
+    FORCE(createSet);
+    FORCE(decodeUTF8StringPtr);
 
     FORCE(getattr);
     FORCE(setattr);
-    FORCE(print);
+    FORCE(delattr);
     FORCE(nonzero);
     FORCE(binop);
     FORCE(compare);
@@ -69,39 +80,63 @@ void force() {
     FORCE(getitem);
     FORCE(getclsattr);
     FORCE(getGlobal);
+    FORCE(delGlobal);
     FORCE(setitem);
     FORCE(delitem);
     FORCE(unaryop);
     FORCE(import);
+    FORCE(importFrom);
+    FORCE(importStar);
     FORCE(repr);
-    FORCE(isinstance);
+    FORCE(str);
+    FORCE(exceptionMatches);
+    FORCE(yield);
+    FORCE(getiterHelper);
+    FORCE(hasnext);
 
-    FORCE(checkUnpackingLength);
+    FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);
     FORCE(raiseAttributeErrorStr);
+    FORCE(raiseIndexErrorStr);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
+    FORCE(assertFailDerefNameDefined);
     FORCE(assertFail);
 
+    FORCE(strOrUnicode);
     FORCE(printFloat);
     FORCE(listAppendInternal);
+    FORCE(getSysStdout);
 
     FORCE(runtimeCall);
     FORCE(callattr);
+
+    FORCE(raise0);
+    FORCE(raise3);
+    FORCE(deopt);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);
     FORCE(pow_i64_i64);
 
     FORCE(div_float_float);
+    FORCE(floordiv_float_float);
     FORCE(mod_float_float);
     FORCE(pow_float_float);
+
+    FORCE(exec);
+
+    FORCE(dump);
 
     FORCE(boxFloat);
 
     FORCE(createModule);
 
     FORCE(gc::sizes);
+
+    FORCE(boxedLocalsSet);
+    FORCE(boxedLocalsGet);
+    FORCE(boxedLocalsDel);
 
     // FORCE(listIter);
 }

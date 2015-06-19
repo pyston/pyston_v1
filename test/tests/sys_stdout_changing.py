@@ -1,5 +1,3 @@
-# expected: fail
-
 # prints without an explicit destination should go to sys.stdout, not to the real stdout,
 # in case sys.stdout gets changed:
 

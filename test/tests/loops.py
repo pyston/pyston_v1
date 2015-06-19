@@ -5,3 +5,11 @@ def f():
             break
         break
 f()
+
+def f2(x):
+    while x:
+        return 1
+    else:
+        return 2
+print f2(1)
+

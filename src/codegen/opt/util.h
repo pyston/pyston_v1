@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,12 +19,14 @@
 
 namespace llvm {
 class CallInst;
+class StringRef;
 }
 
 namespace pyston {
 
-bool isAllocCall(const std::string& name);
+bool isAllocCall(const llvm::StringRef name);
 bool isAllocCall(const llvm::CallInst* CI);
+void* getCalledFuncAddr(const llvm::CallInst* CI);
 }
 
 #endif

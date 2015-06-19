@@ -2,22 +2,9 @@
 #include <cstdio>
 #include "stdint.h"
 
-void set64(int64_t* ptr) {
-    *ptr = 0x1234;
-}
+extern void foo();
 
-void set64full(int64_t* ptr) {
-    *ptr = 0x1234567890;
-}
-
-namespace pyston {
-    class Box {};
-
-int throw_catch(Box* b) {
-    try {
-        throw b;
-    } catch (int e) {
-        return e;
-    }
-}
+void bar(int* x) {
+    if (*x & 0x08)
+        foo();
 }

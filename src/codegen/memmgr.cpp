@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Memory.h"
 
+#include "codegen/irgen/util.h"
 #include "core/common.h"
+#include "core/stats.h"
 #include "core/util.h"
 
 // This code was copy-pasted from SectionMemoryManager.cpp;
@@ -33,29 +35,30 @@ namespace pyston {
 class PystonMemoryManager : public RTDyldMemoryManager {
 public:
     PystonMemoryManager() {}
-    virtual ~PystonMemoryManager();
+    ~PystonMemoryManager() override;
 
-    virtual uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName);
+    uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
+                                 StringRef SectionName) override;
 
-    virtual uint8_t* allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName,
-                                         bool isReadOnly);
+    uint8_t* allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName,
+                                 bool isReadOnly) override;
 
-    virtual bool finalizeMemory(std::string* ErrMsg = 0);
-
-    virtual void invalidateInstructionCache();
+    bool finalizeMemory(std::string* ErrMsg = 0) override;
 
 private:
+    void invalidateInstructionCache();
+
     struct MemoryGroup {
         SmallVector<sys::MemoryBlock, 16> AllocatedMem;
         SmallVector<sys::MemoryBlock, 16> FreeMem;
         sys::MemoryBlock Near;
     };
 
-    uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment);
+    uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment, StringRef SectionName);
 
-    error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
+    llvm_error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
 
-    virtual uint64_t getSymbolAddress(const std::string& Name);
+    uint64_t getSymbolAddress(const std::string& Name) override;
 
     MemoryGroup CodeMem;
     MemoryGroup RWDataMem;
@@ -67,17 +70,18 @@ uint8_t* PystonMemoryManager::allocateDataSection(uintptr_t Size, unsigned Align
     // printf("allocating data section: %ld %d %d %s %d\n", Size, Alignment, SectionID, SectionName.data(), IsReadOnly);
     // assert(SectionName != ".llvm_stackmaps");
     if (IsReadOnly)
-        return allocateSection(RODataMem, Size, Alignment);
-    return allocateSection(RWDataMem, Size, Alignment);
+        return allocateSection(RODataMem, Size, Alignment, SectionName);
+    return allocateSection(RWDataMem, Size, Alignment, SectionName);
 }
 
 uint8_t* PystonMemoryManager::allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
                                                   StringRef SectionName) {
     // printf("allocating code section: %ld %d %d %s\n", Size, Alignment, SectionID, SectionName.data());
-    return allocateSection(CodeMem, Size, Alignment);
+    return allocateSection(CodeMem, Size, Alignment, SectionName);
 }
 
-uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment) {
+uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment,
+                                              StringRef SectionName) {
     if (!Alignment)
         Alignment = 16;
 
@@ -110,13 +114,16 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     //
     // FIXME: Initialize the Near member for each memory group to avoid
     // interleaving.
-    error_code ec;
+    llvm_error_code ec;
     sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize, &MemGroup.Near,
                                                             sys::Memory::MF_READ | sys::Memory::MF_WRITE, ec);
     if (ec) {
         // FIXME: Add error propogation to the interface.
         return NULL;
     }
+
+    std::string stat_name = "mem_section_" + std::string(SectionName);
+    Stats::log(Stats::getStatCounter(stat_name), MB.size());
 
     // Save this address as the basis for our next request
     MemGroup.Near = MB;
@@ -140,7 +147,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
 
 bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     // FIXME: Should in-progress permissions be reverted if an error occurs?
-    error_code ec;
+    llvm_error_code ec;
 
     // Don't allow free memory blocks to be used after setting protection flags.
     CodeMem.FreeMem.clear();
@@ -177,10 +184,10 @@ bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     return false;
 }
 
-error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
+llvm_error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
 
     for (int i = 0, e = MemGroup.AllocatedMem.size(); i != e; ++i) {
-        error_code ec;
+        llvm_error_code ec;
         ec = sys::Memory::protectMappedMemory(MemGroup.AllocatedMem[i], Permissions);
         if (ec) {
             return ec;
@@ -188,9 +195,9 @@ error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGrou
     }
 
 #if LLVMREV < 209952
-    return error_code::success();
+    return llvm_error_code::success();
 #else
-    return error_code();
+    return llvm_error_code();
 #endif
 }
 
@@ -200,7 +207,11 @@ void PystonMemoryManager::invalidateInstructionCache() {
 }
 
 uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
-    uint64_t base = RTDyldMemoryManager::getSymbolAddress(name);
+    uint64_t base = (uint64_t)getValueOfRelocatableSym(name);
+    if (base)
+        return base;
+
+    base = RTDyldMemoryManager::getSymbolAddress(name);
     if (base)
         return base;
 
@@ -208,7 +219,7 @@ uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
         return getSymbolAddress(".L" + name);
     }
 
-    printf("getSymbolAddress(%s); %lx\n", name.c_str(), base);
+    RELEASE_ASSERT(0, "Could not find sym: %s", name.c_str());
     return 0;
 }
 
@@ -221,7 +232,17 @@ PystonMemoryManager::~PystonMemoryManager() {
         sys::Memory::releaseMappedMemory(RODataMem.AllocatedMem[i]);
 }
 
-llvm::RTDyldMemoryManager* createMemoryManager() {
-    return new PystonMemoryManager();
+std::unique_ptr<llvm::RTDyldMemoryManager> createMemoryManager() {
+    return std::unique_ptr<llvm::RTDyldMemoryManager>(new PystonMemoryManager());
+}
+
+// These functions exist as instance methods of the RTDyldMemoryManager class,
+// but it's tricky to access them since the class has pure-virtual methods.
+void registerEHFrames(uint8_t* addr, uint64_t load_addr, size_t size) {
+    PystonMemoryManager().registerEHFrames(addr, load_addr, size);
+}
+
+void deregisterEHFrames(uint8_t* addr, uint64_t load_addr, size_t size) {
+    PystonMemoryManager().deregisterEHFrames(addr, load_addr, size);
 }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,14 +25,19 @@ namespace pyston {
 void setupSet();
 void teardownSet();
 
-extern BoxedClass* set_cls;
-extern const ObjectFlavor set_flavor;
+extern "C" Box* createSet();
 
 class BoxedSet : public Box {
 public:
-    std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;
+    typedef std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*>> Set;
+    Set s;
+    Box** weakreflist; /* List of weak references */
 
-    BoxedSet() __attribute__((visibility("default"))) : Box(&set_flavor, set_cls) {}
+    BoxedSet() __attribute__((visibility("default"))) {}
+
+    template <typename T> __attribute__((visibility("default"))) BoxedSet(T&& s) : s(std::forward<T>(s)) {}
+
+    DEFAULT_CLASS(set_cls);
 };
 }
 

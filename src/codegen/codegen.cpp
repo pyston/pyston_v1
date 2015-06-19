@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2015 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,47 @@
 #include <unistd.h>
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/FileSystem.h"
 
+#include "analysis/scoping_analysis.h"
+#include "codegen/compvars.h"
+#include "core/ast.h"
 #include "core/util.h"
 
 namespace pyston {
+
+DS_DEFINE_RWLOCK(codegen_rwlock);
+
+SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
+                       std::vector<AST_stmt*> body, std::string fn)
+    : parent_module(m),
+      scoping(scoping),
+      future_flags(future_flags),
+      ast(ast),
+      cfg(NULL),
+      fn(std::move(fn)),
+      body(std::move(body)) {
+    assert(this->fn.size());
+
+    switch (ast->type) {
+        case AST_TYPE::ClassDef:
+        case AST_TYPE::Lambda:
+        case AST_TYPE::Module:
+        case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
+            is_generator = false;
+            break;
+        case AST_TYPE::FunctionDef:
+            is_generator = containsYield(ast);
+            break;
+        default:
+            RELEASE_ASSERT(0, "Unknown type: %d", ast->type);
+            break;
+    }
+}
 
 void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length,
                                                llvm::Function* llvm_func) {
@@ -39,7 +73,7 @@ void FunctionAddressRegistry::dumpPerfMap() {
     std::string out_path = "perf_map";
     removeDirectoryIfExists(out_path);
 
-    llvm::error_code code;
+    llvm_error_code code;
     code = llvm::sys::fs::create_directory(out_path, false);
     assert(!code);
 
@@ -133,47 +167,64 @@ std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool deman
 
 class RegistryEventListener : public llvm::JITEventListener {
 public:
-    void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                     const llvm::RuntimeDyld::LoadedObjectInfo& L) {
         static StatCounter code_bytes("code_bytes");
         code_bytes.log(Obj.getData().size());
 
-        llvm::error_code code;
-        for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;
-#if LLVMREV < 200442
-             I = I.increment(code)
-#else
-             ++I
-#endif
-             ) {
-            llvm::object::section_iterator section(Obj.end_sections());
-            code = I->getSection(section);
+        llvm_error_code code;
+        for (const auto& sym : Obj.symbols()) {
+            llvm::object::section_iterator section(Obj.section_end());
+            code = sym.getSection(section);
             assert(!code);
             bool is_text;
+#if LLVMREV < 219314
             code = section->isText(is_text);
             assert(!code);
+#else
+            is_text = section->isText();
+#endif
             if (!is_text)
                 continue;
 
             llvm::StringRef name;
-            uint64_t addr, size;
-            code = I->getName(name);
+            code = sym.getName(name);
             assert(!code);
-            code = I->getAddress(addr);
-            assert(!code);
-            code = I->getSize(size);
+            uint64_t size;
+            code = sym.getSize(size);
             assert(!code);
 
             if (name == ".text")
                 continue;
 
-            g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
+
+            uint64_t sym_addr = L.getSymbolLoadAddress(name);
+            assert(sym_addr);
+
+            g.func_addr_registry.registerFunction(name.data(), (void*)sym_addr, size, NULL);
         }
     }
 };
 
-GlobalState::GlobalState() : context(llvm::getGlobalContext()) {};
+GlobalState::GlobalState() : context(llvm::getGlobalContext()), cur_module(NULL), cur_cf(NULL){};
 
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
+}
+
+
+FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {
+    accepts_all_inputs = true;
+    boxed_return_value = (rtn_type->llvmType() == UNKNOWN->llvmType());
+}
+
+FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type,
+                                               const std::vector<ConcreteCompilerType*>& arg_types)
+    : rtn_type(rtn_type), arg_types(arg_types) {
+    accepts_all_inputs = true;
+    boxed_return_value = (rtn_type->llvmType() == UNKNOWN->llvmType());
+    for (auto t : arg_types) {
+        accepts_all_inputs = accepts_all_inputs && (t == UNKNOWN);
+    }
 }
 }

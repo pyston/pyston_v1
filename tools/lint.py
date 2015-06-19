@@ -1,14 +1,27 @@
 import os
 import sys
+import re
 
-def verify_include(_, dir, files):
+def file_is_from_cpython(fn):
+    if 'from_cpython' in fn:
+        return True
+
+    if fn.endswith("/thread_pthread.h"):
+        return True
+
+    return False
+
+def verify_include_guard(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
 
         if not bn.endswith(".h"):
             continue
 
-        expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('/', '_').upper() + "_H"
+        if file_is_from_cpython(fn):
+            continue
+
+        expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('-', '').replace('/', '_').upper() + "_H"
         with open(fn) as f:
             while True:
                 l = f.readline()
@@ -24,11 +37,21 @@ def verify_license(_, dir, files):
 
         if bn.endswith(".h") or bn.endswith(".cpp"):
             s = open(fn).read(1024)
-            assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
-            assert "Apache License, Version 2.0" in s, fn
+            if file_is_from_cpython(fn):
+                assert "This file is originally from CPython 2.7, with modifications for Pyston" in s, fn
+            elif fn.endswith("/astprint.cpp"):
+                continue
+            else:
+                assert "Copyright (c) 2014-2015 Dropbox, Inc." in s, fn
+                assert "Apache License, Version 2.0" in s, fn
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(os.path.join(PYSTON_SRC_DIR, bn))]
+CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../from_cpython/Include")
+CAPI_HEADERS = [bn for bn in os.listdir(CAPI_HEADER_DIR) if bn.endswith(".h")]
+
+include_re = re.compile(r'^\#include \s+ (<.+?>|".+?") (?:\s+ //.*)? $', re.VERBOSE)
+
 def verify_include_order(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
@@ -42,6 +65,8 @@ def verify_include_order(_, dir, files):
             for l in f:
                 l = l.strip()
                 if l.startswith("//"):
+                    if "lint: allow-unsorted-includes" in l:
+                        break
                     continue
                 if not l:
                     if section:
@@ -49,10 +74,11 @@ def verify_include_order(_, dir, files):
                         section = None
                     continue
 
-                if l.startswith("#include"):
+                m = include_re.match(l)
+                if m:
                     if section is None:
                         section = []
-                    section.append(l)
+                    section.append(m.group(1))
                     continue
 
                 if l.startswith("#ifndef PYSTON") or l.startswith("#define PYSTON"):
@@ -77,10 +103,19 @@ def verify_include_order(_, dir, files):
 
         def is_third_party_section(section):
             for incl in section:
-                if incl.startswith('#include "llvm/'):
+                if incl.startswith('"llvm/'):
                     continue
-                if '"opagent.h"' in incl or '"Python.h"' in incl:
+                if '"opagent.h"' in incl:
                     continue
+
+                matches_capi_header = False
+                for h in CAPI_HEADERS:
+                    if '"%s"' % h in incl:
+                        matches_capi_header = True
+                        break
+                if matches_capi_header:
+                    continue
+
                 return False
             return True
 
@@ -88,7 +123,7 @@ def verify_include_order(_, dir, files):
             # TODO generate this
             include_dirs = PYSTON_SRC_SUBDIRS
             for incl in section:
-                if not any(incl.startswith('#include "%s/' % d) for d in include_dirs):
+                if not any(incl.startswith('"%s/' % d) for d in include_dirs):
                     return False
             return True
 
@@ -100,18 +135,23 @@ def verify_include_order(_, dir, files):
                 sys.exit(1)
             assert len(sections[0]) == len(set(sections[0]))
 
+        dbg = []
         if sections and is_corresponding_header(sections[0]):
+            dbg.append("corresponding")
             del sections[0]
 
         if sections and is_system_section(sections[0]):
+            dbg.append("system")
             check_sorted(sections[0])
             del sections[0]
 
         while sections and is_third_party_section(sections[0]):
+            dbg.append("3rdp")
             check_sorted(sections[0])
             del sections[0]
 
         if sections and is_pyston_section(sections[0]):
+            dbg.append("pyston")
             check_sorted(sections[0])
             for incl in sections[0]:
                 if is_corresponding_header([incl]):
@@ -128,12 +168,13 @@ def verify_include_order(_, dir, files):
             print >>sys.stderr, "- Third party headers"
             print >>sys.stderr, "- Pyston headers"
             print >>sys.stderr, "There should be an extra line between sections but not within sections"
+            print >>sys.stderr, "\ndbg: %s" % dbg
             sys.exit(1)
         assert not sections, fn
 
 
 if __name__ == "__main__":
-    os.path.walk('.', verify_include, None)
+    os.path.walk('.', verify_include_guard, None)
     os.path.walk('.', verify_include_order, None)
     os.path.walk('.', verify_license, None)
     os.path.walk('../tools', verify_license, None)

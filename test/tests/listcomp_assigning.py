@@ -40,5 +40,7 @@ def f2(n, b):
 f2(5, 0)
 print i
 f2(0, 1)
-f2(0, 0)
-
+try:
+    f2(0, 0)
+except UnboundLocalError, e:
+    print e

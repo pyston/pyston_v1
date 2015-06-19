@@ -1,0 +1,34 @@
+From 4e7e44e970b439e977c20693325f46ea8fda6c3f Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kmod@dropbox.com>
+Date: Tue, 17 Jun 2014 19:18:34 -0700
+Subject: [PATCH] Update IntelJITEvents with some recent API changes
+
+---
+ .../IntelJITEvents/IntelJITEventListener.cpp       |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/ExecutionEngine/IntelJITEvents/IntelJITEventListener.cpp b/lib/ExecutionEngine/IntelJITEvents/IntelJITEventListener.cpp
+index 9a65fa0..4e22a8b 100644
+--- a/lib/ExecutionEngine/IntelJITEvents/IntelJITEventListener.cpp
++++ b/lib/ExecutionEngine/IntelJITEvents/IntelJITEventListener.cpp
+@@ -86,7 +86,7 @@ static LineNumberInfo DILineInfoToIntelJITFormat(uintptr_t StartAddress,
+   LineNumberInfo Result;
+ 
+   Result.Offset = Address - StartAddress;
+-  Result.LineNumber = Line.getLine();
++  Result.LineNumber = Line.Line;
+ 
+   return Result;
+ }
+@@ -233,7 +233,7 @@ void IntelJITEventListener::NotifyObjectEmitted(const ObjectImage &Obj) {
+           FunctionMessage.line_number_size = 0;
+           FunctionMessage.line_number_table = 0;
+         } else {
+-          SourceFileName = Lines.front().second.getFileName();
++          SourceFileName = Lines.front().second.FileName;
+           FunctionMessage.source_file_name = const_cast<char *>(SourceFileName.c_str());
+           FunctionMessage.line_number_size = LineInfo.size();
+           FunctionMessage.line_number_table = &*LineInfo.begin();
+-- 
+1.7.4.1
+

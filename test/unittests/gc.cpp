@@ -13,9 +13,15 @@ using namespace pyston;
 using namespace pyston::gc;
 
 struct S {
-    GCObjectHeader header;
     int data[0];
 };
+
+TEST(alloc, basic) {
+    void* p1 = gc_alloc(16, GCKind::UNTRACKED);
+    void* p2 = gc_alloc(16, GCKind::UNTRACKED);
+
+    ASSERT_TRUE(p1 != p2);
+}
 
 void testAlloc(int B) {
     std::unique_ptr<int> masks(new int[B/4]);
@@ -32,8 +38,7 @@ void testAlloc(int B) {
         if (B > 1024)
             N /= 10;
         for (int i = 0; i < N; i++) {
-            S* t = static_cast<S*>(gc_alloc(B));
-            t->header.kind_id = untracked_kind.kind_id;
+            S* t = static_cast<S*>(gc_alloc(B, GCKind::UNTRACKED));
 
             ASSERT_TRUE(t != NULL);
             ASSERT_EQ(0, seen.count(t));
@@ -63,21 +68,21 @@ TEST(alloc, alloc64) { testAlloc(64); }
 TEST(alloc, alloc128) { testAlloc(128); }
 TEST(alloc, alloc258) { testAlloc(258); }
 TEST(alloc, alloc3584) { testAlloc(3584); }
+TEST(alloc, alloc4096) { testAlloc(4096); }
+TEST(alloc, alloc8192) { testAlloc(8192); }
+TEST(alloc, alloc16384) { testAlloc(16384); }
 
 TEST(alloc, largeallocs) {
     int s1 = 1 << 20;
-    S* d1 = (S*)gc_alloc(s1);
-    d1->header.kind_id = untracked_kind.kind_id;
+    S* d1 = (S*)gc_alloc(s1, GCKind::UNTRACKED);
     memset(d1->data, 1, s1 - sizeof(S));
 
     int s2 = 2 << 20;
-    S* d2 = (S*)gc_alloc(s2);
-    d2->header.kind_id = untracked_kind.kind_id;
+    S* d2 = (S*)gc_alloc(s2, GCKind::UNTRACKED);
     memset(d2->data, 2, s2 - sizeof(S));
 
     int s3 = 4 << 20;
-    S* d3 = (S*)gc_alloc(s3);
-    d3->header.kind_id = untracked_kind.kind_id;
+    S* d3 = (S*)gc_alloc(s3, GCKind::UNTRACKED);
     memset(d3->data, 3, s3 - sizeof(S));
 
     for (int i = sizeof(S); i < s1; i++) {
@@ -96,14 +101,14 @@ TEST(alloc, largeallocs) {
 TEST(alloc, freeing) {
     // Not sure this is enough to crash if it doesn't get freed:
     for (int i = 0; i < 100000; i++) {
-        void* a = gc_alloc(1024);
+        void* a = gc_alloc(1024, GCKind::UNTRACKED);
         gc_free(a);
     }
 }
 
 TEST(alloc, freeingLarge) {
     for (int i = 0; i < 200; i++) {
-        void* a = gc_alloc(1<<26);
+        void* a = gc_alloc(1<<26, GCKind::UNTRACKED);
         gc_free(a);
     }
 }

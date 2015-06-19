@@ -12,9 +12,7 @@ diff --git a/tools/scan-build/ccc-analyzer b/tools/scan-build/ccc-analyzer
 index b5445e6..65f8455 100755
 --- a/tools/scan-build/ccc-analyzer
 +++ b/tools/scan-build/ccc-analyzer
-@@ -43,7 +43,7 @@ if ($FindBin::Script =~ /c\+\+-analyzer/) {
-   $Compiler = $ENV{'CCC_CXX'};
-   if (!defined $Compiler || ! -x $Compiler) { $Compiler = $DefaultCXXCompiler; }
+@@ -43,5 +43,5 @@ if ($FindBin::Script =~ /c\+\+-analyzer/) {
  
 -  $Clang = $ENV{'CLANG_CXX'};
 +  $Clang = $ENV{'CCC_CLANG_CXX'};
