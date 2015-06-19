@@ -103,7 +103,7 @@ public:
     // This must not be inlined, because we rely on being able to detect when we're inside of it (by checking whether
     // %rip is inside its instruction range) during a stack-trace in order to produce tracebacks inside interpreted
     // code.
-    __attribute__((__no_inline__)) static Value
+    __attribute__((__no_inline__)) __attribute__((noinline)) static Value
         executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at, RegisterHelper* reg);
 
 

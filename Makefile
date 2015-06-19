@@ -997,7 +997,7 @@ endef
 
 .PHONY: perf_report
 perf_report:
-	perf report -v -n -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
+	perf report -n
 
 .PHONY: run run_% dbg_% debug_% perf_%
 run: run_dbg

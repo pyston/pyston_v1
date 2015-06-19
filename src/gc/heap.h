@@ -75,12 +75,22 @@ class conservative_unordered_map
 
 namespace gc {
 
+extern unsigned bytesAllocatedSinceCollection;
+#define ALLOCBYTES_PER_COLLECTION 10000000
+void _bytesAllocatedTripped();
+
 // Notify the gc of n bytes as being under GC management.
 // This is called internally for anything allocated through gc_alloc,
 // but it can also be called by clients to say that they have memory that
 // is ultimately GC managed but did not get allocated through gc_alloc,
 // such as memory that will get freed by a gc destructor.
-void registerGCManagedBytes(size_t bytes);
+inline void registerGCManagedBytes(size_t bytes) {
+    bytesAllocatedSinceCollection += bytes;
+    if (unlikely(bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION)) {
+        _bytesAllocatedTripped();
+    }
+}
+
 
 class Heap;
 struct HeapStatistics;
@@ -212,7 +222,7 @@ private:
 
         struct Scanner {
         private:
-            int next_to_check;
+            int64_t next_to_check;
             friend class Bitmap<N>;
 
         public:
