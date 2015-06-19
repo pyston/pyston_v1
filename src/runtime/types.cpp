@@ -430,20 +430,11 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     BoxedFunction* f = (BoxedFunction*)b;
 
     // TODO eventually f->name should always be non-NULL, then there'd be no need for this check
-    if (f->name)
-        v->visit(f->name);
-
-    if (f->modname)
-        v->visit(f->modname);
-
-    if (f->doc)
-        v->visit(f->doc);
-
-    if (f->closure)
-        v->visit(f->closure);
-
-    if (f->globals)
-        v->visit(f->globals);
+    v->visit(f->name);
+    v->visit(f->modname);
+    v->visit(f->doc);
+    v->visit(f->closure);
+    v->visit(f->globals);
 
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunctionBase constructor
@@ -564,8 +555,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
             HCAttrs* attrs = b->getHCAttrsPtr();
 
             v->visit(attrs->hcls);
-            if (attrs->attr_list)
-                v->visit(attrs->attr_list);
+            v->visit(attrs->attr_list);
         }
 
         if (b->cls->instancesHaveDictAttrs()) {
@@ -1007,16 +997,11 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
     BoxedClass* cls = (BoxedClass*)b;
 
-    if (cls->tp_base)
-        v->visit(cls->tp_base);
-    if (cls->tp_dict)
-        v->visit(cls->tp_dict);
-    if (cls->tp_mro)
-        v->visit(cls->tp_mro);
-    if (cls->tp_bases)
-        v->visit(cls->tp_bases);
-    if (cls->tp_subclasses)
-        v->visit(cls->tp_subclasses);
+    v->visit(cls->tp_base);
+    v->visit(cls->tp_dict);
+    v->visit(cls->tp_mro);
+    v->visit(cls->tp_bases);
+    v->visit(cls->tp_subclasses);
 
     if (cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* hcls = static_cast<BoxedHeapClass*>(cls);
@@ -1081,14 +1066,10 @@ extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
 
     BoxedProperty* prop = (BoxedProperty*)b;
 
-    if (prop->prop_get)
-        v->visit(prop->prop_get);
-    if (prop->prop_set)
-        v->visit(prop->prop_set);
-    if (prop->prop_del)
-        v->visit(prop->prop_del);
-    if (prop->prop_doc)
-        v->visit(prop->prop_doc);
+    v->visit(prop->prop_get);
+    v->visit(prop->prop_set);
+    v->visit(prop->prop_del);
+    v->visit(prop->prop_doc);
 }
 
 extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
@@ -1096,8 +1077,7 @@ extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
 
     BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
 
-    if (sm->sm_callable)
-        v->visit(sm->sm_callable);
+    v->visit(sm->sm_callable);
 }
 
 extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
@@ -1105,8 +1085,7 @@ extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
 
     BoxedClassmethod* cm = (BoxedClassmethod*)b;
 
-    if (cm->cm_callable)
-        v->visit(cm->cm_callable);
+    v->visit(cm->cm_callable);
 }
 
 // This probably belongs in list.cpp?
@@ -1150,10 +1129,8 @@ extern "C" void sliceGCHandler(GCVisitor* v, Box* b) {
 }
 
 static int call_gc_visit(PyObject* val, void* arg) {
-    if (val) {
-        GCVisitor* v = static_cast<GCVisitor*>(arg);
-        v->visit(val);
-    }
+    GCVisitor* v = static_cast<GCVisitor*>(arg);
+    v->visit(val);
     return 0;
 }
 
@@ -1192,12 +1169,10 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedClosure* c = (BoxedClosure*)b;
-    if (c->parent)
-        v->visit(c->parent);
+    v->visit(c->parent);
 
     for (int i = 0; i < c->nelts; i++) {
-        if (c->elts[i])
-            v->visit(c->elts[i]);
+        v->visit(c->elts[i]);
     }
 }
 

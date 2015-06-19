@@ -114,8 +114,7 @@ static void seqiterGCVisit(GCVisitor* v, Box* b) {
 
     BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
     v->visit(si->b);
-    if (si->next)
-        v->visit(si->next);
+    v->visit(si->next);
 }
 
 static void iterwrapperGCVisit(GCVisitor* v, Box* b) {
@@ -124,8 +123,7 @@ static void iterwrapperGCVisit(GCVisitor* v, Box* b) {
 
     BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
     v->visit(iw->iter);
-    if (iw->next)
-        v->visit(iw->next);
+    v->visit(iw->next);
 }
 
 bool iterwrapperHasnextUnboxed(Box* s) {

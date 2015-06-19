@@ -557,9 +557,9 @@ public:
         if (!o->is_active)
             return;
 
-        v->visitIf(o->exc_info.type);
-        v->visitIf(o->exc_info.value);
-        v->visitIf(o->exc_info.traceback);
+        v->visit(o->exc_info.type);
+        v->visit(o->exc_info.value);
+        v->visit(o->exc_info.traceback);
     }
 };
 static __thread PythonUnwindSession* cur_unwind;
