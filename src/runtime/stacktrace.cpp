@@ -47,7 +47,7 @@ void showBacktrace() {
 }
 
 void raiseExc(Box* exc_obj) {
-    throw ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback());
+    throw ExcInfo(exc_obj->cls, exc_obj, None);
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -245,7 +245,7 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     assert(PyExceptionClass_Check(type));
 
     if (tb == NULL) {
-        tb = new BoxedTraceback();
+        tb = None;
     }
 
     return ExcInfo(type, value, tb);

@@ -102,11 +102,9 @@ Box* BoxedTraceback::getLines(Box* b) {
     if (!tb->py_lines) {
         BoxedList* lines = new BoxedList();
         for (BoxedTraceback* wtb = tb; wtb && wtb != None; wtb = static_cast<BoxedTraceback*>(wtb->tb_next)) {
-            if (wtb->has_line) {
-                auto& line = wtb->line;
-                auto l = BoxedTuple::create({ boxString(line.file), boxString(line.func), boxInt(line.line) });
-                listAppendInternal(lines, l);
-            }
+            auto& line = wtb->line;
+            auto l = BoxedTuple::create({ boxString(line.file), boxString(line.func), boxInt(line.line) });
+            listAppendInternal(lines, l);
         }
         tb->py_lines = lines;
     }
