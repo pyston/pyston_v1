@@ -195,6 +195,54 @@ public:
 #endif
 };
 
+class GuardSet {
+public:
+    // If the var is guarded to be equal to a value and if so what value.
+    bool is_eq_guarded;
+    uint64_t guarded_value;
+
+    // If the var is guarded to be not equal to any values.
+    llvm::SmallVector<uint64_t, 2> ne_guarded_values;
+
+    GuardSet() : is_eq_guarded(false) {}
+
+    void addEqGuard(uint64_t val) {
+        assert(!is_eq_guarded || val == guarded_value);
+        guarded_value = val;
+        is_eq_guarded = true;
+#ifndef NDEBUG
+        for (uint64_t ne_val : ne_guarded_values) {
+            assert(val != ne_val);
+        }
+#endif
+        ne_guarded_values.clear();
+    }
+
+    void addNeGuard(uint64_t val) {
+        assert(!is_eq_guarded || guarded_value != val);
+        if (!is_eq_guarded) {
+            for (uint64_t ne_val : ne_guarded_values) {
+                if (ne_val == val) {
+                    return;
+                }
+            }
+            ne_guarded_values.push_back(val);
+        }
+    }
+
+    bool hasAnyGuards() { return is_eq_guarded || ne_guarded_values.size() > 0; }
+
+    llvm::SmallVector<uint64_t, 2> getAllConstants() {
+        if (is_eq_guarded) {
+            llvm::SmallVector<uint64_t, 2> ans;
+            ans.push_back(guarded_value);
+            return ans;
+        } else {
+            return ne_guarded_values;
+        }
+    }
+};
+
 class Rewriter;
 class RewriterVar;
 class RewriterAction;
@@ -245,10 +293,11 @@ private:
     bool is_constant;
     uint64_t constant_value;
 
-    llvm::DenseMap<int, RewriterVar*> attributeCache;               // used to detect duplicate getattrs
-    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
-
+    llvm::DenseMap<int, RewriterVar*> attributeCache; // used to detect duplicate getattrs
     void clearAttributeCache() { attributeCache.clear(); }
+
+    // Info on the guards attached to this variable.
+    GuardSet guard_set;
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
@@ -263,6 +312,10 @@ private:
     // If this is an immediate, try getting it as one
     assembler::Immediate tryGetAsImmediate(bool* is_immediate);
 
+    int guard_action;
+
+    void insertUseAtArbitraryActionIndex(int action_index);
+
     void dump();
 
     RewriterVar(const RewriterVar&) = delete;
@@ -273,7 +326,8 @@ public:
     static int nvars;
 #endif
 
-    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
+    RewriterVar(Rewriter* rewriter)
+        : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false), guard_action(-1) {
 #ifndef NDEBUG
         nvars++;
 #endif
@@ -383,6 +437,9 @@ private:
             }
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
+
+            assert(vars[0]->guard_action == -1);
+            vars[0]->guard_action = (int)actions.size();
         }
         actions.emplace_back(action);
     }
@@ -438,9 +495,7 @@ private:
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // The public versions of these are in RewriterVar
-    void _addGuard(RewriterVar* var, RewriterVar* val_constant);
-    void _addGuardNotEq(RewriterVar* var, RewriterVar* val_constant);
-    void _addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate = false);
+    void _addGuard(RewriterVar* var, RewriterVar* attr_of = NULL, int attr_offset = 0);
     void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
                   assembler::MovType type = assembler::MovType::Q);
     void _getAttrFloat(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
