@@ -667,6 +667,8 @@ extern "C" int _PyObject_SlotCompare(PyObject* self, PyObject* other) noexcept {
 }
 
 static PyObject* slot_tp_repr(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tprepr");
+
     try {
         return repr(self);
     } catch (ExcInfo e) {
@@ -676,6 +678,8 @@ static PyObject* slot_tp_repr(PyObject* self) noexcept {
 }
 
 static PyObject* slot_tp_str(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpstr");
+
     try {
         return str(self);
     } catch (ExcInfo e) {
@@ -685,8 +689,7 @@ static PyObject* slot_tp_str(PyObject* self) noexcept {
 }
 
 static long slot_tp_hash(PyObject* self) noexcept {
-    static StatCounter slowpath_hash("slowpath_hash");
-    slowpath_hash.log();
+    STAT_TIMER(t0, "us_timer_slot_tphash");
 
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
@@ -725,6 +728,8 @@ static long slot_tp_hash(PyObject* self) noexcept {
 }
 
 PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpcall");
+
     try {
         Py_FatalError("this function is untested");
 
@@ -762,6 +767,8 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
 }
 
 /* Pyston change: static*/ PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tprichcompare");
+
     static StatCounter slowpath_richcompare("slowpath_richcompare");
     slowpath_richcompare.log();
 #if 0
@@ -790,6 +797,8 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
 }
 
 static PyObject* slot_tp_iter(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpiter");
+
     PyObject* func, *res;
     static PyObject* iter_str, *getitem_str;
 
@@ -815,11 +824,15 @@ static PyObject* slot_tp_iter(PyObject* self) noexcept {
 }
 
 static PyObject* slot_tp_iternext(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpiternext");
+
     static PyObject* next_str;
     return call_method(self, "next", &next_str, "()");
 }
 
 static bool slotTppHasnext(PyObject* self) {
+    STAT_TIMER(t0, "us_timer_slot_tpphasnext");
+
     static PyObject* hasnext_str;
     Box* r = self->hasnextOrNullIC();
     assert(r);
@@ -827,6 +840,8 @@ static bool slotTppHasnext(PyObject* self) {
 }
 
 static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpdescrget");
+
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
 
@@ -846,6 +861,8 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
 }
 
 static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tppdescrget");
+
     assert(self->cls->tpp_descr_get);
     try {
         return self->cls->tpp_descr_get(self, obj, type);
@@ -856,14 +873,15 @@ static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* 
 }
 
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
-    static StatCounter slowpath_tp_getattro("slowpath_tp_getattro");
-    slowpath_tp_getattro.log();
+    STAT_TIMER(t0, "us_timer_slot_tpgetattro");
 
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
 }
 
 static int slot_tp_setattro(PyObject* self, PyObject* name, PyObject* value) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpsetattro");
+
     PyObject* res;
     static PyObject* delattr_str, *setattr_str;
 
@@ -900,6 +918,8 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 }
 
 static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpgetattrhook");
+
     PyObject* getattr, *getattribute, * res = NULL;
 
     /* speed hack: we could use lookup_maybe, but that would resolve the
@@ -934,6 +954,8 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
 }
 
 static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpnew");
+
     try {
         // TODO: runtime ICs?
         Box* new_attr = typeLookup(self, _new_str, NULL);
@@ -948,6 +970,8 @@ static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds)
 }
 
 static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_tpinit");
+
     static PyObject* init_str;
     PyObject* meth = lookup_method(self, "__init__", &init_str);
     PyObject* res;
@@ -968,6 +992,8 @@ static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept
 }
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqitem");
+
     try {
         return getitem(self, boxInt(i));
     } catch (ExcInfo e) {
@@ -977,6 +1003,8 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
 }
 
 static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqlength");
+
     static PyObject* len_str;
     PyObject* res = call_method(self, "__len__", &len_str, "()");
     Py_ssize_t len;
@@ -994,6 +1022,8 @@ static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
 }
 
 static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqslice");
+
     static PyObject* getslice_str;
 
     if (PyErr_WarnPy3k("in 3.x, __getslice__ has been removed; "
@@ -1004,6 +1034,8 @@ static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexc
 }
 
 static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqassitem");
+
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
 
@@ -1018,6 +1050,8 @@ static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) n
 }
 
 static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObject* value) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqassslice");
+
     PyObject* res;
     static PyObject* delslice_str, *setslice_str;
 
@@ -1041,6 +1075,8 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
 }
 
 static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_sqcontains");
+
     PyObject* func, *res, *args;
     int result = -1;
 
@@ -1153,6 +1189,8 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
 
 static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_mpasssubscript");
+
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
 
@@ -1178,6 +1216,8 @@ static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*) noexcept;
 SLOT1BINFULL(slot_nb_power_binary, slot_nb_power, nb_power, "__pow__", "__rpow__")
 
 static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_nbpower");
+
     static PyObject* pow_str;
 
     if (modulus == Py_None)
@@ -1197,6 +1237,8 @@ SLOT0(slot_nb_positive, "__pos__")
 SLOT0(slot_nb_absolute, "__abs__")
 
 static int slot_nb_nonzero(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_nbnonzero");
+
     PyObject* func, *args;
     static PyObject* nonzero_str, *len_str;
     int result = -1;
@@ -1232,6 +1274,8 @@ static int slot_nb_nonzero(PyObject* self) noexcept {
 }
 
 static PyObject* slot_nb_index(PyObject* self) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_nbindex");
+
     static PyObject* index_str;
     return call_method(self, "__index__", &index_str, "()");
 }
@@ -1245,6 +1289,8 @@ SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
 SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
 
 static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept {
+    STAT_TIMER(t0, "us_timer_slot_nbcoerce");
+
     static PyObject* coerce_str;
     PyObject* self = *a, * other = *b;
 
@@ -1305,6 +1351,8 @@ SLOT1(slot_nb_inplace_divide, "__idiv__", PyObject*, "O")
 SLOT1(slot_nb_inplace_remainder, "__imod__", PyObject*, "O")
 /* Can't use SLOT1 here, because nb_inplace_power is ternary */
 static PyObject* slot_nb_inplace_power(PyObject* self, PyObject* arg1, PyObject* arg2) {
+    STAT_TIMER(t0, "us_timer_slot_nbinplacepower");
+
     static PyObject* cache_str;
     return call_method(self, "__ipow__", &cache_str, "("
                                                      "O"
