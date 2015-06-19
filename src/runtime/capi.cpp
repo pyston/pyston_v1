@@ -78,7 +78,7 @@ Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexce
 
     if (!isSubclass(inst->cls, self->type))
         PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                       getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
+                     getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
 
     return new BoxedWrapperObject(self, inst);
 }
@@ -1739,8 +1739,9 @@ void setupCAPI() {
 
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
-    method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
-                                                                     0, true, true)));
+    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
+    method_call_cl->internal_callable = BoxedMethodDescriptor::callInternal;
+    method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 

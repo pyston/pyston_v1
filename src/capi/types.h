@@ -228,6 +228,8 @@ public:
     }
 
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
+    static Box* callInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == method_cls);
