@@ -3416,12 +3416,15 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         Box* res = callable(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         return res;
     } else if (obj->cls == instancemethod_cls) {
-        // TODO it's dumb but I should implement patchpoints here as well
-        // duplicated with callattr
         BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(obj);
 
+        RewriterVar* r_im_func;
+        if (rewrite_args) {
+            r_im_func = rewrite_args->obj->getAttr(INSTANCEMETHOD_FUNC_OFFSET, Location::any());
+        }
+
         if (rewrite_args && !rewrite_args->func_guarded) {
-            rewrite_args->obj->addAttrGuard(INSTANCEMETHOD_FUNC_OFFSET, (intptr_t)im->func);
+            r_im_func->addGuard((intptr_t)im->func);
         }
 
         // Guard on which type of instancemethod (bound or unbound)
@@ -3431,13 +3434,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->obj->addAttrGuard(INSTANCEMETHOD_OBJ_OFFSET, 0, im->obj != NULL);
         }
 
-        // TODO guard on im->obj being NULL or not
         if (im->obj == NULL) {
             Box* f = im->func;
             if (rewrite_args) {
                 rewrite_args->func_guarded = true;
                 rewrite_args->args_guarded = true;
-                rewrite_args->obj = rewrite_args->obj->getAttr(INSTANCEMETHOD_FUNC_OFFSET, Location::any());
+                rewrite_args->obj = r_im_func;
             }
             Box* res = runtimeCallInternal(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
             return res;
@@ -3446,10 +3448,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         if (npassed_args <= 2) {
             Box* rtn;
             if (rewrite_args) {
-                // Kind of weird that we don't need to give this a valid RewriterVar, but it shouldn't need to access it
-                // (since we've already guarded on the function).
-                // rewriter enforce that we give it one, though
-                CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+                CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_im_func, rewrite_args->destination);
 
                 srewrite_args.arg1 = rewrite_args->obj->getAttr(INSTANCEMETHOD_OBJ_OFFSET, Location::any());
                 srewrite_args.func_guarded = true;
