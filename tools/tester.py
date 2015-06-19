@@ -592,3 +592,5 @@ if __name__ == "__main__":
         main(origdir)
     finally:
         shutil.rmtree(tmpdir)
+
+# adding a comment here to invalidate cached expected results
