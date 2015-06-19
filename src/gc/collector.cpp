@@ -41,6 +41,7 @@ FILE* trace_fp;
 
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
+static std::unordered_map<void*, GCHandler> root_handlers;
 
 // BoxedClasses in the program that are still needed.
 static std::unordered_set<BoxedClass*> class_objects;
@@ -174,6 +175,15 @@ extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
         registerPermanentRoot(obj, /* allow_duplicates */ true);
     }
     return obj;
+}
+
+void registerRootCallback(void* obj, GCHandler handler) {
+    assert(root_handlers.find(obj) == root_handlers.end());
+    root_handlers[obj] = handler;
+}
+
+void deregisterRootCallback(void* obj, GCHandler handler) {
+    root_handlers.erase(obj);
 }
 
 void registerNonheapRootObject(void* obj, int size) {
@@ -334,6 +344,11 @@ static void markRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at potential root ranges\n");
     for (auto& e : potential_root_ranges) {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
+    }
+
+    GC_TRACE_LOG("calling root handlers\n");
+    for (auto& h : root_handlers) {
+        h.second(&visitor, h.first);
     }
 }
 

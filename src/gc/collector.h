@@ -44,6 +44,10 @@ void registerNonheapRootObject(void* obj, int size);
 
 void registerPotentialRootRange(void* start, void* end);
 
+typedef void (*GCHandler)(GCVisitor* v, void*);
+void registerRootCallback(void* obj, GCHandler handler);
+void deregisterRootCallback(void* obj, GCHandler handler);
+
 // If you want to have a static root "location" where multiple values could be stored, use this:
 class GCRootHandle {
 public:
