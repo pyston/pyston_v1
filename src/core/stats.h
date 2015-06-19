@@ -38,11 +38,15 @@ namespace pyston {
 #define EXPENSIVE_STAT_TIMERS (0 && STAT_TIMERS)
 
 #if STAT_TIMERS
-#define STAT_TIMER(id, name)                                                                                           \
+#define STAT_TIMER(id, name, avoidability)                                                                             \
     static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
-    ScopedStatTimer _st##id(_stcounter##id)
+    ScopedStatTimer _st##id(_stcounter##id, avoidability)
+#define UNAVOIDABLE_STAT_TIMER(id, name)                                                                               \
+    static uint64_t* _stcounter##id = Stats::getStatCounter(name);                                                     \
+    ScopedStatTimer _st##id(_stcounter##id, 0, true)
 #else
-#define STAT_TIMER(id, name)
+#define STAT_TIMER(id, name, avoidability)
+#define UNAVOIDABLE_STAT_TIMER(id, name)
 #endif
 
 #define STAT_TIMER_NAME(id) _st##id
@@ -122,34 +126,43 @@ private:
     StatTimer* _prev;
 
     uint64_t* _statcounter;
+    int avoidability;
+    bool reset_avoidability;
 
 public:
-    StatTimer(uint64_t* counter) : _statcounter(counter) {}
+    StatTimer(uint64_t* counter, int avoidability, bool reset_avoidability = false)
+        : _statcounter(counter), avoidability(avoidability), reset_avoidability(reset_avoidability) {}
 
     void pushNonTopLevel() {
-        uint64_t at_time = getCPUTicks();
 #ifndef NDEBUG
         _start_time = 0;
 #endif
 
         assert(stack);
         _prev = stack;
-        stack = this;
-        _prev->pause(at_time);
-        resume(at_time);
+
+        if (reset_avoidability || avoidability >= _prev->avoidability) {
+            uint64_t at_time = getCPUTicks();
+
+            stack = this;
+            _prev->pause(at_time);
+            resume(at_time);
+        }
     }
 
     void popNonTopLevel() {
-        assert(stack == this);
+        if (reset_avoidability || avoidability >= _prev->avoidability) {
+            assert(stack == this);
 
-        uint64_t at_time;
-        assert(!isPaused());
-        at_time = getCPUTicks();
-        pause(at_time);
+            uint64_t at_time;
+            assert(!isPaused());
+            at_time = getCPUTicks();
+            pause(at_time);
 
-        assert(_prev);
-        stack = _prev;
-        stack->resume(at_time);
+            assert(_prev);
+            stack = _prev;
+            stack->resume(at_time);
+        }
     }
 
     void pushTopLevel(uint64_t at_time) {
@@ -200,7 +213,10 @@ private:
     StatTimer timer;
 
 public:
-    ScopedStatTimer(uint64_t* counter) : timer(counter) { timer.pushNonTopLevel(); }
+    ScopedStatTimer(uint64_t* counter, int avoidability, bool reset_avoidability = false)
+        : timer(counter, avoidability, reset_avoidability) {
+        timer.pushNonTopLevel();
+    }
     ~ScopedStatTimer() { timer.popNonTopLevel(); }
 };
 #else

@@ -302,7 +302,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #if STAT_TIMERS
       ,
       prev_stack(NULL),
-      my_timer(generator_timer_counter)
+      my_timer(generator_timer_counter, 0, true)
 #endif
 {
 

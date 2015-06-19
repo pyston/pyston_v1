@@ -269,7 +269,7 @@ static int main(int argc, char** argv) {
     int rtncode = 0;
     {
 #if STAT_TIMERS
-        StatTimer timer(Stats::getStatCounter("us_timer_main_toplevel"));
+        StatTimer timer(Stats::getStatCounter("us_timer_main_toplevel"), 0, true);
         timer.pushTopLevel(main_time.getStartTime());
 #endif
 

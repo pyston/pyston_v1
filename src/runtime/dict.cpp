@@ -49,7 +49,6 @@ Box* dictRepr(BoxedDict* self) {
 }
 
 Box* dictClear(BoxedDict* self) {
-    STAT_TIMER(t0, "us_timer_dictClear");
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor 'clear' requires a 'dict' object but received a '%s'", getTypeName(self));
 
@@ -58,7 +57,6 @@ Box* dictClear(BoxedDict* self) {
 }
 
 Box* dictCopy(BoxedDict* self) {
-    STAT_TIMER(t0, "us_timer_dictCopy");
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'", getTypeName(self));
 
@@ -68,7 +66,6 @@ Box* dictCopy(BoxedDict* self) {
 }
 
 Box* dictItems(BoxedDict* self) {
-    STAT_TIMER(t0, "us_timer_dictItems");
     BoxedList* rtn = new BoxedList();
 
     rtn->ensure(self->d.size());
@@ -81,7 +78,6 @@ Box* dictItems(BoxedDict* self) {
 }
 
 Box* dictValues(BoxedDict* self) {
-    STAT_TIMER(t0, "us_timer_dictValues");
     BoxedList* rtn = new BoxedList();
     rtn->ensure(self->d.size());
     for (const auto& p : self->d) {
@@ -91,7 +87,6 @@ Box* dictValues(BoxedDict* self) {
 }
 
 Box* dictKeys(BoxedDict* self) {
-    STAT_TIMER(t0, "us_timer_dictKeys");
     RELEASE_ASSERT(isSubclass(self->cls, dict_cls), "");
 
     BoxedList* rtn = new BoxedList();
@@ -188,7 +183,6 @@ extern "C" int PyDict_Update(PyObject* a, PyObject* b) noexcept {
 }
 
 Box* dictGetitem(BoxedDict* self, Box* k) {
-    STAT_TIMER(t0, "us_timer_dictGetitem");
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
@@ -320,7 +314,6 @@ extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexc
 }
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
-    STAT_TIMER(t0, "us_timer_dictSetitem");
     // printf("Starting setitem\n");
     Box*& pos = self->d[k];
     // printf("Got the pos\n");
@@ -335,7 +328,6 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictDelitem(BoxedDict* self, Box* k) {
-    STAT_TIMER(t0, "us_timer_dictDelitem");
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));

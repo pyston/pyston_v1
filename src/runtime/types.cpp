@@ -1419,8 +1419,6 @@ public:
     }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_setitem");
-
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1433,7 +1431,6 @@ public:
     }
 
     static Box* setdefault(Box* _self, Box* _key, Box* value) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_setdefault");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1449,7 +1446,6 @@ public:
     }
 
     static Box* get(Box* _self, Box* _key, Box* def) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_get");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1464,7 +1460,6 @@ public:
     }
 
     static Box* getitem(Box* _self, Box* _key) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_getitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1498,7 +1493,6 @@ public:
     }
 
     static Box* delitem(Box* _self, Box* _key) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_delitem");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1564,7 +1558,6 @@ public:
     }
 
     static Box* values(Box* _self) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_values");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1579,7 +1572,6 @@ public:
     }
 
     static Box* items(Box* _self) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_items");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -1649,7 +1641,6 @@ public:
     }
 
     static Box* update(Box* _self, BoxedTuple* args, BoxedDict* kwargs) {
-        STAT_TIMER(t0, "us_timer_AttrWrapper_update");
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 

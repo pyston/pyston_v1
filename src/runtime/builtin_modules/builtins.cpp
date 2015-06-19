@@ -306,7 +306,6 @@ extern "C" Box* ord(Box* obj) {
 }
 
 Box* range(Box* start, Box* stop, Box* step) {
-    STAT_TIMER(t0, "us_timer_builtin_range");
     i64 istart, istop, istep;
     if (stop == NULL) {
         istart = 0;
@@ -350,7 +349,6 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
-    STAT_TIMER(t0, "us_timer_builtin_sorted");
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
@@ -363,7 +361,6 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
-    STAT_TIMER(t0, "us_timer_builtin_isinstance");
     int rtn = PyObject_IsInstance(obj, cls);
     if (rtn < 0)
         checkAndThrowCAPIException();
@@ -371,7 +368,6 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
-    STAT_TIMER(t0, "us_timer_builtin_issubclass");
     int rtn = PyObject_IsSubclass(child, parent);
     if (rtn < 0)
         checkAndThrowCAPIException();

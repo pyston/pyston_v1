@@ -995,7 +995,7 @@ AST_Module* parse_string(const char* code) {
 }
 
 AST_Module* parse_file(const char* fn) {
-    STAT_TIMER(t0, "us_timer_cpyton_parsing");
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_cpyton_parsing");
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {
@@ -1095,7 +1095,7 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn, AST_Mod
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse_file(const char* fn) {
-    STAT_TIMER(t0, "us_timer_caching_parse_file");
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_caching_parse_file");
     static StatCounter us_parsing("us_parsing");
     Timer _t("parsing");
     _t.setExitCallback([](uint64_t t) { us_parsing.log(t); });
