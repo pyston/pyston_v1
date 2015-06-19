@@ -511,11 +511,11 @@ cpplint:
 	$(VERB) $(PYTHON) $(TOOLS_DIR)/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
 
 .PHONY: check
-check:
-	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
+check: $(CMAKE_SETUP_DBG)
+	$(NINJA) -C $(CMAKE_DIR_DBG) check-basic
 
-	$(MAKE) pyston_dbg check-deps
-	( cd $(CMAKE_DIR_DBG) && ctest -V )
+	$(MAKE) check-deps
+	( cd $(CMAKE_DIR_DBG) && ctest -V -E pyston_defaults_tests )
 
 	$(MAKE) pyston_release
 	( cd $(CMAKE_DIR_RELEASE) && ctest -V -R pyston )
@@ -525,9 +525,11 @@ check:
 # A stripped down set of tests, meant as a quick smoke test to run before submitting a PR and having
 # Travis-CI do the full test.
 .PHONY: quick_check
-quick_check:
+quick_check: $(CMAKE_SETUP_DBG)
+	$(NINJA) -C $(CMAKE_DIR_DBG) check-basic
+
 	$(MAKE) pyston_dbg check-deps
-	( cd $(CMAKE_DIR_DBG) && ctest -V -R 'check-format|unittests|pyston_defaults_tests|pyston_defaults_cpython' )
+	( cd $(CMAKE_DIR_DBG) && ctest -V -R 'check-format|unittests|pyston_defaults_cpython' )
 
 
 Makefile.local:
@@ -883,17 +885,15 @@ $(CMAKE_SETUP_RELEASE):
 	@mkdir -p $(CMAKE_DIR_RELEASE)
 	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Release
 
-# Shared modules (ie extension modules that get built using pyston on setup.py) that we will ask CMake
-# to build.  You can flip this off to allow builds to continue even if self-hosting the sharedmods would fail.
-CMAKE_SHAREDMODS := sharedmods ext_pyston
-
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_DBG) pyston $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG)/pyston pyston_dbg
+	$(NINJA) -C $(CMAKE_DIR_DBG) sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
+	(NINJA) -C $(CMAKE_DIR_RELEASE) sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 
 CMAKE_DIR_GCC := $(CMAKE_DIR_DBG_GCC)
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
@@ -903,7 +903,7 @@ $(CMAKE_SETUP_GCC):
 	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(CMAKE_DIR_DBG_GCC) pyston copy_stdlib copy_libpyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_DBG_GCC) pyston sharedmods ext_pyston ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG_GCC)/pyston pyston_gcc
 
 .PHONY: format check_format
