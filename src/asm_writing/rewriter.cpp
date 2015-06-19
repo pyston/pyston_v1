@@ -369,8 +369,21 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 }
 
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
+    // Look up in the cache to see if we already got this attribute.
+    // Only to this if type is Q
+    if (type == assembler::MovType::Q) {
+        if (this->attributeCache.count(offset) > 0) {
+            return this->attributeCache[offset];
+        }
+    }
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
+
+    if (type == assembler::MovType::Q) {
+        this->attributeCache[offset] = result;
+    }
+
     return result;
 }
 

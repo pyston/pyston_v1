@@ -245,7 +245,10 @@ private:
     bool is_constant;
     uint64_t constant_value;
 
+    llvm::DenseMap<int, RewriterVar*> attributeCache;               // used to detect duplicate getattrs
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
+
+    void clearAttributeCache() { attributeCache.clear(); }
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
@@ -363,6 +366,10 @@ private:
         for (RewriterVar* var : vars) {
             assert(var != NULL);
             var->uses.push_back(actions.size());
+
+            // In the event of mutation, attributes might change so we have to clear this out.
+            if (type == ActionType::MUTATION)
+                var->clearAttributeCache();
         }
         if (type == ActionType::MUTATION) {
             added_changing_action = true;
