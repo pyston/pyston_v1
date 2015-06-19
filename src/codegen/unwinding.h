@@ -19,6 +19,10 @@
 
 #include "codegen/codegen.h"
 
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#undef UNW_LOCAL_ONLY
+
 namespace pyston {
 
 class Box;
@@ -29,12 +33,23 @@ struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 
+void setupUnwinding();
 BoxedModule* getCurrentModule();
 Box* getGlobals();     // returns either the module or a globals dict
 Box* getGlobalsDict(); // always returns a dict-like object
 CompiledFunction* getCFForAddress(uint64_t addr);
 
 BoxedTraceback* getTraceback();
+
+class PythonUnwindSession;
+PythonUnwindSession* beginPythonUnwindSession();
+PythonUnwindSession* getActivePythonUnwindSession();
+void throwingException(PythonUnwindSession* unwind_session);
+void endPythonUnwindSession(PythonUnwindSession* unwind_session);
+void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind_session);
+void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor);
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
 
 struct ExecutionPoint {
     CompiledFunction* cf;

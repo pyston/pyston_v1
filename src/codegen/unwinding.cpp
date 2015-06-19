@@ -58,6 +58,8 @@ struct uw_table_entry {
 
 namespace pyston {
 
+static BoxedClass* unwind_session_cls;
+
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
 // See http://www.airs.com/blog/archives/460 for some useful info.
@@ -277,6 +279,10 @@ struct PythonFrameId {
     uint64_t ip;
     uint64_t bp;
 
+    PythonFrameId() {}
+
+    PythonFrameId(FrameType type, uint64_t ip, uint64_t bp) : type(type), ip(ip), bp(bp) {}
+
     bool operator==(const PythonFrameId& rhs) const { return (this->type == rhs.type) && (this->ip == rhs.ip); }
 };
 
@@ -289,12 +295,10 @@ public:
     intptr_t regs[16];
     uint16_t regs_valid;
 
-    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&) = delete;
-    void operator=(const PythonFrameIteratorImpl&) = delete;
-    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&&) = delete;
-    void operator=(const PythonFrameIteratorImpl&&) = delete;
-
     PythonFrameIteratorImpl() : regs_valid(0) {}
+
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CompiledFunction* cf)
+        : id(PythonFrameId(type, ip, bp)), cf(cf), regs_valid(0) {}
 
     CompiledFunction* getCF() const {
         assert(cf);
@@ -411,22 +415,235 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
     return pip.end_ip;
 }
 
+static bool inASTInterpreterExecuteInner(unw_word_t ip) {
+    static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
+    return ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end);
+}
+
+static bool inGeneratorEntry(unw_word_t ip) {
+    static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
+    return ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end);
+}
+
+
+static inline unw_word_t get_cursor_reg(unw_cursor_t* cursor, int reg) {
+    unw_word_t v;
+    unw_get_reg(cursor, reg, &v);
+    return v;
+}
+static inline unw_word_t get_cursor_ip(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_REG_IP) - 1;
+}
+static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_TDEP_BP);
+}
+
+// if the given ip/bp correspond to a jitted frame or
+// ASTInterpreter::execute_inner frame, return true and return the
+// frame information through the PythonFrameIteratorImpl* info arg.
+bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
+    CompiledFunction* cf = getCFForAddress(ip);
+    bool jitted = cf != NULL;
+    if (!cf) {
+        if (inASTInterpreterExecuteInner(ip)) {
+            cf = getCFForInterpretedFrame((void*)bp);
+            assert(cf);
+        }
+    }
+
+    if (!cf)
+        return false;
+
+    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
+    if (jitted) {
+        // Try getting all the callee-save registers, and save the ones we were able to get.
+        // Some of them may be inaccessible, I think because they weren't defined by that
+        // stack frame, which can show up as a -UNW_EBADREG return code.
+        for (int i = 0; i < 16; i++) {
+            if (!assembler::Register::fromDwarf(i).isCalleeSave())
+                continue;
+            unw_word_t r;
+            int code = unw_get_reg(cursor, i, &r);
+            ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
+            if (code == 0) {
+                info->regs[i] = r;
+                info->regs_valid |= (1 << i);
+            }
+        }
+    }
+
+    return true;
+}
+
+class PythonUnwindSession : public Box {
+    ExcInfo exc_info;
+    bool skip;
+    bool is_active;
+    Timer t;
+
+public:
+    DEFAULT_CLASS_SIMPLE(unwind_session_cls);
+
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false), t(/*min_usec=*/10000) {}
+
+    ExcInfo* getExcInfoStorage() {
+        RELEASE_ASSERT(is_active, "");
+        return &exc_info;
+    }
+    bool shouldSkipFrame() const { return skip; }
+    void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
+    bool isActive() const { return is_active; }
+
+    void begin() {
+        RELEASE_ASSERT(!is_active, "");
+        exc_info = ExcInfo(NULL, NULL, NULL);
+        skip = false;
+        is_active = true;
+        t.restart();
+
+        static StatCounter stat("unwind_sessions");
+        stat.log();
+    }
+    void end() {
+        RELEASE_ASSERT(is_active, "");
+        is_active = false;
+
+        static StatCounter stat("us_unwind_session");
+        stat.log(t.end());
+    }
+
+    void addTraceback(const LineInfo& line_info) {
+        RELEASE_ASSERT(is_active, "");
+        if (exc_info.reraise) {
+            exc_info.reraise = false;
+            return;
+        }
+        BoxedTraceback::here(line_info, &exc_info.traceback);
+    }
+
+    void logException() {
+#if STAT_EXCEPTIONS
+        static StatCounter num_exceptions("num_exceptions");
+        num_exceptions.log();
+
+        std::string stat_name;
+        if (PyType_Check(exc_info.type))
+            stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(exc_info.type)->tp_name);
+        else
+            stat_name = "num_exceptions_" + std::string(exc_info.value->cls->tp_name);
+        Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_EXCEPTIONS_LOCATION
+        logByCurrentPythonLine(stat_name);
+#endif
+#endif
+    }
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == unwind_session_cls);
+
+        PythonUnwindSession* o = static_cast<PythonUnwindSession*>(_o);
+
+        // this is our hack for eventually collecting
+        // exceptions/tracebacks after the exception has been caught.
+        // If a collection happens and a given thread's
+        // PythonUnwindSession isn't active, its exception info can be
+        // collected.
+        if (!o->is_active)
+            return;
+
+        v->visitIf(o->exc_info.type);
+        v->visitIf(o->exc_info.value);
+        v->visitIf(o->exc_info.traceback);
+    }
+};
+static __thread PythonUnwindSession* cur_unwind;
+
+PythonUnwindSession* beginPythonUnwindSession() {
+    if (!cur_unwind) {
+        cur_unwind = new PythonUnwindSession();
+        pyston::gc::registerPermanentRoot(cur_unwind);
+    }
+    cur_unwind->begin();
+    return cur_unwind;
+}
+
+PythonUnwindSession* getActivePythonUnwindSession() {
+    RELEASE_ASSERT(cur_unwind && cur_unwind->isActive(), "");
+    return cur_unwind;
+}
+
+void endPythonUnwindSession(PythonUnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    unwind->end();
+}
+void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    PythonUnwindSession* state = static_cast<PythonUnwindSession*>(unwind);
+    return state->getExcInfoStorage();
+}
+
+void throwingException(PythonUnwindSession* unwind) {
+    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
+    unwind->logException();
+}
+
+static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
+    AST_stmt* current_stmt = frame_it->getCurrentStatement();
+    auto* cf = frame_it->getCF();
+    assert(cf);
+
+    auto source = cf->clfunc->source.get();
+
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+}
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+    // basically the same as PythonUnwindSession::addTraceback, but needs to
+    // be callable after an PythonUnwindSession has ended.  The interpreter
+    // will call this from catch blocks if it needs to ensure that a
+    // line is added.  Right now this only happens in
+    // ASTInterpreter::visit_invoke.
+
+    // It's basically the same except for one thing: we don't have to
+    // worry about the 'skip' (osr) state that PythonUnwindSession handles
+    // here, because the only way we could have gotten into the ast
+    // interpreter is if the exception wasn't caught, and if there was
+    // the osr frame for the one the interpreter is running, it would
+    // have already caught it.
+    if (exc_info->reraise) {
+        exc_info->reraise = false;
+        return;
+    }
+    BoxedTraceback::here(line_info, &exc_info->traceback);
+}
+
+void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor) {
+    unw_word_t ip = get_cursor_ip(cursor);
+    unw_word_t bp = get_cursor_bp(cursor);
+
+    PythonFrameIteratorImpl frame_iter;
+    if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
+        if (!unwind_session->shouldSkipFrame())
+            unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
+
+        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+        unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+    }
+}
+
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
 // the stack frame that they were created in, so we need to use this approach (as opposed to
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
-void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImpl>)> func) {
-    static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
-    static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
+template <typename Func> void unwindPythonStack(Func func) {
+    PythonUnwindSession* unwind_session = new PythonUnwindSession();
+
+    unwind_session->begin();
 
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
     unw_init_local(&cursor, &ctx);
-
-    // If the previous (lower, ie newer) frame was a frame that got OSR'd into,
-    // we skip the previous frame, its OSR parent.
-    bool was_osr = false;
 
     while (true) {
         int r = unw_step(&cursor);
@@ -435,63 +652,24 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
         if (r == 0)
             break;
 
+        unw_word_t ip = get_cursor_ip(&cursor);
+        unw_word_t bp = get_cursor_bp(&cursor);
 
-        unw_word_t ip;
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_word_t bp;
-        unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
+        bool stop_unwinding = false;
 
-        CompiledFunction* cf = getCFForAddress(ip);
-        if (cf) {
-            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
-            info->id.type = PythonFrameId::COMPILED;
-            info->id.ip = ip;
-            info->id.bp = bp;
-            info->cf = cf;
+        PythonFrameIteratorImpl frame_iter;
+        if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
+            if (!unwind_session->shouldSkipFrame())
+                stop_unwinding = func(&frame_iter);
 
-            if (!was_osr) {
-                // Try getting all the callee-save registers, and save the ones we were able to get.
-                // Some of them may be inaccessible, I think because they weren't defined by that
-                // stack frame, which can show up as a -UNW_EBADREG return code.
-                for (int i = 0; i < 16; i++) {
-                    if (!assembler::Register::fromDwarf(i).isCalleeSave())
-                        continue;
-                    unw_word_t r;
-                    int code = unw_get_reg(&cursor, i, &r);
-                    ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
-                    if (code == 0) {
-                        info->regs[i] = r;
-                        info->regs_valid |= (1 << i);
-                    }
-                }
-
-                bool stop = func(std::move(info));
-                if (stop)
-                    break;
-            }
-            was_osr = (bool)cf->entry_descriptor;
-            continue;
+            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+            unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
         }
 
-        if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
-            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
-            info->id.type = PythonFrameId::INTERPRETED;
-            info->id.ip = ip;
-            info->id.bp = bp;
-            cf = info->cf = getCFForInterpretedFrame((void*)bp);
-            assert(cf);
+        if (stop_unwinding)
+            break;
 
-            if (!was_osr) {
-                bool stop = func(std::move(info));
-                if (stop)
-                    break;
-            }
-
-            was_osr = (bool)cf->entry_descriptor;
-            continue;
-        }
-
-        if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
+        if (inGeneratorEntry(ip)) {
             // for generators continue unwinding in the context in which the generator got called
             Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
             // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
@@ -509,26 +687,18 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
 
         // keep unwinding
     }
+
+    unwind_session->end();
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
     STAT_TIMER(t0, "us_timer_getTopPythonFrame");
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> iter) {
-        rtn = std::move(iter);
+    unwindPythonStack([&](PythonFrameIteratorImpl* iter) {
+        rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*iter));
         return true;
     });
     return rtn;
-}
-
-static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
-    AST_stmt* current_stmt = frame_it.getCurrentStatement();
-    auto* cf = frame_it.getCF();
-    assert(cf);
-
-    auto source = cf->clfunc->source.get();
-
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
 // To produce a traceback, we:
@@ -584,20 +754,16 @@ BoxedTraceback* getTraceback() {
 
     Timer _t("getTraceback", 1000);
 
-    std::vector<const LineInfo*> entries;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
-        const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
-        if (line_info)
-            entries.push_back(line_info);
+    Box* tb = new BoxedTraceback();
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
+        BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb);
         return false;
     });
-
-    std::reverse(entries.begin(), entries.end());
 
     long us = _t.end();
     us_gettraceback.log(us);
 
-    return new BoxedTraceback(std::move(entries));
+    return static_cast<BoxedTraceback*>(tb);
 }
 
 ExcInfo* getFrameExcInfo() {
@@ -605,7 +771,7 @@ ExcInfo* getFrameExcInfo() {
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
 
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         FrameInfo* frame_info = frame_iter->getFrameInfo();
 
         copy_from_exc = &frame_info->exc;
@@ -665,9 +831,9 @@ BoxedModule* getCurrentModule() {
 
 PythonFrameIterator getPythonFrame(int depth) {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (depth == 0) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
         depth--;
@@ -691,13 +857,13 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
     std::swap(this->impl, impl);
 }
 
-// TODO factor getStackLoclasIncludingUserHidden and fastLocalsToBoxedLocals
+// TODO factor getStackLocalsIncludingUserHidden and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
 FrameStackState getFrameStackState() {
     FrameStackState rtn(NULL, NULL);
     bool found = false;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
@@ -957,9 +1123,9 @@ FrameInfo* PythonFrameIterator::getFrameInfo() {
 PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     auto& impl = this->impl;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (frame_iter->pointsToTheSameAs(*impl.get())) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
         return false;
@@ -975,9 +1141,9 @@ PythonFrameIterator PythonFrameIterator::back() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     auto& impl = this->impl;
     bool found = false;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
+    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         if (found) {
-            rtn = std::move(frame_iter);
+            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
             return true;
         }
 
@@ -1014,5 +1180,11 @@ void logByCurrentPythonLine(const std::string& stat_name) {
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();
+}
+
+void setupUnwinding() {
+    unwind_session_cls = BoxedHeapClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
+                                                sizeof(PythonUnwindSession), false, "unwind_session");
+    unwind_session_cls->freeze();
 }
 }

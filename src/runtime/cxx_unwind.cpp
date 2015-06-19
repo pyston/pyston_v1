@@ -27,6 +27,7 @@
 #include "core/types.h"        // for ExcInfo
 #include "core/util.h"         // Timer
 #include "runtime/generator.h" // generatorEntry
+#include "runtime/traceback.h" // BoxedTraceback::addLine
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -34,9 +35,6 @@
 #define PYSTON_CUSTOM_UNWINDER 1 // set to 0 to use C++ unwinder
 
 #define NORETURN __attribute__((__noreturn__))
-
-// canary used in ExcData in debug mode to catch exception-value corruption.
-#define CANARY_VALUE 0xdeadbeef
 
 // An action of 0 in the LSDA action table indicates cleanup.
 #define CLEANUP_ACTION 0
@@ -73,42 +71,13 @@ template <typename T> static inline void check(T x) {
 
 namespace pyston {
 
-struct ExcData;
-extern thread_local ExcData exception_ferry;
-
-struct ExcData {
-    ExcInfo exc;
-#ifndef NDEBUG
-    unsigned canary = CANARY_VALUE;
-#endif
-
-    ExcData() : exc(nullptr, nullptr, nullptr) {}
-    ExcData(ExcInfo e) : exc(e) {}
-    ExcData(Box* type, Box* value, Box* traceback) : exc(type, value, traceback) {}
-
-    void check() const {
-        assert(this);
-        assert(canary == CANARY_VALUE);
-        assert(exc.type && exc.value && exc.traceback);
-        ASSERT(gc::isValidGCObject(exc.type), "%p", exc.type);
-        ASSERT(gc::isValidGCObject(exc.value), "%p", exc.value);
-        ASSERT(gc::isValidGCObject(exc.traceback), "%p", exc.traceback);
-        assert(this == &exception_ferry);
-    }
-};
-
-thread_local ExcData exception_ferry;
-
-static_assert(offsetof(ExcData, exc) == 0, "wrong offset");
-
-// Timer that auto-logs.
-struct LogTimer {
-    StatCounter& counter;
-    Timer timer;
-
-    LogTimer(const char* desc, StatCounter& ctr, long min_usec = -1) : counter(ctr), timer(desc, min_usec) {}
-    ~LogTimer() { counter.log(timer.end()); }
-};
+void checkExcInfo(const ExcInfo* exc) {
+    assert(exc);
+    assert(exc->type && exc->value && exc->traceback);
+    ASSERT(gc::isValidGCObject(exc->type), "%p", exc->type);
+    ASSERT(gc::isValidGCObject(exc->value), "%p", exc->value);
+    ASSERT(gc::isValidGCObject(exc->traceback), "%p", exc->traceback);
+}
 
 static StatCounter us_unwind_loop("us_unwind_loop");
 static StatCounter us_unwind_resume_catch("us_unwind_resume_catch");
@@ -422,8 +391,8 @@ static inline bool find_call_site_entry(const lsda_info_t* info, const uint8_t* 
 }
 
 static inline NORETURN void resume(unw_cursor_t* cursor, const uint8_t* landing_pad, int64_t switch_value,
-                                   const ExcData* exc_data) {
-    exc_data->check();
+                                   const ExcInfo* exc_data) {
+    checkExcInfo(exc_data);
     assert(landing_pad);
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("  * RESUMED: ip %p  switch_value %ld\n", (const void*)landing_pad, (long)switch_value);
@@ -508,16 +477,8 @@ static inline int64_t determine_action(const lsda_info_t* info, const call_site_
     RELEASE_ASSERT(0, "action chain exhausted and no cleanup indicated");
 }
 
-static inline int step(unw_cursor_t* cp) {
-    LogTimer t("unw_step", us_unwind_step, 5);
-    return unw_step(cp);
-}
-
 // The stack-unwinding loop.
-// TODO: integrate incremental traceback generation into this function
-static inline void unwind_loop(const ExcData* exc_data) {
-    Timer t("unwind_loop", 50);
-
+static inline void unwind_loop(ExcInfo* exc_data) {
     // NB. https://monoinfinito.wordpress.com/series/exception-handling-in-c/ is a very useful resource
     // as are http://www.airs.com/blog/archives/460 and http://www.airs.com/blog/archives/464
     unw_cursor_t cursor;
@@ -530,19 +491,25 @@ static inline void unwind_loop(const ExcData* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    while (step(&cursor) > 0) {
+    auto unwind_session = getActivePythonUnwindSession();
+
+    while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
-        {
-            // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
-            LogTimer t_procinfo("get_proc_info", us_unwind_get_proc_info, 10);
-            check(unw_get_proc_info(&cursor, &pip));
-        }
+
+        // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
+        check(unw_get_proc_info(&cursor, &pip));
+
         assert((pip.lsda == 0) == (pip.handler == 0));
         assert(pip.flags == 0);
 
         if (VERBOSITY("cxx_unwind") >= 4) {
             print_frame(&cursor, &pip);
         }
+
+        // let the PythonUnwindSession know that we're in a new frame,
+        // giving it a chance to possibly add a traceback entry for
+        // it.
+        unwindingThroughFrame(unwind_session, &cursor);
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -560,8 +527,6 @@ static inline void unwind_loop(const ExcData* exc_data) {
 
         call_site_entry_t entry;
         {
-            LogTimer t_call_site("find_call_site_entry", us_unwind_find_call_site_entry, 10);
-
             // 2. Find our current IP in the call site table.
             unw_word_t ip;
             unw_get_reg(&cursor, UNW_REG_IP, &ip);
@@ -592,18 +557,35 @@ static inline void unwind_loop(const ExcData* exc_data) {
         }
 
         int64_t switch_value = determine_action(&info, &entry);
-        us_unwind_loop.log(t.end());
+        if (switch_value != CLEANUP_ACTION) {
+            // we're transfering control to a non-cleanup landing pad.
+            // i.e. a catch block.  thus ends our unwind session.
+            endPythonUnwindSession(unwind_session);
+        }
+        static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
+        // there is a python unwinding implementation detail leaked
+        // here - that the unwind session can be ended but its
+        // exception storage is still around.
+        //
+        // this manifests itself as this short window here where we've
+        // (possibly) ended the unwind session above but we still need
+        // to pass exc_data (which is the exceptionStorage for this
+        // unwind session) to resume().
+        //
+        // the only way this could bite us is if we somehow clobber
+        // the PythonUnwindSession's storage, or cause a GC to occur, before
+        // transfering control to the landing pad in resume().
+        //
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
 
-    us_unwind_loop.log(t.end());
     // Hit end of stack! return & let unwindException determine what to do.
 }
 
 
 // The unwinder entry-point.
-static void unwind(const ExcData* exc) {
-    exc->check();
+static void unwind(ExcInfo* exc) {
+    checkExcInfo(exc);
     unwind_loop(exc);
     // unwind_loop returned, couldn't find any handler. ruh-roh.
     panic();
@@ -637,7 +619,7 @@ extern "C" void _Unwind_Resume(struct _Unwind_Exception* _exc) {
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** _Unwind_Resume() *****\n");
     // we give `_exc' type `struct _Unwind_Exception*' because unwind.h demands it; it's not actually accurate
-    const pyston::ExcData* data = (const pyston::ExcData*)_exc;
+    pyston::ExcInfo* data = (pyston::ExcInfo*)_exc;
     pyston::unwind(data);
 }
 
@@ -648,45 +630,24 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // we should only ever be throwing ExcInfos
     RELEASE_ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
 
-    // Instead of allocating memory for this exception, we return a pointer to a pre-allocated thread-local variable.
-    //
-    // This variable, pyston::exception_ferry, is used only while we are unwinding, and should not be used outside of
-    // the unwinder. Since it's a thread-local variable, we *cannot* throw any exceptions while it is live, otherwise we
-    // would clobber it and forget our old exception.
-    //
-    // Q: Why can't we just use cur_thread_state.curexc_{type,value,traceback}?
-    //
-    // A: Because that conflates the space used to store exceptions during C++ unwinding with the space used to store
-    // them during C-API return-code based unwinding! This actually comes up in practice - the original version *did*
-    // use curexc_{type,value,traceback}, and it had a bug.
-    //
-    // In particular, we need to unset the C API exception at an appropriate point so as not to make C-API functions
-    // *think* an exception is being thrown when one isn't. The natural place is __cxa_begin_catch, BUT we need some way
-    // to communicate the exception info to the inside of the catch block - and all we get is the return value of
-    // __cxa_begin_catch, which is a single pointer, when we need three!
-    //
-    // You might think we could get away with only unsetting the C-API information in __cxa_end_catch, but you'd be
-    // wrong! Firstly, this would prohibit calling C-API functions inside a catch-block. Secondly, __cxa_end_catch is
-    // always called when leaving a catch block, even if we're leaving it by re-raising the exception. So if we store
-    // our exception info in curexc_*, and then unset these in __cxa_end_catch, then we'll wipe our exception info
-    // during unwinding!
-
-    return (void*)&pyston::exception_ferry;
+    // we begin the unwind session here rather than in __cxa_throw
+    // because we need to return the session's exception storage
+    // from this method.
+    return pyston::getPythonUnwindSessionExceptionStorage(pyston::beginPythonUnwindSession());
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our
 // case, these are the same, and should always be &pyston::exception_ferry.
 extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
-    pyston::gc::endGCUnexpectedRegion();
     assert(exc_obj_in);
     pyston::us_unwind_resume_catch.log(pyston::per_thread_resume_catch_timer.end());
 
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_begin_catch() *****\n");
 
-    pyston::ExcData* e = (pyston::ExcData*)exc_obj_in;
-    e->check();
-    return (void*)&e->exc;
+    pyston::ExcInfo* e = (pyston::ExcInfo*)exc_obj_in;
+    checkExcInfo(e);
+    return e;
 }
 
 extern "C" void __cxa_end_catch() {
@@ -700,7 +661,6 @@ extern "C" void __cxa_end_catch() {
 extern "C" std::type_info EXCINFO_TYPE_INFO;
 
 extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
-    pyston::gc::startGCUnexpectedRegion();
     assert(!pyston::in_cleanup_code);
     assert(exc_obj);
     RELEASE_ASSERT(tinfo == &EXCINFO_TYPE_INFO, "can't throw a non-ExcInfo value! type info: %p", tinfo);
@@ -708,16 +668,19 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_throw() *****\n");
 
-    const pyston::ExcData* exc_data = (const pyston::ExcData*)exc_obj;
-    exc_data->check();
+    pyston::ExcInfo* exc_data = (pyston::ExcInfo*)exc_obj;
+    checkExcInfo(exc_data);
+
+    // let unwinding.cpp know we've started unwinding
+    pyston::throwingException(pyston::getActivePythonUnwindSession());
     pyston::unwind(exc_data);
 }
 
 extern "C" void* __cxa_get_exception_ptr(void* exc_obj_in) noexcept {
     assert(exc_obj_in);
-    pyston::ExcData* e = (pyston::ExcData*)exc_obj_in;
-    e->check();
-    return (void*)&e->exc;
+    pyston::ExcInfo* e = (pyston::ExcInfo*)exc_obj_in;
+    checkExcInfo(e);
+    return e;
 }
 
 // We deliberately don't implement rethrowing because we can't implement it correctly with our current strategy for

@@ -24,6 +24,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -40,6 +41,8 @@ void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
 
     if (self->py_lines)
         v->visit(self->py_lines);
+    if (self->tb_next)
+        v->visit(self->tb_next);
 
     boxGCHandler(v, b);
 }
@@ -53,16 +56,17 @@ void printTraceback(Box* b) {
 
     fprintf(stderr, "Traceback (most recent call last):\n");
 
-    for (auto line : tb->lines) {
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
+    for (; tb && tb != None; tb = static_cast<BoxedTraceback*>(tb->tb_next)) {
+        auto& line = tb->line;
+        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line.file.c_str(), line.line, line.func.c_str());
 
-        if (line->line < 0)
+        if (line.line < 0)
             continue;
 
-        FILE* f = fopen(line->file.c_str(), "r");
+        FILE* f = fopen(line.file.c_str(), "r");
         if (f) {
-            assert(line->line < 10000000 && "Refusing to try to seek that many lines forward");
-            for (int i = 1; i < line->line; i++) {
+            assert(line.line < 10000000 && "Refusing to try to seek that many lines forward");
+            for (int i = 1; i < line.line; i++) {
                 char* buf = NULL;
                 size_t size;
                 size_t r = getline(&buf, &size, f);
@@ -97,15 +101,21 @@ Box* BoxedTraceback::getLines(Box* b) {
 
     if (!tb->py_lines) {
         BoxedList* lines = new BoxedList();
-        lines->ensure(tb->lines.size());
-        for (auto line : tb->lines) {
-            auto l = BoxedTuple::create({ boxString(line->file), boxString(line->func), boxInt(line->line) });
-            listAppendInternal(lines, l);
+        for (BoxedTraceback* wtb = tb; wtb && wtb != None; wtb = static_cast<BoxedTraceback*>(wtb->tb_next)) {
+            if (wtb->has_line) {
+                auto& line = wtb->line;
+                auto l = BoxedTuple::create({ boxString(line.file), boxString(line.func), boxInt(line.line) });
+                listAppendInternal(lines, l);
+            }
         }
         tb->py_lines = lines;
     }
 
     return tb->py_lines;
+}
+
+void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
+    *tb = new BoxedTraceback(lineInfo, *tb);
 }
 
 void setupTraceback() {

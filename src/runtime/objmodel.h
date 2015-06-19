@@ -36,7 +36,6 @@ ExcInfo excInfoForRaise(Box*, Box*, Box*);
 extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
-void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 void _printStacktrace();
 
 extern "C" Box* deopt(AST_expr* expr, Box* value);

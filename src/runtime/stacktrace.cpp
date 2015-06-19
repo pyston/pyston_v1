@@ -46,37 +46,8 @@ void showBacktrace() {
     }
 }
 
-void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
-void raiseRaw(const ExcInfo& e) {
-    STAT_TIMER(t0, "us_timer_raiseraw");
-    // Should set these to None rather than null before getting here:
-    assert(e.type);
-    assert(e.value);
-    assert(e.traceback);
-    assert(gc::isValidGCObject(e.type));
-    assert(gc::isValidGCObject(e.value));
-    assert(gc::isValidGCObject(e.traceback));
-
-#if STAT_EXCEPTIONS
-    static StatCounter num_exceptions("num_exceptions");
-    num_exceptions.log();
-
-    std::string stat_name;
-    if (PyType_Check(e.type))
-        stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(e.type)->tp_name);
-    else
-        stat_name = "num_exceptions_" + std::string(e.value->cls->tp_name);
-    Stats::log(Stats::getStatCounter(stat_name));
-#if STAT_EXCEPTIONS_LOCATION
-    logByCurrentPythonLine(stat_name);
-#endif
-#endif
-
-    throw e;
-}
-
 void raiseExc(Box* exc_obj) {
-    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, getTraceback()));
+    throw ExcInfo(exc_obj->cls, exc_obj, new BoxedTraceback());
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -84,10 +55,8 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    auto tb = getTraceback();
-    std::vector<const LineInfo*> entries = tb->lines;
-    entries.push_back(new LineInfo(lineno, col_offset, file, func));
-    raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
+    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
+    throw ExcInfo(exc->cls, exc, tb);
 }
 
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
@@ -205,11 +174,13 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
-    raiseRaw(*exc_info);
+    exc_info->reraise = true;
+    throw * exc_info;
 }
 
 #ifndef NDEBUG
-ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
+ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback)
+    : type(type), value(value), traceback(traceback), reraise(false) {
 }
 #endif
 
@@ -229,8 +200,12 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     assert(type && value && tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
-    if (tb == None)
-        tb = getTraceback();
+    if (tb == None) {
+        tb = NULL;
+    } else if (tb != NULL && !PyTraceBack_Check(tb)) {
+        raiseExcHelper(TypeError, "raise: arg 3 must be a traceback or None");
+    }
+
 
     /* Next, repeatedly, replace a tuple exception with its first item */
     while (PyTuple_Check(type) && PyTuple_Size(type) > 0) {
@@ -242,6 +217,7 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 
     if (PyExceptionClass_Check(type)) {
         PyErr_NormalizeException(&type, &value, &tb);
+
         if (!PyExceptionInstance_Check(value)) {
             raiseExcHelper(TypeError, "calling %s() should have returned an instance of "
                                       "BaseException, not '%s'",
@@ -268,11 +244,19 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 
     assert(PyExceptionClass_Check(type));
 
+    if (tb == NULL) {
+        tb = new BoxedTraceback();
+    }
+
     return ExcInfo(type, value, tb);
 }
 
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
-    raiseRaw(excInfoForRaise(arg0, arg1, arg2));
+    bool reraise = arg2 != NULL && arg2 != None;
+    auto exc_info = excInfoForRaise(arg0, arg1, arg2);
+
+    exc_info.reraise = reraise;
+    throw exc_info;
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {

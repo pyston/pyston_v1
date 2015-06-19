@@ -69,13 +69,10 @@ private:
     ASTInterpreter* interpreter;
 
 public:
-    RegisterHelper(ASTInterpreter* interpreter, void* frame_addr);
+    RegisterHelper();
     ~RegisterHelper();
-
-    static void deregister(void* frame_addr) {
-        assert(s_interpreterMap.count(frame_addr));
-        s_interpreterMap.erase(frame_addr);
-    }
+    void doRegister(void* frame_addr, ASTInterpreter* interpreter);
+    static void deregister(void* frame_addr);
 };
 
 union Value {
@@ -102,11 +99,13 @@ public:
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
 
+    static Value execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
     // This must not be inlined, because we rely on being able to detect when we're inside of it (by checking whether
     // %rip is inside its instruction range) during a stack-trace in order to produce tracebacks inside interpreted
     // code.
     __attribute__((__no_inline__)) static Value
-        execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
+        executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at, RegisterHelper* reg);
+
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -318,22 +317,35 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     }
 }
 
-RegisterHelper::RegisterHelper(ASTInterpreter* interpreter, void* frame_addr)
-    : frame_addr(frame_addr), interpreter(interpreter) {
-    interpreter->frame_addr = frame_addr;
-    s_interpreterMap[frame_addr] = interpreter;
+RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) {
 }
 
 RegisterHelper::~RegisterHelper() {
+    assert(interpreter);
+    assert(interpreter->frame_addr == frame_addr);
     interpreter->frame_addr = nullptr;
     deregister(frame_addr);
 }
 
-Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    STAT_TIMER(t0, "us_timer_astinterpreter_execute");
+void RegisterHelper::doRegister(void* frame_addr, ASTInterpreter* interpreter) {
+    assert(!this->interpreter);
+    assert(!this->frame_addr);
+    this->frame_addr = frame_addr;
+    this->interpreter = interpreter;
+    interpreter->frame_addr = frame_addr;
+    s_interpreterMap[frame_addr] = interpreter;
+}
 
+void RegisterHelper::deregister(void* frame_addr) {
+    assert(frame_addr);
+    assert(s_interpreterMap.count(frame_addr));
+    s_interpreterMap.erase(frame_addr);
+}
+
+Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at,
+                                   RegisterHelper* reg) {
     void* frame_addr = __builtin_frame_address(0);
-    RegisterHelper frame_registerer(&interpreter, frame_addr);
+    reg->doRegister(frame_addr, &interpreter);
 
     Value v;
 
@@ -371,6 +383,14 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
         }
     }
     return v;
+}
+
+Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+    STAT_TIMER(t0, "us_timer_astinterpreter_execute");
+
+    RegisterHelper frame_registerer;
+
+    return executeInner(interpreter, start_block, start_at, &frame_registerer);
 }
 
 Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type) {
@@ -610,6 +630,10 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         v = visit_stmt(node->stmt);
         next_block = node->normal_dest;
     } catch (ExcInfo e) {
+
+        auto source = getCF()->clfunc->source.get();
+        exceptionCaughtInInterpreter(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()), &e);
+
         next_block = node->exc_dest;
         last_exception = e;
     }
@@ -1269,7 +1293,7 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 }
 }
 
-const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
+const void* interpreter_instr_addr = (void*)&ASTInterpreter::executeInner;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {

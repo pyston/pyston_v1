@@ -727,7 +727,7 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
             std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
         } catch (ExcInfo e) {
             remove_keys();
-            raiseRaw(e);
+            throw e;
         }
 
         remove_keys();

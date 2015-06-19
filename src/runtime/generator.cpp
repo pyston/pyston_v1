@@ -155,7 +155,7 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
         freeGeneratorStack(self);
         // don't raise StopIteration exceptions because those are handled specially.
         if (!self->exception.matches(StopIteration))
-            raiseRaw(self->exception);
+            throw self->exception;
         return;
     }
 
@@ -193,7 +193,7 @@ Box* generatorSend(Box* s, Box* v) {
         self->exception = ExcInfo(nullptr, nullptr, nullptr);
         if (old_exc.type == NULL)
             raiseExcHelper(StopIteration, (const char*)nullptr);
-        raiseRaw(old_exc);
+        throw old_exc;
     }
 
     return self->returnValue;
@@ -272,7 +272,7 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     if (self->exception.type) {
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
-        raiseRaw(e);
+        throw e;
     }
     return self->returnValue;
 }

@@ -88,6 +88,10 @@ public:
     GCVisitor(TraceStack* stack) : stack(stack) {}
 
     // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
+    void visitIf(void* p) {
+        if (p)
+            visit(p);
+    }
     void visit(void* p);
     void visitRange(void* const* start, void* const* end);
     void visitPotential(void* p);
@@ -666,7 +670,7 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
 
 struct LineInfo {
 public:
-    const int line, column;
+    int line, column;
     std::string file, func;
 
     LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)
@@ -675,11 +679,12 @@ public:
 
 struct ExcInfo {
     Box* type, *value, *traceback;
+    bool reraise;
 
 #ifndef NDEBUG
     ExcInfo(Box* type, Box* value, Box* traceback);
 #else
-    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
+    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback), reraise(false) {}
 #endif
     bool matches(BoxedClass* cls) const;
     void printExcAndTraceback() const;

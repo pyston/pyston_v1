@@ -162,7 +162,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
         }
     }
 
-    Box* r = classLookup(cls, std::string(attr->s()));
+    Box* r = classLookup(cls, attr->s());
     if (!r)
         raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
