@@ -856,6 +856,9 @@ static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* 
 }
 
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
+    static StatCounter slowpath_tp_getattro("slowpath_tp_getattro");
+    slowpath_tp_getattro.log();
+
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
 }

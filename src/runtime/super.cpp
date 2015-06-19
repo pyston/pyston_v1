@@ -134,6 +134,15 @@ Box* superGetattribute(Box* _s, Box* _attr) {
     return processDescriptor(r, s, s->cls);
 }
 
+Box* super_getattro(Box* _s, Box* _attr) noexcept {
+    try {
+        return superGetattribute(_s, _attr);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* superRepr(Box* _s) {
     RELEASE_ASSERT(_s->cls == super_cls, "");
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
@@ -191,7 +200,7 @@ void setupSuper() {
     super_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false,
                                        "super");
 
-    super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
+    // super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
 
     super_cls->giveAttr("__init__",
@@ -205,5 +214,6 @@ void setupSuper() {
                         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj_type)));
 
     super_cls->freeze();
+    super_cls->tp_getattro = super_getattro;
 }
 }

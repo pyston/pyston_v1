@@ -1022,7 +1022,7 @@ $(call make_target,_gcc)
 nosearch_runpy_% nosearch_pyrun_%: %.py ext_python
 	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
 nosearch_pypyrun_%: %.py ext_python
-	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
+	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time pypy $<'
 $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 $(call make_search,pypyrun_%)
