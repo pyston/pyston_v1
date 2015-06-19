@@ -143,6 +143,7 @@ public:
     DEFAULT_CLASS(wrapperdescr_cls);
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+    static Box* descr_get(Box* self, Box* inst, Box* owner) noexcept;
     static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
 
     static void gcHandler(GCVisitor* v, Box* _o) {

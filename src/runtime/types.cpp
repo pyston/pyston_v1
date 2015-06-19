@@ -857,6 +857,14 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     return new BoxedInstanceMethod(inst, self, owner);
 }
 
+static Box* function_descr_get(Box* self, Box* inst, Box* owner) noexcept {
+    RELEASE_ASSERT(self->cls == function_cls, "");
+
+    if (inst == None)
+        inst = NULL;
+    return new BoxedInstanceMethod(inst, self, owner);
+}
+
 static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     RELEASE_ASSERT(self->cls == function_cls, "%s", getTypeName(self));
 
@@ -2748,6 +2756,7 @@ void setupRuntime() {
     function_cls->giveAttr("__defaults__", function_cls->getattr("func_defaults"));
     function_cls->giveAttr("func_globals", function_cls->getattr("__globals__"));
     function_cls->freeze();
+    function_cls->tp_descr_get = function_descr_get;
 
     builtin_function_or_method_cls->giveAttr(
         "__module__",
