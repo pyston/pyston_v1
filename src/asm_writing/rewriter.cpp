@@ -1626,10 +1626,10 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
 
     // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),
     // so don't do the more-expensive hash table lookup to find it.
-    if (rtn_addr > (void*)0x1000000) {
+    if (rtn_addr > (void*)0x1800000) {
         ic = getICInfo(rtn_addr);
     } else {
-        assert(!getICInfo(rtn_addr));
+        ASSERT(!getICInfo(rtn_addr), "%p", rtn_addr);
     }
 
     log_ic_attempts(debug_name);

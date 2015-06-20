@@ -2131,6 +2131,9 @@ extern "C" bool nonzero(Box* obj) {
         r_obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)obj->cls);
     }
 
+    // Note: it feels silly to have all these special cases here, and we should probably be
+    // able to at least generate rewrites that are as good as the ones we write here.
+    // But for now we can't and these should be a bit faster:
     if (obj->cls == bool_cls) {
         // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
         if (rewriter.get()) {
@@ -2142,9 +2145,6 @@ extern "C" bool nonzero(Box* obj) {
         return bool_obj->n;
     } else if (obj->cls == int_cls) {
         if (rewriter.get()) {
-            // TODO should do:
-            // test 	%rsi, %rsi
-            // setne	%al
             RewriterVar* n = r_obj->getAttr(INT_N_OFFSET, rewriter->getReturnDestination());
             RewriterVar* b = n->toBool(rewriter->getReturnDestination());
             rewriter->commitReturning(b);
@@ -2164,18 +2164,47 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commitReturning(b);
         }
         return false;
+    } else if (obj->cls == long_cls) {
+        BoxedLong* long_obj = static_cast<BoxedLong*>(obj);
+        bool r = longNonzeroUnboxed(long_obj);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn = rewriter->call(false, (void*)longNonzeroUnboxed, r_obj);
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == tuple_cls) {
+        BoxedTuple* tuple_obj = static_cast<BoxedTuple*>(obj);
+        bool r = (tuple_obj->ob_size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(BoxedTuple, ob_size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == list_cls) {
+        BoxedList* list_obj = static_cast<BoxedList*>(obj);
+        bool r = (list_obj->size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn = r_obj->getAttr(offsetof(BoxedList, size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == str_cls) {
+        BoxedString* str_obj = static_cast<BoxedString*>(obj);
+        bool r = (str_obj->ob_size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(BoxedString, ob_size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
     }
 
-    // FIXME we have internal functions calling this method;
-    // instead, we should break this out into an external and internal function.
-    // slowpath_* counters are supposed to count external calls; putting it down
-    // here gets a better representation of that.
-    // TODO move internal callers to nonzeroInternal, and log *all* calls to nonzero
-    slowpath_nonzero.log();
-
-    // int id = Stats::getStatId("slowpath_nonzero_" + *getTypeName(obj));
-    // Stats::log(id);
-
+    // TODO: rewrite these.
     static BoxedString* nonzero_str = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
     static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
     // go through descriptor logic
