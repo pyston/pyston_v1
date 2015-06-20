@@ -378,7 +378,7 @@ private:
         // Loads the constant into any register or if already in a register just return it
         assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
 
-        llvm::DenseMap<uint64_t, RewriterVar*> constToVar;
+        std::unordered_map<uint64_t, RewriterVar*> constToVar;
     };
 
 
