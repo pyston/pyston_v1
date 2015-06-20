@@ -69,6 +69,20 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
+Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
+    RELEASE_ASSERT(_self->cls == wrapperdescr_cls, "");
+    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
+
+    if (inst == None)
+        return self;
+
+    if (!isSubclass(inst->cls, self->type))
+        PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
+                     getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
+
+    return new BoxedWrapperObject(self, inst);
+}
+
 Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args) {
     RELEASE_ASSERT(descr->cls == wrapperdescr_cls, "");
 
@@ -1725,8 +1739,9 @@ void setupCAPI() {
 
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
-    method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
-                                                                     0, true, true)));
+    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
+    method_call_cl->internal_callable = BoxedMethodDescriptor::callInternal;
+    method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
@@ -1737,6 +1752,7 @@ void setupCAPI() {
     wrapperdescr_cls->giveAttr("__doc__",
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->freeze();
+    wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
 
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
