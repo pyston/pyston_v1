@@ -2579,6 +2579,31 @@ extern "C" void dumpEx(void* p, int levels) {
             }
         }
 
+        if (isSubclass(b->cls, function_cls)) {
+            BoxedFunction* f = static_cast<BoxedFunction*>(b);
+
+            CLFunction* cl = f->f;
+            if (cl->source) {
+                printf("User-defined function '%s'\n", cl->source->getName().c_str());
+            } else {
+                printf("A builtin function\n");
+            }
+
+            printf("Has %ld function versions\n", cl->versions.size());
+            for (CompiledFunction* cf : cl->versions) {
+                if (cf->is_interpreted) {
+                    printf("[interpreted]\n");
+                } else {
+                    bool got_name;
+                    std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
+                    if (got_name)
+                        printf("%s\n", name.c_str());
+                    else
+                        printf("%p\n", cf->code);
+                }
+            }
+        }
+
         if (isSubclass(b->cls, module_cls)) {
             printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
         }
@@ -2862,6 +2887,16 @@ static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** ar
     return args[idx - 3];
 }
 
+static inline RewriterVar* getArg(int idx, CallRewriteArgs* rewrite_args) {
+    if (idx == 0)
+        return rewrite_args->arg1;
+    if (idx == 1)
+        return rewrite_args->arg2;
+    if (idx == 2)
+        return rewrite_args->arg3;
+    return rewrite_args->args->getAttr(sizeof(Box*) * (idx - 3));
+}
+
 static StatCounter slowpath_pickversion("slowpath_pickversion");
 static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
@@ -3003,17 +3038,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
 
-    if (argspec.has_starargs || argspec.has_kwargs || f->isGenerator()) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-    }
-
-    // These could be handled:
-    if (argspec.num_keywords) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-    }
-
     // TODO Should we guard on the CLFunction or the BoxedFunctionBase?
     // A single CLFunction could end up forming multiple BoxedFunctionBases, and we
     // could emit assembly that handles any of them.  But doing this involves some
@@ -3038,12 +3062,40 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (!f->isGenerator()) {
-        if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
-            && !f->takes_varargs && !f->takes_kwargs) {
-            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, func->globals, arg1, arg2, arg3, args);
+        if (argspec.num_keywords == 0 && argspec.has_starargs == f->takes_varargs && !argspec.has_kwargs
+            && !f->takes_kwargs && argspec.num_args == f->num_args) {
+            // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
+            // since otherwise modifications by the callee would be visible to the caller (hence why varargs
+            // received by the caller are always tuples).
+            // This is why we can't pass kwargs here.
+            if (argspec.has_starargs) {
+                Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+                if (given_varargs->cls == tuple_cls) {
+                    if (rewrite_args) {
+                        getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
+                            ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
+                    }
+                    return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
+                                      closure, NULL, func->globals, arg1, arg2, arg3, args);
+                }
+            } else {
+                return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
+                                  closure, NULL, func->globals, arg1, arg2, arg3, args);
+            }
         }
     }
     slowpath_callfunc_slowpath.log();
+
+    if (argspec.has_starargs || argspec.has_kwargs || f->isGenerator()) {
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
+    }
+
+    // These could be handled:
+    if (argspec.num_keywords) {
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
+    }
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
