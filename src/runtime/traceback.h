@@ -28,12 +28,10 @@ extern "C" BoxedClass* traceback_cls;
 class BoxedTraceback : public Box {
 public:
     Box* tb_next;
-    bool has_line;
     LineInfo line;
     Box* py_lines;
 
-    BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), has_line(true), line(line), py_lines(NULL) {}
-    BoxedTraceback() : tb_next(None), has_line(false), line(-1, -1, "", ""), py_lines(NULL) {}
+    BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), line(line), py_lines(NULL) {}
 
     DEFAULT_CLASS(traceback_cls);
 

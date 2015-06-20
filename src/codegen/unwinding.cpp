@@ -732,7 +732,7 @@ static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
 // 4. Unless we've hit the end of the stack, go to 2 and keep unwinding.
 //
 static StatCounter us_gettraceback("us_gettraceback");
-BoxedTraceback* getTraceback() {
+Box* getTraceback() {
     STAT_TIMER(t0, "us_timer_gettraceback", 20);
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
@@ -740,7 +740,7 @@ BoxedTraceback* getTraceback() {
             printed_warning = true;
             fprintf(stderr, "Warning: can't get traceback since ENABLE_FRAME_INTROSPECTION=0\n");
         }
-        return new BoxedTraceback();
+        return None;
     }
 
     if (!ENABLE_TRACEBACKS) {
@@ -749,12 +749,12 @@ BoxedTraceback* getTraceback() {
             printed_warning = true;
             fprintf(stderr, "Warning: can't get traceback since ENABLE_TRACEBACKS=0\n");
         }
-        return new BoxedTraceback();
+        return None;
     }
 
     Timer _t("getTraceback", 1000);
 
-    Box* tb = new BoxedTraceback();
+    Box* tb = None;
     unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb);
         return false;
