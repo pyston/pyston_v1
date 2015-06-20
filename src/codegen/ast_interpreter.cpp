@@ -1295,6 +1295,8 @@ const void* interpreter_instr_addr = (void*)&ASTInterpreter::executeInner;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astInterpretFunction");
+
     assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
     bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
     if (unlikely(can_reopt && cf->times_called > REOPT_THRESHOLD_INTERPRETER)) {

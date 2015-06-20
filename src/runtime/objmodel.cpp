@@ -3328,13 +3328,54 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
         return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 }
 
+// This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
+// only supports calling functions with at most 6 since it can currently only pass arguments
+// in registers.
+static Box* astInterpretHelper(CompiledFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
+                               Box* globals, Box** _args) {
+    Box* arg1 = _args[0];
+    Box* arg2 = _args[1];
+    Box* arg3 = _args[2];
+    Box* args = _args[3];
+
+    return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
+}
+
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astInterpretFunction");
+        if (rewrite_args) {
+            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+
+            RewriterVar::SmallVector arg_vec;
+
+            // TODO this kind of embedded reference needs to be tracked by the GC somehow?
+            // Or maybe it's ok, since we've guarded on the function object?
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)chosen_cf, Location::forArg(0)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)num_output_args, Location::forArg(1)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(2)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(3)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(4)));
+
+            // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
+            // to unpack some of the additional arguments:
+            RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
+            arg_vec.push_back(arg_array);
+            if (num_output_args >= 1)
+                arg_array->setAttr(0, rewrite_args->arg1);
+            if (num_output_args >= 2)
+                arg_array->setAttr(8, rewrite_args->arg2);
+            if (num_output_args >= 3)
+                arg_array->setAttr(16, rewrite_args->arg3);
+            if (num_output_args >= 4)
+                arg_array->setAttr(24, rewrite_args->args);
+
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+            rewrite_args->out_success = true;
+        }
 
         return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
                                     oargs);
