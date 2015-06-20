@@ -332,6 +332,7 @@ private:
 
     const Location return_location;
 
+    bool failed;   // if we tried to generate an invalid rewrite.
     bool finished; // committed or aborted
 #ifndef NDEBUG
     int start_vars;
@@ -366,6 +367,10 @@ private:
         if (type == ActionType::MUTATION) {
             added_changing_action = true;
         } else if (type == ActionType::GUARD) {
+            if (added_changing_action) {
+                failed = true;
+                return;
+            }
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
@@ -483,6 +488,7 @@ public:
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
                       RewriterVar* arg2);
     RewriterVar* add(RewriterVar* a, int64_t b, Location dest);
+    // Allocates n pointer-sized stack slots:
     RewriterVar* allocate(int n);
     RewriterVar* allocateAndCopy(RewriterVar* array, int n);
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);

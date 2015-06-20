@@ -2131,6 +2131,9 @@ extern "C" bool nonzero(Box* obj) {
         r_obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)obj->cls);
     }
 
+    // Note: it feels silly to have all these special cases here, and we should probably be
+    // able to at least generate rewrites that are as good as the ones we write here.
+    // But for now we can't and these should be a bit faster:
     if (obj->cls == bool_cls) {
         // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
         if (rewriter.get()) {
@@ -2142,9 +2145,6 @@ extern "C" bool nonzero(Box* obj) {
         return bool_obj->n;
     } else if (obj->cls == int_cls) {
         if (rewriter.get()) {
-            // TODO should do:
-            // test 	%rsi, %rsi
-            // setne	%al
             RewriterVar* n = r_obj->getAttr(INT_N_OFFSET, rewriter->getReturnDestination());
             RewriterVar* b = n->toBool(rewriter->getReturnDestination());
             rewriter->commitReturning(b);
@@ -2164,18 +2164,47 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commitReturning(b);
         }
         return false;
+    } else if (obj->cls == long_cls) {
+        BoxedLong* long_obj = static_cast<BoxedLong*>(obj);
+        bool r = longNonzeroUnboxed(long_obj);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn = rewriter->call(false, (void*)longNonzeroUnboxed, r_obj);
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == tuple_cls) {
+        BoxedTuple* tuple_obj = static_cast<BoxedTuple*>(obj);
+        bool r = (tuple_obj->ob_size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(BoxedTuple, ob_size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == list_cls) {
+        BoxedList* list_obj = static_cast<BoxedList*>(obj);
+        bool r = (list_obj->size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn = r_obj->getAttr(offsetof(BoxedList, size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else if (obj->cls == str_cls) {
+        BoxedString* str_obj = static_cast<BoxedString*>(obj);
+        bool r = (str_obj->ob_size != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(BoxedString, ob_size))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
     }
 
-    // FIXME we have internal functions calling this method;
-    // instead, we should break this out into an external and internal function.
-    // slowpath_* counters are supposed to count external calls; putting it down
-    // here gets a better representation of that.
-    // TODO move internal callers to nonzeroInternal, and log *all* calls to nonzero
-    slowpath_nonzero.log();
-
-    // int id = Stats::getStatId("slowpath_nonzero_" + *getTypeName(obj));
-    // Stats::log(id);
-
+    // TODO: rewrite these.
     static BoxedString* nonzero_str = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
     static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
     // go through descriptor logic
@@ -2743,6 +2772,12 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
 extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1, Box* arg2,
                          Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
+#if 0
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_callattr_nopatch");
+    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+#endif
 
     ASSERT(gc::isValidGCObject(obj), "%p", obj);
 
@@ -2786,16 +2821,16 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPa
             rewrite_args.arg3 = rewriter->getArg(6);
         if (npassed_args >= 4)
             rewrite_args.args = rewriter->getArg(7);
-        // XXX whole point is to not have to do this!
         rtn = callattrInternal(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (rtn) {
             rewriter->commitReturning(rewrite_args.out_rtn);
+        } else if (flags.null_on_nonexistent) {
+            rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
         }
     } else {
-        // XXX whole point is to not have to do this!
         rtn = callattrInternal(obj, attr, scope, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 
@@ -3299,13 +3334,54 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
         return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 }
 
+// This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
+// only supports calling functions with at most 6 since it can currently only pass arguments
+// in registers.
+static Box* astInterpretHelper(CompiledFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
+                               Box* globals, Box** _args) {
+    Box* arg1 = _args[0];
+    Box* arg2 = _args[1];
+    Box* arg3 = _args[2];
+    Box* args = _args[3];
+
+    return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
+}
+
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astInterpretFunction");
+        if (rewrite_args) {
+            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+
+            RewriterVar::SmallVector arg_vec;
+
+            // TODO this kind of embedded reference needs to be tracked by the GC somehow?
+            // Or maybe it's ok, since we've guarded on the function object?
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)chosen_cf, Location::forArg(0)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)num_output_args, Location::forArg(1)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(2)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(3)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(4)));
+
+            // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
+            // to unpack some of the additional arguments:
+            RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
+            arg_vec.push_back(arg_array);
+            if (num_output_args >= 1)
+                arg_array->setAttr(0, rewrite_args->arg1);
+            if (num_output_args >= 2)
+                arg_array->setAttr(8, rewrite_args->arg2);
+            if (num_output_args >= 3)
+                arg_array->setAttr(16, rewrite_args->arg3);
+            if (num_output_args >= 4)
+                arg_array->setAttr(24, rewrite_args->args);
+
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+            rewrite_args->out_success = true;
+        }
 
         return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
                                     oargs);

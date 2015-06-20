@@ -726,6 +726,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
             {
                 // this forces the register allocator to spill this register:
                 assembler::Register r2 = allocReg(l);
+                if (failed)
+                    return;
                 assert(r == r2);
                 assert(vars_by_location.count(l) == 0);
             }
@@ -886,6 +888,11 @@ void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
 
+    if (failed) {
+        this->abort();
+        return;
+    }
+
     static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
 
     auto on_assemblyfail = [&]() {
@@ -935,6 +942,11 @@ void Rewriter::commit() {
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
         actions[i].action();
+
+        if (failed) {
+            this->abort();
+            return;
+        }
 
         assertConsistent();
         if (i == last_guard_action) {
@@ -1116,7 +1128,9 @@ Location Rewriter::allocScratch() {
             return l;
         }
     }
-    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_size);
+
+    failed = true;
+    return Location(Location::None, 0);
 }
 
 RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
@@ -1301,6 +1315,9 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
     }
 
     Location scratch = allocScratch();
+    if (failed)
+        return;
+
     assembler::Indirect mem = indirectFor(scratch);
     assembler->mov(reg, mem);
     addLocationToVar(var, scratch);
@@ -1366,7 +1383,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
             spillRegister(reg);
         }
 
-        assert(vars_by_location.count(reg) == 0);
+        assert(failed || vars_by_location.count(reg) == 0);
         return reg;
     } else {
         RELEASE_ASSERT(0, "%d", dest.type);
@@ -1499,6 +1516,7 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
       assembler(rewrite->getAssembler()),
       const_loader(this),
       return_location(rewrite->returnRegister()),
+      failed(false),
       added_changing_action(false),
       marked_inside_ic(false),
       last_guard_action(-1),
@@ -1626,10 +1644,10 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
 
     // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),
     // so don't do the more-expensive hash table lookup to find it.
-    if (rtn_addr > (void*)0x1000000) {
+    if (rtn_addr > (void*)0x1800000) {
         ic = getICInfo(rtn_addr);
     } else {
-        assert(!getICInfo(rtn_addr));
+        ASSERT(!getICInfo(rtn_addr), "%p", rtn_addr);
     }
 
     log_ic_attempts(debug_name);

@@ -1237,6 +1237,10 @@ Box* longNonzero(BoxedLong* self) {
     return True;
 }
 
+bool longNonzeroUnboxed(BoxedLong* self) {
+    return mpz_sgn(self->n) != 0;
+}
+
 Box* longHash(BoxedLong* self) {
     if (!isSubclass(self->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
