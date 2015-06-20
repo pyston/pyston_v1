@@ -365,21 +365,29 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
                 if opts.expected == "statfail":
                     r += ("(expected statfailure)",)
                     break
-                elif KEEP_GOING:
-                    failed.append(fn)
-                    return r + ("\033[31mFailed statcheck\033[0m",)
                 else:
+                    msg = ()
                     m = re.match("""stats\[['"]([\w_]+)['"]]""", l)
                     if m:
                         statname = m.group(1)
-                        raise Exception((l, statname, stats[statname]))
+                        msg = (l, statname, stats[statname])
 
                     m = re.search("""noninit_count\(['"]([\w_]+)['"]\)""", l)
-                    if m:
+                    if m and not msg:
                         statname = m.group(1)
-                        raise Exception((l, statname, noninit_count(statname)))
+                        msg = (l, statname, noninit_count(statname))
 
-                    raise Exception((l, stats))
+                    if not msg:
+                        msg = (l, stats)
+
+                    elif KEEP_GOING:
+                        failed.append(fn)
+                        if VERBOSE:
+                            return r + ("\033[31mFailed statcheck\033[0m\n%s" % (msg,),)
+                        else:
+                            return r + ("\033[31mFailed statcheck\033[0m",)
+                    else:
+                        raise Exception(msg)
         else:
             # only can get here if all statchecks passed
             if opts.expected == "statfail":
@@ -387,7 +395,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
                     failed.append(fn)
                     return r + ("\033[31mUnexpected statcheck success\033[0m",)
                 else:
-                    raise Exception(("Unexpected statcheck success!", statchecks, stats))
+                    raise Exception(("Unexpected statcheck success!", opts.statchecks, stats))
     else:
         r += ("(ignoring stats)",)
 
