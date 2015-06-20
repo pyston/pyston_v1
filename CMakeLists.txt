@@ -6,8 +6,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(pyconfig)
 include(ExternalProject)
 
-set(DEPS_DIR $ENV{HOME}/pyston_deps)
-
 # set build type to release by default
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 if(NOT CMAKE_BUILD_TYPE)
@@ -72,13 +70,60 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
   set(CMAKE_CXX_FLAGS_DEBUG "-O3" CACHE STRING "" FORCE)
 endif()
 
-execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND cat llvm_revision.txt
+                OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# llvm, clang, and libunwind patches
-add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
+                   COMMAND git submodule update --init
+                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
+                   DEPENDS .gitmodules
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 
+# llvm
+set(LLVM_PATCHES
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0001-Support-emitting-stackmap-sections-for-ELF-object-fi.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0002-support-varargs-intrinsics.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0003-Update-TailCallElim-to-avoid-making-redundant-change.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0004-Update-IntelJITEvents-with-some-recent-API-changes.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0007-Enable-invoking-the-patchpoint-intrinsic.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0008-Add-llvm.experimental.patchpoint.double.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0009-Filter-out-extraneous-registers-from-live-outs-like-.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0010-Expose-getSymbolLoadAddress-through-LoadedObjectInfo.patch
+  ${CMAKE_SOURCE_DIR}/llvm_patches/0011-Symbolic-Stackmap-Entries.patch
+)
+
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/llvm/pyston_patched
+                   COMMAND python tools/git_svn_gotorev.py llvm ${LLVMREV} llvm_patches
+                   COMMAND python tools/git_svn_gotorev.py clang ${LLVMREV} clang_patches
+                   COMMAND cmake -E touch llvm/pyston_patched
+                   DEPENDS ${LLVM_PATCHES} llvm_revision.txt 
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(llvm_patched DEPENDS ${CMAKE_SOURCE_DIR}/llvm/pyston_patched)
+
+set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
+set(LLVM_EXTERNAL_CLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/clang" CACHE String "Clang directory")
+if(ENABLE_INTEL_JIT_EVENTS)
+  set(LLVM_USE_INTEL_JITEVENTS "ON" CACHE STRING "Enable building support for the Intel JIT Events API")
+  set(INTEL_JIT_EVENTS_LIB "inteljitevents")
+  add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
+endif()
+add_subdirectory(llvm ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
+include(LLVMConfig)
+llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
+add_dependencies(LLVMCodeGen llvm_patched)
+add_dependencies(LLVMCore llvm_patched)
+add_dependencies(LLVMMC llvm_patched)
+add_dependencies(LLVMRuntimeDyld llvm_patched)
+add_dependencies(LLVMScalarOpts llvm_patched)
+add_dependencies(LLVMSelectionDAG llvm_patched)
+add_dependencies(LLVMSupport llvm_patched)
+add_dependencies(LLVMTableGen llvm_patched)
+add_dependencies(LLVMX86CodeGen llvm_patched)
+
+# libunwind
 set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0001-pyston-add-lots-of-comments.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch
@@ -86,35 +131,13 @@ set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/9999-is-patched-marker.patch
 )
 
-add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
-                   COMMAND git submodule update --init
-                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
-                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
-add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
-
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
                    COMMAND git submodule update libunwind
-                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
-                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                   DEPENDS ${LIBUNWIND_PATCHES}
-                   DEPENDS gitsubmodules)
+                   COMMAND python tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
+                   DEPENDS ${LIBUNWIND_PATCHES} gitsubmodules
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(libunwind_patched DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched)
 
-# llvm
-set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
-#set(LLVM_EXTERNAL_CLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/clang" CACHE String "Clang directory")
-if(ENABLE_INTEL_JIT_EVENTS)
-  set(LLVM_USE_INTEL_JITEVENTS "ON" CACHE STRING "Enable building support for the Intel JIT Events API")
-  set(INTEL_JIT_EVENTS_LIB "inteljitevents")
-  add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
-endif()
-add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
-include(LLVMConfig)
-llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
-
-# libunwind
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   set(LIBUNWIND_DEBUG_CFLAGS "CFLAGS=-O0 -g")
   set(LIBUNWIND_DEBUG "--enable-debug")
@@ -133,18 +156,13 @@ ExternalProject_Add(libunwind
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
                     LOG_INSTALL ON)
-# Tell CMake that patching libunwind means that we need to rebuild it:
+# Tell CMake that patching libunwind means that we need to rebuild it
 ExternalProject_Add_Step(libunwind forcebuild
-    DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
-    DEPENDERS build
+                         DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+                         DEPENDERS build
 )
-# Tell CMake that rebuilding libunwind will touch the build files (why doesn't it know this??)
-# Otherwise, if you do something that triggers a rebuild (not a fresh build) of libunwind,
-# it will take another build to realize that any source files that #include libunwind.h
-# need to get rebuilt.
-SET_SOURCE_FILES_PROPERTIES(
-    ${CMAKE_BINARY_DIR}/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
-)
+# Tell CMake that rebuilding libunwind will touch the build files
+set_source_files_properties(${CMAKE_BINARY_DIR}/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched)
 
 # libpypa
 add_subdirectory(libpypa EXCLUDE_FROM_ALL)
@@ -214,6 +232,7 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
+add_dependencies(pyston copy_stdlib copy_libpyston)
 
 # copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
@@ -258,7 +277,7 @@ add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-deps DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-deps DEPENDS pyston clang-format ext_cpython ext_pyston unittests sharedmods)
 add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS check-deps)
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
