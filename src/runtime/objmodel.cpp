@@ -3731,6 +3731,13 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
+    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+#if 0
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_binop_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_binop_nopatch");
+    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ScopedStatTimer st((havepatch && can_patchpoint)? st_id : st_id_nopatch, 10);
+#endif
 
     static StatCounter slowpath_binop("slowpath_binop");
     slowpath_binop.log();
@@ -3744,7 +3751,6 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
     // TODO implement full resolving semantics inside the rewrite?
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
     if (can_patchpoint)
         rewriter.reset(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));

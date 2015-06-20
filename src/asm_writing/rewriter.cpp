@@ -888,15 +888,22 @@ void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
 
+    static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
+    static StatCounter ic_rewrites_aborted_failed("ic_rewrites_aborted_failed");
+
     if (failed) {
+        ic_rewrites_aborted_failed.log();
         this->abort();
         return;
     }
 
-    static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
-
     auto on_assemblyfail = [&]() {
         ic_rewrites_aborted_assemblyfail.log();
+#if 0
+        std::string per_name_stat_name = "ic_rewrites_aborted_assemblyfail_" + std::string(debugName());
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
+#endif
         this->abort();
     };
 
@@ -944,6 +951,7 @@ void Rewriter::commit() {
         actions[i].action();
 
         if (failed) {
+            ic_rewrites_aborted_failed.log();
             this->abort();
             return;
         }

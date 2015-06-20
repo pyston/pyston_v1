@@ -474,6 +474,8 @@ public:
 
     TypeRecorder* getTypeRecorder();
 
+    const char* debugName() { return rewrite->debugName(); }
+
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
     // can_call_into_python: whether this call could result in arbitrary Python code being called.
