@@ -1159,6 +1159,7 @@ AST_Module* caching_parse_file(const char* fn) {
             if (strncmp(&file_data[0], getMagic(), MAGIC_STRING_LENGTH) != 0) {
                 if (VERBOSITY() || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
+                    fprintf(stderr, "%d %d %d %d\n", file_data[0], file_data[1], file_data[2], file_data[3]);
                 }
                 good = false;
             }
