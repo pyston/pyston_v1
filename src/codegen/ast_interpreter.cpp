@@ -278,6 +278,7 @@ ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
       generator(0),
       edgecount(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
+      globals(0),
       frame_addr(0) {
 
     CLFunction* f = compiled_function->clfunc;
