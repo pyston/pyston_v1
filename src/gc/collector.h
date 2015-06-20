@@ -22,6 +22,14 @@
 namespace pyston {
 namespace gc {
 
+#define TRACE_GC_MARKING 0
+#if TRACE_GC_MARKING
+extern FILE* trace_fp;
+#define GC_TRACE_LOG(...) fprintf(pyston::gc::trace_fp, __VA_ARGS__)
+#else
+#define GC_TRACE_LOG(...)
+#endif
+
 // Mark this gc-allocated object as being a root, even if there are no visible references to it.
 // (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use
 // a GCRootHandle)

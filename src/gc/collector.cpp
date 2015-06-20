@@ -35,8 +35,6 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
-#define DEBUG_MARK_PHASE 0
-
 #ifndef NDEBUG
 #define DEBUG 1
 #else
@@ -46,11 +44,8 @@
 namespace pyston {
 namespace gc {
 
-#if DEBUG_MARK_PHASE
+#if TRACE_GC_MARKING
 FILE* trace_fp;
-#define TRACE_LOG(...) fprintf(trace_fp, __VA_ARGS__)
-#else
-#define TRACE_LOG(...)
 #endif
 
 class TraceStack {
@@ -100,7 +95,7 @@ public:
     }
 
     void push(void* p) {
-        TRACE_LOG("Pushing %p\n", p);
+        GC_TRACE_LOG("Pushing %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
         if (isMarked(al))
             return;
@@ -271,10 +266,18 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     assert((uintptr_t)end % sizeof(void*) == 0);
 
     while (start < end) {
+#if TRACE_GC_MARKING
+        if (global_heap.getAllocationFromInteriorPointer(*start)) {
+            GC_TRACE_LOG("Found conservative reference to %p from %p\n", *start, start);
+        }
+#endif
+
         visitPotential(*start);
         start++;
     }
 }
+
+static int ncollections = 0;
 
 void markPhase() {
 #ifndef NVALGRIND
@@ -283,31 +286,37 @@ void markPhase() {
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
 
-#if DEBUG_MARK_PHASE
+#if TRACE_GC_MARKING
+#if 1 // separate log file per collection
+    char tracefn_buf[80];
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%03d.txt", ncollections);
+    trace_fp = fopen(tracefn_buf, "w");
+#else // overwrite previous log file with each collection
     trace_fp = fopen("gc_trace.txt", "w");
 #endif
-    TRACE_LOG("Starting collection\n");
+#endif
+    GC_TRACE_LOG("Starting collection %d\n", ncollections);
 
-    TRACE_LOG("Looking at roots\n");
+    GC_TRACE_LOG("Looking at roots\n");
     TraceStack stack(roots);
     GCVisitor visitor(&stack);
 
-    TRACE_LOG("Looking at the stack\n");
+    GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
-    TRACE_LOG("Looking at root handles\n");
+    GC_TRACE_LOG("Looking at root handles\n");
     for (auto h : *getRootHandles()) {
         visitor.visit(h->value);
     }
 
-    TRACE_LOG("Looking at potential root ranges\n");
+    GC_TRACE_LOG("Looking at potential root ranges\n");
     for (auto& e : potential_root_ranges) {
         visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
     }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
-        TRACE_LOG("Looking at heap object %p\n", p);
+        GC_TRACE_LOG("Looking at heap object %p\n", p);
         assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
@@ -356,7 +365,7 @@ void markPhase() {
         }
     }
 
-#if DEBUG_MARK_PHASE
+#if TRACE_GC_MARKING
     fclose(trace_fp);
     trace_fp = NULL;
 #endif
@@ -383,7 +392,6 @@ void disableGC() {
     gc_enabled = false;
 }
 
-static int ncollections = 0;
 static bool should_not_reenter_gc = false;
 
 void startGCUnexpectedRegion() {
