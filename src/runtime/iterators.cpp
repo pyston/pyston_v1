@@ -39,6 +39,8 @@ public:
     }
 
     void next() override {
+        STAT_TIMER(t0, "us_timer_iteratorgeneric_next", 0);
+
         assert(iterator);
         Box* hasnext = iterator->hasnextOrNullIC();
         if (hasnext) {

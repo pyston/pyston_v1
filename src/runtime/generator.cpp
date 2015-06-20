@@ -118,6 +118,8 @@ Box* generatorIter(Box* s) {
 
 // called from both generatorHasNext and generatorSend/generatorNext (but only if generatorHasNext hasn't been called)
 static void generatorSendInternal(BoxedGenerator* self, Box* v) {
+    STAT_TIMER(t0, "us_timer_generator_switching", 0);
+
     if (self->running)
         raiseExcHelper(ValueError, "generator already executing");
 
@@ -260,6 +262,8 @@ Box* generatorHasnext(Box* s) {
 
 
 extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
+    STAT_TIMER(t0, "us_timer_generator_switching", 0);
+
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     self->returnValue = value;

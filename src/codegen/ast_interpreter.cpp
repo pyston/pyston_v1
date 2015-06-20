@@ -386,7 +386,7 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
 }
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astinterpreter_execute");
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
     RegisterHelper frame_registerer;
 
@@ -605,7 +605,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 arg_array.push_back(it.second);
             }
 
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astinterpreter_jump_osrexit");
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
             auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
             Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
@@ -1295,7 +1295,7 @@ const void* interpreter_instr_addr = (void*)&ASTInterpreter::executeInner;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {
-    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_astInterpretFunction");
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
     assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
     bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
