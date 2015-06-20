@@ -1,3 +1,0 @@
-# included by Makefile
-
-LLVM_CONFIGURE_LINE := CXX=$(GPP) LDFLAGS="-Wl,-rpath,$(GCC_DIR)/lib64" $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR) --disable-bindings
