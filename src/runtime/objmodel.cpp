@@ -2772,6 +2772,12 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
 extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1, Box* arg2,
                          Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
+#if 0
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_callattr_nopatch");
+    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+#endif
 
     ASSERT(gc::isValidGCObject(obj), "%p", obj);
 
@@ -2815,16 +2821,16 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPa
             rewrite_args.arg3 = rewriter->getArg(6);
         if (npassed_args >= 4)
             rewrite_args.args = rewriter->getArg(7);
-        // XXX whole point is to not have to do this!
         rtn = callattrInternal(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (rtn) {
             rewriter->commitReturning(rewrite_args.out_rtn);
+        } else if (flags.null_on_nonexistent) {
+            rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
         }
     } else {
-        // XXX whole point is to not have to do this!
         rtn = callattrInternal(obj, attr, scope, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 
