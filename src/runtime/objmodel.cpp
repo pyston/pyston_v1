@@ -3014,14 +3014,22 @@ static KeywordDest placeKeyword(const ParamNames& param_names, llvm::SmallVector
     }
 }
 
+static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                            void** extra_args) {
+    Box** args = (Box**)extra_args[0];
+    auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
+    return callFunc(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+}
+
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-
 #if STAT_TIMERS
     StatTimer::assertActive();
+    STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
 #endif
+
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3037,6 +3045,16 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
+
+    if (num_passed_args >= 1)
+        assert(gc::isValidGCObject(arg1) || !arg1);
+    if (num_passed_args >= 2)
+        assert(gc::isValidGCObject(arg2) || !arg2);
+    if (num_passed_args >= 3)
+        assert(gc::isValidGCObject(arg3) || !arg3);
+    for (int i = 3; i < num_passed_args; i++) {
+        assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
+    }
 
     // TODO Should we guard on the CLFunction or the BoxedFunctionBase?
     // A single CLFunction could end up forming multiple BoxedFunctionBases, and we
@@ -3086,15 +3104,64 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
     slowpath_callfunc_slowpath.log();
 
-    if (argspec.has_starargs || argspec.has_kwargs || f->isGenerator()) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-    }
+    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords || f->isGenerator()) {
+// These are the cases that we won't be able to rewrite.
+// So instead, just rewrite them to be a call to callFunc, which helps a little bit.
+// TODO we should extract the rest of this function from the end of this block,
+// put it in a different function, and have the rewrites target that.
 
-    // These could be handled:
-    if (argspec.num_keywords) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
+// Note(kmod): I tried moving this section to runtimeCallInternal, ie to the place that calls
+// callFunc.  The thought was that this would let us apply this same optimization to other
+// internal callables.  It ended up hurting perf slightly; my theory is that it's because if
+// an internal callable failed, it's better to call the non-internal version since it's lower
+// overhead.
+
+// To investigate the cases where we can't rewrite, enable this block.
+// This also will also log the times that we call into callFunc directly
+// from a rewrite.
+#if 0
+        char buf[80];
+        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", f->isGenerator(),
+                 argspec.num_args, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs, f->num_args,
+                 f->num_defaults, f->takes_varargs, f->takes_kwargs);
+        uint64_t* counter = Stats::getStatCounter(buf);
+        Stats::log(counter);
+#endif
+
+        if (rewrite_args) {
+            Rewriter* rewriter = rewrite_args->rewriter;
+            // rewriter->trap();
+            RewriterVar* args_array = rewriter->allocate(2);
+            if (num_passed_args >= 4) {
+                RELEASE_ASSERT(rewrite_args->args, "");
+                args_array->setAttr(0, rewrite_args->args);
+            }
+            args_array->setAttr(8, rewriter->loadConst((intptr_t)keyword_names));
+
+            RewriterVar::SmallVector arg_vec;
+            arg_vec.push_back(rewrite_args->obj);
+            arg_vec.push_back(rewriter->loadConst(argspec.asInt(), Location::forArg(1)));
+            if (num_passed_args >= 1)
+                arg_vec.push_back(rewrite_args->arg1);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(2)));
+            if (num_passed_args >= 2)
+                arg_vec.push_back(rewrite_args->arg2);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(3)));
+            if (num_passed_args >= 3)
+                arg_vec.push_back(rewrite_args->arg3);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(4)));
+            arg_vec.push_back(args_array);
+            for (auto v : arg_vec)
+                assert(v);
+            RewriterVar* r_rtn = rewriter->call(true, (void*)_callFuncHelper, arg_vec);
+
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_rtn;
+            rewrite_args = NULL;
+        }
     }
 
     if (rewrite_args) {
@@ -3650,8 +3717,23 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_runtimecall_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_runtimecall_nopatch");
-    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
-    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+    static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_runtimecall_megamorphic");
+    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    uint64_t* counter;
+    if (!icinfo)
+        counter = st_id_nopatch;
+    else if (icinfo->isMegamorphic())
+        counter = st_id_megamorphic;
+    else {
+        counter = Stats::getStatCounter("us_timer_slowpath_runtimecall_patchable_" + std::string(obj->cls->tp_name));
+    }
+    ScopedStatTimer st(counter, 10);
+
+    static int n = 0;
+    n++;
+
+    if (n == 57261)
+        printf("");
 #endif
 
     if (rewriter.get()) {
