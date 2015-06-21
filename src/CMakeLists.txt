@@ -23,6 +23,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		analysis/scoping_analysis.cpp
 		analysis/type_analysis.cpp
 		asm_writing/assembler.cpp
+		asm_writing/disassemble.cpp
 		asm_writing/icinfo.cpp
 		asm_writing/mc_writer.cpp
 		asm_writing/rewriter.cpp

@@ -17,9 +17,11 @@
 
 #include <unordered_set>
 
+#include "asm_writing/disassemble.h"
 #include "asm_writing/types.h"
 #include "codegen/stackmaps.h"
 #include "core/ast.h"
+#include "core/options.h"
 
 namespace pyston {
 namespace assembler {
@@ -74,6 +76,10 @@ private:
     static const uint8_t OPCODE_ADD = 0b000, OPCODE_SUB = 0b101;
     static const uint8_t REX_B = 1, REX_X = 2, REX_R = 4, REX_W = 8;
 
+#ifndef NDEBUG
+    AssemblyLogger logger;
+#endif
+
 private:
     void emitByte(uint8_t b);
     void emitInt(int64_t n, int bytes);
@@ -84,6 +90,24 @@ private:
 
 public:
     Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
+
+#ifndef NDEBUG
+    inline void comment(std::string msg) {
+        if (ASSEMBLY_LOGGING) {
+            logger.log_comment(msg, addr - start_addr);
+        }
+    }
+    inline std::string dump() {
+        if (ASSEMBLY_LOGGING) {
+            return logger.finalize_log(start_addr, addr);
+        } else {
+            return "";
+        }
+    }
+#else
+    inline void comment(std::string msg) {}
+    inline std::string dump() { return ""; }
+#endif
 
     bool hasFailed() { return failed; }
 
