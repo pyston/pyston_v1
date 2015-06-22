@@ -106,7 +106,14 @@ PyAPI_FUNC(int) _PyString_CheckInterned(PyObject *) PYSTON_NOEXCEPT;
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 #define PyString_AS_STRING(op) PyString_AsString((PyObject*)op)
-#define PyString_GET_SIZE(op)  PyString_Size((PyObject*)op)
+// Note: there are buggy extension modules (unicodedata.c) that rely on the fact that
+// PyString_GET_SIZE does *not* have the same behavior as PyString_Size.  In particular,
+// you can get away with calling PyString_GET_SIZE on a unicode object and getting the
+// length of the unicode string, not the length of the bytes it encodes to in the default
+// encoding.
+// So, set up a different function for those callers to use.
+PyAPI_FUNC(Py_ssize_t) _PyString_SizeMacro(PyObject *) PYSTON_NOEXCEPT;
+#define PyString_GET_SIZE(op)  _PyString_SizeMacro((PyObject*)op)
 //#define PyString_AS_STRING(op) (((PyStringObject *)(op))->ob_sval)
 //#define PyString_GET_SIZE(op)  Py_SIZE(op)
 
