@@ -80,6 +80,8 @@ public:
 
     const ICInfo* getICInfo() { return ic; }
 
+    const char* debugName() { return debug_name; }
+
     friend class ICInfo;
 };
 

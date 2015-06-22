@@ -128,7 +128,7 @@ static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
 #endif
 size_t PyHasher::operator()(Box* b) const {
 #if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyhasher_timer_counter);
+    ScopedStatTimer _st(pyhasher_timer_counter, 10);
 #endif
     if (b->cls == str_cls) {
         StringHash<char> H;
@@ -141,7 +141,7 @@ size_t PyHasher::operator()(Box* b) const {
 
 bool PyEq::operator()(Box* lhs, Box* rhs) const {
 #if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyeq_timer_counter);
+    ScopedStatTimer _st(pyeq_timer_counter, 10);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
@@ -152,7 +152,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
 #if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pylt_timer_counter);
+    ScopedStatTimer _st(pylt_timer_counter, 10);
 #endif
 
     int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
@@ -984,7 +984,7 @@ Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewri
 
 bool isNondataDescriptorInstanceSpecialCase(Box* descr) {
     return descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == staticmethod_cls
-           || descr->cls == classmethod_cls;
+           || descr->cls == classmethod_cls || descr->cls == wrapperdescr_cls;
 }
 
 Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* obj, Box* descr, RewriterVar* r_descr,
@@ -1058,7 +1058,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         if (!for_call) {
             if (rewrite_args) {
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
+                    = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
                 rewrite_args->out_success = true;
             }
             return boxInstanceMethod(im_self, im_func, im_class);
@@ -1071,12 +1071,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             }
             return im_func;
         }
-    }
-
-    else if (descr->cls == staticmethod_cls) {
-        static StatCounter slowpath("slowpath_staticmethod_get");
-        slowpath.log();
-
+    } else if (descr->cls == staticmethod_cls) {
         BoxedStaticmethod* sm = static_cast<BoxedStaticmethod*>(descr);
         if (sm->sm_callable == NULL) {
             raiseExcHelper(RuntimeError, "uninitialized staticmethod object");
@@ -1090,6 +1085,23 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         }
 
         return sm->sm_callable;
+    } else if (descr->cls == wrapperdescr_cls) {
+        BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
+        Box* inst = obj;
+        Box* owner = obj->cls;
+
+        Box* r = BoxedWrapperDescriptor::__get__(self, inst, owner);
+
+        if (rewrite_args) {
+            // TODO: inline this?
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(
+                /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::__get__, r_descr, rewrite_args->obj,
+                r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
+
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_rtn;
+        }
+        return r;
     }
 
     return NULL;
@@ -1120,14 +1132,13 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         return descr;
     }
 
-    // Special case: member descriptor
-    if (descr->cls == member_descriptor_cls) {
+    // These classes are descriptors, but only have special behavior when involved
+    // in instance lookups
+    if (descr->cls == member_descriptor_cls || descr->cls == wrapperdescr_cls) {
         if (rewrite_args)
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
         if (rewrite_args) {
-            // Actually just return val (it's a descriptor but only
-            // has special behaviour for instance lookups - see below)
             rewrite_args->out_rtn = r_descr;
             rewrite_args->out_success = true;
         }
@@ -1332,7 +1343,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, llvm::
 
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
             rewrite_args->out_rtn = rewrite_args->rewriter->call(
-                /* can_call_into_python */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
+                /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
             if (descr->cls == capi_getset_cls)
                 // TODO I think we are supposed to check the return value?
@@ -1896,7 +1907,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
             args.push_back(r_val);
             args.push_back(r_closure);
             rewrite_args->rewriter->call(
-                /* can_call_into_python */ true, (void*)getset_descr->set, args);
+                /* has_side_effects */ true, (void*)getset_descr->set, args);
 
             if (descr->cls == capi_getset_cls)
                 // TODO I think we are supposed to check the return value?
@@ -2021,7 +2032,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
 }
 
 extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
-    STAT_TIMER(t0, "us_timer_slowpath_setsattr", 10);
+    STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
 
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
@@ -3415,10 +3426,10 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     // distinguish lexically between calls that target jitted python
     // code and calls that target to builtins.
     if (f->source) {
-        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_chosen_cf_body_jitted");
+        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         r = callChosenCF(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
     } else {
-        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_chosen_cf_body_builtins");
+        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
         r = callChosenCF(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
     }
 
@@ -3584,6 +3595,13 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, "runtimeCall"));
     Box* rtn;
 
+#if 0 && STAT_TIMERS
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_runtimecall_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_runtimecall_nopatch");
+    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+#endif
+
     if (rewriter.get()) {
         // TODO feel weird about doing this; it either isn't necessary
         // or this kind of thing is necessary in a lot more places
@@ -3731,6 +3749,13 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
+    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+#if 0
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_binop_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_binop_nopatch");
+    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ScopedStatTimer st((havepatch && can_patchpoint)? st_id : st_id_nopatch, 10);
+#endif
 
     static StatCounter slowpath_binop("slowpath_binop");
     slowpath_binop.log();
@@ -3744,7 +3769,6 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
     // TODO implement full resolving semantics inside the rewrite?
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
     if (can_patchpoint)
         rewriter.reset(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));

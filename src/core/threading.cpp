@@ -167,8 +167,10 @@ static void pushThreadState(ThreadStateInternal* thread_state, ucontext_t* conte
 #endif
 
     assert(stack_low < stack_high);
+    GC_TRACE_LOG("Visiting other thread's stack\n");
     cur_visitor->visitPotentialRange((void**)stack_low, (void**)stack_high);
 
+    GC_TRACE_LOG("Visiting other thread's threadstate + generator stacks\n");
     thread_state->accept(cur_visitor);
 }
 
@@ -195,8 +197,12 @@ static void visitLocalStack(gc::GCVisitor* v) {
 #endif
 
     assert(stack_low < stack_high);
+
+    GC_TRACE_LOG("Visiting current stack from %p to %p\n", stack_low, stack_high);
+
     v->visitPotentialRange((void**)stack_low, (void**)stack_high);
 
+    GC_TRACE_LOG("Visiting current thread's threadstate + generator stacks\n");
     current_internal_thread_state->accept(v);
 }
 

@@ -50,6 +50,12 @@ StatTimer* StatTimer::createStack(StatTimer& timer) {
     timer.pushTopLevel(at_time);
     return prev_stack;
 }
+
+uint64_t* StatTimer::getCurrentCounter() {
+    if (stack)
+        return stack->_statcounter;
+    return NULL;
+}
 #endif
 
 std::unordered_map<uint64_t*, std::string>* Stats::names;

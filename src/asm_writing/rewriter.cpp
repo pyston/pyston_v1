@@ -232,6 +232,36 @@ assembler::Register Rewriter::ConstLoader::loadConst(uint64_t val, Location othe
     return reg;
 }
 
+void Rewriter::restoreArgs() {
+    ASSERT(!done_guarding, "this will probably work but why are we calling this at this time");
+
+    for (int i = 0; i < args.size(); i++) {
+        args[i]->bumpUse();
+
+        Location l = Location::forArg(i);
+        if (l.type == Location::Stack)
+            continue;
+
+        assert(l.type == Location::Register);
+        assembler::Register r = l.asRegister();
+
+        if (!args[i]->isInLocation(l)) {
+            allocReg(r);
+            args[i]->getInReg(r);
+        }
+    }
+
+    assertArgsInPlace();
+}
+
+void Rewriter::assertArgsInPlace() {
+    ASSERT(!done_guarding, "this will probably work but why are we calling this at this time");
+
+    for (int i = 0; i < args.size(); i++) {
+        assert(args[i]->isInLocation(args[i]->arg_loc));
+    }
+}
+
 void RewriterVar::addGuard(uint64_t val) {
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
@@ -241,6 +271,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    restoreArgs();
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -248,6 +280,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
@@ -265,6 +299,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    restoreArgs();
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -272,6 +308,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
@@ -291,6 +329,8 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
 void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
+
+    restoreArgs();
 
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
@@ -315,6 +355,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
     } else {
         assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     if (negate)
         assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
     else
@@ -621,35 +663,35 @@ RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     return const_loader_var;
 }
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr) {
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
-    return call(can_call_into_python, func_addr, args, args_xmm);
+    return call(has_side_effects, func_addr, args, args_xmm);
 }
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0) {
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0) {
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
-    return call(can_call_into_python, func_addr, args, args_xmm);
+    return call(has_side_effects, func_addr, args, args_xmm);
 }
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1) {
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1) {
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
     args.push_back(arg1);
-    return call(can_call_into_python, func_addr, args, args_xmm);
+    return call(has_side_effects, func_addr, args, args_xmm);
 }
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
                             RewriterVar* arg2) {
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
     args.push_back(arg1);
     args.push_back(arg2);
-    return call(can_call_into_python, func_addr, args, args_xmm);
+    return call(has_side_effects, func_addr, args, args_xmm);
 }
 
 static const Location caller_save_registers[]{
@@ -660,7 +702,7 @@ static const Location caller_save_registers[]{
     assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
 };
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {
     RewriterVar* result = createNewVar();
     std::vector<RewriterVar*> uses;
@@ -672,19 +714,22 @@ RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, const Re
         assert(v != NULL);
         uses.push_back(v);
     }
-    addAction([=]() { this->_call(result, can_call_into_python, func_addr, args, args_xmm); }, uses,
-              ActionType::MUTATION);
+
+    ActionType type;
+    if (has_side_effects)
+        type = ActionType::MUTATION;
+    else
+        type = ActionType::NORMAL;
+    addAction([=]() { this->_call(result, has_side_effects, func_addr, args, args_xmm); }, uses, type);
     return result;
 }
 
-void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_addr,
-                     const RewriterVar::SmallVector& args, const RewriterVar::SmallVector& args_xmm) {
-    // TODO figure out why this is here -- what needs to be done differently
-    // if can_call_into_python is true?
-    // assert(!can_call_into_python);
-    assert(done_guarding);
+void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
+                     const RewriterVar::SmallVector& args_xmm) {
+    if (has_side_effects)
+        assert(done_guarding);
 
-    if (can_call_into_python) {
+    if (has_side_effects) {
         // We need some fixed amount of space at the beginning of the IC that we can use to invalidate
         // it by writing a jmp.
         // FIXME this check is conservative, since actually we just have to verify that the return
@@ -694,7 +739,7 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
         assert(assembler->bytesWritten() >= IC_INVALDITION_HEADER_SIZE);
     }
 
-    if (can_call_into_python) {
+    if (has_side_effects) {
         if (!marked_inside_ic) {
             // assembler->trap();
 
@@ -888,15 +933,22 @@ void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
 
+    static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
+    static StatCounter ic_rewrites_aborted_failed("ic_rewrites_aborted_failed");
+
     if (failed) {
+        ic_rewrites_aborted_failed.log();
         this->abort();
         return;
     }
 
-    static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
-
     auto on_assemblyfail = [&]() {
         ic_rewrites_aborted_assemblyfail.log();
+#if 0
+        std::string per_name_stat_name = "ic_rewrites_aborted_assemblyfail_" + std::string(debugName());
+        uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+        Stats::log(counter);
+#endif
         this->abort();
     };
 
@@ -915,7 +967,7 @@ void Rewriter::commit() {
     // Emit assembly for each action, and set done_guarding when
     // we reach the last guard.
 
-    // Note: If an arg finishes its uses before we're done gurading, we don't release it at that point;
+    // Note: If an arg finishes its uses before we're done guarding, we don't release it at that point;
     // instead, we release it here, at the point when we set done_guarding.
     // An alternate, maybe cleaner, way to accomplish this would be to add a use for each arg
     // at each guard in the var's `uses` list.
@@ -944,6 +996,7 @@ void Rewriter::commit() {
         actions[i].action();
 
         if (failed) {
+            ic_rewrites_aborted_failed.log();
             this->abort();
             return;
         }
@@ -1282,12 +1335,6 @@ assembler::Indirect Rewriter::indirectFor(Location l) {
 void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
     assert(preserve.type == Location::Register || preserve.type == Location::AnyReg);
 
-    if (!done_guarding) {
-        for (int i = 0; i < args.size(); i++) {
-            assert(args[i]->arg_loc != Location(reg));
-        }
-    }
-
     RewriterVar* var = vars_by_location[reg];
     assert(var);
 
@@ -1326,12 +1373,6 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
 
 void Rewriter::spillRegister(assembler::XMMRegister reg) {
     assertPhaseEmitting();
-
-    if (!done_guarding) {
-        for (int i = 0; i < args.size(); i++) {
-            assert(!args[i]->isInLocation(Location(reg)));
-        }
-    }
 
     RewriterVar* var = vars_by_location[reg];
     assert(var);
@@ -1644,7 +1685,7 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
 
     // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),
     // so don't do the more-expensive hash table lookup to find it.
-    if (rtn_addr > (void*)0x1800000) {
+    if (rtn_addr > (void*)0x1000000) {
         ic = getICInfo(rtn_addr);
     } else {
         ASSERT(!getICInfo(rtn_addr), "%p", rtn_addr);

@@ -371,6 +371,9 @@ private:
                 failed = true;
                 return;
             }
+            for (RewriterVar* arg : args) {
+                arg->uses.push_back(actions.size());
+            }
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
@@ -387,6 +390,12 @@ private:
         assertPhaseEmitting();
         return done_guarding;
     }
+
+    // Move the original IC args back into their original registers:
+    void restoreArgs();
+    // Assert that our original args are correctly placed in case we need to
+    // bail out of the IC:
+    void assertArgsInPlace();
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
@@ -414,7 +423,7 @@ private:
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
-    void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+    void _call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
@@ -448,6 +457,11 @@ private:
                 assert(p.second->locations.count(p.first) == 1);
             }
         }
+        if (!done_guarding) {
+            for (RewriterVar* arg : args) {
+                assert(!arg->locations.empty());
+            }
+        }
 #endif
     }
 
@@ -474,19 +488,23 @@ public:
 
     TypeRecorder* getTypeRecorder();
 
+    const char* debugName() { return rewrite->debugName(); }
+
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
-    // can_call_into_python: whether this call could result in arbitrary Python code being called.
-    // This causes some extra bookkeeping to prevent, ex this patchpoint to be rewritten when
-    // entered recursively.  Setting to false disables this for slightly better performance, but
-    // it's not huge so if in doubt just pass "true".
-    RewriterVar* call(bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+    // has_side_effects: whether this call could have "side effects".  the exact side effects we've
+    // been concerned about have changed over time, so it's better to err on the side of saying "true",
+    // but currently you can only set it to false if 1) you will not call into Python code, which basically
+    // can have any sorts of side effects, but in particular could result in the IC being reentrant, and
+    // 2) does not have any side-effects that would be user-visible if we bailed out from the middle of the
+    // inline cache.  (Extra allocations don't count even though they're potentially visible if you look
+    // hard enough.)
+    RewriterVar* call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                       const RewriterVar::SmallVector& args_xmm = RewriterVar::SmallVector());
-    RewriterVar* call(bool can_call_into_python, void* func_addr);
-    RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0);
-    RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
-    RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
-                      RewriterVar* arg2);
+    RewriterVar* call(bool has_side_effects, void* func_addr);
+    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0);
+    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
+    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     RewriterVar* add(RewriterVar* a, int64_t b, Location dest);
     // Allocates n pointer-sized stack slots:
     RewriterVar* allocate(int n);
