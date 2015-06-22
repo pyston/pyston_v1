@@ -669,7 +669,7 @@ BoxedDict* Box::getDict() {
 static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
 
-    if (rewrite_args)
+    if (rewrite_args && !rewrite_args->obj_cls_guarded)
         rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (intptr_t)cls);
 
 #if 0
@@ -5052,6 +5052,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         if (rewriter.get()) {
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), builtins, rewriter->getReturnDestination());
+            rewrite_args.obj_cls_guarded = true; // always builtin module
             rtn = builtins_module->getattr(name->s(), &rewrite_args);
 
             if (!rtn || !rewrite_args.out_success) {
