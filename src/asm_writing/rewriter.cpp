@@ -251,6 +251,12 @@ void Rewriter::restoreArgs() {
         }
     }
 
+    assertArgsInPlace();
+}
+
+void Rewriter::assertArgsInPlace() {
+    ASSERT(!done_guarding, "this will probably work but why are we calling this at this time");
+
     for (int i = 0; i < args.size(); i++) {
         assert(args[i]->isInLocation(args[i]->arg_loc));
     }
@@ -274,6 +280,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
@@ -300,6 +308,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
     } else {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
@@ -345,6 +355,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
     } else {
         assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
     }
+
+    assertArgsInPlace();
     if (negate)
         assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
     else

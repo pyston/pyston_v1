@@ -391,9 +391,11 @@ private:
         return done_guarding;
     }
 
-    // Make sure our original args are currently in their original positions.
-    // ie if we are about to guard and then branch to the slowpath callsite.
+    // Move the original IC args back into their original registers:
     void restoreArgs();
+    // Assert that our original args are correctly placed in case we need to
+    // bail out of the IC:
+    void assertArgsInPlace();
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
