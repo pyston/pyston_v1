@@ -280,7 +280,7 @@ void RewriterVar::addGuard(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
+    rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, NULL, ActionType::GUARD);
 }
 
 void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
@@ -311,7 +311,7 @@ void RewriterVar::addGuardNotEq(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
+    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, NULL, ActionType::GUARD);
 }
 
 void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
@@ -344,7 +344,7 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
     RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val_var, negate); }, { this, val_var },
+    rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val_var, negate); }, { this, val_var }, NULL,
                         ActionType::GUARD);
 }
 
@@ -395,7 +395,8 @@ RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType 
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = rewriter->createNewVar();
-    rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
+    rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, result,
+                        ActionType::NORMAL);
     return result;
 }
 
@@ -424,7 +425,8 @@ RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = rewriter->createNewVar();
-    rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, ActionType::NORMAL);
+    rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, result,
+                        ActionType::NORMAL);
     return result;
 }
 
@@ -446,7 +448,8 @@ RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = rewriter->createNewVar();
-    rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, ActionType::NORMAL);
+    rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, result,
+                        ActionType::NORMAL);
     return result;
 }
 
@@ -471,7 +474,7 @@ RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, L
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = rewriter->createNewVar();
-    rewriter->addAction([=]() { rewriter->_cmp(result, this, cmp_type, other, dest); }, { this, other },
+    rewriter->addAction([=]() { rewriter->_cmp(result, this, cmp_type, other, dest); }, { this, other }, result,
                         ActionType::NORMAL);
     return result;
 }
@@ -508,7 +511,7 @@ RewriterVar* RewriterVar::toBool(Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = rewriter->createNewVar();
-    rewriter->addAction([=]() { rewriter->_toBool(result, this, dest); }, { this }, ActionType::NORMAL);
+    rewriter->addAction([=]() { rewriter->_toBool(result, this, dest); }, { this }, result, ActionType::NORMAL);
     return result;
 }
 
@@ -532,7 +535,7 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 void RewriterVar::setAttr(int offset, RewriterVar* val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
+    rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, NULL, ActionType::MUTATION);
 }
 
 void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
@@ -703,7 +706,7 @@ Location Rewriter::getReturnDestination() {
 }
 
 void Rewriter::trap() {
-    addAction([=]() { this->_trap(); }, {}, ActionType::NORMAL);
+    addAction([=]() { this->_trap(); }, {}, NULL, ActionType::VISIBLE);
 }
 
 void Rewriter::_trap() {
@@ -814,8 +817,8 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     if (has_side_effects)
         type = ActionType::MUTATION;
     else
-        type = ActionType::NORMAL;
-    addAction([=]() { this->_call(result, has_side_effects, func_addr, args, args_xmm); }, uses, type);
+        type = ActionType::VISIBLE;
+    addAction([=]() { this->_call(result, has_side_effects, func_addr, args, args_xmm); }, uses, result, type);
     return result;
 }
 
@@ -1116,6 +1119,31 @@ void Rewriter::commit() {
 
     assertConsistent();
 
+    // Figure out which actions are necessary
+    for (int i = actions.size() - 1; i >= 0; i--) {
+        if (!actions[i].necessary) {
+            // We should not have any actions that are both NORMAL and which have no result.
+            assert(actions[i].result != NULL);
+            for (int use : actions[i].result->uses) {
+                if (use == actions.size() || actions[use].necessary) {
+                    actions[i].necessary = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Remove unnecessary uses of each var
+    for (RewriterVar& var : vars) {
+        llvm::SmallVector<int, 32> old_uses = std::move(var.uses);
+        var.uses.clear();
+        for (int i = 0; i < old_uses.size(); i++) {
+            if (old_uses[i] == actions.size() || actions[old_uses[i]].necessary) {
+                var.uses.push_back(old_uses[i]);
+            }
+        }
+    }
+
     // Emit assembly for each action, and set done_guarding when
     // we reach the last guard.
 
@@ -1151,12 +1179,14 @@ void Rewriter::commit() {
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
-        actions[i].action();
+        if (actions[i].necessary) {
+            actions[i].action();
 
-        if (failed) {
-            ic_rewrites_aborted_failed.log();
-            this->abort();
-            return;
+            if (failed) {
+                ic_rewrites_aborted_failed.log();
+                this->abort();
+                return;
+            }
         }
 
         assertConsistent();
@@ -1342,7 +1372,7 @@ void Rewriter::commitReturning(RewriterVar* var) {
         assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
-    }, { var }, ActionType::NORMAL);
+    }, { var }, NULL, ActionType::VISIBLE);
 
     commit();
 }
@@ -1369,7 +1399,7 @@ RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_add(result, a, b, dest); }, { a }, ActionType::NORMAL);
+    addAction([=]() { this->_add(result, a, b, dest); }, { a }, result, ActionType::NORMAL);
     return result;
 }
 
@@ -1401,7 +1431,7 @@ RewriterVar* Rewriter::allocate(int n) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_allocate(result, n); }, {}, ActionType::NORMAL);
+    addAction([=]() { this->_allocate(result, n); }, {}, result, ActionType::NORMAL);
     return result;
 }
 
@@ -1453,7 +1483,7 @@ RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_allocateAndCopy(result, array_ptr, n); }, { array_ptr }, ActionType::NORMAL);
+    addAction([=]() { this->_allocateAndCopy(result, array_ptr, n); }, { array_ptr }, result, ActionType::NORMAL);
     return result;
 }
 
@@ -1491,7 +1521,7 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
     addAction([=]() { this->_allocateAndCopyPlus1(result, first_elem, rest_ptr, n_rest); },
               rest_ptr ? std::vector<RewriterVar*>({ first_elem, rest_ptr })
                        : std::vector<RewriterVar*>({ first_elem }),
-              ActionType::NORMAL);
+              result, ActionType::NORMAL);
     return result;
 }
 
