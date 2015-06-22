@@ -593,6 +593,8 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
                 assembler::Register dest_reg = dest.asRegister();
                 assert(dest_reg != reg); // should have been caught by the previous case
 
+                rewriter->allocReg(dest);
+
                 rewriter->assembler->mov(reg, dest_reg);
                 rewriter->addLocationToVar(this, dest_reg);
                 return dest_reg;
@@ -1047,6 +1049,13 @@ void Rewriter::commit() {
     for (int i = 0; i < live_outs.size(); i++) {
         live_outs[i]->uses.push_back(actions.size());
     }
+    for (RewriterVar* var : vars) {
+        // Add a use for every constant. This helps make constants available for the lea stuff
+        // But since "spilling" a constant has no cost, it shouldn't add register pressure.
+        if (var->is_constant) {
+            var->uses.push_back(actions.size());
+        }
+    }
 
     assertConsistent();
 
@@ -1124,11 +1133,17 @@ void Rewriter::commit() {
                 num_as_live_out++;
             }
         }
-        assert(var->next_use + num_as_live_out == var->uses.size());
+        assert(var->next_use + num_as_live_out + (var->is_constant ? 1 : 0) == var->uses.size());
     }
 #endif
 
     assert(live_out_regs.size() == live_outs.size());
+
+    for (RewriterVar* var : vars) {
+        if (var->is_constant) {
+            var->bumpUse();
+        }
+    }
 
     // Live-outs placement: sometimes a live out can be placed into the location of a different live-out,
     // so we need to reshuffle and solve those conflicts.
