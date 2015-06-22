@@ -2349,6 +2349,16 @@ extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
     return len;
 }
 
+extern "C" Py_ssize_t _PyString_SizeMacro(PyObject* op) noexcept {
+    if (PyString_Check(op))
+        return static_cast<BoxedString*>(op)->size();
+
+    if (PyUnicode_Check(op))
+        return Py_SIZE(op);
+
+    RELEASE_ASSERT(0, "Need to verify the behavior of PyString_GET_SIZE on %s objects", op->cls->tp_name);
+}
+
 extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
 

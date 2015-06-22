@@ -744,14 +744,10 @@ static int _PyCodecRegistry_Init(void) {
     if (interp->codec_search_path != NULL)
         return 0;
 
-    interp->codec_search_path = PyList_New(0);
-    interp->codec_search_cache = PyDict_New();
-    interp->codec_error_registry = PyDict_New();
-
     // Pyston change: register roots
-    gc::registerPermanentRoot(interp->codec_search_path);
-    gc::registerPermanentRoot(interp->codec_search_cache);
-    gc::registerPermanentRoot(interp->codec_error_registry);
+    interp->codec_search_path = PyGC_AddRoot(PyList_New(0));
+    interp->codec_search_cache = PyGC_AddRoot(PyDict_New());
+    interp->codec_error_registry = PyGC_AddRoot(PyDict_New());
 
     if (interp->codec_error_registry) {
         for (i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i) {
