@@ -15,7 +15,6 @@
 #include "runtime/util.h"
 
 #include "core/options.h"
-#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 

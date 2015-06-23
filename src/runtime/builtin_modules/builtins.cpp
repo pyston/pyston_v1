@@ -27,7 +27,6 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/file.h"
 #include "runtime/ics.h"

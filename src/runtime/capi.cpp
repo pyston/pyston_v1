@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>
@@ -1456,56 +1455,6 @@ extern "C" char* PyModule_GetFilename(PyObject* m) noexcept {
         return NULL;
     }
     return PyString_AsString(fileobj);
-}
-
-BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path) {
-    void* handle = dlopen(path.c_str(), RTLD_NOW);
-    if (!handle) {
-        // raiseExcHelper(ImportError, "%s", dlerror());
-        fprintf(stderr, "%s\n", dlerror());
-        exit(1);
-    }
-    assert(handle);
-
-    std::string initname = "init" + last_name;
-    void (*init)() = (void (*)())dlsym(handle, initname.c_str());
-
-    char* error;
-    if ((error = dlerror()) != NULL) {
-        // raiseExcHelper(ImportError, "%s", error);
-        fprintf(stderr, "%s\n", error);
-        exit(1);
-    }
-
-    assert(init);
-
-    // Let the GC know about the static variables.
-    uintptr_t bss_start = (uintptr_t)dlsym(handle, "__bss_start");
-    uintptr_t bss_end = (uintptr_t)dlsym(handle, "_end");
-    RELEASE_ASSERT(bss_end - bss_start < 100000, "Large BSS section detected - there maybe something wrong");
-    // only track void* aligned memory
-    bss_start = (bss_start + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
-    bss_end -= bss_end % sizeof(void*);
-    gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
-
-    char* packagecontext = strdup(full_name.c_str());
-    char* oldcontext = _Py_PackageContext;
-    _Py_PackageContext = packagecontext;
-    (*init)();
-    _Py_PackageContext = oldcontext;
-    free(packagecontext);
-
-    checkAndThrowCAPIException();
-
-    BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxString(full_name);
-    Box* _m = sys_modules->d[s];
-    RELEASE_ASSERT(_m, "dynamic module not initialized properly");
-    assert(_m->cls == module_cls);
-
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-    m->setattr("__file__", boxString(path), NULL);
-    return m;
 }
 
 Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,

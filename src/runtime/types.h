@@ -962,6 +962,19 @@ AST* unboxAst(Box* b);
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 
+void checkAndThrowCAPIException();
+void throwCAPIException() __attribute__((noreturn));
+struct ExcInfo;
+void setCAPIException(const ExcInfo& e);
+
+#define fatalOrError(exception, message)                                                                               \
+    do {                                                                                                               \
+        if (CONTINUE_AFTER_FATAL)                                                                                      \
+            PyErr_SetString((exception), (message));                                                                   \
+        else                                                                                                           \
+            Py_FatalError((message));                                                                                  \
+    } while (0)
+
 // A descriptor that you can add to your class to provide instances with a __dict__ accessor.
 // Classes created in Python get this automatically, but builtin types (including extension types)
 // are supposed to add one themselves.  type_cls and function_cls do this, for example.

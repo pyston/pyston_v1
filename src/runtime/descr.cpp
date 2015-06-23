@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "codegen/compvars.h"
-#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
 #include "runtime/types.h"

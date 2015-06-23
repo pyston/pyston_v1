@@ -15,7 +15,6 @@
 #ifndef PYSTON_CAPI_TYPES_H
 #define PYSTON_CAPI_TYPES_H
 
-#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 

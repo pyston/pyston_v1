@@ -34,7 +34,6 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
-#include "runtime/capi.h"
 #include "runtime/generator.h"
 #include "runtime/import.h"
 #include "runtime/inline/boxing.h"

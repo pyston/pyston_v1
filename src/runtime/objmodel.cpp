@@ -39,7 +39,6 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "gc/heap.h"
-#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
