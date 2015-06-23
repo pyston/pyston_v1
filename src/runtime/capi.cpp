@@ -53,47 +53,6 @@ extern "C" {
 int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
-BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
-}
-
-Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
-    RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
-
-    if (inst == None)
-        return self;
-
-    if (!isSubclass(inst->cls, self->type))
-        raiseExcHelper(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                       getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
-
-    return new BoxedWrapperObject(self, inst);
-}
-
-Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
-    RELEASE_ASSERT(_self->cls == wrapperdescr_cls, "");
-    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
-
-    if (inst == None)
-        return self;
-
-    if (!isSubclass(inst->cls, self->type))
-        PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                     getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
-
-    return new BoxedWrapperObject(self, inst);
-}
-
-Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args) {
-    RELEASE_ASSERT(descr->cls == wrapperdescr_cls, "");
-
-    BoxedDict* kw = static_cast<BoxedDict*>(_args[0]);
-
-    if (!isSubclass(self->cls, descr->type))
-        raiseExcHelper(TypeError, "descriptor '' requires a '%s' object but received a '%s'",
-                       getFullNameOfClass(descr->type).c_str(), getFullTypeName(self).c_str());
-
-    auto wrapper = new BoxedWrapperObject(descr, self);
-    return BoxedWrapperObject::__call__(wrapper, args, kw);
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
@@ -1645,21 +1604,6 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
     return r;
 }
 
-static Box* methodGetDoc(Box* b, void*) {
-    assert(b->cls == method_cls);
-    const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
-    if (s)
-        return boxString(s);
-    return None;
-}
-
-static Box* wrapperdescrGetDoc(Box* b, void*) {
-    assert(b->cls == wrapperdescr_cls);
-    auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
-    assert(s.size());
-    return boxString(s);
-}
-
 /* extension modules might be compiled with GC support so these
    functions must always be available */
 
@@ -1719,10 +1663,6 @@ extern "C" void _Py_FatalError(const char* fmt, const char* function, const char
     abort();
 }
 
-extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
-    return new BoxedClassmethod(callable);
-}
-
 void setupCAPI() {
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
@@ -1736,27 +1676,6 @@ void setupCAPI() {
         "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
 
     capifunc_cls->freeze();
-
-    method_cls->giveAttr("__get__",
-                         new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
-    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
-    method_call_cl->internal_callable = BoxedMethodDescriptor::callInternal;
-    method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
-    method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
-    method_cls->freeze();
-
-    wrapperdescr_cls->giveAttr("__get__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
-    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
-                                                                           UNKNOWN, 2, 0, true, true)));
-    wrapperdescr_cls->giveAttr("__doc__",
-                               new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
-    wrapperdescr_cls->freeze();
-    wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
-
-    wrapperobject_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
-    wrapperobject_cls->freeze();
 }
 
 void teardownCAPI() {

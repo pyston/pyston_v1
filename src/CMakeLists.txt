@@ -28,7 +28,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		asm_writing/rewriter.cpp
 		capi/abstract.cpp
 		capi/codecs.cpp
-		capi/descrobject.cpp
 		capi/errors.cpp
 		capi/modsupport.cpp
 		capi/object.cpp
