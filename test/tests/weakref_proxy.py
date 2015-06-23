@@ -21,6 +21,12 @@ def getWR():
 
 wr = getWR()
 fact(100) # try to clear some memory
+
+def recurse(f, n):
+    if n:
+        return recurse(f, n - 1)
+    return f()
+recurse(gc.collect, 50)
 gc.collect()
 
 try:

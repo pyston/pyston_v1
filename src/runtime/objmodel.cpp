@@ -2579,6 +2579,31 @@ extern "C" void dumpEx(void* p, int levels) {
             }
         }
 
+        if (isSubclass(b->cls, function_cls)) {
+            BoxedFunction* f = static_cast<BoxedFunction*>(b);
+
+            CLFunction* cl = f->f;
+            if (cl->source) {
+                printf("User-defined function '%s'\n", cl->source->getName().c_str());
+            } else {
+                printf("A builtin function\n");
+            }
+
+            printf("Has %ld function versions\n", cl->versions.size());
+            for (CompiledFunction* cf : cl->versions) {
+                if (cf->is_interpreted) {
+                    printf("[interpreted]\n");
+                } else {
+                    bool got_name;
+                    std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
+                    if (got_name)
+                        printf("%s\n", name.c_str());
+                    else
+                        printf("%p\n", cf->code);
+                }
+            }
+        }
+
         if (isSubclass(b->cls, module_cls)) {
             printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
         }
@@ -2862,6 +2887,16 @@ static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** ar
     return args[idx - 3];
 }
 
+static inline RewriterVar* getArg(int idx, CallRewriteArgs* rewrite_args) {
+    if (idx == 0)
+        return rewrite_args->arg1;
+    if (idx == 1)
+        return rewrite_args->arg2;
+    if (idx == 2)
+        return rewrite_args->arg3;
+    return rewrite_args->args->getAttr(sizeof(Box*) * (idx - 3));
+}
+
 static StatCounter slowpath_pickversion("slowpath_pickversion");
 static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
@@ -2979,14 +3014,22 @@ static KeywordDest placeKeyword(const ParamNames& param_names, llvm::SmallVector
     }
 }
 
+static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                            void** extra_args) {
+    Box** args = (Box**)extra_args[0];
+    auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
+    return callFunc(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+}
+
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-
 #if STAT_TIMERS
     StatTimer::assertActive();
+    STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
 #endif
+
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3003,15 +3046,14 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
 
-    if (argspec.has_starargs || argspec.has_kwargs || f->isGenerator()) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-    }
-
-    // These could be handled:
-    if (argspec.num_keywords) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
+    if (num_passed_args >= 1)
+        assert(gc::isValidGCObject(arg1) || !arg1);
+    if (num_passed_args >= 2)
+        assert(gc::isValidGCObject(arg2) || !arg2);
+    if (num_passed_args >= 3)
+        assert(gc::isValidGCObject(arg3) || !arg3);
+    for (int i = 3; i < num_passed_args; i++) {
+        assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
     }
 
     // TODO Should we guard on the CLFunction or the BoxedFunctionBase?
@@ -3038,12 +3080,92 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (!f->isGenerator()) {
-        if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
-            && !f->takes_varargs && !f->takes_kwargs) {
-            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, func->globals, arg1, arg2, arg3, args);
+        if (argspec.num_keywords == 0 && argspec.has_starargs == f->takes_varargs && !argspec.has_kwargs
+            && !f->takes_kwargs && argspec.num_args == f->num_args) {
+            // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
+            // since otherwise modifications by the callee would be visible to the caller (hence why varargs
+            // received by the caller are always tuples).
+            // This is why we can't pass kwargs here.
+            if (argspec.has_starargs) {
+                Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+                if (given_varargs->cls == tuple_cls) {
+                    if (rewrite_args) {
+                        getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
+                            ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
+                    }
+                    return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
+                                      closure, NULL, func->globals, arg1, arg2, arg3, args);
+                }
+            } else {
+                return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
+                                  closure, NULL, func->globals, arg1, arg2, arg3, args);
+            }
         }
     }
     slowpath_callfunc_slowpath.log();
+
+    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords || f->isGenerator()) {
+// These are the cases that we won't be able to rewrite.
+// So instead, just rewrite them to be a call to callFunc, which helps a little bit.
+// TODO we should extract the rest of this function from the end of this block,
+// put it in a different function, and have the rewrites target that.
+
+// Note(kmod): I tried moving this section to runtimeCallInternal, ie to the place that calls
+// callFunc.  The thought was that this would let us apply this same optimization to other
+// internal callables.  It ended up hurting perf slightly; my theory is that it's because if
+// an internal callable failed, it's better to call the non-internal version since it's lower
+// overhead.
+
+// To investigate the cases where we can't rewrite, enable this block.
+// This also will also log the times that we call into callFunc directly
+// from a rewrite.
+#if 0
+        char buf[80];
+        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", f->isGenerator(),
+                 argspec.num_args, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs, f->num_args,
+                 f->num_defaults, f->takes_varargs, f->takes_kwargs);
+        uint64_t* counter = Stats::getStatCounter(buf);
+        Stats::log(counter);
+#endif
+
+        if (rewrite_args) {
+            Rewriter* rewriter = rewrite_args->rewriter;
+            // rewriter->trap();
+            RewriterVar* args_array = rewriter->allocate(2);
+            if (num_passed_args >= 4) {
+                RELEASE_ASSERT(rewrite_args->args, "");
+                args_array->setAttr(0, rewrite_args->args);
+            }
+            if (argspec.num_keywords)
+                args_array->setAttr(8, rewriter->loadConst((intptr_t)keyword_names));
+            else
+                args_array->setAttr(8, rewriter->loadConst(0));
+
+            RewriterVar::SmallVector arg_vec;
+            arg_vec.push_back(rewrite_args->obj);
+            arg_vec.push_back(rewriter->loadConst(argspec.asInt(), Location::forArg(1)));
+            if (num_passed_args >= 1)
+                arg_vec.push_back(rewrite_args->arg1);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(2)));
+            if (num_passed_args >= 2)
+                arg_vec.push_back(rewrite_args->arg2);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(3)));
+            if (num_passed_args >= 3)
+                arg_vec.push_back(rewrite_args->arg3);
+            else
+                arg_vec.push_back(rewriter->loadConst(0, Location::forArg(4)));
+            arg_vec.push_back(args_array);
+            for (auto v : arg_vec)
+                assert(v);
+            RewriterVar* r_rtn = rewriter->call(true, (void*)_callFuncHelper, arg_vec);
+
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_rtn;
+            rewrite_args = NULL;
+        }
+    }
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
@@ -3598,8 +3720,23 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_runtimecall_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_runtimecall_nopatch");
-    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
-    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+    static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_runtimecall_megamorphic");
+    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    uint64_t* counter;
+    if (!icinfo)
+        counter = st_id_nopatch;
+    else if (icinfo->isMegamorphic())
+        counter = st_id_megamorphic;
+    else {
+        counter = Stats::getStatCounter("us_timer_slowpath_runtimecall_patchable_" + std::string(obj->cls->tp_name));
+    }
+    ScopedStatTimer st(counter, 10);
+
+    static int n = 0;
+    n++;
+
+    if (n == 57261)
+        printf("");
 #endif
 
     if (rewriter.get()) {
@@ -4821,7 +4958,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     // this is ok with not using StlCompatAllocator since we will manually register these objects with the GC
     static std::vector<Box*> allowable_news;
     if (allowable_news.empty()) {
-        for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls }) {
+        for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
             auto new_obj = typeLookup(allowed_cls, new_str, NULL);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
