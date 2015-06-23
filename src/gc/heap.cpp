@@ -469,7 +469,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
 
 
 SmallArena::Block* SmallArena::_allocBlock(uint64_t size, Block** prev) {
-    Block* rtn = (Block*)doMmap(sizeof(Block));
+    Block* rtn = (Block*)allocFromArena(sizeof(Block));
     assert(rtn);
     rtn->size = size;
     rtn->num_obj = BLOCK_SIZE / size;
@@ -752,7 +752,7 @@ retry:
     if (free_chunks)
         return (LargeObj*)free_chunks;
 
-    section = (LargeBlock*)doMmap(BLOCK_SIZE);
+    section = (LargeBlock*)allocFromArena(BLOCK_SIZE);
 
     if (!section)
         return NULL;
@@ -819,7 +819,8 @@ GCAllocation* HugeArena::alloc(size_t size) {
 
     size_t total_size = size + sizeof(HugeObj);
     total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    HugeObj* rtn = (HugeObj*)doMmap(total_size);
+    extendMapping(total_size);
+    HugeObj* rtn = (HugeObj*)allocFromArena(total_size);
     rtn->obj_size = size;
 
     nullNextPrev(rtn);

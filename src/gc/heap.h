@@ -132,27 +132,44 @@ inline void clearMark(GCAllocation* header) {
 
 #define PAGE_SIZE 4096
 
-template <uintptr_t arena_start, uintptr_t arena_size> class Arena {
+template <uintptr_t arena_start, uintptr_t arena_size, uintptr_t initial_mapsize, uintptr_t increment> class Arena {
 private:
     void* cur;
-    void* end;
+    void* frontier;
+    void* arena_end;
 
 protected:
-    Arena() : cur((void*)arena_start), end((void*)(arena_start + arena_size)) {}
-
-public:
-    void* doMmap(size_t size) {
-        assert(size % PAGE_SIZE == 0);
-
-        assert(((uint8_t*)cur + size) < end && "arena full");
-
-        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        RELEASE_ASSERT((uintptr_t)mrtn != -1, "failed to allocate memory from OS");
-        ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
-        cur = (uint8_t*)cur + size;
-        return mrtn;
+    Arena() : cur((void*)arena_start), frontier((void*)arena_start), arena_end((void*)(arena_start + arena_size)) {
+        if (initial_mapsize)
+            extendMapping(initial_mapsize);
     }
 
+    // extends the mapping for this arena
+    void extendMapping(size_t size) {
+        assert(size % PAGE_SIZE == 0);
+
+        assert(((uint8_t*)frontier + size) < arena_end && "arena full");
+
+        void* mrtn = mmap(frontier, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        RELEASE_ASSERT((uintptr_t)mrtn != -1, "failed to allocate memory from OS");
+        ASSERT(mrtn == frontier, "%p %p\n", mrtn, cur);
+
+        frontier = (uint8_t*)frontier + size;
+    }
+
+    void* allocFromArena(size_t size) {
+        if (((char*)cur + size) >= (char*)frontier) {
+            // grow the arena by a multiple of increment such that we can service the allocation request
+            size_t grow_size = (size + increment - 1) & ~(increment - 1);
+            extendMapping(grow_size);
+        }
+
+        void* rtn = cur;
+        cur = (uint8_t*)cur + size;
+        return rtn;
+    }
+
+public:
     bool contains(void* addr) { return (void*)arena_start <= addr && addr < cur; }
 };
 
@@ -175,7 +192,7 @@ static const size_t sizes[] = {
 static constexpr size_t NUM_BUCKETS = sizeof(sizes) / sizeof(sizes[0]);
 
 
-class SmallArena : public Arena<SMALL_ARENA_START, ARENA_SIZE> {
+class SmallArena : public Arena<SMALL_ARENA_START, ARENA_SIZE, 64 * 1024 * 1024, 16 * 1024 * 1024> {
 public:
     SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {
 #ifndef NDEBUG
@@ -353,7 +370,7 @@ private:
 //
 // Blocks of 1meg are mmap'ed individually, and carved up as needed.
 //
-class LargeArena : public Arena<LARGE_ARENA_START, ARENA_SIZE> {
+class LargeArena : public Arena<LARGE_ARENA_START, ARENA_SIZE, 32 * 1024 * 1024, 16 * 1024 * 1024> {
 private:
     struct LargeBlock {
         LargeBlock* next;
@@ -420,7 +437,7 @@ public:
 //
 // Objects are allocated with individual mmap() calls, and kept in a
 // linked list.  They are not reused.
-class HugeArena : public Arena<HUGE_ARENA_START, ARENA_SIZE> {
+class HugeArena : public Arena<HUGE_ARENA_START, ARENA_SIZE, 0, PAGE_SIZE> {
 public:
     HugeArena(Heap* heap) : heap(heap) {}
 
