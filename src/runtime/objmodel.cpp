@@ -683,15 +683,14 @@ Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
 #if 0
-    if (attr[0] == '_' && attr[1] == '_') {
+    if (attr.data()[0] == '_' && attr.data()[1] == '_') {
         // Only do this logging for potentially-avoidable cases:
         if (!rewrite_args && cls != classobj_cls) {
             if (attr == "__setattr__")
                 printf("");
 
             std::string per_name_stat_name = "slowpath_box_getattr." + std::string(attr);
-            int id = Stats::getStatId(per_name_stat_name);
-            Stats::log(id);
+            Stats::log(Stats::getStatCounter(per_name_stat_name));
         }
     }
 #endif
