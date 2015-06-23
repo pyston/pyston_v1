@@ -149,9 +149,14 @@ public:
 
     void add(Immediate imm, Register reg);
     void sub(Immediate imm, Register reg);
+
     void incl(Indirect mem);
     void decl(Indirect mem);
 
+    void incl(Immediate mem);
+    void decl(Immediate mem);
+
+    void call(Immediate imm); // the value is the offset
     void callq(Register reg);
     void retq();
     void leave();
@@ -187,6 +192,7 @@ public:
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
 
+    uint8_t* startAddr() const { return start_addr; }
     int bytesLeft() const { return end_addr - addr; }
     int bytesWritten() const { return addr - start_addr; }
     uint8_t* curInstPointer() { return addr; }

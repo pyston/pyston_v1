@@ -75,6 +75,16 @@ void ICSlotRewrite::abort() {
     ic->retry_in = ic->retry_backoff;
 }
 
+ICSlotInfo* ICSlotRewrite::prepareEntry() {
+    this->ic_entry = ic->pickEntryForRewrite(debug_name);
+    return this->ic_entry;
+}
+
+uint8_t* ICSlotRewrite::getSlotStart() {
+    assert(ic_entry != NULL);
+    return (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
+}
+
 void ICSlotRewrite::commit(CommitHook* hook) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
@@ -91,14 +101,10 @@ void ICSlotRewrite::commit(CommitHook* hook) {
         return;
     }
 
-    ICSlotInfo* ic_entry = ic->pickEntryForRewrite(debug_name);
-    if (ic_entry == NULL)
-        return;
-
-    uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
+    uint8_t* slot_start = getSlotStart();
     uint8_t* continue_point = (uint8_t*)ic->continue_addr;
 
-    bool do_commit = hook->finishAssembly(ic_entry, continue_point - slot_start);
+    bool do_commit = hook->finishAssembly(continue_point - slot_start);
 
     if (!do_commit)
         return;
@@ -110,6 +116,8 @@ void ICSlotRewrite::commit(CommitHook* hook) {
         ICInvalidator* invalidator = dependencies[i].first;
         invalidator->addDependent(ic_entry);
     }
+
+    ic->next_slot_to_try++;
 
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
@@ -166,18 +174,16 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
             continue;
 
         if (VERBOSITY() >= 4) {
-            printf("committing %s icentry to in-use slot %d at %p\n", debug_name, i, start_addr);
+            printf("picking %s icentry to in-use slot %d at %p\n", debug_name, i, start_addr);
         }
-        next_slot_to_try = i + 1;
 
+        next_slot_to_try = i;
         return &sinfo;
     }
     if (VERBOSITY() >= 4)
         printf("not committing %s icentry since there are no available slots\n", debug_name);
     return NULL;
 }
-
-
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
                int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
