@@ -728,6 +728,8 @@ template <typename Func> void unwindPythonStack(Func func) {
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
     STAT_TIMER(t0, "us_timer_getTopPythonFrame", 10);
+    static StatCounter calls("num_getTopPythonFrame");
+    calls.log();
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     unwindPythonStack([&](PythonFrameIteratorImpl* iter) {
         rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*iter));
