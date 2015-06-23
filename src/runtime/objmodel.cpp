@@ -3136,7 +3136,10 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 RELEASE_ASSERT(rewrite_args->args, "");
                 args_array->setAttr(0, rewrite_args->args);
             }
-            args_array->setAttr(8, rewriter->loadConst((intptr_t)keyword_names));
+            if (argspec.num_keywords)
+                args_array->setAttr(8, rewriter->loadConst((intptr_t)keyword_names));
+            else
+                args_array->setAttr(8, rewriter->loadConst(0));
 
             RewriterVar::SmallVector arg_vec;
             arg_vec.push_back(rewrite_args->obj);
