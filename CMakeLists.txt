@@ -72,6 +72,26 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
   set(CMAKE_CXX_FLAGS_DEBUG "-O3" CACHE STRING "" FORCE)
 endif()
 
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
+                   COMMAND git submodule update --init
+                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
+add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
+
+# jemalloc
+ExternalProject_Add(libjemalloc
+                    PREFIX jemalloc-build
+                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/jemalloc
+                    DEPENDS gitsubmodules
+                    UPDATE_COMMAND autoconf
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof-libunwind
+                    INSTALL_COMMAND make install_bin install_lib
+                    LOG_UPDATE ON
+                    LOG_CONFIGURE ON
+                    LOG_BUILD ON
+                    LOG_INSTALL ON)
+
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 # llvm, clang, and libunwind patches
@@ -85,13 +105,6 @@ set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0003-use-a-sorted-array-for-registered-objects-and-do-a-b.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/9999-is-patched-marker.patch
 )
-
-add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
-                   COMMAND git submodule update --init
-                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
-                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
-add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
                    COMMAND git submodule update libunwind
@@ -213,7 +226,8 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} -L${CMAKE_BINARY_DIR}/jemalloc/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/jemalloc/lib jemalloc)
+add_dependencies(pyston libjemalloc)
 
 # copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
