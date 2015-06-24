@@ -21,7 +21,6 @@
 #include "capi/typeobject.h"
 #include "core/threading.h"
 #include "core/types.h"
-#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 

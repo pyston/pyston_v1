@@ -29,7 +29,6 @@
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/collector.h"
-#include "runtime/capi.h"
 #include "runtime/dict.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"

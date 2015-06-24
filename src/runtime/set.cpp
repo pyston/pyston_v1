@@ -17,7 +17,6 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "gc/collector.h"
-#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {

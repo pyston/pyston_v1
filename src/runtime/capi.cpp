@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>
@@ -53,47 +52,6 @@ extern "C" {
 int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
-BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
-}
-
-Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
-    RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
-
-    if (inst == None)
-        return self;
-
-    if (!isSubclass(inst->cls, self->type))
-        raiseExcHelper(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                       getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
-
-    return new BoxedWrapperObject(self, inst);
-}
-
-Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
-    RELEASE_ASSERT(_self->cls == wrapperdescr_cls, "");
-    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
-
-    if (inst == None)
-        return self;
-
-    if (!isSubclass(inst->cls, self->type))
-        PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                     getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
-
-    return new BoxedWrapperObject(self, inst);
-}
-
-Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args) {
-    RELEASE_ASSERT(descr->cls == wrapperdescr_cls, "");
-
-    BoxedDict* kw = static_cast<BoxedDict*>(_args[0]);
-
-    if (!isSubclass(self->cls, descr->type))
-        raiseExcHelper(TypeError, "descriptor '' requires a '%s' object but received a '%s'",
-                       getFullNameOfClass(descr->type).c_str(), getFullTypeName(self).c_str());
-
-    auto wrapper = new BoxedWrapperObject(descr, self);
-    return BoxedWrapperObject::__call__(wrapper, args, kw);
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
@@ -674,77 +632,6 @@ static int internal_print(PyObject* op, FILE* fp, int flags, int nesting) noexce
 extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
     return internal_print(obj, fp, flags, 0);
 };
-
-extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
-}
-
-extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
-}
-
-extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
-}
-
-extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
-    try {
-        // Not sure if this is really the same:
-        return getitem(o, boxInt(i));
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
-    try {
-        // Not sure if this is really the same:
-        return getitem(o, createSlice(boxInt(i1), boxInt(i2), None));
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-    }
-}
-
-extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
-
-extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
-    try {
-        // Not sure if this is really the same:
-        delitem(o, boxInt(i));
-        return 0;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return -1;
-    }
-}
-
-extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
-
-extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
-
-extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
-
-extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
-}
 
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
     try {
@@ -1570,56 +1457,6 @@ extern "C" char* PyModule_GetFilename(PyObject* m) noexcept {
     return PyString_AsString(fileobj);
 }
 
-BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path) {
-    void* handle = dlopen(path.c_str(), RTLD_NOW);
-    if (!handle) {
-        // raiseExcHelper(ImportError, "%s", dlerror());
-        fprintf(stderr, "%s\n", dlerror());
-        exit(1);
-    }
-    assert(handle);
-
-    std::string initname = "init" + last_name;
-    void (*init)() = (void (*)())dlsym(handle, initname.c_str());
-
-    char* error;
-    if ((error = dlerror()) != NULL) {
-        // raiseExcHelper(ImportError, "%s", error);
-        fprintf(stderr, "%s\n", error);
-        exit(1);
-    }
-
-    assert(init);
-
-    // Let the GC know about the static variables.
-    uintptr_t bss_start = (uintptr_t)dlsym(handle, "__bss_start");
-    uintptr_t bss_end = (uintptr_t)dlsym(handle, "_end");
-    RELEASE_ASSERT(bss_end - bss_start < 100000, "Large BSS section detected - there maybe something wrong");
-    // only track void* aligned memory
-    bss_start = (bss_start + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
-    bss_end -= bss_end % sizeof(void*);
-    gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
-
-    char* packagecontext = strdup(full_name.c_str());
-    char* oldcontext = _Py_PackageContext;
-    _Py_PackageContext = packagecontext;
-    (*init)();
-    _Py_PackageContext = oldcontext;
-    free(packagecontext);
-
-    checkAndThrowCAPIException();
-
-    BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxString(full_name);
-    Box* _m = sys_modules->d[s];
-    RELEASE_ASSERT(_m, "dynamic module not initialized properly");
-    assert(_m->cls == module_cls);
-
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-    m->setattr("__file__", boxString(path), NULL);
-    return m;
-}
-
 Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
                                      Box* arg1, Box* arg2, Box* arg3, Box** args,
                                      const std::vector<BoxedString*>* keyword_names) {
@@ -1643,21 +1480,6 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
     checkAndThrowCAPIException();
     assert(r);
     return r;
-}
-
-static Box* methodGetDoc(Box* b, void*) {
-    assert(b->cls == method_cls);
-    const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
-    if (s)
-        return boxString(s);
-    return None;
-}
-
-static Box* wrapperdescrGetDoc(Box* b, void*) {
-    assert(b->cls == wrapperdescr_cls);
-    auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
-    assert(s.size());
-    return boxString(s);
 }
 
 /* extension modules might be compiled with GC support so these
@@ -1719,10 +1541,6 @@ extern "C" void _Py_FatalError(const char* fmt, const char* function, const char
     abort();
 }
 
-extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
-    return new BoxedClassmethod(callable);
-}
-
 void setupCAPI() {
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
@@ -1736,27 +1554,6 @@ void setupCAPI() {
         "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
 
     capifunc_cls->freeze();
-
-    method_cls->giveAttr("__get__",
-                         new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
-    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
-    method_call_cl->internal_callable = BoxedMethodDescriptor::callInternal;
-    method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
-    method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
-    method_cls->freeze();
-
-    wrapperdescr_cls->giveAttr("__get__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
-    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
-                                                                           UNKNOWN, 2, 0, true, true)));
-    wrapperdescr_cls->giveAttr("__doc__",
-                               new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
-    wrapperdescr_cls->freeze();
-    wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
-
-    wrapperobject_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
-    wrapperobject_cls->freeze();
 }
 
 void teardownCAPI() {

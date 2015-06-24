@@ -32,7 +32,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/complex.h"
 #include "runtime/dict.h"

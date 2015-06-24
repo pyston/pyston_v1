@@ -88,7 +88,8 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls,
     *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
-    *capi_getset_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls, *frame_cls;
+    *capi_getset_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls, *frame_cls, *capifunc_cls,
+    *wrapperdescr_cls, *wrapperobject_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
@@ -869,6 +870,62 @@ public:
     DEFAULT_CLASS(generator_cls);
 };
 
+struct wrapper_def {
+    const llvm::StringRef name;
+    int offset;
+    void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
+    wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
+    const llvm::StringRef doc;
+    int flags;
+    // exists in CPython: PyObject *name_strobj
+};
+
+class BoxedWrapperDescriptor : public Box {
+public:
+    const wrapper_def* wrapper;
+    BoxedClass* type;
+    void* wrapped;
+    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type, void* wrapped)
+        : wrapper(wrapper), type(type), wrapped(wrapped) {}
+
+    DEFAULT_CLASS(wrapperdescr_cls);
+
+    static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+    static Box* descr_get(Box* self, Box* inst, Box* owner) noexcept;
+    static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
+
+    static void gcHandler(GCVisitor* v, Box* _o);
+};
+
+class BoxedWrapperObject : public Box {
+public:
+    BoxedWrapperDescriptor* descr;
+    Box* obj;
+
+    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : descr(descr), obj(obj) {}
+
+    DEFAULT_CLASS(wrapperobject_cls);
+
+    static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds);
+    static void gcHandler(GCVisitor* v, Box* _o);
+};
+
+class BoxedMethodDescriptor : public Box {
+public:
+    PyMethodDef* method;
+    BoxedClass* type;
+
+    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) {}
+
+    DEFAULT_CLASS(method_cls);
+
+    static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner);
+    static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
+    static Box* callInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
+    static void gcHandler(GCVisitor* v, Box* _o);
+};
+
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* objectNewNoArgs(BoxedClass* cls);
@@ -904,6 +961,19 @@ AST* unboxAst(Box* b);
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
+
+void checkAndThrowCAPIException();
+void throwCAPIException() __attribute__((noreturn));
+struct ExcInfo;
+void setCAPIException(const ExcInfo& e);
+
+#define fatalOrError(exception, message)                                                                               \
+    do {                                                                                                               \
+        if (CONTINUE_AFTER_FATAL)                                                                                      \
+            PyErr_SetString((exception), (message));                                                                   \
+        else                                                                                                           \
+            Py_FatalError((message));                                                                                  \
+    } while (0)
 
 // A descriptor that you can add to your class to provide instances with a __dict__ accessor.
 // Classes created in Python get this automatically, but builtin types (including extension types)
