@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 # prints variables for debugging
 print-%: ; @echo $($*)
 
