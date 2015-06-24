@@ -1232,6 +1232,15 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
             if (consec == n) {
                 int a = i / 8 - n + 1;
                 int b = i / 8;
+                // Put placeholders in so the array space doesn't get re-allocated.
+                // This won't get collected, but that's fine.
+                // Note: make sure to do this marking before the initializeInReg call
+                for (int j = a; j <= b; j++) {
+                    Location m(Location::Scratch, j * 8);
+                    assert(vars_by_location.count(m) == 0);
+                    vars_by_location[m] = LOCATION_PLACEHOLDER;
+                }
+
                 assembler::Register r = result->initializeInReg();
 
                 // TODO should be a LEA instruction
@@ -1239,13 +1248,6 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 // this when necessary, so it won't spill. Is that worth?
                 assembler->mov(assembler::RSP, r);
                 assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRspOffset()), r);
-
-                // Put placeholders in so the array space doesn't get re-allocated.
-                // This won't get collected, but that's fine.
-                for (int j = a; j <= b; j++) {
-                    Location m(Location::Scratch, j * 8);
-                    vars_by_location[m] = LOCATION_PLACEHOLDER;
-                }
 
                 assertConsistent();
                 result->releaseIfNoUses();

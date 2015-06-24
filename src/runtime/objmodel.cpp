@@ -2662,6 +2662,8 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
                 v->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)args[i - 3]->cls);
             }
         }
+
+        rewrite_args->args_guarded = true;
     }
 
     // right now I don't think this is ever called with INST_ONLY?
@@ -2670,7 +2672,7 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
     // Look up the argument. Pass in the arguments to getattrInternalGeneral or getclsattr_general
     // that will shortcut functions by not putting them into instancemethods
     Box* bind_obj = NULL; // Initialize this to NULL to allow getattrInternalEx to ignore it
-    RewriterVar* r_bind_obj;
+    RewriterVar* r_bind_obj = NULL;
     Box* val;
     RewriterVar* r_val = NULL;
     if (rewrite_args) {
@@ -2692,114 +2694,28 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
     }
 
     if (bind_obj != NULL) {
+        Box** new_args = NULL;
+        if (npassed_args >= 3) {
+            new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
+        }
+
         if (rewrite_args) {
             r_val->addGuard((int64_t)val);
+            rewrite_args->obj = r_val;
+            rewrite_args->func_guarded = true;
         }
 
-        // TODO copy from runtimeCall
-        // TODO these two branches could probably be folded together (the first one is becoming
-        // a subset of the second)
-        if (npassed_args <= 2) {
-            Box* rtn;
-            if (rewrite_args) {
-                CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
-                srewrite_args.arg1 = r_bind_obj;
-
-                // should be no-ops:
-                if (npassed_args >= 1)
-                    srewrite_args.arg2 = rewrite_args->arg1;
-                if (npassed_args >= 2)
-                    srewrite_args.arg3 = rewrite_args->arg2;
-
-                srewrite_args.func_guarded = true;
-                srewrite_args.args_guarded = true;
-
-                rtn = runtimeCallInternal(val, &srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                           argspec.has_starargs, argspec.has_kwargs),
-                                          bind_obj, arg1, arg2, NULL, keyword_names);
-
-                if (!srewrite_args.out_success) {
-                    rewrite_args = NULL;
-                } else {
-                    rewrite_args->out_rtn = srewrite_args.out_rtn;
-                }
-            } else {
-                rtn = runtimeCallInternal(val, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                 argspec.has_starargs, argspec.has_kwargs),
-                                          bind_obj, arg1, arg2, NULL, keyword_names);
-            }
-
-            if (rewrite_args)
-                rewrite_args->out_success = true;
-            return rtn;
-        } else {
-            int alloca_size = sizeof(Box*) * (npassed_args + 1 - 3);
-
-            Box** new_args = (Box**)alloca(alloca_size);
-            new_args[0] = arg3;
-            memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
-
-            Box* rtn;
-            if (rewrite_args) {
-                CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
-                srewrite_args.arg1 = r_bind_obj;
-                srewrite_args.arg2 = rewrite_args->arg1;
-                srewrite_args.arg3 = rewrite_args->arg2;
-                srewrite_args.args = rewrite_args->rewriter->allocateAndCopyPlus1(
-                    rewrite_args->arg3, npassed_args == 3 ? NULL : rewrite_args->args, npassed_args - 3);
-
-                srewrite_args.args_guarded = true;
-                srewrite_args.func_guarded = true;
-
-                rtn = runtimeCallInternal(val, &srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                           argspec.has_starargs, argspec.has_kwargs),
-                                          bind_obj, arg1, arg2, new_args, keyword_names);
-
-                if (!srewrite_args.out_success) {
-                    rewrite_args = NULL;
-                } else {
-                    rewrite_args->out_rtn = srewrite_args.out_rtn;
-
-                    rewrite_args->out_success = true;
-                }
-            } else {
-                rtn = runtimeCallInternal(val, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                 argspec.has_starargs, argspec.has_kwargs),
-                                          bind_obj, arg1, arg2, new_args, keyword_names);
-            }
-            return rtn;
-        }
-    } else {
         Box* rtn;
+        ArgPassSpec new_argspec
+            = bindObjIntoArgs(bind_obj, r_bind_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+        return runtimeCallInternal(val, rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
+    } else {
         if (rewrite_args) {
-            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
-            if (npassed_args >= 1)
-                srewrite_args.arg1 = rewrite_args->arg1;
-            if (npassed_args >= 2)
-                srewrite_args.arg2 = rewrite_args->arg2;
-            if (npassed_args >= 3)
-                srewrite_args.arg3 = rewrite_args->arg3;
-            if (npassed_args >= 4)
-                srewrite_args.args = rewrite_args->args;
-            srewrite_args.args_guarded = true;
-
-            rtn = runtimeCallInternal(val, &srewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
-
-            if (!srewrite_args.out_success) {
-                rewrite_args = NULL;
-            } else {
-                rewrite_args->out_rtn = srewrite_args.out_rtn;
-            }
-        } else {
-            rtn = runtimeCallInternal(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            rewrite_args->obj = r_val;
         }
 
-        if (!rtn) {
-            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(val));
-        }
-
-        if (rewrite_args)
-            rewrite_args->out_success = true;
+        Box* rtn = runtimeCallInternal(val, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        assert(rtn); // not sure why we have this here
         return rtn;
     }
 }
@@ -3012,8 +2928,8 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
 
-ArgPassSpec bindObjIntoArgs(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*& arg1, Box*& arg2,
-                            Box*& arg3, Box** args, Box** new_args) {
+ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+                            Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args) {
     int npassed_args = argspec.totalPassed();
 
     assert((new_args != NULL) == (npassed_args >= 3));
@@ -3025,7 +2941,7 @@ ArgPassSpec bindObjIntoArgs(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec
 
     arg3 = arg2;
     arg2 = arg1;
-    arg1 = obj;
+    arg1 = bind_obj;
 
     if (rewrite_args) {
         if (npassed_args >= 3) {
@@ -3034,7 +2950,7 @@ ArgPassSpec bindObjIntoArgs(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec
         }
         rewrite_args->arg3 = rewrite_args->arg2;
         rewrite_args->arg2 = rewrite_args->arg1;
-        rewrite_args->arg1 = rewrite_args->obj;
+        rewrite_args->arg1 = r_bind_obj;
     }
 
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
@@ -3681,6 +3597,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         if (rewrite_args && !rewrite_args->func_guarded) {
             r_im_func->addGuard((intptr_t)im->func);
+            rewrite_args->func_guarded = true;
         }
 
         // Guard on which type of instancemethod (bound or unbound)
@@ -3693,54 +3610,26 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         if (im->obj == NULL) {
             Box* f = im->func;
             if (rewrite_args) {
-                rewrite_args->func_guarded = true;
-                rewrite_args->args_guarded = true;
                 rewrite_args->obj = r_im_func;
             }
             Box* res = runtimeCallInternal(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
             return res;
         }
 
-        if (npassed_args <= 2) {
-            Box* rtn;
-            if (rewrite_args) {
-                CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_im_func, rewrite_args->destination);
-
-                srewrite_args.arg1 = rewrite_args->obj->getAttr(INSTANCEMETHOD_OBJ_OFFSET, Location::any());
-                srewrite_args.func_guarded = true;
-                srewrite_args.args_guarded = true;
-                if (npassed_args >= 1)
-                    srewrite_args.arg2 = rewrite_args->arg1;
-                if (npassed_args >= 2)
-                    srewrite_args.arg3 = rewrite_args->arg2;
-
-                rtn = runtimeCallInternal(
-                    im->func, &srewrite_args,
-                    ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
-                    im->obj, arg1, arg2, NULL, keyword_names);
-
-                if (!srewrite_args.out_success) {
-                    rewrite_args = NULL;
-                } else {
-                    rewrite_args->out_rtn = srewrite_args.out_rtn;
-                }
-            } else {
-                rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                      argspec.has_starargs, argspec.has_kwargs),
-                                          im->obj, arg1, arg2, NULL, keyword_names);
-            }
-            if (rewrite_args)
-                rewrite_args->out_success = true;
-            return rtn;
-        } else {
-            Box** new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
-            new_args[0] = arg3;
-            memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
-            Box* rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                       argspec.has_starargs, argspec.has_kwargs),
-                                           im->obj, arg1, arg2, new_args, keyword_names);
-            return rtn;
+        Box** new_args = NULL;
+        if (npassed_args >= 3) {
+            new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
         }
+
+        RewriterVar* r_bind_obj = NULL;
+        if (rewrite_args) {
+            r_bind_obj = rewrite_args->obj->getAttr(INSTANCEMETHOD_OBJ_OFFSET);
+            rewrite_args->obj = r_im_func;
+        }
+
+        ArgPassSpec new_argspec
+            = bindObjIntoArgs(im->obj, r_bind_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+        return runtimeCallInternal(im->func, rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
     }
     assert(0);
     abort();

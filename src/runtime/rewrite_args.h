@@ -131,9 +131,10 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                         Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
                         Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs);
 
-// new_args should be allocated by the caller if at least three args get passed in
-ArgPassSpec bindObjIntoArgs(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*& arg1, Box*& arg2,
-                            Box*& arg3, Box** args, Box** new_args);
+// new_args should be allocated by the caller if at least three args get passed in.
+// rewrite_args will get modified in place.
+ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+                            Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args);
 } // namespace pyston
 
 #endif

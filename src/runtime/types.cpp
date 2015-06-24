@@ -547,7 +547,15 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
     }
 
-    ArgPassSpec new_argspec = bindObjIntoArgs(self, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+    RewriterVar* r_bind_obj = NULL;
+    if (rewrite_args) {
+        r_bind_obj = rewrite_args->obj;
+        rewrite_args->obj = NULL;
+    }
+
+    ArgPassSpec new_argspec
+        = bindObjIntoArgs(self, r_bind_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+
     return typeCallInner(rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
 }
 
