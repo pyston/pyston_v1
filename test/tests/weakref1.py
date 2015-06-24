@@ -1,8 +1,10 @@
 import weakref
 import gc
 
+num_destroyed = 0
 def cb(wr):
-  print "object was destroyed", wr()
+    global num_destroyed
+    num_destroyed += 1
 
 def doStuff():
   def meth():
@@ -11,18 +13,7 @@ def doStuff():
   wr = weakref.ref(meth, cb)
   return wr
 
-def fact(n):
-    if n <= 1:
-        return n
-    return n * fact(n-1)
-
-
-w = doStuff()
-fact(10) # try to clear some memory
-
-def recurse(f, n):
-    if n:
-        return recurse(f, n - 1)
-    return f()
-recurse(gc.collect, 50)
+l = [doStuff() for i in xrange(5)]
 gc.collect()
+
+assert num_destroyed >= 1
