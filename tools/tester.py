@@ -72,11 +72,14 @@ def get_global_mtime():
     # Start off by depending on the tester itself
     rtn = os.stat(THIS_FILE).st_mtime
 
-    assert os.listdir(EXTMODULE_DIR), EXTMODULE_DIR
-    for fn in os.listdir(EXTMODULE_DIR):
-        if not fn.endswith(".so"):
-            continue
-        rtn = max(rtn, os.stat(os.path.join(EXTMODULE_DIR, fn)).st_mtime)
+    #assert os.listdir(EXTMODULE_DIR), EXTMODULE_DIR
+    try:
+        for fn in os.listdir(EXTMODULE_DIR):
+            if not fn.endswith(".so"):
+                continue
+            rtn = max(rtn, os.stat(os.path.join(EXTMODULE_DIR, fn)).st_mtime)
+    except (OSError):
+        pass
     _global_mtime = rtn
     return rtn
 
