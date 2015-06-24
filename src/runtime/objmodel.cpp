@@ -2985,8 +2985,6 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 
     if (rewrite_args) {
         rewrite_success = false; // default case
-        assert(rewrite_args->args_guarded && "need to guard args here");
-        assert(rewrite_args->func_guarded && "this is the callers responsibility");
     }
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple

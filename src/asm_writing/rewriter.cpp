@@ -694,6 +694,17 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
     return call(has_side_effects, func_addr, args, args_xmm);
 }
 
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
+                            RewriterVar* arg2, RewriterVar* arg3) {
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
+    args.push_back(arg1);
+    args.push_back(arg2);
+    args.push_back(arg3);
+    return call(has_side_effects, func_addr, args, args_xmm);
+}
+
 static const Location caller_save_registers[]{
     assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
     assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,

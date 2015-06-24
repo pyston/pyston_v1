@@ -124,6 +124,7 @@ struct CompareRewriteArgs {
 // Passes the output arguments back through oarg.  Passes the rewrite success by setting rewrite_success.
 // Directly modifies rewrite_args args in place, but only if rewrite_success got set.
 // oargs needs to be pre-allocated by the caller, since it's assumed that they will want to use alloca.
+// The caller is responsible for guarding for paramspec, argspec, param_names, and defaults.
 // TODO Fix this function's signature.  should we pass back out through args?  the common case is that they
 // match anyway.  Or maybe it should call a callback function, which could save on the common case.
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
