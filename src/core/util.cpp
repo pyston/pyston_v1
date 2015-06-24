@@ -44,7 +44,7 @@ void Timer::restart(const char* newdesc) {
     assert(ended);
 
     desc = newdesc;
-    start_time = getCPUTicks();
+    gettimeofday(&start_time, NULL);
     Timer::level++;
     ended = false;
 }
@@ -54,14 +54,14 @@ void Timer::restart(const char* newdesc, long new_min_usec) {
     restart(newdesc);
 }
 
-uint64_t Timer::end(uint64_t* ended_at) {
+uint64_t Timer::end() {
     if (!ended) {
-        uint64_t end = getCPUTicks();
-        uint64_t duration = end - start_time;
+        timeval end;
+        gettimeofday(&end, NULL);
+        long us = 1000000L * (end.tv_sec - start_time.tv_sec) + (end.tv_usec - start_time.tv_usec);
+
         Timer::level--;
         if (VERBOSITY("time") >= 2 && desc) {
-            uint64_t us = (uint64_t)(duration / Stats::estimateCPUFreq());
-
             if (us > min_usec) {
                 for (int i = 0; i < Timer::level; i++) {
                     putchar(' ');
@@ -78,10 +78,9 @@ uint64_t Timer::end(uint64_t* ended_at) {
                 fflush(stdout);
             }
         }
-        if (ended_at)
-            *ended_at = end;
         ended = true;
-        return duration;
+
+        return us;
     }
     return -1;
 }

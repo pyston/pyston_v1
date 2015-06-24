@@ -265,12 +265,12 @@ static int main(int argc, char** argv) {
 
     timespec before_ts, after_ts;
 
-    Timer main_time;
+    uint64_t main_time_started_at = getCPUTicks();
     int rtncode = 0;
     {
 #if STAT_TIMERS
         StatTimer timer(Stats::getStatCounter("us_timer_main_toplevel"), 0, true);
-        timer.pushTopLevel(main_time.getStartTime());
+        timer.pushTopLevel(main_time_started_at);
 #endif
 
         int code;
@@ -506,8 +506,8 @@ static int main(int argc, char** argv) {
         _t.split("finishing up");
 
 #if STAT_TIMERS
-        uint64_t main_time_ended_at;
-        uint64_t main_time_duration = main_time.end(&main_time_ended_at);
+        uint64_t main_time_ended_at = getCPUTicks();
+        uint64_t main_time_duration = main_time_ended_at - main_time_started_at;
         static StatCounter mt("ticks_in_main");
         mt.log(main_time_duration);
 
