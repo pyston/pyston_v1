@@ -38,44 +38,6 @@ class Value;
 
 namespace pyston {
 
-struct ArgPassSpec {
-    bool has_starargs : 1;
-    bool has_kwargs : 1;
-    unsigned int num_keywords : 14;
-    unsigned int num_args : 16;
-
-    static const int MAX_ARGS = (1 << 16) - 1;
-    static const int MAX_KEYWORDS = (1 << 14) - 1;
-
-    explicit ArgPassSpec(int num_args) : has_starargs(false), has_kwargs(false), num_keywords(0), num_args(num_args) {
-        assert(num_args <= MAX_ARGS);
-        assert(num_keywords <= MAX_KEYWORDS);
-    }
-    explicit ArgPassSpec(int num_args, int num_keywords, bool has_starargs, bool has_kwargs)
-        : has_starargs(has_starargs), has_kwargs(has_kwargs), num_keywords(num_keywords), num_args(num_args) {
-        assert(num_args <= MAX_ARGS);
-        assert(num_keywords <= MAX_KEYWORDS);
-    }
-
-    bool operator==(ArgPassSpec rhs) {
-        return has_starargs == rhs.has_starargs && has_kwargs == rhs.has_kwargs && num_keywords == rhs.num_keywords
-               && num_args == rhs.num_args;
-    }
-
-    bool operator!=(ArgPassSpec rhs) { return !(*this == rhs); }
-
-    int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
-
-    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
-
-    void dump() {
-        printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
-               has_kwargs ? "true" : "false", num_keywords, num_args);
-    }
-};
-static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register! (CC is probably wrong)");
-static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
-
 namespace gc {
 
 class TraceStack;
@@ -143,6 +105,92 @@ class ScopingAnalysis;
 
 class CLFunction;
 class OSREntryDescriptor;
+
+struct ArgPassSpec {
+    bool has_starargs : 1;
+    bool has_kwargs : 1;
+    unsigned int num_keywords : 14;
+    unsigned int num_args : 16;
+
+    static const int MAX_ARGS = (1 << 16) - 1;
+    static const int MAX_KEYWORDS = (1 << 14) - 1;
+
+    explicit ArgPassSpec(int num_args) : has_starargs(false), has_kwargs(false), num_keywords(0), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+    explicit ArgPassSpec(int num_args, int num_keywords, bool has_starargs, bool has_kwargs)
+        : has_starargs(has_starargs), has_kwargs(has_kwargs), num_keywords(num_keywords), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+
+    bool operator==(ArgPassSpec rhs) {
+        return has_starargs == rhs.has_starargs && has_kwargs == rhs.has_kwargs && num_keywords == rhs.num_keywords
+               && num_args == rhs.num_args;
+    }
+
+    bool operator!=(ArgPassSpec rhs) { return !(*this == rhs); }
+
+    int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
+
+    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
+
+    void dump() {
+        printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
+               has_kwargs ? "true" : "false", num_keywords, num_args);
+    }
+};
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register! (CC is probably wrong)");
+static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
+
+struct ParamNames {
+    bool takes_param_names;
+    std::vector<llvm::StringRef> args;
+    llvm::StringRef vararg, kwarg;
+
+    explicit ParamNames(AST* ast, InternedStringPool& pool);
+    ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
+    static ParamNames empty() { return ParamNames(); }
+
+    int totalParameters() const {
+        return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
+    }
+
+private:
+    ParamNames() : takes_param_names(false) {}
+};
+
+// Probably overkill to copy this from ArgPassSpec
+struct ParamReceiveSpec {
+    bool takes_varargs : 1;
+    bool takes_kwargs : 1;
+    unsigned int num_defaults : 14;
+    unsigned int num_args : 16;
+
+    static const int MAX_ARGS = (1 << 16) - 1;
+    static const int MAX_DEFAULTS = (1 << 14) - 1;
+
+    explicit ParamReceiveSpec(int num_args)
+        : takes_varargs(false), takes_kwargs(false), num_defaults(0), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_defaults <= MAX_DEFAULTS);
+    }
+    explicit ParamReceiveSpec(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs)
+        : takes_varargs(takes_varargs), takes_kwargs(takes_kwargs), num_defaults(num_defaults), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_defaults <= MAX_DEFAULTS);
+    }
+
+    bool operator==(ParamReceiveSpec rhs) {
+        return takes_varargs == rhs.takes_varargs && takes_kwargs == rhs.takes_kwargs
+               && num_defaults == rhs.num_defaults && num_args == rhs.num_args;
+    }
+
+    bool operator!=(ParamReceiveSpec rhs) { return !(*this == rhs); }
+
+    int totalReceived() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+};
 
 class ICInvalidator {
 private:
@@ -229,23 +277,6 @@ public:
     void speculationFailed();
 };
 
-struct ParamNames {
-    bool takes_param_names;
-    std::vector<llvm::StringRef> args;
-    llvm::StringRef vararg, kwarg;
-
-    explicit ParamNames(AST* ast, InternedStringPool& pool);
-    ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
-    static ParamNames empty() { return ParamNames(); }
-
-    int totalParameters() const {
-        return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
-    }
-
-private:
-    ParamNames() : takes_param_names(false) {}
-};
-
 typedef int FutureFlags;
 
 class BoxedModule;
@@ -283,9 +314,7 @@ struct CallRewriteArgs;
 class BoxedCode;
 class CLFunction {
 public:
-    int num_args;
-    int num_defaults;
-    bool takes_varargs, takes_kwargs;
+    ParamReceiveSpec paramspec;
 
     std::unique_ptr<SourceInfo> source;
     ParamNames param_names;
@@ -308,10 +337,7 @@ public:
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                std::unique_ptr<SourceInfo> source)
-        : num_args(num_args),
-          num_defaults(num_defaults),
-          takes_varargs(takes_varargs),
-          takes_kwargs(takes_kwargs),
+        : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
           source(std::move(source)),
           param_names(this->source->ast, this->source->getInternedStrings()),
           always_use_version(NULL),
@@ -319,10 +345,7 @@ public:
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-        : num_args(num_args),
-          num_defaults(num_defaults),
-          takes_varargs(takes_varargs),
-          takes_kwargs(takes_kwargs),
+        : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
           source(nullptr),
           param_names(param_names),
           always_use_version(NULL),
@@ -330,7 +353,7 @@ public:
         assert(num_args >= num_defaults);
     }
 
-    int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+    int numReceivedArgs() { return paramspec.totalReceived(); }
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
@@ -344,7 +367,7 @@ public:
                 && compiled->spec->boxed_return_value)
                 always_use_version = compiled;
 
-            assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
+            assert(compiled->spec->arg_types.size() == paramspec.totalReceived());
             versions.push_back(compiled);
         } else {
             osr_versions[compiled->entry_descriptor] = compiled;

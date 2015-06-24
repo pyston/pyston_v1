@@ -316,7 +316,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
         this->doc = None;
     }
 
-    assert(f->num_defaults == ndefaults);
+    assert(f->paramspec.num_defaults == ndefaults);
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
@@ -338,7 +338,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->doc = None;
     }
 
-    assert(f->num_defaults == ndefaults);
+    assert(f->paramspec.num_defaults == ndefaults);
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {

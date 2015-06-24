@@ -72,7 +72,7 @@ public:
     static Box* argcount(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
 
-        return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
+        return boxInt(static_cast<BoxedCode*>(b)->f->paramspec.num_args);
     }
 
     static Box* varnames(Box* b, void*) {
