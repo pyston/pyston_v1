@@ -3012,6 +3012,34 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
 
+ArgPassSpec bindObjIntoArgs(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*& arg1, Box*& arg2,
+                            Box*& arg3, Box** args, Box** new_args) {
+    int npassed_args = argspec.totalPassed();
+
+    assert((new_args != NULL) == (npassed_args >= 3));
+
+    if (npassed_args >= 3) {
+        new_args[0] = arg3;
+        memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
+    }
+
+    arg3 = arg2;
+    arg2 = arg1;
+    arg1 = obj;
+
+    if (rewrite_args) {
+        if (npassed_args >= 3) {
+            rewrite_args->args = rewrite_args->rewriter->allocateAndCopyPlus1(
+                rewrite_args->arg3, npassed_args == 3 ? NULL : rewrite_args->args, npassed_args - 3);
+        }
+        rewrite_args->arg3 = rewrite_args->arg2;
+        rewrite_args->arg2 = rewrite_args->arg1;
+        rewrite_args->arg1 = rewrite_args->obj;
+    }
+
+    return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
+}
+
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,

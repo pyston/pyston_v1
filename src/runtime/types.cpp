@@ -537,43 +537,18 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                         Box** args, const std::vector<BoxedString*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
-    Box** new_args;
-    if (npassed_args >= 3) {
-        new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
-        new_args[0] = arg3;
-        memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
-    }
-
     if (argspec.has_starargs) {
         // This would fail in typeCallInner
         rewrite_args = NULL;
     }
 
-    if (rewrite_args) {
-        CallRewriteArgs srewrite_args(rewrite_args->rewriter, NULL, rewrite_args->destination);
-        srewrite_args.arg1 = rewrite_args->obj;
-        srewrite_args.arg2 = rewrite_args->arg1;
-        srewrite_args.arg3 = rewrite_args->arg2;
-        if (npassed_args >= 3) {
-            srewrite_args.args = rewrite_args->rewriter->allocateAndCopyPlus1(
-                rewrite_args->arg3, npassed_args == 3 ? NULL : rewrite_args->args, npassed_args - 3);
-        }
-
-        srewrite_args.args_guarded = rewrite_args->args_guarded;
-        srewrite_args.func_guarded = rewrite_args->func_guarded;
-
-        Box* rtn = typeCallInner(&srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                             argspec.has_starargs, argspec.has_kwargs),
-                                 self, arg1, arg2, new_args, keyword_names);
-
-        rewrite_args->out_rtn = srewrite_args.out_rtn;
-        rewrite_args->out_success = srewrite_args.out_success;
-        return rtn;
-    } else {
-        return typeCallInner(
-            NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
-            self, arg1, arg2, new_args, keyword_names);
+    Box** new_args = NULL;
+    if (npassed_args >= 3) {
+        new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
     }
+
+    ArgPassSpec new_argspec = bindObjIntoArgs(self, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+    return typeCallInner(rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
 }
 
 static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
