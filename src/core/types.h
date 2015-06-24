@@ -300,7 +300,7 @@ public:
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
-    const std::string getName();
+    llvm::StringRef getName();
     InternedString mangleName(InternedString id);
 
     Box* getDocString();

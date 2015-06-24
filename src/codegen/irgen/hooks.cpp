@@ -87,7 +87,7 @@ InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
 
-const std::string SourceInfo::getName() {
+llvm::StringRef SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::ClassDef:

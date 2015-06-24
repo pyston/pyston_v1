@@ -2583,7 +2583,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
             CLFunction* cl = f->f;
             if (cl->source) {
-                printf("User-defined function '%s'\n", cl->source->getName().c_str());
+                printf("User-defined function '%s'\n", cl->source->getName().data());
             } else {
                 printf("A builtin function\n");
             }
@@ -2962,13 +2962,14 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     return compileFunction(f, spec, new_effort, NULL);
 }
 
-static std::string getFunctionName(CLFunction* f) {
+static llvm::StringRef getFunctionName(CLFunction* f) {
     if (f->source)
         return f->source->getName();
     else if (f->versions.size()) {
-        std::ostringstream oss;
-        oss << "<function at " << f->versions[0]->code << ">";
-        return oss.str();
+        return "<builtin function>";
+        // std::ostringstream oss;
+        // oss << "<function at " << f->versions[0]->code << ">";
+        // return oss.str();
     }
     return "<unknown function>";
 }
@@ -2979,7 +2980,7 @@ enum class KeywordDest {
 };
 static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled,
                                 BoxedString* kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
-                                BoxedDict* okwargs, CLFunction* cl) {
+                                BoxedDict* okwargs, const char* func_name) {
     assert(kw_val);
     assert(gc::isValidGCObject(kw_val));
     assert(kw_name);
@@ -2988,8 +2989,8 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
     for (int j = 0; j < param_names->args.size(); j++) {
         if (param_names->args[j] == kw_name->s() && kw_name->size() > 0) {
             if (params_filled[j]) {
-                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
-                               getFunctionName(cl).c_str(), kw_name->c_str());
+                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name,
+                               kw_name->c_str());
             }
 
             getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
@@ -3002,14 +3003,13 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
     if (okwargs) {
         Box*& v = okwargs->d[kw_name];
         if (v) {
-            raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
-                           getFunctionName(cl).c_str(), kw_name->c_str());
+            raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name,
+                           kw_name->c_str());
         }
         v = kw_val;
         return KeywordDest::KWARGS;
     } else {
-        raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", getFunctionName(cl).c_str(),
-                       kw_name->c_str());
+        raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name, kw_name->c_str());
     }
 }
 
@@ -3020,15 +3020,17 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
     return callFunc(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
-static StatCounter slowpath_callfunc("slowpath_callfunc");
-static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
-Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-#if STAT_TIMERS
-    StatTimer::assertActive();
-    STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
-#endif
+typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
 
+// Passes the output arguments through oarg.  Passes the rewrite success by setting rewrite_success.
+// Directly modifies rewrite_args args in place, but only if rewrite_success got set.
+// oargs needs to be pre-allocated by the caller, since it's assumed that they will want to use alloca.
+// TODO Fix this function's signature.  should we pass back out through args?  the common case is that they
+// match anyway.
+void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
+                        Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
+                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs) {
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3037,14 +3039,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
      * - error about missing parameters
      */
 
-    BoxedClosure* closure = func->closure;
-    CLFunction* f = func->f;
-
-    ParamReceiveSpec paramspec = f->paramspec;
-
-    slowpath_callfunc.log();
-
-    int num_output_args = f->numReceivedArgs();
+    int num_output_args = paramspec.totalReceived();
     int num_passed_args = argspec.totalPassed();
 
     if (num_passed_args >= 1)
@@ -3057,56 +3052,351 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
     }
 
-    // TODO Should we guard on the CLFunction or the BoxedFunctionBase?
-    // A single CLFunction could end up forming multiple BoxedFunctionBases, and we
-    // could emit assembly that handles any of them.  But doing this involves some
-    // extra indirection, and it's not clear if that's worth it, since it seems like
-    // the common case will be functions only ever getting a single set of default arguments.
-    bool guard_clfunc = false;
-    assert(!guard_clfunc && "I think there are users that expect the boxedfunction to be guarded");
+    assert((defaults != NULL) == (paramspec.num_defaults != 0));
 
     if (rewrite_args) {
+        rewrite_success = false; // default case
         assert(rewrite_args->args_guarded && "need to guard args here");
-
-        if (!rewrite_args->func_guarded) {
-            if (guard_clfunc) {
-                rewrite_args->obj->addAttrGuard(offsetof(BoxedFunctionBase, f), (intptr_t)f);
-            } else {
-                rewrite_args->obj->addGuard((intptr_t)func);
-            }
-            rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
-        }
+        assert(rewrite_args->func_guarded && "this is the callers responsibility");
     }
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
-    if (!f->isGenerator()) {
-        if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
-            && !paramspec.takes_kwargs && argspec.num_args == paramspec.num_args) {
-            // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
-            // since otherwise modifications by the callee would be visible to the caller (hence why varargs
-            // received by the caller are always tuples).
-            // This is why we can't pass kwargs here.
-            if (argspec.has_starargs) {
-                Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
-                if (given_varargs->cls == tuple_cls) {
-                    if (rewrite_args) {
-                        getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
-                            ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
-                    }
-                    return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
-                                      closure, NULL, func->globals, arg1, arg2, arg3, args);
+    if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
+        && !paramspec.takes_kwargs && argspec.num_args == paramspec.num_args) {
+        assert(num_output_args == num_passed_args);
+
+        // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
+        // since otherwise modifications by the callee would be visible to the caller (hence why varargs
+        // received by the caller are always tuples).
+        // This is why we can't pass kwargs here.
+        if (argspec.has_starargs) {
+            Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+            if (given_varargs->cls == tuple_cls) {
+                if (rewrite_args) {
+                    getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
+                        ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
                 }
+                rewrite_success = true;
+                oarg1 = arg1;
+                oarg2 = arg2;
+                oarg3 = arg3;
+                if (num_output_args > 3)
+                    memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+                return;
+            }
+        } else {
+            rewrite_success = true;
+            oarg1 = arg1;
+            oarg2 = arg2;
+            oarg3 = arg3;
+            if (num_output_args > 3)
+                memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+            return;
+        }
+    }
+
+    static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
+    slowpath_rearrangeargs_slowpath.log();
+
+    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords) {
+        rewrite_args = NULL;
+    }
+
+    if (paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 3) {
+        // We currently only handle up to 3 arguments into the varargs tuple
+        rewrite_args = NULL;
+    }
+
+    // At this point we are not allowed to abort the rewrite any more, since we will start
+    // modifying rewrite_args.
+
+    if (rewrite_args)
+        rewrite_success = true;
+
+    if (rewrite_args) {
+        // We might have trouble if we have more output args than input args,
+        // such as if we need more space to pass defaults.
+        if (num_output_args > 3 && num_output_args > num_passed_args) {
+            int arg_bytes_required = (num_output_args - 3) * sizeof(Box*);
+            RewriterVar* new_args = NULL;
+
+            assert((rewrite_args->args == NULL) == (num_passed_args <= 3));
+            if (num_passed_args <= 3) {
+                // we weren't passed args
+                new_args = rewrite_args->rewriter->allocate(num_output_args - 3);
             } else {
-                return callCLFunc(f, rewrite_args, argspec.num_args + argspec.has_starargs + argspec.has_kwargs,
-                                  closure, NULL, func->globals, arg1, arg2, arg3, args);
+                new_args = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
+            }
+
+            rewrite_args->args = new_args;
+        }
+    }
+
+    std::vector<Box*, StlCompatAllocator<Box*>> varargs;
+    if (argspec.has_starargs) {
+        assert(!rewrite_args);
+        Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+        for (Box* e : given_varargs->pyElements()) {
+            varargs.push_back(e);
+        }
+    }
+
+    ////
+    // First, match up positional parameters to positional/varargs:
+    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
+    for (int i = 0; i < positional_to_positional; i++) {
+        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
+    }
+
+    int varargs_to_positional = std::min((int)varargs.size(), paramspec.num_args - positional_to_positional);
+    for (int i = 0; i < varargs_to_positional; i++) {
+        assert(!rewrite_args && "would need to be handled here");
+        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
+    }
+
+    llvm::SmallVector<bool, 8> params_filled(num_output_args);
+    for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
+        params_filled[i] = true;
+    }
+
+    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
+    RewriterVar::SmallVector unused_positional_rvars;
+    for (int i = positional_to_positional; i < argspec.num_args; i++) {
+        unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
+        if (rewrite_args) {
+            if (i == 0)
+                unused_positional_rvars.push_back(rewrite_args->arg1);
+            if (i == 1)
+                unused_positional_rvars.push_back(rewrite_args->arg2);
+            if (i == 2)
+                unused_positional_rvars.push_back(rewrite_args->arg3);
+            if (i >= 3)
+                unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+        }
+    }
+    for (int i = varargs_to_positional; i < varargs.size(); i++) {
+        assert(!rewrite_args);
+        unused_positional.push_back(varargs[i]);
+    }
+
+    if (paramspec.takes_varargs) {
+        int varargs_idx = paramspec.num_args;
+        if (rewrite_args) {
+            assert(!varargs.size());
+            assert(!argspec.has_starargs);
+
+            RewriterVar* varargs_val;
+            int varargs_size = unused_positional_rvars.size();
+
+            if (varargs_size == 0) {
+                varargs_val = rewrite_args->rewriter->loadConst(
+                    (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
+            } else if (varargs_size == 1) {
+                varargs_val
+                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create1, unused_positional_rvars[0]);
+            } else if (varargs_size == 2) {
+                varargs_val = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create2,
+                                                           unused_positional_rvars[0], unused_positional_rvars[1]);
+            } else if (varargs_size == 3) {
+                varargs_val
+                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create3, unused_positional_rvars[0],
+                                                   unused_positional_rvars[1], unused_positional_rvars[2]);
+            } else {
+                // This is too late to abort the rewrite (we should have checked this earlier)
+                abort();
+            }
+
+            if (varargs_val) {
+                if (varargs_idx == 0)
+                    rewrite_args->arg1 = varargs_val;
+                if (varargs_idx == 1)
+                    rewrite_args->arg2 = varargs_val;
+                if (varargs_idx == 2)
+                    rewrite_args->arg3 = varargs_val;
+                if (varargs_idx >= 3)
+                    rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
+            }
+        }
+
+        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
+        getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
+    } else if (unused_positional.size()) {
+        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", func_name, paramspec.num_args,
+                       (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
+    }
+
+    ////
+    // Second, apply any keywords:
+
+    BoxedDict* okwargs = NULL;
+    if (paramspec.takes_kwargs) {
+        int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
+        if (rewrite_args) {
+            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
+
+            if (kwargs_idx == 0)
+                rewrite_args->arg1 = r_kwargs;
+            if (kwargs_idx == 1)
+                rewrite_args->arg2 = r_kwargs;
+            if (kwargs_idx == 2)
+                rewrite_args->arg3 = r_kwargs;
+            if (kwargs_idx >= 3)
+                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
+        }
+
+        okwargs = new BoxedDict();
+        getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
+    }
+
+    if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
+        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+    }
+
+    if (argspec.num_keywords)
+        assert(argspec.num_keywords == keyword_names->size());
+
+    for (int i = 0; i < argspec.num_keywords; i++) {
+        assert(!rewrite_args && "would need to be handled here");
+
+        int arg_idx = i + argspec.num_args;
+        Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
+
+        if (!param_names || !param_names->takes_param_names) {
+            assert(okwargs);
+            assert(!rewrite_args); // would need to add it to r_kwargs
+            okwargs->d[(*keyword_names)[i]] = kw_val;
+            continue;
+        }
+
+        auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
+                                 okwargs, func_name);
+        assert(!rewrite_args);
+    }
+
+    if (argspec.has_kwargs) {
+        assert(!rewrite_args && "would need to be handled here");
+
+        Box* kwargs
+            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
+
+        if (!isSubclass(kwargs->cls, dict_cls)) {
+            BoxedDict* d = new BoxedDict();
+            dictMerge(d, kwargs);
+            kwargs = d;
+        }
+        assert(isSubclass(kwargs->cls, dict_cls));
+        BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
+
+        for (auto& p : d_kwargs->d) {
+            auto k = coerceUnicodeToStr(p.first);
+
+            if (k->cls != str_cls)
+                raiseExcHelper(TypeError, "%s() keywords must be strings", func_name);
+
+            BoxedString* s = static_cast<BoxedString*>(k);
+
+            if (param_names && param_names->takes_param_names) {
+                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
+                placeKeyword(param_names, params_filled, s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, func_name);
+            } else {
+                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
+                assert(okwargs);
+
+                Box*& v = okwargs->d[p.first];
+                if (v) {
+                    raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'", func_name,
+                                   s->data());
+                }
+                v = p.second;
+                assert(!rewrite_args);
             }
         }
     }
-    slowpath_callfunc_slowpath.log();
 
-    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords || f->isGenerator()) {
-// These are the cases that we won't be able to rewrite.
+    // Fill with defaults:
+
+    for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
+        if (params_filled[i])
+            continue;
+        // TODO not right error message
+        raiseExcHelper(TypeError, "%s() did not get a value for positional argument %d", func_name, i);
+    }
+
+    for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
+        if (params_filled[arg_idx])
+            continue;
+
+        int default_idx = arg_idx + paramspec.num_defaults - paramspec.num_args;
+
+        Box* default_obj = defaults[default_idx];
+
+        if (rewrite_args) {
+            if (arg_idx == 0)
+                rewrite_args->arg1 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0));
+            else if (arg_idx == 1)
+                rewrite_args->arg2 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1));
+            else if (arg_idx == 2)
+                rewrite_args->arg3 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2));
+            else
+                rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*),
+                                            rewrite_args->rewriter->loadConst((intptr_t)default_obj));
+        }
+
+        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
+    }
+}
+
+static StatCounter slowpath_callfunc("slowpath_callfunc");
+Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+#if STAT_TIMERS
+    StatTimer::assertActive();
+    STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
+#endif
+    slowpath_callfunc.log();
+
+    CLFunction* f = func->f;
+    ParamReceiveSpec paramspec = f->paramspec;
+
+    if (rewrite_args) {
+        if (!rewrite_args->func_guarded) {
+            rewrite_args->obj->addGuard((intptr_t)func);
+            rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
+        }
+    }
+
+    Box* oarg1, *oarg2, *oarg3, **oargs;
+    bool rewrite_success = false;
+
+    int num_output_args = paramspec.totalReceived();
+    int num_passed_args = argspec.totalPassed();
+
+    if (num_output_args > 3) {
+        int size = (num_output_args - 3) * sizeof(Box*);
+        oargs = (Box**)alloca(size);
+
+#ifndef NDEBUG
+        memset(&oargs[0], 0, size);
+#endif
+    } else {
+        // It won't get looked at, but the compiler wants this:
+        oargs = NULL;
+    }
+
+    rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
+                       paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
+                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+
+#if 0
+    for (int i = 0; i < num_output_args; i++) {
+        auto arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+        RELEASE_ASSERT(!arg || gc::isValidGCObject(arg), "%p", arg);
+    }
+#endif
+
+    if (rewrite_args && !rewrite_success) {
+// These are the cases that we weren't able to rewrite.
 // So instead, just rewrite them to be a call to callFunc, which helps a little bit.
 // TODO we should extract the rest of this function from the end of this block,
 // put it in a different function, and have the rewrites target that.
@@ -3168,286 +3458,14 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         }
     }
 
-    if (rewrite_args) {
-        // We might have trouble if we have more output args than input args,
-        // such as if we need more space to pass defaults.
-        if (num_output_args > 3 && num_output_args > argspec.totalPassed()) {
-            int arg_bytes_required = (num_output_args - 3) * sizeof(Box*);
-            RewriterVar* new_args = NULL;
-            if (rewrite_args->args == NULL) {
-                // rewrite_args->args could be empty if there are not more than
-                // 3 input args.
-                new_args = rewrite_args->rewriter->allocate(num_output_args - 3);
-            } else {
-                new_args = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
-            }
-
-            rewrite_args->args = new_args;
-        }
-    }
-
-    std::vector<Box*, StlCompatAllocator<Box*>> varargs;
-    if (argspec.has_starargs) {
-        Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
-        for (Box* e : given_varargs->pyElements()) {
-            varargs.push_back(e);
-        }
-    }
-
-    // The "output" args that we will pass to the called function:
-    Box* oarg1 = NULL, * oarg2 = NULL, * oarg3 = NULL;
-    Box** oargs = NULL;
-
-    if (num_output_args > 3) {
-        int size = (num_output_args - 3) * sizeof(Box*);
-        oargs = (Box**)alloca(size);
-
-#ifndef NDEBUG
-        memset(&oargs[0], 0, size);
-#endif
-    }
-
-    ////
-    // First, match up positional parameters to positional/varargs:
-    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
-    for (int i = 0; i < positional_to_positional; i++) {
-        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
-
-        // we already moved the positional args into position
-    }
-
-    int varargs_to_positional = std::min((int)varargs.size(), paramspec.num_args - positional_to_positional);
-    for (int i = 0; i < varargs_to_positional; i++) {
-        assert(!rewrite_args && "would need to be handled here");
-        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
-    }
-
-    llvm::SmallVector<bool, 8> params_filled(num_output_args);
-    for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
-        params_filled[i] = true;
-    }
-
-    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
-    RewriterVar::SmallVector unused_positional_rvars;
-    for (int i = positional_to_positional; i < argspec.num_args; i++) {
-        unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
-        if (rewrite_args) {
-            if (i == 0)
-                unused_positional_rvars.push_back(rewrite_args->arg1);
-            if (i == 1)
-                unused_positional_rvars.push_back(rewrite_args->arg2);
-            if (i == 2)
-                unused_positional_rvars.push_back(rewrite_args->arg3);
-            if (i >= 3)
-                unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
-        }
-    }
-    for (int i = varargs_to_positional; i < varargs.size(); i++) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-        unused_positional.push_back(varargs[i]);
-    }
-
-    if (paramspec.takes_varargs) {
-        int varargs_idx = paramspec.num_args;
-        if (rewrite_args) {
-            assert(!varargs.size());
-            assert(!argspec.has_starargs);
-
-            RewriterVar* varargs_val;
-            int varargs_size = unused_positional_rvars.size();
-
-            if (varargs_size == 0) {
-                varargs_val = rewrite_args->rewriter->loadConst(
-                    (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
-            } else if (varargs_size == 1) {
-                varargs_val
-                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create1, unused_positional_rvars[0]);
-            } else if (varargs_size == 2) {
-                varargs_val = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create2,
-                                                           unused_positional_rvars[0], unused_positional_rvars[1]);
-            } else if (varargs_size == 3) {
-                varargs_val
-                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create3, unused_positional_rvars[0],
-                                                   unused_positional_rvars[1], unused_positional_rvars[2]);
-            } else {
-                varargs_val = NULL;
-                rewrite_args = NULL;
-            }
-
-            if (varargs_val) {
-                if (varargs_idx == 0)
-                    rewrite_args->arg1 = varargs_val;
-                if (varargs_idx == 1)
-                    rewrite_args->arg2 = varargs_val;
-                if (varargs_idx == 2)
-                    rewrite_args->arg3 = varargs_val;
-                if (varargs_idx >= 3)
-                    rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
-            }
-        }
-
-        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
-        getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
-    } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", getFunctionName(f).c_str(),
-                       paramspec.num_args, (paramspec.num_args == 1 ? "" : "s"),
-                       argspec.num_args + argspec.num_keywords + varargs.size());
-    }
-
-    ////
-    // Second, apply any keywords:
-
-    BoxedDict* okwargs = NULL;
-    if (paramspec.takes_kwargs) {
-        int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
-        if (rewrite_args) {
-            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
-
-            if (kwargs_idx == 0)
-                rewrite_args->arg1 = r_kwargs;
-            if (kwargs_idx == 1)
-                rewrite_args->arg2 = r_kwargs;
-            if (kwargs_idx == 2)
-                rewrite_args->arg3 = r_kwargs;
-            if (kwargs_idx >= 3)
-                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
-        }
-
-        okwargs = new BoxedDict();
-        getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
-    }
-
-    const ParamNames* param_names = &f->param_names;
-    if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
-        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", getFunctionName(f).c_str());
-    }
-
-    if (argspec.num_keywords)
-        assert(argspec.num_keywords == keyword_names->size());
-
-    for (int i = 0; i < argspec.num_keywords; i++) {
-        assert(!rewrite_args && "would need to be handled here");
-
-        int arg_idx = i + argspec.num_args;
-        Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
-
-        if (!param_names || !param_names->takes_param_names) {
-            assert(okwargs);
-            rewrite_args = NULL; // would need to add it to r_kwargs
-            okwargs->d[(*keyword_names)[i]] = kw_val;
-            continue;
-        }
-
-        auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
-                                 okwargs, f);
-        rewrite_args = NULL;
-    }
-
-    if (argspec.has_kwargs) {
-        assert(!rewrite_args && "would need to be handled here");
-
-        Box* kwargs
-            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
-
-        if (!isSubclass(kwargs->cls, dict_cls)) {
-            BoxedDict* d = new BoxedDict();
-            dictMerge(d, kwargs);
-            kwargs = d;
-        }
-        assert(isSubclass(kwargs->cls, dict_cls));
-        BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
-
-        for (auto& p : d_kwargs->d) {
-            auto k = coerceUnicodeToStr(p.first);
-
-            if (k->cls != str_cls)
-                raiseExcHelper(TypeError, "%s() keywords must be strings", getFunctionName(f).c_str());
-
-            BoxedString* s = static_cast<BoxedString*>(k);
-
-            if (param_names && param_names->takes_param_names) {
-                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
-                placeKeyword(param_names, params_filled, s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, f);
-            } else {
-                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
-                assert(okwargs);
-
-                Box*& v = okwargs->d[p.first];
-                if (v) {
-                    raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'",
-                                   getFunctionName(f).c_str(), s->data());
-                }
-                v = p.second;
-                rewrite_args = NULL;
-            }
-        }
-    }
-
-    // Fill with defaults:
-
-    for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
-        if (params_filled[i])
-            continue;
-        // TODO not right error message
-        raiseExcHelper(TypeError, "%s() did not get a value for positional argument %d", getFunctionName(f).c_str(), i);
-    }
-
-    RewriterVar* r_defaults_array = NULL;
-    if (guard_clfunc) {
-        r_defaults_array = rewrite_args->obj->getAttr(offsetof(BoxedFunctionBase, defaults), Location::any());
-    }
-
-    for (int i = paramspec.num_args - paramspec.num_defaults; i < paramspec.num_args; i++) {
-        if (params_filled[i])
-            continue;
-
-        int default_idx = i + paramspec.num_defaults - paramspec.num_args;
-        Box* default_obj = func->defaults->elts[default_idx];
-
-        if (rewrite_args) {
-            int offset = offsetof(std::remove_pointer<decltype(BoxedFunctionBase::defaults)>::type, elts)
-                         + sizeof(Box*) * default_idx;
-            if (guard_clfunc) {
-                // If we just guarded on the CLFunction, then we have to emit assembly
-                // to fetch the values from the defaults array:
-                if (i < 3) {
-                    RewriterVar* r_default = r_defaults_array->getAttr(offset, Location::forArg(i));
-                    if (i == 0)
-                        rewrite_args->arg1 = r_default;
-                    if (i == 1)
-                        rewrite_args->arg2 = r_default;
-                    if (i == 2)
-                        rewrite_args->arg3 = r_default;
-                } else {
-                    RewriterVar* r_default = r_defaults_array->getAttr(offset, Location::any());
-                    rewrite_args->args->setAttr((i - 3) * sizeof(Box*), r_default);
-                }
-            } else {
-                // If we guarded on the BoxedFunctionBase, which has a constant set of defaults,
-                // we can embed the default arguments directly into the instructions.
-                if (i < 3) {
-                    RewriterVar* r_default = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::any());
-                    if (i == 0)
-                        rewrite_args->arg1 = r_default;
-                    if (i == 1)
-                        rewrite_args->arg2 = r_default;
-                    if (i == 2)
-                        rewrite_args->arg3 = r_default;
-                } else {
-                    RewriterVar* r_default = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::any());
-                    rewrite_args->args->setAttr((i - 3) * sizeof(Box*), r_default);
-                }
-            }
-        }
-
-        getArg(i, oarg1, oarg2, oarg3, oargs) = default_obj;
-    }
+    BoxedClosure* closure = func->closure;
 
     // special handling for generators:
     // the call to function containing a yield should just create a new generator object.
     Box* res;
     if (f->isGenerator()) {
+        // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
+        // rewrite up to the call to it:
         res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
     } else {
         res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);

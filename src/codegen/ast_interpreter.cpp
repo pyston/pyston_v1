@@ -752,7 +752,7 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
 #endif
 
     if (0) {
-        printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
+        printf("%20s % 2d ", source_info->getName().data(), current_block->idx);
         print_ast(node);
         printf("\n");
     }
