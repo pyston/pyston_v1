@@ -41,6 +41,7 @@
 #include "runtime/list.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
+#include "runtime/rewrite_args.h"
 #include "runtime/set.h"
 #include "runtime/super.h"
 #include "runtime/traceback.h"
@@ -85,6 +86,9 @@ extern "C" void PyMarshal_Init();
 extern "C" void initstrop();
 
 namespace pyston {
+
+static const std::string init_str("__init__");
+static const std::string new_str("__new__");
 
 void setupGC();
 
@@ -524,6 +528,354 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
     } else {
         assert(type_cls == NULL || b == type_cls);
     }
+}
+
+static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args, const std::vector<BoxedString*>* keyword_names);
+
+static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                        Box** args, const std::vector<BoxedString*>* keyword_names) {
+    int npassed_args = argspec.totalPassed();
+
+    Box** new_args;
+    if (npassed_args >= 3) {
+        new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
+        new_args[0] = arg3;
+        memcpy(new_args + 1, args, (npassed_args - 3) * sizeof(Box*));
+    }
+
+    if (argspec.has_starargs) {
+        // This would fail in typeCallInner
+        rewrite_args = NULL;
+    }
+
+    if (rewrite_args) {
+        CallRewriteArgs srewrite_args(rewrite_args->rewriter, NULL, rewrite_args->destination);
+        srewrite_args.arg1 = rewrite_args->obj;
+        srewrite_args.arg2 = rewrite_args->arg1;
+        srewrite_args.arg3 = rewrite_args->arg2;
+        if (npassed_args >= 3) {
+            srewrite_args.args = rewrite_args->rewriter->allocateAndCopyPlus1(
+                rewrite_args->arg3, npassed_args == 3 ? NULL : rewrite_args->args, npassed_args - 3);
+        }
+
+        srewrite_args.args_guarded = rewrite_args->args_guarded;
+        srewrite_args.func_guarded = rewrite_args->func_guarded;
+
+        Box* rtn = typeCallInner(&srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
+                                                             argspec.has_starargs, argspec.has_kwargs),
+                                 self, arg1, arg2, new_args, keyword_names);
+
+        rewrite_args->out_rtn = srewrite_args.out_rtn;
+        rewrite_args->out_success = srewrite_args.out_success;
+        return rtn;
+    } else {
+        return typeCallInner(
+            NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
+            self, arg1, arg2, new_args, keyword_names);
+    }
+}
+
+static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    if (rewrite_args)
+        assert(rewrite_args->func_guarded);
+
+    static StatCounter slowpath_typecall("slowpath_typecall");
+    slowpath_typecall.log();
+
+    if (argspec.has_starargs)
+        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    return typeCallInner(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+}
+
+// For use on __init__ return values
+static void assertInitNone(Box* obj) {
+    if (obj != None) {
+        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj));
+    }
+}
+
+static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args, const std::vector<BoxedString*>* keyword_names) {
+    int npassed_args = argspec.totalPassed();
+
+    assert(argspec.num_args >= 1);
+    Box* _cls = arg1;
+
+    if (!isSubclass(_cls->cls, type_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
+                       getTypeName(_cls));
+    }
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+
+    RewriterVar* r_ccls = NULL;
+    RewriterVar* r_new = NULL;
+    RewriterVar* r_init = NULL;
+    Box* new_attr, *init_attr;
+    if (rewrite_args) {
+        assert(!argspec.has_starargs);
+        assert(argspec.num_args > 0);
+
+        r_ccls = rewrite_args->arg1;
+        // This is probably a duplicate, but it's hard to really convince myself of that.
+        // Need to create a clear contract of who guards on what
+        r_ccls->addGuard((intptr_t)arg1 /* = _cls */);
+    }
+
+    if (rewrite_args) {
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
+        // TODO: if tp_new != Py_CallPythonNew, call that instead?
+        new_attr = typeLookup(cls, new_str, &grewrite_args);
+
+        if (!grewrite_args.out_success)
+            rewrite_args = NULL;
+        else {
+            assert(new_attr);
+            r_new = grewrite_args.out_rtn;
+            r_new->addGuard((intptr_t)new_attr);
+        }
+
+        // Special-case functions to allow them to still rewrite:
+        if (new_attr->cls != function_cls) {
+            Box* descr_r = processDescriptorOrNull(new_attr, None, cls);
+            if (descr_r) {
+                new_attr = descr_r;
+                rewrite_args = NULL;
+            }
+        }
+    } else {
+        new_attr = typeLookup(cls, new_str, NULL);
+        new_attr = processDescriptor(new_attr, None, cls);
+    }
+    assert(new_attr && "This should always resolve");
+
+    // typeCall is tricky to rewrite since it has complicated behavior: we are supposed to
+    // call the __init__ method of the *result of the __new__ call*, not of the original
+    // class.  (And only if the result is an instance of the original class, but that's not
+    // even the tricky part here.)
+    //
+    // By the time we know the type of the result of __new__(), it's too late to add traditional
+    // guards.  So, instead of doing that, we're going to add a guard that makes sure that __new__
+    // has the property that __new__(kls) always returns an instance of kls.
+    //
+    // Whitelist a set of __new__ methods that we know work like this.  Most importantly: object.__new__.
+    //
+    // Most builtin classes behave this way, but not all!
+    // Notably, "type" itself does not.  For instance, assuming M is a subclass of
+    // type, type.__new__(M, 1) will return the int class, which is not an instance of M.
+
+    // this is ok with not using StlCompatAllocator since we will manually register these objects with the GC
+    static std::vector<Box*> allowable_news;
+    if (allowable_news.empty()) {
+        for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
+            auto new_obj = typeLookup(allowed_cls, new_str, NULL);
+            gc::registerPermanentRoot(new_obj);
+            allowable_news.push_back(new_obj);
+        }
+    }
+
+    bool type_new_special_case;
+    if (rewrite_args) {
+        bool ok = false;
+        for (auto b : allowable_news) {
+            if (b == new_attr) {
+                ok = true;
+                break;
+            }
+        }
+
+        if (!ok && (cls == int_cls || cls == float_cls || cls == long_cls)) {
+            if (npassed_args == 1)
+                ok = true;
+            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls)) {
+                rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
+                ok = true;
+            }
+        }
+
+        type_new_special_case = (cls == type_cls && argspec == ArgPassSpec(2));
+
+        if (!ok && !type_new_special_case) {
+            // Uncomment this to try to find __new__ functions that we could either white- or blacklist:
+            // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
+            // allowable_news, otherwise add to the blacklist in this assert", cls->tp_name);
+            rewrite_args = NULL;
+        }
+    }
+
+    if (rewrite_args) {
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
+        init_attr = typeLookup(cls, init_str, &grewrite_args);
+
+        if (!grewrite_args.out_success)
+            rewrite_args = NULL;
+        else {
+            if (init_attr) {
+                r_init = grewrite_args.out_rtn;
+                r_init->addGuard((intptr_t)init_attr);
+            }
+        }
+    } else {
+        init_attr = typeLookup(cls, init_str, NULL);
+    }
+    // The init_attr should always resolve as well, but doesn't yet
+
+    Box* made;
+    RewriterVar* r_made = NULL;
+
+    ArgPassSpec new_argspec = argspec;
+
+    if (rewrite_args) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
+            // Fast case: if we are calling object_new, we normally doesn't look at the arguments at all.
+            // (Except in the case when init_attr != object_init, in which case object_new looks at the number
+            // of arguments and throws an exception.)
+            //
+            // Another option is to rely on rewriting to make this fast, which would probably require adding
+            // a custom internal callable to object.__new__
+            made = objectNewNoArgs(cls);
+            r_made = rewrite_args->rewriter->call(true, (void*)objectNewNoArgs, r_ccls);
+        } else {
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
+            srewrite_args.args_guarded = true;
+            srewrite_args.func_guarded = true;
+
+            int new_npassed_args = new_argspec.totalPassed();
+
+            if (new_npassed_args >= 1)
+                srewrite_args.arg1 = r_ccls;
+            if (new_npassed_args >= 2)
+                srewrite_args.arg2 = rewrite_args->arg2;
+            if (new_npassed_args >= 3)
+                srewrite_args.arg3 = rewrite_args->arg3;
+            if (new_npassed_args >= 4)
+                srewrite_args.args = rewrite_args->args;
+
+            made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
+
+            if (!srewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                r_made = srewrite_args.out_rtn;
+            }
+        }
+
+        ASSERT(made->cls == cls || type_new_special_case,
+               "We should only have allowed the rewrite to continue if we were guaranteed that made "
+               "would have class cls!");
+    } else {
+        made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
+    }
+
+    assert(made);
+
+    // Special-case (also a special case in CPython): if we just called type.__new__(arg), don't call __init__
+    if (cls == type_cls && argspec == ArgPassSpec(2)) {
+        if (rewrite_args) {
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_made;
+        }
+        return made;
+    }
+
+    // If __new__ returns a subclass, supposed to call that subclass's __init__.
+    // If __new__ returns a non-subclass, not supposed to call __init__.
+    if (made->cls != cls) {
+        ASSERT(rewrite_args == NULL, "We should only have allowed the rewrite to continue if we were guaranteed that "
+                                     "made would have class cls!");
+
+        if (!isSubclass(made->cls, cls)) {
+            init_attr = NULL;
+        } else {
+            // We could have skipped the initial __init__ lookup
+            init_attr = typeLookup(made->cls, init_str, NULL);
+        }
+    }
+
+    if (init_attr && made->cls->tp_init != object_cls->tp_init) {
+        // TODO apply the same descriptor special-casing as in callattr?
+
+        Box* initrtn;
+        // Attempt to rewrite the basic case:
+        if (rewrite_args && init_attr->cls == function_cls) {
+            // Note: this code path includes the descriptor logic
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
+            if (npassed_args >= 1)
+                srewrite_args.arg1 = r_made;
+            if (npassed_args >= 2)
+                srewrite_args.arg2 = rewrite_args->arg2;
+            if (npassed_args >= 3)
+                srewrite_args.arg3 = rewrite_args->arg3;
+            if (npassed_args >= 4)
+                srewrite_args.args = rewrite_args->args;
+            srewrite_args.args_guarded = true;
+            srewrite_args.func_guarded = true;
+
+            // initrtn = callattrInternal(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
+            // keyword_names);
+            initrtn = runtimeCallInternal(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
+
+            if (!srewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
+            }
+        } else {
+            init_attr = processDescriptor(init_attr, made, cls);
+
+            ArgPassSpec init_argspec = argspec;
+            init_argspec.num_args--;
+
+            int passed = init_argspec.totalPassed();
+
+            // If we weren't passed the args array, it's not safe to index into it
+            if (passed <= 2)
+                initrtn = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, NULL, NULL, keyword_names);
+            else
+                initrtn
+                    = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, args[0], &args[1], keyword_names);
+        }
+        assertInitNone(initrtn);
+    } else {
+        if (new_attr == NULL && npassed_args != 1) {
+            // TODO not npassed args, since the starargs or kwargs could be null
+            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
+        }
+    }
+
+    if (rewrite_args) {
+        rewrite_args->out_rtn = r_made;
+        rewrite_args->out_success = true;
+    }
+
+    return made;
+}
+
+Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
+    assert(vararg->cls == tuple_cls);
+
+    bool pass_kwargs = (kwargs && kwargs->d.size());
+
+    int n = vararg->size();
+    int args_to_pass = n + 1 + (pass_kwargs ? 1 : 0); // 1 for obj, 1 for kwargs
+
+    Box** args = NULL;
+    if (args_to_pass > 3)
+        args = (Box**)alloca(sizeof(Box*) * (args_to_pass - 3));
+
+    Box* arg1, *arg2, *arg3;
+    arg1 = obj;
+    for (int i = 0; i < n; i++) {
+        getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
+    }
+
+    if (pass_kwargs)
+        getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
+
+    return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
 }
 
 extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
@@ -2687,6 +3039,7 @@ void setupRuntime() {
     type_cls->tp_richcompare = type_richcompare;
     add_operators(type_cls);
     type_cls->freeze();
+    type_cls->tpp_call = &typeTppCall;
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));

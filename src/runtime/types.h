@@ -201,6 +201,10 @@ public:
 
     pyston_inquiry tpp_hasnext;
 
+    typedef Box* (*pyston_call)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+                                const std::vector<BoxedString*>*);
+    pyston_call tpp_call;
+
     bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();
@@ -1002,6 +1006,17 @@ extern "C" inline Box* boxInt(int64_t n) {
         return interned_ints[n];
     }
     return new BoxedInt(n);
+}
+
+// Helper function: fetch an arg from our calling convention
+inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
+    if (idx == 0)
+        return arg1;
+    if (idx == 1)
+        return arg2;
+    if (idx == 2)
+        return arg3;
+    return args[idx - 3];
 }
 }
 
