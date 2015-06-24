@@ -36,7 +36,7 @@ inline uint64_t getCPUTicks() {
 class Timer {
 private:
     static int level;
-    timeval start_time;
+    uint64_t start_time;
     const char* desc;
     long min_usec;
     bool ended;
@@ -55,12 +55,14 @@ public:
 
     // returns the duration.  if @ended_at is non-null, it's filled in
     // with the tick the timer stopped at.
-    uint64_t end();
+    uint64_t end(uint64_t* ended_at = NULL);
     uint64_t split(const char* newdesc = NULL) {
         uint64_t rtn = end();
         restart(newdesc);
         return rtn;
     }
+
+    uint64_t getStartTime() const { return start_time; }
 };
 
 #else // DISABLE_TIMERS
