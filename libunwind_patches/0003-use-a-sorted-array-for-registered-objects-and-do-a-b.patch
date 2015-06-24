@@ -119,7 +119,7 @@ diff --git a/src/mi/dyn-register.c b/src/mi/dyn-register.c
 index c28954a..c4f88b1 100644
 --- a/src/mi/dyn-register.c
 +++ b/src/mi/dyn-register.c
-@@ -32,13 +32,27 @@ _U_dyn_register (unw_dyn_info_t *di)
+@@ -32,13 +32,31 @@ _U_dyn_register (unw_dyn_info_t *di)
  {
    mutex_lock (&_U_dyn_info_list_lock);
    {
@@ -130,7 +130,7 @@ index c28954a..c4f88b1 100644
 -    if (di->next)
 -	    di->next->prev = di;
 -    _U_dyn_info_list.first = di;
-+      int i;
++      int i = 0, count = _U_dyn_info_list_size;
 +
 +      if (_U_dyn_info_list_size >= _U_dyn_info_list_alloc) {
 +          unw_dyn_info_t** new_list;
@@ -141,11 +141,15 @@ index c28954a..c4f88b1 100644
 +          _U_dyn_info_list = new_list;
 +      }
 +
-+      for (i = 0; i < _U_dyn_info_list_size; i ++) {
-+          unw_dyn_info_t* ldi = _U_dyn_info_list[i];
-+          if (di->start_ip > ldi->start_ip)
-+              continue;
-+          break;
++      while (count > 0) {
++          int pos, step;
++          step = count / 2;
++          pos = i + step;
++          if (_U_dyn_info_list[pos]->start_ip < di->start_ip) {
++              i = ++pos;
++              count -= step + 1;
++          } else
++              count = step;
 +      }
 +
 +      memmove(&_U_dyn_info_list[i+1], &_U_dyn_info_list[i], (_U_dyn_info_list_size - i) * sizeof(unw_dyn_info_t*));
