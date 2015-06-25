@@ -64,9 +64,8 @@ for i in xrange(100):
     session.add(new_address)
     session.commit()
 
-
-# now do 1000 queries
-for i in xrange(1000):
-    session.query(Person).all()
+    # do 100 queries per insert
+    for i in xrange(100):
+        session.query(Person).all()
 
 print "done"
