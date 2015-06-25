@@ -63,7 +63,7 @@ public:
 };
 
 void callPendingFinalizers();
-void runCollection();
+void runCollection(bool also_free_classes = false);
 
 // Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,
 // but does not seem to pause manual calls to gc.collect().  So, callers should check gcIsEnabled(),
@@ -76,7 +76,9 @@ void enableGC();
 bool isValidGCMemory(void* p); // if p is a valid gc-allocated pointer (or a non-heap root)
 bool isValidGCObject(void* p); // whether p is valid gc memory and is set to have Python destructor semantics applied
 bool isNonheapRoot(void* p);
-void setIsPythonObject(Box* b);
+
+void registerPythonObject(Box* b);
+void invalidateOrderedFinalizerList();
 
 // Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
 // use these functions to mark that.  This is different from disableGC/enableGC, since it causes an

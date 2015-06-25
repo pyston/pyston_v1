@@ -51,6 +51,10 @@ FILE* trace_fp;
 std::list<Box*> pending_finalization_list;
 std::list<PyWeakReference*> weakrefs_needing_callback_list;
 
+std::list<Box*> objects_with_ordered_finalizers;
+
+unsigned classesAllocatedSinceCollection = 0;
+
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
 
@@ -157,6 +161,7 @@ std::vector<void**> TraceStack::free_chunks;
 
 class MarkStack : public TraceStack {
 public:
+    MarkStack() : TraceStack() {}
     MarkStack(const std::unordered_set<void*>& root_handles) : TraceStack() {
         for (void* p : root_handles) {
             assert(!isMarked(GCAllocation::fromUserData(p)));
@@ -285,15 +290,43 @@ bool isValidGCObject(void* p) {
     return al->user_data == p && (al->kind_id == GCKind::CONSERVATIVE_PYTHON || al->kind_id == GCKind::PYTHON);
 }
 
-void setIsPythonObject(Box* b) {
+void registerPythonObject(Box* b) {
     assert(isValidGCMemory(b));
     auto al = GCAllocation::fromUserData(b);
-
     if (al->kind_id == GCKind::CONSERVATIVE) {
         al->kind_id = GCKind::CONSERVATIVE_PYTHON;
     } else {
         assert(al->kind_id == GCKind::PYTHON);
     }
+
+    assert(b->cls);
+    if (hasOrderedFinalizer(b)) {
+        objects_with_ordered_finalizers.push_back(b);
+    }
+
+    if (b->cls == type_cls) {
+        classesAllocatedSinceCollection++;
+    }
+}
+
+void invalidateOrderedFinalizerList() {
+    static StatCounter sc_us("us_gc_invalidate_ordered_finalizer_list");
+    Timer _t("invalidateOrderedFinalizerList", /*min_usec=*/10000);
+
+    for (auto iter = objects_with_ordered_finalizers.begin(); iter != objects_with_ordered_finalizers.end();) {
+        Box* box = *iter;
+        GCAllocation* al = GCAllocation::fromUserData(box);
+
+        if (!hasOrderedFinalizer(box) || hasFinalized(al)) {
+            // Cleanup.
+            iter = objects_with_ordered_finalizers.erase(iter);
+        } else {
+            iter++;
+        }
+    }
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 GCRootHandle::GCRootHandle() {
@@ -427,16 +460,6 @@ static void getMarkPhaseRoots(GCVisitor& visitor) {
     }
 }
 
-static void traverseHeapForFinalizers(std::vector<Box*>& objs_with_ordered_finalizers, GCVisitor& visitor) {
-    static StatCounter sc_us("us_gc_traverse_heap");
-    Timer _t("traverseHeap", /*min_usec=*/10000);
-
-    global_heap.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
-
-    long us = _t.end();
-    sc_us.log(us);
-}
-
 static void graphTraversalMarking(std::shared_ptr<MarkStack> stack, GCVisitor& visitor) {
     static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
     static StatCounter sc_marked_objs("gc_marked_object_count");
@@ -500,7 +523,7 @@ static void finalizationOrderingSecondPass(Box* obj) {
 
 // Implementation of PyPy's finalization ordering algorithm:
 // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
-static void finalizationOrderingPhase(std::vector<Box*>& objects_with_ordered_finalizers) {
+static void finalizationOrderingPhase() {
     static StatCounter sc_us("us_gc_finalization_ordering_phase");
     Timer _t("finalizationOrderingPhase", /*min_usec=*/10000);
 
@@ -509,11 +532,10 @@ static void finalizationOrderingPhase(std::vector<Box*>& objects_with_ordered_fi
     for (Box* obj : objects_with_ordered_finalizers) {
         GCAllocation* al = GCAllocation::fromUserData(obj);
 
-        // We are only interested in object with finalizers that need to be
-        // garbage-collected.
+        // We are only interested in object with finalizers that need to be garbage-collected.
         if (orderingState(al) == FinalizationState::UNREACHABLE) {
-            // Unordered finalizers don't block the objects they reference from being finalized.
             assert(hasOrderedFinalizer(obj));
+
             finalizer_marked.push_back(obj);
             finalizationOrderingFirstPass(obj);
             finalizationOrderingSecondPass(obj);
@@ -535,7 +557,17 @@ static void finalizationOrderingPhase(std::vector<Box*>& objects_with_ordered_fi
     sc_us.log(us);
 }
 
-static void markPhase() {
+static void traverseForClasses(GCVisitor& visitor) {
+    static StatCounter sc_us("us_gc_traverse_for_classes");
+    Timer _t("traverse_for_classes", /*min_usec=*/10000);
+
+    global_heap.traverseForClasses(visitor);
+
+    long us = _t.end();
+    sc_us.log(us);
+}
+
+static void markPhase(bool also_free_classes) {
     static StatCounter sc_us("us_gc_mark_phase");
     Timer _t("marking", /*min_usec=*/10000);
 
@@ -564,12 +596,12 @@ static void markPhase() {
     GC_TRACE_LOG("Looking at roots\n");
     getMarkPhaseRoots(visitor);
 
-    // This is different from vanilla mark-and-sweep. We need to do a full heap traversal:
-    // 1) In Python, all classes are themselves objects. We want to mark the class objects
-    //    of any object on the heap, even if the object isn't reachable - this is because
-    //    when we free and object, we might still need to look at it's class.
-    // 2) Objects that have finalizers have special constraints so we need a list of them.
-    traverseHeapForFinalizers(objects_with_ordered_finalizers, visitor);
+    if (also_free_classes) {
+        // If we allow freeing classes, we must make sure that even for unreachable objects,
+        // the class will still exist during the sweep phase. That requires a whole heap
+        // traversal.
+        traverseForClasses(visitor);
+    }
 
     graphTraversalMarking(stack, visitor);
 
@@ -577,7 +609,7 @@ static void markPhase() {
     // of an object, the finalizer expects the object's references to still point to valid
     // memory. So we root objects whose finalizers need to be called by placing them in a
     // pending finalization list.
-    finalizationOrderingPhase(objects_with_ordered_finalizers);
+    finalizationOrderingPhase();
 
 #if TRACE_GC_MARKING
     fclose(trace_fp);
@@ -592,11 +624,11 @@ static void markPhase() {
     sc_us.log(us);
 }
 
-static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced, bool can_free_classes) {
     static StatCounter sc_us("us_gc_sweep_phase");
     Timer _t("sweepPhase", /*min_usec=*/10000);
 
-    global_heap.freeUnmarked(weakly_referenced);
+    global_heap.freeUnmarked(weakly_referenced, can_free_classes);
 
     long us = _t.end();
     sc_us.log(us);
@@ -605,6 +637,8 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
 void callPendingFinalizers() {
     static StatCounter sc_us_finalizer("us_gc_finalizercalls");
     static StatCounter sc_us_weakref("us_gc_weakrefcalls");
+
+    bool initially_empty = pending_finalization_list.empty();
 
     // An object can be resurrected in the finalizer code. So when we call a finalizer, we
     // mark the finalizer as having been called, but the object is only freed in another
@@ -638,6 +672,10 @@ void callPendingFinalizers() {
         finalize(box);
     }
 
+    if (!initially_empty) {
+        invalidateOrderedFinalizerList();
+    }
+
     sc_us_finalizer.log(_timer_finalizer.end());
 
     // Callbacks for weakly-referenced objects without finalizers.
@@ -655,6 +693,22 @@ void callPendingFinalizers() {
     sc_us_weakref.log(_timer_weakref.end());
 
     assert(pending_finalization_list.empty());
+}
+
+static void prepareWeakrefCallbacks(Box* box) {
+    assert(isValidGCObject(box));
+    PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(box);
+    while (PyWeakReference* head = *list) {
+        assert(isValidGCObject(head));
+        if (head->wr_object != Py_None) {
+            assert(head->wr_object == box);
+            _PyWeakref_ClearRef(head);
+
+            if (head->wr_callback) {
+                weakrefs_needing_callback_list.push_back(head);
+            }
+        }
+    }
 }
 
 bool gcIsEnabled() {
@@ -679,7 +733,7 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
-void runCollection() {
+void runCollection(bool also_free_classes) {
     static StatCounter sc("gc_collections");
     sc.log();
 
@@ -701,32 +755,20 @@ void runCollection() {
 
     Timer _t("collecting", /*min_usec=*/10000);
 
-    markPhase();
+    markPhase(also_free_classes);
 
     // The sweep phase will not free weakly-referenced objects, so that we can inspect their
     // weakrefs_list.  We want to defer looking at those lists until the end of the sweep phase,
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
-    sweepPhase(weakly_referenced);
+    sweepPhase(weakly_referenced, also_free_classes);
 
     // Free weakly-referenced objects without finalizers and make a list of callbacks to call.
     // They will be called later outside of GC when it is safe to do so. Weakrefs callbacks are
     // just like finalizers, except that they don't impose ordering.
     for (auto o : weakly_referenced) {
-        assert(isValidGCObject(o));
-        PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
-        while (PyWeakReference* head = *list) {
-            assert(isValidGCObject(head));
-            if (head->wr_object != Py_None) {
-                assert(head->wr_object == o);
-                _PyWeakref_ClearRef(head);
-
-                if (head->wr_callback) {
-                    weakrefs_needing_callback_list.push_back(head);
-                }
-            }
-        }
+        prepareWeakrefCallbacks(o);
 
         // We didn't finalize these objects because we skipped them during sweep phase.
         finalizeIfUnordered(o);

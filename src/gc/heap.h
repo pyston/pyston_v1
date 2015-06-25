@@ -81,6 +81,11 @@ extern unsigned bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 10000000
 void _bytesAllocatedTripped();
 
+#define ALLOC_CLASSES_PER_CLASS_COLLECTION 2000
+extern unsigned classesAllocatedSinceCollection;
+void classesAllocatedTripped();
+
+
 // Notify the gc of n bytes as being under GC management.
 // This is called internally for anything allocated through gc_alloc,
 // but it can also be called by clients to say that they have memory that
@@ -139,8 +144,16 @@ inline void setMark(GCAllocation* header) {
     header->gc_flags |= MARK_BIT;
 }
 
+inline void setMarkForced(GCAllocation* header) {
+    header->gc_flags |= MARK_BIT;
+}
+
 inline void clearMark(GCAllocation* header) {
     assert(isMarked(header));
+    header->gc_flags &= ~MARK_BIT;
+}
+
+inline void clearMarkForced(GCAllocation* header) {
     header->gc_flags &= ~MARK_BIT;
 }
 
@@ -269,8 +282,8 @@ public:
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -402,8 +415,8 @@ private:
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
-    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
-    void _traverseForFinalizersFromBlock(std::vector<Box*>& objs, GCVisitor& visitor, Block** head);
+    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void _traverseForClassesFromBlock(GCVisitor& visitor, Block** head);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -476,8 +489,8 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -495,8 +508,8 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
-    void traverseForFinalizers(std::vector<Box*>& objs, GCVisitor& visitor);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -608,16 +621,16 @@ public:
     }
 
     // not thread safe:
-    void freeUnmarked(std::vector<Box*>& weakly_referenced) {
-        small_arena.freeUnmarked(weakly_referenced);
-        large_arena.freeUnmarked(weakly_referenced);
-        huge_arena.freeUnmarked(weakly_referenced);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes) {
+        small_arena.freeUnmarked(weakly_referenced, can_free_classes);
+        large_arena.freeUnmarked(weakly_referenced, can_free_classes);
+        huge_arena.freeUnmarked(weakly_referenced, can_free_classes);
     }
 
-    void traverseForFinalizers(std::vector<Box*>& objs_with_ordered_finalizers, GCVisitor& visitor) {
-        small_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
-        large_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
-        huge_arena.traverseForFinalizers(objs_with_ordered_finalizers, visitor);
+    void traverseForClasses(GCVisitor& visitor) {
+        small_arena.traverseForClasses(visitor);
+        large_arena.traverseForClasses(visitor);
+        huge_arena.traverseForClasses(visitor);
     }
 
     void dumpHeapStatistics(int level);

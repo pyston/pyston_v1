@@ -2738,10 +2738,10 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
     assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
 
-    gc::setIsPythonObject(op);
-
     Py_TYPE(op) = tp;
     op->ob_size = size;
+
+    gc::registerPythonObject(op);
 
     return op;
 }
@@ -2753,9 +2753,9 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
 
-    gc::setIsPythonObject(op);
-
     Py_TYPE(op) = tp;
+
+    gc::registerPythonObject(op);
 
     if (PyType_SUPPORTS_WEAKREFS(tp)) {
         *PyObject_GET_WEAKREFS_LISTPTR(op) = NULL;
@@ -2889,6 +2889,12 @@ static void setupDefaultClassGCParticipation() {
     setTypeGCNone(&Match_Type);
     setTypeGCNone(&Pattern_Type);
     setTypeGCNone(&PyCallIter_Type);
+
+    // We just changed the has_safe_tp_dealloc field on a few classes, changing
+    // them from having an ordered finalizer to an unordered one.
+    // If some instances of those classes have already been allocated (e.g.
+    // preallocated exceptions), they need to be invalidated.
+    gc::invalidateOrderedFinalizerList();
 }
 
 bool TRACK_ALLOCATIONS = false;
