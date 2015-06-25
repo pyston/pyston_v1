@@ -36,7 +36,7 @@ def install_and_test_pyicu():
     subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=PYICU_DIR, env=env)
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=PYICU_DIR, env=env)
     
-    expected = []
+    expected = [{'ran': 17}]
     run_test([PYTHON_EXE, "setup.py", "test"], cwd=PYICU_DIR, expected=expected)
     
 create_virtenv(ENV_NAME, None, force_create = True)

@@ -25,7 +25,7 @@ def install_and_test_protobuf():
     env["LD_LIBRARY_PATH"] = os.path.join(INSTALL_DIR, "lib")
     subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=PROTOBUF_PY_DIR, env=env)
     
-    expected = [{"failures": 0, "errors": 1}]
+    expected = [{"ran": 216, "failures": 0, "errors": 1}]
     run_test([PYTHON_EXE, "setup.py", "test"], cwd=PROTOBUF_PY_DIR, expected=expected, env=env)
     
 create_virtenv(ENV_NAME, None, force_create = True)
