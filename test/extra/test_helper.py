@@ -36,22 +36,35 @@ def pip_install(name, package_list):
 
 def parse_output(output):
     result = []
-    it = re.finditer("FAILED \(failures=(\d+), errors=(\d+)\)", output)
-    for m in it:
-        d = { "failures" : int(m.group(1)), "errors" : int(m.group(2)) }
-        result.append(d)
-    it = re.finditer("FAILED \(errors=(\d+), failures=(\d+)\)", output)
-    for m in it:
-        d = { "failures" : int(m.group(2)), "errors" : int(m.group(1)) }
-        result.append(d)
-    it = re.finditer("FAILED \(failures=(\d+)\)", output)
-    for m in it:
-        d = { "failures" : int(m.group(1)), "errors" : 0 }
-        result.append(d)
-    it = re.finditer("FAILED \(errors=(\d+)\)", output)
-    for m in it:
-        d = { "failures" : 0, "errors" : int(m.group(1)) }
-        result.append(d)
+    for l in output.split('\n'):
+        m = re.match("Ran (\d+) tests in", l)
+        if m:
+            result.append({"ran": int(m.group(1))})
+
+        m = re.match("FAILED \(failures=(\d+), errors=(\d+)\)", l)
+        if m:
+            d = result[-1]
+            assert d.keys() == ["ran"]
+            d['failures'] = int(m.group(1))
+            d['errors'] = int(m.group(2))
+        m = re.match("FAILED \(errors=(\d+), failures=(\d+)\)", l)
+        if m:
+            d = result[-1]
+            assert d.keys() == ["ran"]
+            d['failures'] = int(m.group(2))
+            d['errors'] = int(m.group(1))
+        m = re.match("FAILED \(failures=(\d+)\)", l)
+        if m:
+            d = result[-1]
+            assert d.keys() == ["ran"]
+            d['failures'] = int(m.group(1))
+            d['errors'] = 0
+        m = re.match("FAILED \(errors=(\d+)\)", l)
+        if m:
+            d = result[-1]
+            assert d.keys() == ["ran"]
+            d['failures'] = 0
+            d['errors'] = int(m.group(1))
     return result
 
 def run_test(cmd, cwd, expected, env = None):

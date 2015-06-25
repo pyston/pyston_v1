@@ -28,7 +28,7 @@ def install_and_test_mysqldb():
 
     env = os.environ
     env["TESTDB"] = "travis.cnf" 
-    expected = []
+    expected = [{"ran": 69}]
     run_test([nosetests_exe], cwd=MYSQLDB_DIR, expected=expected, env=env)
 
 packages = ["nose==1.3.7"]
