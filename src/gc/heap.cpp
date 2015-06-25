@@ -158,17 +158,7 @@ void finalize(Box* b) {
     b->cls->tp_dealloc(b);
 }
 
-
-void finalizeIfUnordered(Box* b) {
-    if (!hasOrderedFinalizer(b)) {
-        GCAllocation* al = GCAllocation::fromUserData(b);
-        if (!hasFinalized(al)) {
-            finalize(b);
-        }
-    }
-}
-
-bool isWeaklyReferenced(Box* b) {
+__attribute__((always_inline)) bool isWeaklyReferenced(Box* b) {
     if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
         if (list && *list) {
@@ -220,7 +210,15 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 
         ASSERT(!hasOrderedFinalizer(b) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
                getTypeName(b));
-        finalizeIfUnordered(b);
+
+        if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
+            GCAllocation* al = GCAllocation::fromUserData(b);
+            assert(!hasFinalized(al));
+            assert(!hasOrderedFinalizer(b));
+
+            // Don't bother setting the finalized flag since the object is getting freed right now.
+            b->cls->tp_dealloc(b);
+        }
     }
     return true;
 }

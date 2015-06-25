@@ -76,6 +76,12 @@ static bool gc_enabled = true;
 static int ncollections = 0;
 static bool should_not_reenter_gc = false;
 
+enum TraceStackType {
+    MarkPhase,
+    FinalizationOrderingFirst,
+    FinalizationOrderingSecond,
+};
+
 class TraceStack {
 protected:
     const int CHUNK_SIZE = 256;
@@ -89,6 +95,8 @@ protected:
     void** end;
 
     void* previous_pop = NULL;
+
+    TraceStackType visit_type;
 
     void get_chunk() {
         if (free_chunks.size()) {
@@ -115,19 +123,66 @@ protected:
     }
 
 public:
-    TraceStack() { get_chunk(); }
-    virtual ~TraceStack() {}
-
-    // Returns false if we should skip visiting the children.
-    // true otherwise.
-    virtual bool visit_action(GCAllocation* al) = 0;
+    TraceStack(TraceStackType type) : visit_type(type) { get_chunk(); }
+    TraceStack(TraceStackType type, const std::unordered_set<void*>& root_handles) : visit_type(type) {
+        get_chunk();
+        for (void* p : root_handles) {
+            assert(!isMarked(GCAllocation::fromUserData(p)));
+            push(p);
+        }
+    }
+    ~TraceStack() {}
 
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
-        if (!visit_action(al)) {
-            return;
+        switch (visit_type) {
+            case TraceStackType::MarkPhase:
+// Use this to print the directed edges of the GC graph traversal.
+// i.e. print every a > b where a is a pointer and b is something a references
+#if 0
+                if (previous_pop) {
+                    GCAllocation* source_allocation = GCAllocation::fromUserData(previous_pop);
+                    if (source_allocation->kind_id == GCKind::PYTHON) {
+                        printf("(%s) ", ((Box*)previous_pop)->cls->tp_name);
+                    }
+                    printf("%p > %p", previous_pop, al->user_data);
+                } else {
+                    printf("source %p", al->user_data);
+                }
+
+                if (al->kind_id == GCKind::PYTHON) {
+                    printf(" (%s)", ((Box*)al->user_data)->cls->tp_name);
+                }
+                printf("\n");
+
+#endif
+
+                if (isMarked(al)) {
+                    return;
+                } else {
+                    setMark(al);
+                }
+                break;
+            case TraceStackType::FinalizationOrderingFirst:
+                if (orderingState(al) == FinalizationState::UNREACHABLE) {
+                    setOrderingState(al, FinalizationState::TEMPORARY);
+                } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
+                    setOrderingState(al, FinalizationState::ALIVE);
+                } else {
+                    return;
+                }
+                break;
+            case TraceStackType::FinalizationOrderingSecond:
+                if (orderingState(al) == FinalizationState::TEMPORARY) {
+                    setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
+                } else {
+                    return;
+                }
+                break;
+            default:
+                assert(false);
         }
 
         *cur++ = p;
@@ -158,77 +213,6 @@ public:
     }
 };
 std::vector<void**> TraceStack::free_chunks;
-
-class MarkStack : public TraceStack {
-public:
-    MarkStack() : TraceStack() {}
-    MarkStack(const std::unordered_set<void*>& root_handles) : TraceStack() {
-        for (void* p : root_handles) {
-            assert(!isMarked(GCAllocation::fromUserData(p)));
-            push(p);
-        }
-    }
-
-    virtual bool visit_action(GCAllocation* al) {
-// Use this to print the directed edges of the GC graph traversal.
-// i.e. print every a > b where a is a pointer and b is something a references
-#if 0
-        if (previous_pop) {
-            GCAllocation* source_allocation = GCAllocation::fromUserData(previous_pop);
-            if (source_allocation->kind_id == GCKind::PYTHON) {
-                printf("(%s) ", ((Box*)previous_pop)->cls->tp_name);
-            }
-            printf("%p > %p", previous_pop, al->user_data);
-        } else {
-            printf("source %p", al->user_data);
-        }
-
-        if (al->kind_id == GCKind::PYTHON) {
-            printf(" (%s)", ((Box*)al->user_data)->cls->tp_name);
-        }
-        printf("\n");
-
-#endif
-
-        if (isMarked(al)) {
-            return false;
-        } else {
-            setMark(al);
-            return true;
-        }
-    }
-};
-
-class FirstPhaseStack : public TraceStack {
-public:
-    FirstPhaseStack() : TraceStack() {}
-
-    virtual bool visit_action(GCAllocation* al) {
-        if (orderingState(al) == FinalizationState::UNREACHABLE) {
-            setOrderingState(al, FinalizationState::TEMPORARY);
-            return true;
-        } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
-            setOrderingState(al, FinalizationState::ALIVE);
-            return true;
-        } else {
-            return false;
-        }
-    }
-};
-
-class SecondPhaseStack : public TraceStack {
-public:
-    SecondPhaseStack() : TraceStack() {}
-
-    virtual bool visit_action(GCAllocation* al) {
-        if (orderingState(al) == FinalizationState::TEMPORARY) {
-            setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
-            return true;
-        } else {
-            return false;
-        }
-    }
-};
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -396,13 +380,23 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-void visitByGCKind(void* p, GCVisitor& visitor) {
+static inline void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
     GCAllocation* al = GCAllocation::fromUserData(p);
 
     GCKind kind_id = al->kind_id;
-    if (kind_id == GCKind::UNTRACKED) {
-        // Nothing here.
+    if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
     } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
         uint32_t bytes = al->kind_data;
         if (DEBUG >= 2) {
@@ -415,21 +409,11 @@ void visitByGCKind(void* p, GCVisitor& visitor) {
             global_heap.assertSmallArenaContains(p, bytes);
         }
         visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-    } else if (kind_id == GCKind::PYTHON) {
-        Box* b = reinterpret_cast<Box*>(p);
-        BoxedClass* cls = b->cls;
-
-        if (cls) {
-            // The cls can be NULL since we use 'new' to construct them.
-            // An arbitrary amount of stuff can happen between the 'new' and
-            // the call to the constructor (ie the args get evaluated), which
-            // can trigger a collection.
-            ASSERT(cls->gc_visit, "%s", getTypeName(b));
-            cls->gc_visit(&visitor, b);
-        }
     } else if (kind_id == GCKind::HIDDEN_CLASS) {
         HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
         hcls->gc_visit(&visitor);
+    } else if (kind_id == GCKind::UNTRACKED) {
+        // Nothing here.
     } else {
         RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
     }
@@ -460,7 +444,7 @@ static void getMarkPhaseRoots(GCVisitor& visitor) {
     }
 }
 
-static void graphTraversalMarking(std::shared_ptr<MarkStack> stack, GCVisitor& visitor) {
+static void graphTraversalMarking(std::shared_ptr<TraceStack> stack, GCVisitor& visitor) {
     static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
     static StatCounter sc_marked_objs("gc_marked_object_count");
     Timer _t("traversing", /*min_usec=*/10000);
@@ -489,7 +473,7 @@ static void finalizationOrderingFirstPass(Box* obj) {
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_1");
     Timer _t("finalizationOrderingFirstPass", /*min_usec=*/10000);
 
-    std::shared_ptr<FirstPhaseStack> stack = std::make_shared<FirstPhaseStack>();
+    std::shared_ptr<TraceStack> stack = std::make_shared<TraceStack>(TraceStackType::FinalizationOrderingFirst);
     GCVisitor visitor(stack);
 
     stack->push(obj);
@@ -507,7 +491,7 @@ static void finalizationOrderingSecondPass(Box* obj) {
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_2");
     Timer _t("finalizationOrderingSecondPass", /*min_usec=*/10000);
 
-    std::shared_ptr<SecondPhaseStack> stack = std::make_shared<SecondPhaseStack>();
+    std::shared_ptr<TraceStack> stack = std::make_shared<TraceStack>(TraceStackType::FinalizationOrderingSecond);
     GCVisitor visitor(stack);
 
     stack->push(obj);
@@ -571,7 +555,7 @@ static void markPhase(bool also_free_classes) {
     static StatCounter sc_us("us_gc_mark_phase");
     Timer _t("marking", /*min_usec=*/10000);
 
-    std::shared_ptr<MarkStack> stack = std::make_shared<MarkStack>(roots);
+    std::shared_ptr<TraceStack> stack = std::make_shared<TraceStack>(TraceStackType::MarkPhase, roots);
     GCVisitor visitor(stack);
     std::vector<Box*> objects_with_ordered_finalizers;
 
@@ -769,9 +753,6 @@ void runCollection(bool also_free_classes) {
     // just like finalizers, except that they don't impose ordering.
     for (auto o : weakly_referenced) {
         prepareWeakrefCallbacks(o);
-
-        // We didn't finalize these objects because we skipped them during sweep phase.
-        finalizeIfUnordered(o);
 
         global_heap.free(GCAllocation::fromUserData(o));
     }
