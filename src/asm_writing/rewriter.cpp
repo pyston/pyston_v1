@@ -1326,6 +1326,8 @@ void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location des
 RewriterVar* Rewriter::allocate(int n) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    assert(n >= 1);
+
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_allocate(result, n); }, {}, ActionType::NORMAL);
     return result;
@@ -1377,17 +1379,26 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
 RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    return this->allocateAndCopy(array_ptr, n, n);
+}
+
+RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n, int m) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    assert(m >= n);
+
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_allocateAndCopy(result, array_ptr, n); }, { array_ptr }, ActionType::NORMAL);
+    addAction([=]() { this->_allocateAndCopy(result, array_ptr, n, m); }, { array_ptr }, ActionType::NORMAL);
     return result;
 }
 
-void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int n) {
+void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int n, int m) {
     assembler->comment("_allocateAndCopy");
 
     // TODO smart register allocation
 
-    int offset = _allocate(result, n);
+    assert(m >= n);
+    int offset = _allocate(result, m);
 
     assembler::Register src_ptr = array_ptr->getInReg();
     assembler::Register tmp = allocReg(Location::any(), /* otherThan */ src_ptr);

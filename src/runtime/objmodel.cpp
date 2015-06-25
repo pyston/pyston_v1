@@ -2989,6 +2989,86 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteA
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
 }
 
+// unpacks the passed stararg
+// callable from the IC
+// TODO we can specialize further when given_varargs is a list or tuple
+// (e.g. just copy elements inline)
+// throws the appropriate exception on failure
+// if exactly 0 arguments are expected, args_out can be NULL
+template <bool takesStarParam>
+static inline void fillArgsFromStarArg(Box** args_out, Box* given_varargs, ArgPassSpec argspec,
+                                       ParamReceiveSpec paramspec, const char* fname) {
+    llvm::SmallVector<Box*, 8> starParamElts;
+
+    int numParams = paramspec.num_args - argspec.num_args;
+
+    int i = 0;
+    for (Box* e : given_varargs->pyElements()) {
+        if (i >= numParams) {
+            if (takesStarParam) {
+                starParamElts.push_back(e);
+            } else {
+                i++;
+            }
+        } else {
+            assert(args_out);
+            args_out[i] = e;
+            i++;
+        }
+    }
+
+    if (i < numParams || (i > numParams && !takesStarParam)) {
+        if (takesStarParam) {
+            raiseExcHelper(TypeError, takesStarParam ? "%s() takes at least %d argument%s (%d given)"
+                                                     : "%s() takes exactly %d argument%s (%d given)",
+                           fname, paramspec.num_args, paramspec.num_args == 1 ? "" : "s", argspec.num_args + i);
+        }
+    }
+
+    if (takesStarParam) {
+        BoxedTuple* starParam = BoxedTuple::create(starParamElts.size());
+        for (int i = 0; i < starParamElts.size(); i++) {
+            starParam->elts[i] = starParamElts[i];
+        }
+        assert(args_out);
+        args_out[numParams] = starParam;
+    }
+}
+extern "C" void fillArgsFromStarArgNoStarParam(Box** args_out, Box* given_varargs, ArgPassSpec argspec,
+                                               ParamReceiveSpec paramspec, const char* fname) {
+    fillArgsFromStarArg<false>(args_out, given_varargs, argspec, paramspec, fname);
+}
+extern "C" void fillArgsFromStarArgWithStarParam(Box** args_out, Box* given_varargs, ArgPassSpec argspec,
+                                                 ParamReceiveSpec paramspec, const char* fname) {
+    fillArgsFromStarArg<true>(args_out, given_varargs, argspec, paramspec, fname);
+}
+
+// A helper function for dealing with the case where starargs is given,
+// and unused positional parameters go in with the starargs to make the varargs parameter
+extern "C" BoxedTuple* makeVarArgsFromArgsAndStarArgs(Box* arg1, Box* arg2, Box* arg3, Box** args, ArgPassSpec argspec,
+                                                      ParamReceiveSpec paramspec) {
+    assert(argspec.num_args >= paramspec.num_args);
+    assert(argspec.has_starargs);
+    assert(paramspec.takes_varargs);
+
+    llvm::SmallVector<Box*, 8> starParamElts;
+
+    for (int i = paramspec.num_args; i < argspec.num_args; i++) {
+        starParamElts.push_back(getArg(i, arg1, arg2, arg3, args));
+    }
+
+    Box* given_varargs = getArg(argspec.num_args, arg1, arg2, arg3, args);
+    for (Box* e : given_varargs->pyElements()) {
+        starParamElts.push_back(e);
+    }
+
+    BoxedTuple* starParam = BoxedTuple::create(starParamElts.size());
+    for (int i = 0; i < starParamElts.size(); i++) {
+        starParam->elts[i] = starParamElts[i];
+    }
+    return starParam;
+}
+
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
@@ -3059,20 +3139,18 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
     slowpath_rearrangeargs_slowpath.log();
 
-    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords) {
+    if (argspec.has_kwargs || argspec.num_keywords) {
         rewrite_args = NULL;
     }
 
-    if (paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 3) {
+    if (paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 3 && !argspec.has_starargs) {
         // We currently only handle up to 3 arguments into the varargs tuple
         rewrite_args = NULL;
     }
 
-    // At this point we are not allowed to abort the rewrite any more, since we will start
-    // modifying rewrite_args.
-
-    if (rewrite_args)
-        rewrite_success = true;
+    if (argspec.has_starargs && paramspec.num_defaults > 0) {
+        rewrite_args = NULL;
+    }
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
@@ -3095,7 +3173,6 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 
     std::vector<Box*, StlCompatAllocator<Box*>> varargs;
     if (argspec.has_starargs) {
-        assert(!rewrite_args);
         Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
         for (Box* e : given_varargs->pyElements()) {
             varargs.push_back(e);
@@ -3111,7 +3188,6 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 
     int varargs_to_positional = std::min((int)varargs.size(), paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
-        assert(!rewrite_args && "would need to be handled here");
         getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
     }
 
@@ -3120,31 +3196,129 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         params_filled[i] = true;
     }
 
+    auto get_rewriter_var_arg = [rewrite_args](int i) {
+        if (i == 0)
+            return rewrite_args->arg1;
+        else if (i == 1)
+            return rewrite_args->arg2;
+        else if (i == 2)
+            return rewrite_args->arg3;
+        else
+            return rewrite_args->args->getAttr((i - 3) * sizeof(Box*));
+    };
+
     std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
         if (rewrite_args) {
-            if (i == 0)
-                unused_positional_rvars.push_back(rewrite_args->arg1);
-            if (i == 1)
-                unused_positional_rvars.push_back(rewrite_args->arg2);
-            if (i == 2)
-                unused_positional_rvars.push_back(rewrite_args->arg3);
-            if (i >= 3)
-                unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+            unused_positional_rvars.push_back(get_rewriter_var_arg(i));
         }
     }
     for (int i = varargs_to_positional; i < varargs.size(); i++) {
-        assert(!rewrite_args);
         unused_positional.push_back(varargs[i]);
     }
 
+    if (rewrite_args && argspec.has_starargs) {
+        assert(!argspec.has_kwargs);
+        assert(!argspec.num_keywords);
+        // We just dispatch to a helper function to copy the args and call pyElements
+        // TODO In some cases we can be smarter depending on the arrangement of args and type
+        // of the star args object. For example if star args is an (immutable) tuple,
+        // we may be able to have the `Box** args` pointer point directly into it.
+        if (argspec.num_args > paramspec.num_args) {
+            // TODO this case
+            if (!paramspec.takes_varargs) {
+                // we're going to throw an exception below in this case
+                rewrite_args = NULL;
+                REWRITE_ABORTED("too many args, but params don't take varargs");
+            } else {
+                RewriterVar::SmallVector callargs;
+                callargs.push_back(rewrite_args->arg1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0));
+                callargs.push_back(rewrite_args->arg2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0));
+                callargs.push_back(rewrite_args->arg3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0));
+                callargs.push_back(rewrite_args->args ? rewrite_args->args : rewrite_args->rewriter->loadConst(0));
+                callargs.push_back(rewrite_args->rewriter->loadConst(argspec.asInt()));
+                callargs.push_back(rewrite_args->rewriter->loadConst(paramspec.asInt()));
+                RewriterVar* r_varargs = rewrite_args->rewriter->call(true /* has side effects */,
+                                                                      (void*)makeVarArgsFromArgsAndStarArgs, callargs);
+
+                if (paramspec.num_args == 0)
+                    rewrite_args->arg1 = r_varargs;
+                else if (paramspec.num_args == 1)
+                    rewrite_args->arg2 = r_varargs;
+                else if (paramspec.num_args == 2)
+                    rewrite_args->arg3 = r_varargs;
+                else {
+                    // TODO duplicate copy
+                    // (do we need to do this copy at all? do we "own" the args array? What is the
+                    // contract here?
+                    rewrite_args->args
+                        = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
+                    rewrite_args->args->setAttr(sizeof(Box*) * (paramspec.num_args - 3), r_varargs);
+                }
+            }
+        } else {
+            if (argspec.num_args <= 3) {
+                assert(paramspec.num_args >= argspec.num_args);
+                int bufSize = paramspec.num_args - argspec.num_args + (paramspec.takes_varargs ? 1 : 0);
+                // TODO duplicate allocation
+                RewriterVar* r_buf_ptr = bufSize > 0 ? rewrite_args->rewriter->allocate(bufSize)
+                                                     : rewrite_args->rewriter->loadConst(0);
+                rewrite_args->rewriter->call(true /* has side effects */,
+                                             (void*)(paramspec.takes_varargs ? fillArgsFromStarArgWithStarParam
+                                                                             : fillArgsFromStarArgNoStarParam),
+                                             r_buf_ptr, get_rewriter_var_arg(argspec.num_args),
+                                             rewrite_args->rewriter->loadConst(argspec.asInt()),
+                                             rewrite_args->rewriter->loadConst(paramspec.asInt()),
+                                             rewrite_args->rewriter->loadConst((int64_t)func_name));
+                for (int i = argspec.num_args; i < (paramspec.num_args + (paramspec.takes_varargs ? 1 : 0)); i++) {
+                    int buf_offset = sizeof(Box*) * (i - argspec.num_args);
+                    if (i == 0)
+                        rewrite_args->arg1 = r_buf_ptr->getAttr(buf_offset);
+                    else if (i == 1)
+                        rewrite_args->arg2 = r_buf_ptr->getAttr(buf_offset);
+                    else if (i == 2)
+                        rewrite_args->arg3 = r_buf_ptr->getAttr(buf_offset);
+                    else {
+                        assert(i == 3);
+                        rewrite_args->args = rewrite_args->rewriter->add(r_buf_ptr, buf_offset);
+                        break;
+                    }
+                }
+            } else {
+                assert(argspec.num_args >= 3);
+                assert(paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) >= 3);
+                // TODO duplicate allocation
+                RewriterVar* r_buf_ptr = rewrite_args->rewriter->allocateAndCopy(
+                    rewrite_args->args, argspec.num_args - 3,
+                    paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) - 3);
+
+                RewriterVar* r_buf_ptr_for_varargs
+                    = rewrite_args->rewriter->add(r_buf_ptr, (argspec.num_args - 3) * sizeof(Box*), assembler::RDI);
+
+                rewrite_args->rewriter->call(true /* has side effects */,
+                                             (void*)(paramspec.takes_varargs ? fillArgsFromStarArgWithStarParam
+                                                                             : fillArgsFromStarArgNoStarParam),
+                                             r_buf_ptr_for_varargs, get_rewriter_var_arg(argspec.num_args),
+                                             rewrite_args->rewriter->loadConst(argspec.asInt()),
+                                             rewrite_args->rewriter->loadConst(paramspec.asInt()),
+                                             rewrite_args->rewriter->loadConst((int64_t)func_name));
+
+                rewrite_args->args = r_buf_ptr;
+            }
+        }
+    }
+
+    // At this point we are not allowed to abort the rewrite any more
+
+    if (rewrite_args)
+        rewrite_success = true;
+
     if (paramspec.takes_varargs) {
         int varargs_idx = paramspec.num_args;
-        if (rewrite_args) {
+        if (rewrite_args && !argspec.has_starargs) {
             assert(!varargs.size());
-            assert(!argspec.has_starargs);
 
             RewriterVar* varargs_val;
             int varargs_size = unused_positional_rvars.size();
@@ -3304,6 +3478,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
 
         getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
+    }
+
+    if (argspec.has_starargs) {
+        static StatCounter sc("slowpath_rearrange_args_has_starargs_no_exception");
+        sc.log();
     }
 }
 
@@ -3509,14 +3688,22 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         // Or maybe it's ok, since we've guarded on the function object?
         if (closure)
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(0)));
-        if (num_output_args >= 1)
+        if (num_output_args >= 1) {
             arg_vec.push_back(rewrite_args->arg1);
-        if (num_output_args >= 2)
+            assert(rewrite_args->arg1 != NULL);
+        }
+        if (num_output_args >= 2) {
             arg_vec.push_back(rewrite_args->arg2);
-        if (num_output_args >= 3)
+            assert(rewrite_args->arg2 != NULL);
+        }
+        if (num_output_args >= 3) {
             arg_vec.push_back(rewrite_args->arg3);
-        if (num_output_args >= 4)
+            assert(rewrite_args->arg3 != NULL);
+        }
+        if (num_output_args >= 4) {
             arg_vec.push_back(rewrite_args->args);
+            assert(rewrite_args->args != NULL);
+        }
 
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)chosen_cf->call, arg_vec);
         rewrite_args->out_success = true;
