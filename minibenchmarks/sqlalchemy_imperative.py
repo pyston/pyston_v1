@@ -56,10 +56,9 @@ for i in xrange(100):
     new_address = Address.insert()
     new_address.execute(post_code='00000')#, person=new_person)
 
-
-# now do 1000 queries
-for i in xrange(1000):
-    s = Person.select()
-    rs = s.execute()
+    # do 100 queries per insert
+    for i in xrange(100):
+        s = Person.select()
+        rs = s.execute()
 
 print "done"
