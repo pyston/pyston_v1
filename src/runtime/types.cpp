@@ -606,6 +606,25 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // This is probably a duplicate, but it's hard to really convince myself of that.
         // Need to create a clear contract of who guards on what
         r_ccls->addGuard((intptr_t)arg1 /* = _cls */);
+
+
+        if (!rewrite_args->args_guarded) {
+            // TODO should know which args don't need to be guarded, ex if we're guaranteed that they
+            // already fit, either since the type inferencer could determine that,
+            // or because they only need to fit into an UNKNOWN slot.
+
+            if (npassed_args >= 1)
+                rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
+            if (npassed_args >= 2)
+                rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
+            if (npassed_args >= 3)
+                rewrite_args->arg3->addAttrGuard(offsetof(Box, cls), (intptr_t)arg3->cls);
+            for (int i = 3; i < npassed_args; i++) {
+                RewriterVar* v = rewrite_args->args->getAttr((i - 3) * sizeof(Box*), Location::any());
+                v->addAttrGuard(offsetof(Box, cls), (intptr_t)args[i - 3]->cls);
+            }
+            rewrite_args->args_guarded = true;
+        }
     }
 
     if (rewrite_args) {
@@ -723,7 +742,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             r_made = rewrite_args->rewriter->call(true, (void*)objectNewNoArgs, r_ccls);
         } else {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
-            srewrite_args.args_guarded = true;
+            srewrite_args.args_guarded = rewrite_args->args_guarded;
             srewrite_args.func_guarded = true;
 
             int new_npassed_args = new_argspec.totalPassed();
@@ -786,15 +805,14 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (rewrite_args && init_attr->cls == function_cls) {
             // Note: this code path includes the descriptor logic
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
-            if (npassed_args >= 1)
-                srewrite_args.arg1 = r_made;
+            srewrite_args.arg1 = r_made;
             if (npassed_args >= 2)
                 srewrite_args.arg2 = rewrite_args->arg2;
             if (npassed_args >= 3)
                 srewrite_args.arg3 = rewrite_args->arg3;
             if (npassed_args >= 4)
                 srewrite_args.args = rewrite_args->args;
-            srewrite_args.args_guarded = true;
+            srewrite_args.args_guarded = rewrite_args->args_guarded;
             srewrite_args.func_guarded = true;
 
             // initrtn = callattrInternal(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
