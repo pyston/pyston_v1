@@ -604,6 +604,42 @@ static void assertInitNone(Box* obj) {
     }
 }
 
+static PyObject* cpython_type_call(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
+    PyObject* obj;
+
+    if (type->tp_new == NULL) {
+        PyErr_Format(PyExc_TypeError, "cannot create '%.100s' instances", type->tp_name);
+        return NULL;
+    }
+
+    obj = type->tp_new(type, args, kwds);
+    if (obj != NULL) {
+        /* Ugly exception: when the call was type(something),
+         *            don't call tp_init on the result. */
+        if (type == &PyType_Type && PyTuple_Check(args) && PyTuple_GET_SIZE(args) == 1
+            && (kwds == NULL || (PyDict_Check(kwds) && PyDict_Size(kwds) == 0)))
+            return obj;
+        /* If the returned object is not an instance of type,
+         *            it won't be initialized. */
+        if (!PyType_IsSubtype(obj->cls, type))
+            return obj;
+        type = obj->cls;
+        if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_CLASS) && type->tp_init != NULL
+            && type->tp_init(obj, args, kwds) < 0) {
+            Py_DECREF(obj);
+            obj = NULL;
+        }
+    }
+    return obj;
+}
+
+static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwds) {
+    Box* r = cpython_type_call(type, args, kwds);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                           Box** args, const std::vector<BoxedString*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
@@ -617,6 +653,29 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+
+    if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new) {
+        // Looks like we're calling an extension class and we're not going to be able to
+        // separately rewrite the new + init calls.  But we can rewrite the fact that we
+        // should just call the cpython version, which will end up working pretty well.
+        ParamReceiveSpec paramspec(1, false, true, true);
+        bool rewrite_success = false;
+        Box* oarg1, *oarg2, *oarg3, ** oargs = NULL;
+        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
+                           keyword_names, oarg1, oarg2, oarg3, oargs);
+        assert(oarg1 == cls);
+
+        if (!rewrite_success)
+            rewrite_args = NULL;
+
+        if (rewrite_args) {
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)cpythonTypeCall, rewrite_args->arg1,
+                                                                 rewrite_args->arg2, rewrite_args->arg3);
+            rewrite_args->out_success = true;
+        }
+
+        return cpythonTypeCall(cls, oarg2, oarg3);
+    }
 
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
@@ -793,7 +852,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                "We should only have allowed the rewrite to continue if we were guaranteed that made "
                "would have class cls!");
     } else {
-        made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init)
+            made = objectNewNoArgs(cls);
+        else
+            made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
     }
 
     assert(made);

@@ -743,10 +743,13 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
     if (has_side_effects) {
         // We need some fixed amount of space at the beginning of the IC that we can use to invalidate
         // it by writing a jmp.
-        // FIXME this check is conservative, since actually we just have to verify that the return
+        // TODO this check is conservative, since actually we just have to verify that the return
         // address is at least IC_INVALDITION_HEADER_SIZE bytes past the beginning, but we're
         // checking based on the beginning of the call.  I think the load+call might actually
         // always larger than the invalidation jmp.
+        while (assembler->bytesWritten() < IC_INVALDITION_HEADER_SIZE)
+            assembler->nop();
+
         assert(assembler->bytesWritten() >= IC_INVALDITION_HEADER_SIZE);
     }
 

@@ -36,6 +36,7 @@ int type_set_bases(PyTypeObject* type, PyObject* value, void* context) noexcept;
 
 PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept;
 PyObject* slot_tp_iternext(PyObject* self) noexcept;
+PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept;
 }
 
 #endif

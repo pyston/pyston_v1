@@ -957,7 +957,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     return res;
 }
 
-static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+/* Pyston change: static */ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpnew", SLOT_AVOIDABILITY(self));
 
     try {
