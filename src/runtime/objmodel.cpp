@@ -3514,12 +3514,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     int npassed_args = argspec.totalPassed();
 
     if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
-        STAT_TIMER(t0, "us_timer_slowpath_runtimecall_nonfunction", 20);
-
         // TODO: maybe eventually runtimeCallInternal should just be the default tpp_call?
         if (obj->cls->tpp_call) {
             return obj->cls->tpp_call(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         }
+
+        STAT_TIMER(t0, "us_timer_slowpath_runtimecall_nonfunction", 20);
 
 #if 0
         std::string per_name_stat_name = "zzz_runtimecall_nonfunction_" + std::string(obj->cls->tp_name);

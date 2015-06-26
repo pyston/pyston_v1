@@ -1457,29 +1457,106 @@ extern "C" char* PyModule_GetFilename(PyObject* m) noexcept {
     return PyString_AsString(fileobj);
 }
 
-Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
-                                     Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                     const std::vector<BoxedString*>* keyword_names) {
-    if (argspec != ArgPassSpec(2))
-        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+Box* BoxedCApiFunction::__call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
+    STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", (self->cls->is_user_defined ? 10 : 20));
+    assert(self->cls == capifunc_cls);
+    assert(varargs->cls == tuple_cls);
+    assert(kwargs->cls == dict_cls);
 
-    assert(arg1->cls == capifunc_cls);
-    BoxedCApiFunction* capifunc = static_cast<BoxedCApiFunction*>(arg1);
-    if (capifunc->method_def->ml_flags != METH_O)
-        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    // Kind of silly to have asked callFunc to rearrange the arguments for us, just to pass things
+    // off to tppCall, but this case should be very uncommon (people explicitly asking for __call__)
+
+    return BoxedCApiFunction::tppCall(self, NULL, ArgPassSpec(0, 0, true, true), varargs, kwargs, NULL, NULL, NULL);
+}
+
+Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                                Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", 10);
+
+    assert(_self->cls == capifunc_cls);
+    BoxedCApiFunction* self = static_cast<BoxedCApiFunction*>(_self);
 
     if (rewrite_args) {
-        rewrite_args->arg1->addGuard((intptr_t)arg1);
-        RewriterVar* r_passthrough = rewrite_args->arg1->getAttr(offsetof(BoxedCApiFunction, passthrough));
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)capifunc->method_def->ml_meth, r_passthrough,
-                                                             rewrite_args->arg2);
-        rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+        rewrite_args->obj->addGuard((intptr_t)self);
+    }
+
+    int flags = self->method_def->ml_flags;
+    auto func = self->method_def->ml_meth;
+
+    ParamReceiveSpec paramspec(0, 0, true, false);
+    if (flags == METH_VARARGS) {
+        paramspec = ParamReceiveSpec(0, 0, true, false);
+    } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
+        paramspec = ParamReceiveSpec(0, 0, true, true);
+    } else if (flags == METH_NOARGS) {
+        paramspec = ParamReceiveSpec(0, 0, false, false);
+    } else if (flags == METH_O) {
+        paramspec = ParamReceiveSpec(1, 0, false, false);
+    } else if (flags == METH_OLDARGS) {
+        paramspec = ParamReceiveSpec(1, 0, false, false);
+    } else {
+        RELEASE_ASSERT(0, "0x%x", flags);
+    }
+
+    Box* oarg1 = NULL;
+    Box* oarg2 = NULL;
+    Box* oarg3 = NULL;
+    Box** oargs = NULL;
+
+    bool rewrite_success = false;
+    rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,
+                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, args);
+
+    if (!rewrite_success)
+        rewrite_args = NULL;
+
+    RewriterVar* r_passthrough;
+    if (rewrite_args)
+        r_passthrough = rewrite_args->rewriter->loadConst((intptr_t)self->passthrough, Location::forArg(0));
+
+    Box* rtn;
+    if (flags == METH_VARARGS) {
+        rtn = (Box*)func(self->passthrough, oarg1);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+    } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
+        rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, oarg1, oarg2);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
+                                                                 rewrite_args->arg2);
+    } else if (flags == METH_NOARGS) {
+        rtn = (Box*)func(self->passthrough, NULL);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                true, (void*)func, r_passthrough, rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
+    } else if (flags == METH_O) {
+        rtn = (Box*)func(self->passthrough, oarg1);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+    } else if (flags == METH_OLDARGS) {
+        /* the really old style */
+
+        rewrite_args = NULL;
+
+        int size = PyTuple_GET_SIZE(oarg1);
+        Box* arg = oarg1;
+        if (size == 1)
+            arg = PyTuple_GET_ITEM(oarg1, 0);
+        else if (size == 0)
+            arg = NULL;
+        rtn = func(self->passthrough, arg);
+    } else {
+        RELEASE_ASSERT(0, "0x%x", flags);
+    }
+
+    if (rewrite_args) {
+        rewrite_args->rewriter->call(false, (void*)checkAndThrowCAPIException);
         rewrite_args->out_success = true;
     }
-    Box* r = capifunc->method_def->ml_meth(capifunc->passthrough, arg2);
+
     checkAndThrowCAPIException();
-    assert(r);
-    return r;
+    assert(rtn && "should have set + thrown an exception!");
+    return rtn;
 }
 
 /* extension modules might be compiled with GC support so these
@@ -1546,8 +1623,8 @@ void setupCAPI() {
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
 
     auto capi_call = new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true));
-    capi_call->f->internal_callable = BoxedCApiFunction::callInternal;
     capifunc_cls->giveAttr("__call__", capi_call);
+    capifunc_cls->tpp_call = BoxedCApiFunction::tppCall;
     capifunc_cls->giveAttr("__name__",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::getname, NULL, NULL));
     capifunc_cls->giveAttr(
