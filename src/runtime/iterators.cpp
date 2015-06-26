@@ -44,8 +44,10 @@ public:
         Box* next = PyIter_Next(iterator);
         if (next)
             value = next;
-        else
+        else {
+            checkAndThrowCAPIException();
             *this = *end();
+        }
     }
 
     Box* getValue() override { return value; }

@@ -47,6 +47,7 @@ void showBacktrace() {
 }
 
 void raiseExc(Box* exc_obj) {
+    assert(!PyErr_Occurred());
     throw ExcInfo(exc_obj->cls, exc_obj, None);
 }
 
@@ -56,6 +57,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
     auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
+    assert(!PyErr_Occurred());
     throw ExcInfo(exc->cls, exc, tb);
 }
 
@@ -175,6 +177,7 @@ extern "C" void raise0() {
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
     exc_info->reraise = true;
+    assert(!PyErr_Occurred());
     throw * exc_info;
 }
 
@@ -256,6 +259,7 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
     exc_info.reraise = reraise;
+    assert(!PyErr_Occurred());
     throw exc_info;
 }
 
