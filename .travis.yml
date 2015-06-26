@@ -52,12 +52,9 @@ before_script:
   - mysql -e 'create database mysqldb_test charset utf8;'
 
 script:
-  - echo 'Building Pyston' && echo -en 'travis_fold:start:compiling\\r'
   - ccache -z
-  - PYSTON_RUN_ARGS=G ninja -j4 check-deps
+  - PYSTON_RUN_ARGS=G ninja -j4 pyston check-deps && ctest --output-on-failure
   - ccache -s
-  - echo -en 'travis_fold:end:compiling\\r'
-  - ctest --output-on-failure
 
 os:
   - linux
