@@ -358,11 +358,14 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     ///////////////////////////////
     // Now do all the rewriting
 
+    // Note: we're not allowed to modify the contents of the `Box** args` arguments array.
+    // If we need to make modifications, we have to copy it first.
+
     // Right now we don't handle either of these
     if (argspec.has_kwargs || argspec.num_keywords)
         return;
 
-    if (argspec.has_starargs && !paramspec.num_defaults && !paramspec.takes_kwargs) {
+    if (argspec.has_starargs && !paramspec.num_defaults) {
         assert(!argspec.has_kwargs);
         assert(!argspec.num_keywords);
         // We just dispatch to a helper function to copy the args and call pyElements
@@ -395,7 +398,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         } else {
             if (argspec.num_args <= 3) {
                 assert(paramspec.num_args >= argspec.num_args);
-                int bufSize = paramspec.num_args - argspec.num_args + (paramspec.takes_varargs ? 1 : 0);
+                int bufSize = paramspec.num_args - argspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0);
                 RewriterVar* r_buf_ptr = bufSize > 0 ? rewrite_args->rewriter->allocate(bufSize)
                                                      : rewrite_args->rewriter->loadConst(0);
                 rewrite_args->rewriter->call(true /* has side effects */,
@@ -405,7 +408,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                                              rewrite_args->rewriter->loadConst(argspec.asInt()),
                                              rewrite_args->rewriter->loadConst(paramspec.asInt()),
                                              rewrite_args->rewriter->loadConst((int64_t)func_name));
-                for (int i = argspec.num_args; i < (paramspec.num_args + (paramspec.takes_varargs ? 1 : 0)); i++) {
+                for (int i = argspec.num_args; i < (paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0)); i++) {
                     int buf_offset = sizeof(Box*) * (i - argspec.num_args);
                     if (i == 0)
                         rewrite_args->arg1 = r_buf_ptr->getAttr(buf_offset);
@@ -424,7 +427,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                 assert(paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) >= 3);
                 RewriterVar* r_buf_ptr = rewrite_args->rewriter->allocateAndCopy(
                     rewrite_args->args, argspec.num_args - 3,
-                    paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) - 3);
+                    paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0) - 3);
 
                 RewriterVar* r_buf_ptr_for_varargs
                     = rewrite_args->rewriter->add(r_buf_ptr, (argspec.num_args - 3) * sizeof(Box*), assembler::RDI);
@@ -438,6 +441,23 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                                              rewrite_args->rewriter->loadConst((int64_t)func_name));
 
                 rewrite_args->args = r_buf_ptr;
+            }
+        }
+
+        if (paramspec.takes_kwargs) {
+            assert(!argspec.num_keywords && !argspec.has_kwargs);
+
+            int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
+            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
+
+            if (kwargs_idx == 0)
+                rewrite_args->arg1 = r_kwargs;
+            if (kwargs_idx == 1)
+                rewrite_args->arg2 = r_kwargs;
+            if (kwargs_idx == 2)
+                rewrite_args->arg3 = r_kwargs;
+            if (kwargs_idx >= 3) {
+                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
             }
         }
 
