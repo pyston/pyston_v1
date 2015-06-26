@@ -310,7 +310,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #endif
 {
 
-    int numArgs = function->f->num_args;
+    int numArgs = function->f->numReceivedArgs();
     if (numArgs > 3) {
         numArgs -= 3;
         this->args = new (numArgs) GCdArray();
@@ -384,7 +384,7 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     BoxedGenerator* g = (BoxedGenerator*)b;
 
     v->visit(g->function);
-    int num_args = g->function->f->num_args;
+    int num_args = g->function->f->numReceivedArgs();
     if (num_args >= 1)
         v->visit(g->arg1);
     if (num_args >= 2)

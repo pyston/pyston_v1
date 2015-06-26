@@ -112,8 +112,6 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
-Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
@@ -153,7 +151,11 @@ Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
 bool isUserDefined(BoxedClass* cls);
 
+// These process a potential descriptor, differing in their behavior if the object was not a descriptor.
+// the OrNull variant returns NULL to signify it wasn't a descriptor, and the processDescriptor version
+// returns obj.
 Box* processDescriptor(Box* obj, Box* inst, Box* owner);
+Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);

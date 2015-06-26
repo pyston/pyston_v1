@@ -828,7 +828,7 @@ public:
 
             Sig* type_sig = new Sig();
             type_sig->rtn_type = fspec->rtn_type;
-            type_sig->ndefaults = clf->num_defaults;
+            type_sig->ndefaults = clf->paramspec.num_defaults;
 
             if (stripfirst) {
                 assert(fspec->arg_types.size() >= 1);
@@ -1545,12 +1545,14 @@ public:
         CLFunction* cl = rtattr_func->f;
         assert(cl);
 
-        if (cl->takes_varargs || cl->takes_kwargs)
+        ParamReceiveSpec paramspec = cl->paramspec;
+        if (paramspec.takes_varargs || paramspec.takes_kwargs)
             return NULL;
 
-        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
-        RELEASE_ASSERT(args.size() + 1 >= cl->num_args - cl->num_defaults && args.size() + 1 <= cl->num_args, "%d",
-                       info.unw_info.current_stmt->lineno);
+        RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
+        RELEASE_ASSERT(args.size() + 1 >= paramspec.num_args - paramspec.num_defaults
+                           && args.size() + 1 <= paramspec.num_args,
+                       "%d", info.unw_info.current_stmt->lineno);
 
         CompiledFunction* cf = NULL;
         bool found = false;
@@ -1578,8 +1580,8 @@ public:
         assert(cf->code);
 
         std::vector<llvm::Type*> arg_types;
-        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
-        for (int i = 0; i < cl->num_args; i++) {
+        RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
+        for (int i = 0; i < paramspec.num_args; i++) {
             // TODO support passing unboxed values as arguments
             assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
 
@@ -1602,9 +1604,9 @@ public:
         new_args.push_back(var);
         new_args.insert(new_args.end(), args.begin(), args.end());
 
-        for (int i = args.size() + 1; i < cl->num_args; i++) {
+        for (int i = args.size() + 1; i < paramspec.num_args; i++) {
             // TODO should _call() be able to take llvm::Value's directly?
-            auto value = rtattr_func->defaults->elts[i - cl->num_args + cl->num_defaults];
+            auto value = rtattr_func->defaults->elts[i - paramspec.num_args + paramspec.num_defaults];
             llvm::Value* llvm_value;
             if (value)
                 llvm_value = embedRelocatablePtr(value, g.llvm_value_type_ptr);

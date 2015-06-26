@@ -694,6 +694,17 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
     return call(has_side_effects, func_addr, args, args_xmm);
 }
 
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
+                            RewriterVar* arg2, RewriterVar* arg3) {
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
+    args.push_back(arg1);
+    args.push_back(arg2);
+    args.push_back(arg3);
+    return call(has_side_effects, func_addr, args, args_xmm);
+}
+
 static const Location caller_save_registers[]{
     assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
     assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
@@ -1232,6 +1243,15 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
             if (consec == n) {
                 int a = i / 8 - n + 1;
                 int b = i / 8;
+                // Put placeholders in so the array space doesn't get re-allocated.
+                // This won't get collected, but that's fine.
+                // Note: make sure to do this marking before the initializeInReg call
+                for (int j = a; j <= b; j++) {
+                    Location m(Location::Scratch, j * 8);
+                    assert(vars_by_location.count(m) == 0);
+                    vars_by_location[m] = LOCATION_PLACEHOLDER;
+                }
+
                 assembler::Register r = result->initializeInReg();
 
                 // TODO should be a LEA instruction
@@ -1239,13 +1259,6 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 // this when necessary, so it won't spill. Is that worth?
                 assembler->mov(assembler::RSP, r);
                 assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRspOffset()), r);
-
-                // Put placeholders in so the array space doesn't get re-allocated.
-                // This won't get collected, but that's fine.
-                for (int j = a; j <= b; j++) {
-                    Location m(Location::Scratch, j * 8);
-                    vars_by_location[m] = LOCATION_PLACEHOLDER;
-                }
 
                 assertConsistent();
                 result->releaseIfNoUses();
@@ -1301,12 +1314,12 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
 void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
     int offset = _allocate(result, n_rest + 1);
 
-    assembler::Register tmp = first_elem->getInReg();
-    assembler->mov(tmp, assembler::Indirect(assembler::RSP, 8 * offset + rewrite->getScratchRspOffset()));
+    assembler::Register first_reg = first_elem->getInReg();
+    assembler->mov(first_reg, assembler::Indirect(assembler::RSP, 8 * offset + rewrite->getScratchRspOffset()));
 
     if (n_rest > 0) {
         assembler::Register src_ptr = rest_ptr->getInReg();
-        // TODO if this triggers we'll need a way to allocate two distinct registers
+        assembler::Register tmp = allocReg(Location::any(), /* otherThan */ src_ptr);
         assert(tmp != src_ptr);
 
         for (int i = 0; i < n_rest; i++) {
