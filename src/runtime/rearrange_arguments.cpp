@@ -150,7 +150,6 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                         Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
                         Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs) {
-
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -398,7 +397,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         } else {
             if (argspec.num_args <= 3) {
                 assert(paramspec.num_args >= argspec.num_args);
-                int bufSize = paramspec.num_args - argspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0);
+                int bufSize = paramspec.num_args - argspec.num_args + (paramspec.takes_varargs ? 1 : 0)
+                              + (paramspec.takes_kwargs ? 1 : 0);
                 RewriterVar* r_buf_ptr = bufSize > 0 ? rewrite_args->rewriter->allocate(bufSize)
                                                      : rewrite_args->rewriter->loadConst(0);
                 rewrite_args->rewriter->call(true /* has side effects */,
@@ -408,7 +408,9 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                                              rewrite_args->rewriter->loadConst(argspec.asInt()),
                                              rewrite_args->rewriter->loadConst(paramspec.asInt()),
                                              rewrite_args->rewriter->loadConst((int64_t)func_name));
-                for (int i = argspec.num_args; i < (paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0)); i++) {
+                for (int i = argspec.num_args;
+                     i < (paramspec.num_args + (paramspec.takes_varargs ? 1 : 0) + (paramspec.takes_kwargs ? 1 : 0));
+                     i++) {
                     int buf_offset = sizeof(Box*) * (i - argspec.num_args);
                     if (i == 0)
                         rewrite_args->arg1 = r_buf_ptr->getAttr(buf_offset);

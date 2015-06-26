@@ -2745,6 +2745,7 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* 
                          const std::vector<BoxedString*>* keyword_names) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
 
+
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_callattr_nopatch");
@@ -2756,7 +2757,7 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* 
     else if (icinfo->isMegamorphic())
         counter = st_id_megamorphic;
     else {
-        //counter = Stats::getStatCounter("us_timer_slowpath_callattr_patchable_" + std::string(obj->cls->tp_name));
+        // counter = Stats::getStatCounter("us_timer_slowpath_callattr_patchable_" + std::string(obj->cls->tp_name));
         counter = Stats::getStatCounter("us_timer_slowpath_callattr_patchable_" + std::string(attr->s()));
     }
     ScopedStatTimer st(counter, 10);
