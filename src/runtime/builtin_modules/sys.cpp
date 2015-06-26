@@ -205,8 +205,8 @@ void appendToSysPath(llvm::StringRef path) {
 void prependToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
     static BoxedString* insert_str = static_cast<BoxedString*>(PyString_InternFromString("insert"));
-    callattr(sys_path, insert_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
-             boxInt(0), boxString(path), NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
+    callattr(sys_path, insert_str, callattr_flags, boxInt(0), boxString(path), NULL, NULL, NULL);
 }
 
 static BoxedClass* sys_flags_cls;

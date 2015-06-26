@@ -124,8 +124,7 @@ public:
     }
 
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
-                                       CallattrFlags flags, struct ArgPassSpec argspec,
-                                       const std::vector<CompilerVariable*>& args,
+                                       CallattrFlags flags, const std::vector<CompilerVariable*>& args,
                                        const std::vector<BoxedString*>* keyword_names) {
         printf("callattr not defined for %s\n", debugName().c_str());
         abort();
@@ -268,7 +267,7 @@ public:
     virtual void setattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CompilerVariable* v) = 0;
     virtual void delattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr) = 0;
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
-                                       struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<CompilerVariable*>& args,
                                        const std::vector<BoxedString*>* keyword_names) = 0;
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
@@ -348,9 +347,9 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
-                               struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                               const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
-        return type->callattr(emitter, info, this, attr, flags, argspec, args, keyword_names);
+        return type->callattr(emitter, info, this, attr, flags, args, keyword_names);
     }
     CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
                            const std::vector<CompilerVariable*>& args,

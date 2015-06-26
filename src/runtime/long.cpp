@@ -635,8 +635,8 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
             static BoxedString* long_str = static_cast<BoxedString*>(PyString_InternFromString("__long__"));
-            Box* r = callattr(val, long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                              ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+            Box* r = callattr(val, long_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 
             if (!r) {
                 fprintf(stderr, "TypeError: long() argument must be a string or a number, not '%s'\n",

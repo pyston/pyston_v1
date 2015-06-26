@@ -192,9 +192,9 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         Box* finder = meta_path->elts->elts[i];
 
         auto path_pass = path_list ? path_list : None;
+        CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
         Box* loader
-            = callattr(finder, findmodule_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                       ArgPassSpec(2), boxString(full_name), path_pass, NULL, NULL, NULL);
+            = callattr(finder, findmodule_str, callattr_flags, boxString(full_name), path_pass, NULL, NULL, NULL);
 
         if (loader != None)
             return SearchResult(loader);
@@ -234,9 +234,9 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
             return SearchResult("", SearchResult::SEARCH_ERROR);
 
         if (importer != None) {
+            CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
             Box* loader
-                = callattr(importer, findmodule_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                           ArgPassSpec(1), boxString(full_name), NULL, NULL, NULL, NULL);
+                = callattr(importer, findmodule_str, callattr_flags, boxString(full_name), NULL, NULL, NULL, NULL);
             if (loader != None)
                 return SearchResult(loader);
         }
@@ -399,9 +399,11 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
             else if (sr.type == SearchResult::IMP_HOOK) {
                 static BoxedString* loadmodule_str
                     = static_cast<BoxedString*>(PyString_InternFromString("load_module"));
-                module = callattr(sr.loader, loadmodule_str,
-                                  CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(1),
-                                  boxString(full_name), NULL, NULL, NULL, NULL);
+                CallattrFlags callattr_flags{.cls_only = false,
+                                             .null_on_nonexistent = false,
+                                             .argspec = ArgPassSpec(1) };
+                module
+                    = callattr(sr.loader, loadmodule_str, callattr_flags, boxString(full_name), NULL, NULL, NULL, NULL);
             } else
                 RELEASE_ASSERT(0, "%d", sr.type);
         } catch (ExcInfo e) {

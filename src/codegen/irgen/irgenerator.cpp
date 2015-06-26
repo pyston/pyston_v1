@@ -873,9 +873,8 @@ private:
 
         CompilerVariable* rtn;
         if (is_callattr) {
-            CallattrFlags flags = {.cls_only = callattr_clsonly, .null_on_nonexistent = false };
-            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr.getBox(), flags, argspec, args,
-                                 keyword_names);
+            CallattrFlags flags = {.cls_only = callattr_clsonly, .null_on_nonexistent = false, .argspec = argspec };
+            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr.getBox(), flags, args, keyword_names);
         } else {
             rtn = func->call(emitter, getOpInfoForNode(node, unw_info), argspec, args, keyword_names);
         }
@@ -1138,9 +1137,9 @@ private:
 
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
-            CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
-            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags,
-                                                ArgPassSpec(1), { elt }, NULL);
+            CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
+            CompilerVariable* r
+                = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags, { elt }, NULL);
             r->decvref(emitter);
             elt->decvref(emitter);
         }
@@ -1907,9 +1906,9 @@ private:
 
             curblock = ss_block;
             emitter.getBuilder()->SetInsertPoint(ss_block);
-            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1),
-                                    { makeStr(space_str) }, NULL);
+            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, { makeStr(space_str) },
+                                    NULL);
             r->decvref(emitter);
 
             emitter.getBuilder()->CreateBr(join_block);
@@ -1921,16 +1920,15 @@ private:
             llvm::Value* v = emitter.createCall(unw_info, g.funcs.strOrUnicode, converted->getValue());
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
-            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1), { s },
-                               NULL);
+            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, { s }, NULL);
             s->decvref(emitter);
             r->decvref(emitter);
             converted->decvref(emitter);
         }
 
         if (node->nl) {
-            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, ArgPassSpec(1),
+            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags,
                                     { makeStr(newline_str) }, NULL);
             r->decvref(emitter);
 

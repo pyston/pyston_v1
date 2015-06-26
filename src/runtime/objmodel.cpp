@@ -2720,8 +2720,8 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
     }
 }
 
-extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                         Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                         const std::vector<BoxedString*>* keyword_names) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
 #if 0
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
@@ -2732,6 +2732,7 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPa
 
     ASSERT(gc::isValidGCObject(obj), "%p", obj);
 
+    ArgPassSpec argspec(flags.argspec);
     int npassed_args = argspec.totalPassed();
 
     static StatCounter slowpath_callattr("slowpath_callattr");
@@ -2765,13 +2766,13 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPa
 
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         if (npassed_args >= 1)
-            rewrite_args.arg1 = rewriter->getArg(4);
+            rewrite_args.arg1 = rewriter->getArg(3);
         if (npassed_args >= 2)
-            rewrite_args.arg2 = rewriter->getArg(5);
+            rewrite_args.arg2 = rewriter->getArg(4);
         if (npassed_args >= 3)
-            rewrite_args.arg3 = rewriter->getArg(6);
+            rewrite_args.arg3 = rewriter->getArg(5);
         if (npassed_args >= 4)
-            rewrite_args.args = rewriter->getArg(7);
+            rewrite_args.args = rewriter->getArg(6);
         rtn = callattrInternal(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         if (!rewrite_args.out_success) {
@@ -4586,8 +4587,9 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     static BoxedString* new_box = static_cast<BoxedString*>(PyString_InternFromString(new_str.c_str()));
     if (winner != metatype) {
         if (getattr(winner, new_box) != getattr(type_cls, new_box)) {
-            return callattr(winner, new_box, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                            ArgPassSpec(4), winner, arg1, arg2, _args, NULL);
+            CallattrFlags callattr_flags
+                = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(4) };
+            return callattr(winner, new_box, callattr_flags, winner, arg1, arg2, _args, NULL);
         }
         metatype = winner;
     }

@@ -745,9 +745,11 @@ struct FrameInfo {
 struct CallattrFlags {
     bool cls_only : 1;
     bool null_on_nonexistent : 1;
+    ArgPassSpec argspec;
 
-    char asInt() { return (cls_only << 0) + (null_on_nonexistent << 1); }
+    uint64_t asInt() { return (uint64_t(argspec.asInt()) << 32) | (cls_only << 0) | (null_on_nonexistent << 1); }
 };
+static_assert(sizeof(CallattrFlags) == sizeof(uint64_t), "");
 }
 
 namespace std {

@@ -135,8 +135,8 @@ bool iterwrapperHasnextUnboxed(Box* s) {
     static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
     Box* next;
     try {
-        next = callattr(self->iter, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
-                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+        next = callattr(self->iter, next_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         if (e.matches(StopIteration)) {
             self->next = NULL;

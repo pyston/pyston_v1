@@ -657,8 +657,8 @@ static Box* instanceHash(BoxedInstance* inst) {
 
     res = runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     if (PyInt_Check(res) || PyLong_Check(res)) {
-        return callattr(res, hash_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
-                        nullptr, nullptr, nullptr, nullptr, nullptr);
+        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+        return callattr(res, hash_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
     } else {
         raiseExcHelper(TypeError, "__hash__() should return an int");
     }

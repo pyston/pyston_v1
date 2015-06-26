@@ -95,15 +95,15 @@ extern "C" Box* abs_(Box* x) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
         static BoxedString* abs_str = static_cast<BoxedString*>(PyString_InternFromString("__abs__"));
-        return callattr(x, abs_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
-                        NULL, NULL, NULL, NULL, NULL);
+        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+        return callattr(x, abs_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     }
 }
 
 extern "C" Box* hexFunc(Box* x) {
     static BoxedString* hex_str = static_cast<BoxedString*>(PyString_InternFromString("__hex__"));
-    Box* r = callattr(x, hex_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0), NULL,
-                      NULL, NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* r = callattr(x, hex_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
         raiseExcHelper(TypeError, "hex() argument can't be converted to hex");
 
@@ -115,8 +115,8 @@ extern "C" Box* hexFunc(Box* x) {
 
 extern "C" Box* octFunc(Box* x) {
     static BoxedString* oct_str = static_cast<BoxedString*>(PyString_InternFromString("__oct__"));
-    Box* r = callattr(x, oct_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0), NULL,
-                      NULL, NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* r = callattr(x, oct_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
         raiseExcHelper(TypeError, "oct() argument can't be converted to oct");
 
@@ -209,8 +209,8 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
 extern "C" Box* next(Box* iterator, Box* _default) {
     try {
         static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
-        return callattr(iterator, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
-                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+        return callattr(iterator, next_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         if (_default && e.matches(StopIteration))
             return _default;
@@ -882,27 +882,23 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
     static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
 
     // TODO softspace handling?
     // TODO: duplicates code with ASTInterpreter::visit_print()
+
     bool first = true;
     for (auto e : *args) {
         BoxedString* s = str(e);
-
         if (!first) {
-            Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                              ArgPassSpec(1), space_str, NULL, NULL, NULL, NULL);
+            Box* r = callattr(dest, write_str, callattr_flags, space_str, NULL, NULL, NULL, NULL);
             RELEASE_ASSERT(r, "");
         }
         first = false;
-
-        Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                          ArgPassSpec(1), s, NULL, NULL, NULL, NULL);
+        Box* r = callattr(dest, write_str, callattr_flags, s, NULL, NULL, NULL, NULL);
         RELEASE_ASSERT(r, "");
     }
-
-    Box* r = callattr(dest, write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
-                      ArgPassSpec(1), end, NULL, NULL, NULL, NULL);
+    Box* r = callattr(dest, write_str, callattr_flags, end, NULL, NULL, NULL, NULL);
     RELEASE_ASSERT(r, "");
 
     return None;
@@ -912,8 +908,8 @@ Box* getreversed(Box* o) {
     static BoxedString* reversed_str = static_cast<BoxedString*>(PyString_InternFromString("__reversed__"));
 
     // TODO add rewriting to this?  probably want to try to avoid this path though
-    Box* r = callattr(o, reversed_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
-                      NULL, NULL, NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* r = callattr(o, reversed_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (r)
         return r;
 

@@ -192,8 +192,8 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
         // Try calling __missing__ if this is a subclass
         if (self->cls != dict_cls) {
             static BoxedString* missing_str = static_cast<BoxedString*>(PyString_InternFromString("__missing__"));
-            Box* r = callattr(self, missing_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
-                              ArgPassSpec(1), k, NULL, NULL, NULL, NULL);
+            CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(1) };
+            Box* r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
             if (r)
                 return r;
         }
@@ -519,8 +519,8 @@ void dictMerge(BoxedDict* self, Box* other) {
     }
 
     static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
-    Box* keys = callattr(other, keys_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = true }),
-                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     assert(keys);
 
     for (Box* k : keys->pyElements()) {

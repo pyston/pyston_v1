@@ -249,17 +249,17 @@ void initGlobalFuncs(GlobalState& g) {
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
     g.funcs.callattr = getFunc((void*)callattr, "callattr");
-    g.funcs.callattr0 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
-                                g.llvm_boxedstring_type_ptr, g.i1, g.i32);
+    g.funcs.callattr0
+        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64);
     g.funcs.callattr1 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
-                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr);
+                                g.llvm_boxedstring_type_ptr, g.i64, g.llvm_value_type_ptr);
     g.funcs.callattr2 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
-                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+                                g.llvm_boxedstring_type_ptr, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattr3
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i1,
-                  g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
+                  g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattrN = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
-                                g.llvm_boxedstring_type_ptr, g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+                                g.llvm_boxedstring_type_ptr, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
                                 g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
     g.funcs.reoptCompiledFunc = addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
