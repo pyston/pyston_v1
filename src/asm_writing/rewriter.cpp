@@ -1314,12 +1314,12 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
 void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
     int offset = _allocate(result, n_rest + 1);
 
-    assembler::Register tmp = first_elem->getInReg();
-    assembler->mov(tmp, assembler::Indirect(assembler::RSP, 8 * offset + rewrite->getScratchRspOffset()));
+    assembler::Register first_reg = first_elem->getInReg();
+    assembler->mov(first_reg, assembler::Indirect(assembler::RSP, 8 * offset + rewrite->getScratchRspOffset()));
 
     if (n_rest > 0) {
         assembler::Register src_ptr = rest_ptr->getInReg();
-        // TODO if this triggers we'll need a way to allocate two distinct registers
+        assembler::Register tmp = allocReg(Location::any(), /* otherThan */ src_ptr);
         assert(tmp != src_ptr);
 
         for (int i = 0; i < n_rest; i++) {
