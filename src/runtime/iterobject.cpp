@@ -132,20 +132,14 @@ bool iterwrapperHasnextUnboxed(Box* s) {
     RELEASE_ASSERT(s->cls == iterwrapper_cls, "");
     BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
 
-    static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
-    Box* next;
-    try {
-        next = callattr(self->iter, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
-                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    } catch (ExcInfo e) {
-        if (e.matches(StopIteration)) {
-            self->next = NULL;
-            return false;
-        }
-        throw e;
-    }
+    Box* next = PyIter_Next(self->iter);
     self->next = next;
-    return true;
+    if (!next) {
+        if (PyErr_Occurred() && !PyErr_ExceptionMatches(PyExc_StopIteration))
+            throwCAPIException();
+        PyErr_Clear();
+    }
+    return next != NULL;
 }
 
 Box* iterwrapperHasnext(Box* s) {

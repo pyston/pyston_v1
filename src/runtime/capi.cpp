@@ -633,25 +633,6 @@ extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
     return internal_print(obj, fp, flags, 0);
 };
 
-extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
-    try {
-        Box* hasnext = iter->hasnextOrNullIC();
-        if (hasnext) {
-            if (hasnext->nonzeroIC())
-                return iter->nextIC();
-            else
-                return NULL;
-        } else {
-            return iter->nextIC();
-        }
-    } catch (ExcInfo e) {
-        if (e.matches(StopIteration))
-            return NULL;
-        setCAPIException(e);
-    }
-    return NULL;
-}
-
 extern "C" int PyCallable_Check(PyObject* x) noexcept {
     if (x == NULL)
         return 0;

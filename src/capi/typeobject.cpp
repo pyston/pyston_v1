@@ -827,7 +827,7 @@ static PyObject* slot_tp_iter(PyObject* self) noexcept {
     return PySeqIter_New(self);
 }
 
-static PyObject* slot_tp_iternext(PyObject* self) noexcept {
+/* Pyston change: static */ PyObject* slot_tp_iternext(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpiternext", SLOT_AVOIDABILITY(self));
 
     static PyObject* next_str;

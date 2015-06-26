@@ -41,24 +41,11 @@ public:
     void next() override {
         STAT_TIMER(t0, "us_timer_iteratorgeneric_next", 0);
 
-        assert(iterator);
-        Box* hasnext = iterator->hasnextOrNullIC();
-        if (hasnext) {
-            if (hasnext->nonzeroIC()) {
-                value = iterator->nextIC();
-            } else {
-                *this = *end();
-            }
-        } else {
-            try {
-                value = iterator->nextIC();
-            } catch (ExcInfo e) {
-                if (e.matches(StopIteration))
-                    *this = *end();
-                else
-                    throw e;
-            }
-        }
+        Box* next = PyIter_Next(iterator);
+        if (next)
+            value = next;
+        else
+            *this = *end();
     }
 
     Box* getValue() override { return value; }

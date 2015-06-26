@@ -238,8 +238,37 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
                     ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
+extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
+    if (iter->cls->tp_iternext != slot_tp_iternext) {
+        PyObject* result;
+        result = (*iter->cls->tp_iternext)(iter);
+        if (result == NULL && PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
+            PyErr_Clear();
+        return result;
+    }
+
+    try {
+        Box* hasnext = iter->hasnextOrNullIC();
+        if (hasnext) {
+            if (hasnext->nonzeroIC())
+                return iter->cls->callNextIC(iter);
+            else
+                return NULL;
+        } else {
+            return iter->cls->callNextIC(iter);
+        }
+    } catch (ExcInfo e) {
+        if (!e.matches(StopIteration))
+            setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* BoxedClass::callNextIC(Box* obj) {
     assert(obj->cls == this);
+
+    // This would work, but it would have been better to just call tp_iternext
+    assert(this->tp_iternext == slot_tp_iternext);
 
     auto ic = next_ic.get();
     if (!ic) {
@@ -302,11 +331,6 @@ bool Box::nonzeroIC() {
 Box* Box::hasnextOrNullIC() {
     return this->cls->callHasnextIC(this, true);
 }
-
-Box* Box::nextIC() {
-    return this->cls->callNextIC(this);
-}
-
 
 std::string builtinStr("__builtin__");
 
