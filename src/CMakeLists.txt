@@ -100,6 +100,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/list.cpp
 		runtime/long.cpp
 		runtime/objmodel.cpp
+		runtime/rearrange_arguments.cpp
 		runtime/set.cpp
 		runtime/stacktrace.cpp
 		runtime/str.cpp
