@@ -516,6 +516,8 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
 // TODO: should we use C++11 `noexcept' here?
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
                               std::initializer_list<Box*> defaults) {
+    STAT_TIMER(t0, "us_timer_boxclfunction", 10);
+
     if (closure)
         assert(closure->cls == closure_cls);
 

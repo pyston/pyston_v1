@@ -372,6 +372,8 @@ void BoxedMethodDescriptor::gcHandler(GCVisitor* v, Box* _o) {
 }
 
 Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
+    STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_get", 20);
+
     RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
 
     if (inst == None)
@@ -427,7 +429,7 @@ static Box* wrapperdescrGetDoc(Box* b, void*) {
 }
 
 Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
-    STAT_TIMER(t0, "us_timer_boxedwrapperobject__call__", (self->cls->is_user_defined ? 1 : 2));
+    STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (self->cls->is_user_defined ? 10 : 20));
 
     assert(self->cls == wrapperobject_cls);
     assert(args->cls == tuple_cls);
@@ -454,6 +456,8 @@ Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds
 
 Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                  Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
+
     assert(_self->cls == wrapperobject_cls);
     BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
 

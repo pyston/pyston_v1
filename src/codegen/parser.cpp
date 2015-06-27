@@ -995,7 +995,6 @@ AST_Module* parse_string(const char* code) {
 }
 
 AST_Module* parse_file(const char* fn) {
-    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_cpyton_parsing");
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {

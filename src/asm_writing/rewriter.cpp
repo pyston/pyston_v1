@@ -263,6 +263,8 @@ void Rewriter::assertArgsInPlace() {
 }
 
 void RewriterVar::addGuard(uint64_t val) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
@@ -291,6 +293,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
 }
 
 void RewriterVar::addGuardNotEq(uint64_t val) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
@@ -319,6 +323,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
 }
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
     RewriterVar* val_var = rewriter->loadConst(val);
@@ -369,6 +375,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 }
 
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
     return result;
@@ -394,6 +402,8 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
 }
 
 RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, ActionType::NORMAL);
     return result;
@@ -412,6 +422,8 @@ void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset,
 }
 
 RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, ActionType::NORMAL);
     return result;
@@ -433,6 +445,8 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
 }
 
 RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_cmp(result, this, cmp_type, other, dest); }, { this, other },
                         ActionType::NORMAL);
@@ -466,6 +480,8 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
 }
 
 RewriterVar* RewriterVar::toBool(Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_toBool(result, this, dest); }, { this }, ActionType::NORMAL);
     return result;
@@ -487,6 +503,8 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 }
 
 void RewriterVar::setAttr(int offset, RewriterVar* val) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
 
@@ -656,6 +674,8 @@ void Rewriter::_trap() {
 }
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar*& const_loader_var = const_loader.constToVar[val];
     if (!const_loader_var) {
         const_loader_var = createNewConstantVar(val);
@@ -664,12 +684,16 @@ RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
 }
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     return call(has_side_effects, func_addr, args, args_xmm);
 }
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
@@ -677,6 +701,8 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
 }
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
@@ -686,6 +712,8 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
                             RewriterVar* arg2) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
@@ -696,6 +724,8 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
                             RewriterVar* arg2, RewriterVar* arg3) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar::SmallVector args;
     RewriterVar::SmallVector args_xmm;
     args.push_back(arg0);
@@ -903,6 +933,8 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 }
 
 void Rewriter::abort() {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     assert(!finished);
     finished = true;
     rewrite->abort();
@@ -944,6 +976,8 @@ void RewriterVar::releaseIfNoUses() {
 }
 
 void Rewriter::commit() {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     assert(!finished);
     initPhaseEmitting();
 
@@ -1173,6 +1207,8 @@ bool Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
 }
 
 void Rewriter::commitReturning(RewriterVar* var) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     addAction([=]() {
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
@@ -1201,6 +1237,8 @@ Location Rewriter::allocScratch() {
 }
 
 RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_add(result, a, b, dest); }, { a }, ActionType::NORMAL);
     return result;
@@ -1229,6 +1267,8 @@ void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location des
 }
 
 RewriterVar* Rewriter::allocate(int n) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_allocate(result, n); }, {}, ActionType::NORMAL);
     return result;
@@ -1275,6 +1315,8 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
 }
 
 RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_allocateAndCopy(result, array_ptr, n); }, { array_ptr }, ActionType::NORMAL);
     return result;
@@ -1301,6 +1343,8 @@ void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int
 }
 
 RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
     if (n_rest > 0)
         assert(rest_ptr != NULL);
     else
@@ -1697,6 +1741,8 @@ static inline void log_ic_attempts_started(const char* debug_name) {
 }
 
 Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
+    STAT_TIMER(t0, "us_timer_createrewriter", 10);
+
     ICInfo* ic = NULL;
 
     // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),

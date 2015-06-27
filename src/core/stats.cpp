@@ -53,6 +53,8 @@ StatTimer* StatTimer::createStack(StatTimer& timer) {
 }
 
 uint64_t* StatTimer::getCurrentCounter() {
+    if (counter_override)
+        return counter_override;
     if (stack)
         return stack->_statcounter;
     return NULL;
