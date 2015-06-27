@@ -531,7 +531,6 @@ public:
     BoxedString* reprICAsString();
     bool nonzeroIC();
     Box* hasnextOrNullIC();
-    Box* nextIC();
 
     friend class AttrWrapper;
 };

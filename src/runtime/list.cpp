@@ -101,7 +101,7 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
 
     int64_t n = PyInt_AsSsize_t(idx);
     if (n == -1 && PyErr_Occurred())
-        raiseExcHelper(TypeError, "an integer is required");
+        throwCAPIException();
 
     if (n < 0)
         n = self->size + n;

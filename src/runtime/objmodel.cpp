@@ -2723,11 +2723,22 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
 extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1, Box* arg2,
                          Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
-#if 0
+
+#if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_callattr_nopatch");
-    bool havepatch = (bool)getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
-    ScopedStatTimer st(havepatch ? st_id : st_id_nopatch, 10);
+    static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_callattr_megamorphic");
+    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    uint64_t* counter;
+    if (!icinfo)
+        counter = st_id_nopatch;
+    else if (icinfo->isMegamorphic())
+        counter = st_id_megamorphic;
+    else {
+        //counter = Stats::getStatCounter("us_timer_slowpath_callattr_patchable_" + std::string(obj->cls->tp_name));
+        counter = Stats::getStatCounter("us_timer_slowpath_callattr_patchable_" + std::string(attr->s()));
+    }
+    ScopedStatTimer st(counter, 10);
 #endif
 
     ASSERT(gc::isValidGCObject(obj), "%p", obj);
@@ -3504,6 +3515,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
            g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
            chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
+    assert(!PyErr_Occurred());
 
     return r;
 }
@@ -3514,12 +3526,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     int npassed_args = argspec.totalPassed();
 
     if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
-        STAT_TIMER(t0, "us_timer_slowpath_runtimecall_nonfunction", 20);
-
         // TODO: maybe eventually runtimeCallInternal should just be the default tpp_call?
         if (obj->cls->tpp_call) {
             return obj->cls->tpp_call(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         }
+
+        STAT_TIMER(t0, "us_timer_slowpath_runtimecall_nonfunction", 20);
 
 #if 0
         std::string per_name_stat_name = "zzz_runtimecall_nonfunction_" + std::string(obj->cls->tp_name);

@@ -347,6 +347,9 @@ Box* BoxedMethodDescriptor::callInternal(BoxedFunctionBase* f, CallRewriteArgs* 
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
 
+    if (!rtn)
+        throwCAPIException();
+
     rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
     rewrite_args->out_rtn = r_rtn;
     rewrite_args->out_success = true;

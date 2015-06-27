@@ -248,7 +248,7 @@ Box* open(Box* arg1, Box* arg2, Box* arg3) {
 extern "C" Box* chr(Box* arg) {
     i64 n = PyInt_AsLong(arg);
     if (n == -1 && PyErr_Occurred())
-        raiseExcHelper(TypeError, "an integer is required");
+        throwCAPIException();
 
     if (n < 0 || n >= 256) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");

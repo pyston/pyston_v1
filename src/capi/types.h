@@ -42,57 +42,9 @@ public:
         return boxString(self->method_def->ml_name);
     }
 
-    static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
-        STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", (self->cls->is_user_defined ? 10 : 20));
-        assert(self->cls == capifunc_cls);
-        assert(varargs->cls == tuple_cls);
-        assert(kwargs->cls == dict_cls);
-
-        threading::GLPromoteRegion _gil_lock;
-
-        Box* rtn;
-
-        int flags = self->method_def->ml_flags;
-        auto func = self->method_def->ml_meth;
-        if (flags == METH_VARARGS) {
-            assert(kwargs->d.size() == 0);
-            rtn = (Box*)func(self->passthrough, varargs);
-        } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
-            rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, varargs, kwargs);
-        } else if (flags == METH_NOARGS) {
-            assert(kwargs->d.size() == 0);
-            assert(varargs->size() == 0);
-            rtn = (Box*)func(self->passthrough, NULL);
-        } else if (flags == METH_O) {
-            if (kwargs->d.size() != 0) {
-                raiseExcHelper(TypeError, "%s() takes no keyword arguments", self->method_def->ml_name);
-            }
-            if (varargs->size() != 1) {
-                raiseExcHelper(TypeError, "%s() takes exactly one argument (%d given)", self->method_def->ml_name,
-                               varargs->size());
-            }
-            rtn = (Box*)func(self->passthrough, varargs->elts[0]);
-        } else if (flags == METH_OLDARGS) {
-            /* the really old style */
-            if (kwargs == NULL || PyDict_Size(kwargs) == 0) {
-                int size = PyTuple_GET_SIZE(varargs);
-                Box* arg = varargs;
-                if (size == 1)
-                    arg = PyTuple_GET_ITEM(varargs, 0);
-                else if (size == 0)
-                    arg = NULL;
-                rtn = func(self->passthrough, arg);
-            } else {
-                raiseExcHelper(TypeError, "%.200s() takes no keyword arguments", self->method_def->ml_name);
-            }
-        } else {
-            RELEASE_ASSERT(0, "0x%x", flags);
-        }
-
-        checkAndThrowCAPIException();
-        assert(rtn && "should have set + thrown an exception!");
-        return rtn;
-    }
+    static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs);
+    static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                        Box** args, const std::vector<BoxedString*>* keyword_names);
 
     static Box* getname(Box* b, void*) {
         RELEASE_ASSERT(b->cls == capifunc_cls, "");
@@ -101,9 +53,6 @@ public:
             return boxString(s);
         return None;
     }
-
-    static Box* callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == capifunc_cls);
