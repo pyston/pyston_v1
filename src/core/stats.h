@@ -129,9 +129,21 @@ private:
     int avoidability;
     bool reset_avoidability;
 
+    static __thread uint64_t* counter_override;
+
 public:
     StatTimer(uint64_t* counter, int avoidability, bool reset_avoidability = false)
         : _statcounter(counter), avoidability(avoidability), reset_avoidability(reset_avoidability) {}
+
+    static void overrideCounter(uint64_t* new_counter) {
+        assert(!counter_override);
+        counter_override = new_counter;
+    }
+
+    static void finishOverride() {
+        assert(counter_override);
+        counter_override = NULL;
+    }
 
     void pushNonTopLevel() {
 #ifndef NDEBUG
@@ -187,7 +199,10 @@ private:
         assert(at_time > _start_time);
 
         uint64_t _duration = at_time - _start_time;
-        Stats::log(_statcounter, _duration);
+        if (counter_override)
+            Stats::log(counter_override, _duration);
+        else
+            Stats::log(_statcounter, _duration);
 
         _start_time = 0;
     }

@@ -561,6 +561,9 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             // we're transfering control to a non-cleanup landing pad.
             // i.e. a catch block.  thus ends our unwind session.
             endPythonUnwindSession(unwind_session);
+#if STAT_TIMERS
+            pyston::StatTimer::finishOverride();
+#endif
         }
         static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
         // there is a python unwinding implementation detail leaked
@@ -660,6 +663,10 @@ extern "C" void __cxa_end_catch() {
 #define EXCINFO_TYPE_INFO _ZTIN6pyston7ExcInfoE
 extern "C" std::type_info EXCINFO_TYPE_INFO;
 
+#if STAT_TIMERS
+static uint64_t* unwinding_stattimer = pyston::Stats::getStatCounter("us_timer_unwinding");
+#endif
+
 extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
     assert(!pyston::in_cleanup_code);
     assert(exc_obj);
@@ -671,6 +678,9 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     pyston::ExcInfo* exc_data = (pyston::ExcInfo*)exc_obj;
     checkExcInfo(exc_data);
 
+#if STAT_TIMERS
+    pyston::StatTimer::overrideCounter(unwinding_stattimer);
+#endif
     // let unwinding.cpp know we've started unwinding
     pyston::throwingException(pyston::getActivePythonUnwindSession());
     pyston::unwind(exc_data);

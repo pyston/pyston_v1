@@ -289,23 +289,35 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     Box* rtn;
     if (call_flags == METH_NOARGS) {
-        rtn = (Box*)self->method->ml_meth(oarg1, NULL);
+        {
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+            rtn = (Box*)self->method->ml_meth(oarg1, NULL);
+        }
         if (rewrite_args)
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
     } else if (call_flags == METH_VARARGS) {
-        rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        {
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+            rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                                  rewrite_args->arg2);
     } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
-        rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(oarg1, oarg2, oarg3);
+        {
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(oarg1, oarg2, oarg3);
+        }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                                  rewrite_args->arg2, rewrite_args->arg3);
     } else if (call_flags == METH_O) {
-        rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        {
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+            rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                                  rewrite_args->arg2);
