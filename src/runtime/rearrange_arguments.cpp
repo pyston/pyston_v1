@@ -94,11 +94,26 @@ static inline void fillArgsFromStarArg(Box** args_out, Box* given_varargs, ArgPa
         }
     }
 
-    if (i < numParams || (i > numParams && !takesStarParam)) {
-        if (takesStarParam) {
-            raiseExcHelper(TypeError, takesStarParam ? "%s() takes at least %d argument%s (%d given)"
-                                                     : "%s() takes exactly %d argument%s (%d given)",
-                           fname, paramspec.num_args, paramspec.num_args == 1 ? "" : "s", argspec.num_args + i);
+    assert(!paramspec.num_defaults);
+    // Because there are no defaults, we don't need to do the 'at most' error message.
+    // Right now i is the number of args (not eaten by the star param, if applicable)
+    if (takesStarParam) {
+        // It takes star params, so it takes at least this many arguments.
+        // If we found less than that, then error.
+        if (i < numParams) {
+            raiseExcHelper(TypeError, "%s() takes at least %d argument%s (%d given)", fname, paramspec.num_args,
+                           paramspec.num_args == 1 ? "" : "s", argspec.num_args + i);
+        }
+    } else {
+        // It doesn't take star params, so we needed to have found exactly numParams
+        // arguments. If we found any other number, then error.
+        if (i != numParams) {
+            if (paramspec.num_args == 0) {
+                raiseExcHelper(TypeError, "%s() takes no arguments (%d given)", fname, argspec.num_args + i);
+            } else {
+                raiseExcHelper(TypeError, "%s() takes exactly %d argument%s (%d given)", fname, paramspec.num_args,
+                               paramspec.num_args == 1 ? "" : "s", argspec.num_args + i);
+            }
         }
     }
 
@@ -128,7 +143,8 @@ extern "C" BoxedTuple* makeVarArgsFromArgsAndStarArgs(Box* arg1, Box* arg2, Box*
     assert(argspec.has_starargs);
     assert(paramspec.takes_varargs);
 
-    llvm::SmallVector<Box*, 8> starParamElts;
+    // TODO use PyTuple_Resize
+    std::vector<Box*, StlCompatAllocator<Box*>> starParamElts;
 
     for (int i = paramspec.num_args; i < argspec.num_args; i++) {
         starParamElts.push_back(getArg(i, arg1, arg2, arg3, args));
@@ -258,8 +274,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", func_name, paramspec.num_args,
-                       (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
+        if (paramspec.num_args == 0) {
+            raiseExcHelper(TypeError, "%s() takes no argument%s (%d given)", func_name,
+                           (paramspec.num_args == 1 ? "" : "s"),
+                           argspec.num_args + argspec.num_keywords + varargs.size());
+        } else {
+            raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", func_name, paramspec.num_args,
+                           (paramspec.num_args == 1 ? "" : "s"),
+                           argspec.num_args + argspec.num_keywords + varargs.size());
+        }
     }
 
     ////
@@ -331,10 +354,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     // Fill with defaults:
 
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
-        if (params_filled[i])
-            continue;
-        // TODO not right error message
-        raiseExcHelper(TypeError, "%s() did not get a value for positional argument %d", func_name, i);
+        if (!params_filled[i]) {
+            // TODO not right error message
+            if (paramspec.num_defaults || paramspec.takes_varargs)
+                raiseExcHelper(TypeError, "%s() takes at least %d arguments (%d given)", func_name,
+                               paramspec.num_args - paramspec.num_defaults, argspec.num_args + varargs.size());
+            else
+                raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%d given)", func_name,
+                               paramspec.num_args - paramspec.num_defaults, argspec.num_args + varargs.size());
+        }
     }
 
     for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
@@ -367,6 +395,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     if (argspec.has_starargs && !paramspec.num_defaults) {
         assert(!argspec.has_kwargs);
         assert(!argspec.num_keywords);
+        assert(!paramspec.num_defaults);
+
         // We just dispatch to a helper function to copy the args and call pyElements
         // TODO In some cases we can be smarter depending on the arrangement of args and type
         // of the star args object. For example if star args is an (immutable) tuple,
@@ -375,10 +405,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             assert(paramspec.takes_varargs);
 
             RewriterVar::SmallVector callargs;
-            callargs.push_back(rewrite_args->arg1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0));
-            callargs.push_back(rewrite_args->arg2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0));
-            callargs.push_back(rewrite_args->arg3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0));
-            callargs.push_back(rewrite_args->args ? rewrite_args->args : rewrite_args->rewriter->loadConst(0));
+            // TODO no need to actually load the constant 0 since makeVarArgsAndStarArgs won't look at them
+            callargs.push_back(num_passed_args >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0));
+            callargs.push_back(num_passed_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0));
+            callargs.push_back(num_passed_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0));
+            callargs.push_back(num_passed_args >= 4 ? rewrite_args->args : rewrite_args->rewriter->loadConst(0));
             callargs.push_back(rewrite_args->rewriter->loadConst(argspec.asInt()));
             callargs.push_back(rewrite_args->rewriter->loadConst(paramspec.asInt()));
             RewriterVar* r_varargs = rewrite_args->rewriter->call(true /* has side effects */,
