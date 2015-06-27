@@ -263,72 +263,48 @@ void Rewriter::assertArgsInPlace() {
 }
 
 void RewriterVar::addGuard(uint64_t val) {
-    RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
-}
-
-void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
-    assert(val_constant->is_constant);
-    uint64_t val = val_constant->constant_value;
-
-    restoreArgs();
-
-    assembler::Register var_reg = var->getInReg();
-    if (isLargeConstant(val)) {
-        assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
-        assembler->cmp(var_reg, reg);
-    } else {
-        assembler->cmp(var_reg, assembler::Immediate(val));
+    bool guard_action_already_added = this->guard_set.hasAnyGuards();
+    this->guard_set.addEqGuard(val);
+    if (!guard_action_already_added) {
+        // TODO? we could track when this variable is actually an attribute and maybe get the guardattr optimization
+        rewriter->addAction([=]() { rewriter->_addGuard(this); }, { this }, ActionType::GUARD);
     }
-
-    assertArgsInPlace();
-    assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
-
-    var->bumpUse();
-    val_constant->bumpUse();
-
-    assertConsistent();
 }
 
 void RewriterVar::addGuardNotEq(uint64_t val) {
-    RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
-}
-
-void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
-    assert(val_constant->is_constant);
-    uint64_t val = val_constant->constant_value;
-
-    restoreArgs();
-
-    assembler::Register var_reg = var->getInReg();
-    if (isLargeConstant(val)) {
-        assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
-        assembler->cmp(var_reg, reg);
-    } else {
-        assembler->cmp(var_reg, assembler::Immediate(val));
+    bool guard_action_already_added = this->guard_set.hasAnyGuards();
+    this->guard_set.addNeGuard(val);
+    if (!guard_action_already_added) {
+        rewriter->addAction([=]() { rewriter->_addGuard(this); }, { this }, ActionType::GUARD);
     }
-
-    assertArgsInPlace();
-    assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
-
-    var->bumpUse();
-    val_constant->bumpUse();
-
-    assertConsistent();
 }
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
-    if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
-        return; // duplicate guard detected
-    RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val_var, negate); }, { this, val_var },
-                        ActionType::GUARD);
+    RewriterVar*& attr_var = this->attributeCache[offset];
+    if (!attr_var) {
+        attr_var = rewriter->createNewVar();
+    }
+
+    bool guard_action_already_added = attr_var->guard_set.hasAnyGuards();
+    if (negate)
+        attr_var->guard_set.addNeGuard(val);
+    else
+        attr_var->guard_set.addEqGuard(val);
+    if (!guard_action_already_added) {
+        // Note: addAction excepts attr_var to the be the first `uses` argument
+        rewriter->addAction([=]() { rewriter->_addGuard(attr_var, this, offset); }, { attr_var, this },
+                            ActionType::GUARD);
+    }
 }
 
-void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate) {
-    assert(val_constant->is_constant);
-    uint64_t val = val_constant->constant_value;
+// _addGuard "uses" several variables. The obvious one is the variable being guarded.
+// The other variables are the constants compared to.
+// The constant variables are added as uses in the beginning of commit (after the GuardSets
+// have been fully constructed)
+void Rewriter::_addGuard(RewriterVar* var, RewriterVar* attr_of, int attr_offset) {
+    assert(var->guard_set.hasAnyGuards());
+
+    llvm::SmallVector<uint64_t, 2> consts = var->guard_set.getAllConstants();
 
     restoreArgs();
 
@@ -337,40 +313,88 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
     //   cmp $0x10(%rax), %rdi
     // when we could just do
     //   cmp ($0x133), %rdi
-    assembler::Register var_reg = var->getInReg(Location::any(), /* allow_constant_in_reg */ true);
+    // is this a case that comes up?
 
-    if (isLargeConstant(val)) {
-        assembler::Register reg(0);
-
-        if (val_constant == var) {
-            // TODO This case actually shows up, but it's stuff like guarding that type_cls->cls == type_cls
-            // I think we can optimize this case out, and in general, we can probably optimize out
-            // any case where var is constant.
-            reg = var_reg;
+    // Special case where this is an attribute guard, and we do the guard without loading the attribute
+    // into memory
+    if (attr_of && var->uses.size() == 1 && consts.size() == 1 && !isLargeConstant(consts[0])) {
+        uint64_t val = consts[0];
+        assembler::Register var_reg = attr_of->getInReg(Location::any(), /* allow_constant_in_reg */ true);
+        assembler->cmp(assembler::Indirect(var_reg, attr_offset), assembler::Immediate(val));
+        assertArgsInPlace();
+        if (var->guard_set.is_eq_guarded) {
+            assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
         } else {
-            reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
+            assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+        }
+        const_loader.constToVar[val]->bumpUse();
+        attr_of->bumpUse();
+    } else {
+
+        assembler::Register var_reg(0);
+
+        if (!var->is_constant && var->locations.size() == 0) {
+            // It's possible that `var` hasn't been loaded yet, if it was created in `addAttrGuard`.
+            // If that's the case, we need to load it as an attribute, here:
+            assert(attr_of != NULL);
+
+            assembler::Register ptr_reg = attr_of->getInReg(Location::any(), /* allow_constant_in_reg */ true);
+            attr_of->bumpUse();
+            var_reg = var->initializeInReg(Location::any());
+            assembler->mov(assembler::Indirect(ptr_reg, attr_offset), var_reg);
+        } else {
+            // Normal case, just use getInReg, and we have no need for the attr_of var
+            if (attr_of) {
+                attr_of->bumpUse();
+            }
+            var_reg = var->getInReg();
         }
 
-        assembler->cmp(assembler::Indirect(var_reg, offset), reg);
-    } else {
-        assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
+        for (uint64_t val : var->guard_set.getAllConstants()) {
+            RewriterVar* constant_var = const_loader.constToVar[val];
+
+            if (isLargeConstant(val)) {
+                RewriterVar* val_constant = const_loader.constToVar[val];
+                assert(val_constant);
+                assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
+                assert(var->locations.count(var_reg) > 0);
+                assembler->cmp(var_reg, reg);
+            } else {
+                assert(var->locations.count(var_reg) > 0);
+                assembler->cmp(var_reg, assembler::Immediate(val));
+            }
+            assertArgsInPlace();
+            if (var->guard_set.is_eq_guarded) {
+                assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+            } else {
+                assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+            }
+
+            constant_var->bumpUse();
+        }
     }
 
-    assertArgsInPlace();
-    if (negate)
-        assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
-    else
-        assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
-
     var->bumpUse();
-    val_constant->bumpUse();
 
     assertConsistent();
 }
 
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
+    // Look up in the cache to see if we already got this attribute.
+    // Only to this if type is Q
+    if (type == assembler::MovType::Q) {
+        if (this->attributeCache.count(offset) > 0) {
+            return this->attributeCache[offset];
+        }
+    }
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
+
+    if (type == assembler::MovType::Q) {
+        this->attributeCache[offset] = result;
+    }
+
     return result;
 }
 
@@ -943,9 +967,26 @@ void RewriterVar::releaseIfNoUses() {
     }
 }
 
+void RewriterVar::insertUseAtArbitraryActionIndex(int action_index) {
+    // Inserts action_index into the correct position of the sorted `uses` vector
+    for (int i = 0; i < uses.size(); i++) {
+        if (uses[i] >= action_index) {
+            int t = uses[i];
+            uses[i] = action_index;
+            for (int j = i + 1; j < uses.size(); j++) {
+                int s = uses[j];
+                uses[j] = t;
+                t = s;
+            }
+            uses.push_back(t);
+            return;
+        }
+    }
+    uses.push_back(action_index);
+}
+
 void Rewriter::commit() {
     assert(!finished);
-    initPhaseEmitting();
 
     static StatCounter ic_rewrites_aborted_assemblyfail("ic_rewrites_aborted_assemblyfail");
     static StatCounter ic_rewrites_aborted_failed("ic_rewrites_aborted_failed");
@@ -977,6 +1018,30 @@ void Rewriter::commit() {
     }
 
     assertConsistent();
+
+    // Find all the variables with guards
+    llvm::SmallVector<RewriterVar*, 8> vars_with_guards;
+    for (RewriterVar* var : vars) {
+        // If it has a guard
+        if (var->guard_action != -1) {
+            vars_with_guards.push_back(var);
+        }
+    }
+    // Add uses for the 'constant' variables that are guarded on in each guard
+    // (This may add new constant variables, modifying `vars`,
+    // so it has to be separate loop from the above)
+    for (RewriterVar* var : vars_with_guards) {
+        for (uint64_t constant_val : var->guard_set.getAllConstants()) {
+            RewriterVar* constant_var = loadConst(constant_val);
+            // insert into the `uses` list
+            // hopefully not too slow (this is linear in the size of `uses`)
+            constant_var->insertUseAtArbitraryActionIndex(var->guard_action);
+        }
+    }
+
+    assertConsistent();
+
+    initPhaseEmitting();
 
     // Emit assembly for each action, and set done_guarding when
     // we reach the last guard.
