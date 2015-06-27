@@ -226,123 +226,89 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
     return new BoxedInstanceMethod(type, cm->cm_callable, type);
 }
 
+// TODO this should be auto-generated as a slot wrapper:
 Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
-    STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
     BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
+    return BoxedMethodDescriptor::tppCall(self, NULL, ArgPassSpec(1, 0, true, true), obj, varargs, kwargs, NULL, NULL);
+}
 
-    assert(self->cls == method_cls);
-    assert(varargs->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
+Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                    Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
+
+    assert(_self->cls == method_cls);
+    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
 
     int ml_flags = self->method->ml_flags;
+    int call_flags = ml_flags & (~METH_CLASS);
 
-    int call_flags;
-    if (ml_flags & METH_CLASS) {
-        if (!isSubclass(obj->cls, type_cls))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
-                           getFullTypeName(obj).c_str());
-        call_flags = ml_flags & (~METH_CLASS);
-    } else {
-        if (!isSubclass(obj->cls, self->type))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' object but received a '%s'",
-                           self->method->ml_name, getFullNameOfClass(self->type).c_str(), getFullTypeName(obj).c_str());
-        call_flags = ml_flags;
+    if (rewrite_args && !rewrite_args->func_guarded) {
+        rewrite_args->obj->addAttrGuard(offsetof(BoxedMethodDescriptor, method), (intptr_t)self->method);
     }
 
-    threading::GLPromoteRegion _gil_lock;
-
-    Box* rtn;
+    ParamReceiveSpec paramspec(0, 0, false, false);
     if (call_flags == METH_NOARGS) {
-        RELEASE_ASSERT(varargs->size() == 0, "");
-        RELEASE_ASSERT(kwargs->d.size() == 0, "");
-        rtn = (Box*)self->method->ml_meth(obj, NULL);
+        paramspec = ParamReceiveSpec(1, 0, false, false);
     } else if (call_flags == METH_VARARGS) {
-        RELEASE_ASSERT(kwargs->d.size() == 0, "");
-        rtn = (Box*)self->method->ml_meth(obj, varargs);
+        paramspec = ParamReceiveSpec(1, 0, true, false);
     } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
-        rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
+        paramspec = ParamReceiveSpec(1, 0, true, true);
     } else if (call_flags == METH_O) {
-        RELEASE_ASSERT(kwargs->d.size() == 0, "");
-        RELEASE_ASSERT(varargs->size() == 1, "");
-        rtn = (Box*)self->method->ml_meth(obj, varargs->elts[0]);
+        paramspec = ParamReceiveSpec(2, 0, false, false);
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
 
-    checkAndThrowCAPIException();
-    assert(rtn && "should have set + thrown an exception!");
-    return rtn;
-}
+    Box* oarg1 = NULL;
+    Box* oarg2 = NULL;
+    Box* oarg3 = NULL;
+    Box** oargs = NULL;
 
-Box* BoxedMethodDescriptor::callInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
-                                         Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                         const std::vector<BoxedString*>* keyword_names) {
-    // TODO: could also handle cases where we have starargs but no positional args,
-    // and similarly for kwargs but no keywords
-    if (!rewrite_args || argspec.has_kwargs || argspec.has_starargs || argspec.num_keywords > 0 || argspec.num_args > 4)
-        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    bool rewrite_success = false;
+    rearrangeArguments(paramspec, NULL, self->method->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1, arg2,
+                       arg3, args, keyword_names, oarg1, oarg2, oarg3, args);
 
-    assert(argspec.num_args >= 2);
-    int passed_varargs = argspec.num_args - 2;
+    if (!rewrite_success)
+        rewrite_args = NULL;
 
-    assert(arg1->cls == method_cls);
-    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(arg1);
-    Box* obj = arg2;
-    RewriterVar* r_obj = rewrite_args->arg2;
+    if (ml_flags & METH_CLASS) {
+        rewrite_args = NULL;
+        if (!isSubclass(oarg1->cls, type_cls))
+            raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
+                           getFullTypeName(oarg1).c_str());
+    } else {
+        if (!isSubclass(oarg1->cls, self->type))
+            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' oarg1 but received a '%s'",
+                           self->method->ml_name, getFullNameOfClass(self->type).c_str(),
+                           getFullTypeName(oarg1).c_str());
+    }
 
-    // We could also guard on the fields of the method object, but lets just guard on the object itself
-    // for now.
-    // TODO: what if it gets GC'd?
-    rewrite_args->arg1->addGuard((intptr_t)self);
-
-    int ml_flags = self->method->ml_flags;
-    RELEASE_ASSERT((ml_flags & METH_CLASS) == 0, "unimplemented");
-    if (!isSubclass(obj->cls, self->type))
-        raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' object but received a '%s'", self->method->ml_name,
-                       getFullNameOfClass(self->type).c_str(), getFullTypeName(obj).c_str());
-    r_obj->addAttrGuard(offsetof(Box, cls), (intptr_t)obj->cls);
-    int call_flags = ml_flags;
+    if (rewrite_args) {
+        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)oarg1->cls);
+    }
 
     Box* rtn;
-    RewriterVar* r_rtn;
     if (call_flags == METH_NOARGS) {
-        RELEASE_ASSERT(passed_varargs == 0, "");
-        rtn = (Box*)(self->method->ml_meth)(obj, NULL);
-        r_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, r_obj,
-                                             rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
-    } else if (call_flags & METH_VARARGS) {
-        RELEASE_ASSERT(call_flags == METH_VARARGS || call_flags == (METH_VARARGS | METH_KEYWORDS), "");
-
-        Box* varargs;
-        RewriterVar* r_varargs;
-
-        if (passed_varargs == 0) {
-            varargs = EmptyTuple;
-            r_varargs = rewrite_args->rewriter->loadConst((intptr_t)EmptyTuple, Location::forArg(1));
-        } else if (passed_varargs == 1) {
-            varargs = BoxedTuple::create1(arg3);
-            r_varargs = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create1, rewrite_args->arg3);
-        } else if (passed_varargs == 2) {
-            varargs = BoxedTuple::create2(arg3, args[0]);
-            r_varargs = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create2, rewrite_args->arg3,
-                                                     rewrite_args->args->getAttr(0, Location::forArg(1)));
-        } else {
-            RELEASE_ASSERT(0, "");
-        }
-
-        if (call_flags & METH_KEYWORDS) {
-            Box* kwargs = NULL;
-            RewriterVar* r_kwargs = rewrite_args->rewriter->loadConst(0);
-            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
-            r_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, r_obj, r_varargs, r_kwargs);
-        } else {
-            rtn = (Box*)(self->method->ml_meth)(obj, varargs);
-            r_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, r_obj, r_varargs);
-        }
+        rtn = (Box*)self->method->ml_meth(oarg1, NULL);
+        if (rewrite_args)
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
+    } else if (call_flags == METH_VARARGS) {
+        rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                                 rewrite_args->arg2);
+    } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
+        rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(oarg1, oarg2, oarg3);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                                 rewrite_args->arg2, rewrite_args->arg3);
     } else if (call_flags == METH_O) {
-        RELEASE_ASSERT(passed_varargs == 1, "");
-        rtn = (Box*)(self->method->ml_meth)(obj, arg3);
-        r_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, r_obj, rewrite_args->arg3);
+        rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+        if (rewrite_args)
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                                 rewrite_args->arg2);
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
@@ -350,9 +316,11 @@ Box* BoxedMethodDescriptor::callInternal(BoxedFunctionBase* f, CallRewriteArgs* 
     if (!rtn)
         throwCAPIException();
 
-    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
-    rewrite_args->out_rtn = r_rtn;
-    rewrite_args->out_success = true;
+    if (rewrite_args) {
+        rewrite_args->rewriter->call(false, (void*)checkAndThrowCAPIException);
+        rewrite_args->out_success = true;
+    }
+
     return rtn;
 }
 
@@ -597,8 +565,8 @@ void setupDescr() {
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
-    method_call_cl->internal_callable = BoxedMethodDescriptor::callInternal;
     method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
+    method_cls->tpp_call = BoxedMethodDescriptor::tppCall;
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
