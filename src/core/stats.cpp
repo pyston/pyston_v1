@@ -25,6 +25,7 @@ namespace pyston {
 #if STAT_TIMERS
 
 __thread StatTimer* StatTimer::stack;
+__thread uint64_t* StatTimer::counter_override;
 
 StatTimer* StatTimer::swapStack(StatTimer* s) {
     uint64_t at_time = getCPUTicks();
