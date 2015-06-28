@@ -1,5 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
-//
+// Copyright (c) 2014-2015 Dropbox, Inc.  //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -248,6 +247,18 @@ void Rewriter::restoreArgs() {
         }
     }
 
+    for (int i = 0; i < live_outs.size(); i++) {
+        assembler::GenericRegister gr = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
+        if (gr.type == assembler::GenericRegister::GP) {
+            assembler::Register r = gr.gp;
+            if (!live_outs[i]->isInLocation(Location(r))) {
+                allocReg(r);
+                live_outs[i]->getInReg(r);
+                assert(live_outs[i]->isInLocation(r));
+            }
+        }
+    }
+
     assertArgsInPlace();
 }
 
@@ -256,6 +267,10 @@ void Rewriter::assertArgsInPlace() {
 
     for (int i = 0; i < args.size(); i++) {
         assert(args[i]->isInLocation(args[i]->arg_loc));
+    }
+    for (int i = 0; i < live_outs.size(); i++) {
+        assembler::GenericRegister r = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
+        assert(live_outs[i]->isInLocation(r));
     }
 }
 
@@ -272,8 +287,6 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
-    restoreArgs();
-
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -282,6 +295,7 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
+    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
@@ -304,8 +318,6 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
-    restoreArgs();
-
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -314,6 +326,7 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
+    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
@@ -339,8 +352,6 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
-    restoreArgs();
-
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
     //   cmp $0x10(%rax), %rdi
@@ -365,6 +376,7 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
         assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
     }
 
+    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     if (negate)
         assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
@@ -1971,14 +1983,18 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     std::vector<assembler::GenericRegister> regs_to_spill;
     std::vector<assembler::Register> regs_to_reload;
 
+    std::unordered_set<int> live_outs_for_slot;
+
     for (int dwarf_regnum : live_outs) {
         assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(dwarf_regnum);
 
         assert(!(ru.type == assembler::GenericRegister::GP && ru.gp == assembler::R11) && "We assume R11 is free!");
 
         if (ru.type == assembler::GenericRegister::GP) {
-            if (ru.gp == assembler::RSP || ru.gp.isCalleeSave())
+            if (ru.gp == assembler::RSP || ru.gp.isCalleeSave()) {
+                live_outs_for_slot.insert(dwarf_regnum);
                 continue;
+            }
         }
 
         // Location(ru).dump();
@@ -1988,8 +2004,11 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
 
             regs_to_reload.push_back(ru.gp);
             est_slowpath_size += 7; // 7 bytes for a single mov
+
             continue;
         }
+
+        live_outs_for_slot.insert(dwarf_regnum);
 
         regs_to_spill.push_back(ru);
 
@@ -2046,6 +2065,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr);
+    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr,
+                                        std::move(live_outs_for_slot));
 }
 }

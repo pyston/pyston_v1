@@ -265,10 +265,10 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         // (rbp - rsp) == (stack_size - 8)  -- the "-8" is from the value of rbp being pushed onto the stack
         int scratch_rsp_offset = scratch_rbp_offset + (stack_size - 8);
 
-        std::unique_ptr<ICInfo> icinfo
-            = registerCompiledPatchpoint(start_addr, initialization_info.slowpath_start,
-                                         initialization_info.continue_addr, initialization_info.slowpath_rtn_addr, ic,
-                                         StackInfo(scratch_size, scratch_rsp_offset), std::move(live_outs));
+        std::unique_ptr<ICInfo> icinfo = registerCompiledPatchpoint(
+            start_addr, initialization_info.slowpath_start, initialization_info.continue_addr,
+            initialization_info.slowpath_rtn_addr, ic, StackInfo(scratch_size, scratch_rsp_offset),
+            std::move(initialization_info.live_outs));
 
         assert(cf);
         // TODO: unsafe.  hard to use a unique_ptr here though.

@@ -538,9 +538,14 @@ struct PatchpointInitializationInfo {
     uint8_t* slowpath_start;
     uint8_t* slowpath_rtn_addr;
     uint8_t* continue_addr;
+    std::unordered_set<int> live_outs;
 
-    PatchpointInitializationInfo(uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr, uint8_t* continue_addr)
-        : slowpath_start(slowpath_start), slowpath_rtn_addr(slowpath_rtn_addr), continue_addr(continue_addr) {}
+    PatchpointInitializationInfo(uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr, uint8_t* continue_addr,
+                                 std::unordered_set<int>&& live_outs)
+        : slowpath_start(slowpath_start),
+          slowpath_rtn_addr(slowpath_rtn_addr),
+          continue_addr(continue_addr),
+          live_outs(std::move(live_outs)) {}
 };
 
 PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
