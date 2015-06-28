@@ -39,21 +39,42 @@ Box* listiterHasnext(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    return boxBool(self->pos < self->l->size);
+    if (!self->l) {
+        raiseExcHelper(StopIteration, "");
+    }
+
+    bool ans = (self->pos < self->l->size);
+    if (!ans) {
+        self->l = NULL;
+    }
+    return boxBool(ans);
 }
 
 i1 listiterHasnextUnboxed(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    return self->pos < self->l->size;
+    if (!self->l) {
+        raiseExcHelper(StopIteration, "");
+    }
+
+    bool ans = (self->pos < self->l->size);
+    if (!ans) {
+        self->l = NULL;
+    }
+    return ans;
 }
 
 Box* listiterNext(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
+    if (!self->l) {
+        raiseExcHelper(StopIteration, "");
+    }
+
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        self->l = NULL;
         raiseExcHelper(StopIteration, "");
     }
 

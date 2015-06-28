@@ -7,6 +7,15 @@
 extern "C" {
 #endif
 
+// Pyston change: moved this from iterobject.c
+typedef struct {
+    PyObject_HEAD
+    PyObject *it_callable; /* Set to NULL when iterator is exhausted */
+    PyObject *it_sentinel; /* Set to NULL when iterator is exhausted */
+    // Pyston changes:
+    PyObject *it_nextvalue; /* Set to non-null when iterator is advanced in __hasnext__ */
+} calliterobject;
+
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PySeqIter_Type;
 

@@ -51,6 +51,8 @@ public:
     DEFAULT_CLASS(iterwrapper_cls);
 };
 
+bool calliter_hasnext(Box* b);
+
 void setupIter();
 }
 
