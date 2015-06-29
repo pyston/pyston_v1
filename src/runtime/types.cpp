@@ -621,8 +621,12 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
-    if (argspec.has_starargs)
-        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    if (argspec.has_starargs) {
+        if (rewrite_args)
+            return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        else
+            return callFuncNoRewrite(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    }
 
     return typeCallInner(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
@@ -1535,7 +1539,7 @@ static Box* instancemethodRepr(Box* b) {
     const char* sfuncname = "?", * sklassname = "?";
 
     static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
-    funcname = getattrInternal(func, name_str, NULL);
+    funcname = getattrInternalNoRewrite(func, name_str);
 
     if (funcname != NULL) {
         if (!PyString_Check(funcname)) {
@@ -1547,7 +1551,7 @@ static Box* instancemethodRepr(Box* b) {
     if (klass == NULL) {
         klassname = NULL;
     } else {
-        klassname = getattrInternal(klass, name_str, NULL);
+        klassname = getattrInternalNoRewrite(klass, name_str);
         if (klassname != NULL) {
             if (!PyString_Check(klassname)) {
                 klassname = NULL;
