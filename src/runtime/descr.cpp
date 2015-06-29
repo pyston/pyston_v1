@@ -46,7 +46,7 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
 
     static BoxedString* doc_str = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
     try {
-        get_doc = getattrInternal(fget, doc_str, NULL);
+        get_doc = getattrInternalNoRewrite(fget, doc_str);
     } catch (ExcInfo e) {
         if (!e.matches(Exception)) {
             throw e;

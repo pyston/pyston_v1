@@ -423,7 +423,7 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
         if (value == NULL)
             delattrGeneric(obj, static_cast<BoxedString*>(name), NULL);
         else
-            setattrGeneric(obj, static_cast<BoxedString*>(name), value, NULL);
+            setattrGenericNoRewrite(obj, static_cast<BoxedString*>(name), value);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

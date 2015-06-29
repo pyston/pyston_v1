@@ -589,7 +589,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
-        if (getattrInternal(arg, keys_str, NULL)) {
+        if (getattrInternalNoRewrite(arg, keys_str)) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);

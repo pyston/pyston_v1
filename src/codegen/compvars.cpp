@@ -1449,7 +1449,7 @@ public:
     CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = typeLookup(cls, attr, nullptr);
+            Box* rtattr = typeLookupNoRewrite(cls, attr);
             if (rtattr == NULL)
                 return UNDEF;
 
@@ -1474,7 +1474,7 @@ public:
                               bool cls_only) override {
         // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = typeLookup(cls, attr->s(), nullptr);
+            Box* rtattr = typeLookupNoRewrite(cls, attr->s());
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall3(
                     info.unw_info, g.funcs.raiseAttributeErrorStr, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
