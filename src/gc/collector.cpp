@@ -385,10 +385,10 @@ void markPhase() {
 #endif
 }
 
-static void sweepPhase(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced) {
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
-    global_heap.freeUnmarked(weakly_referenced, classes_to_free);
+    global_heap.freeUnmarked(weakly_referenced);
 }
 
 static bool gc_enabled = true;
@@ -445,17 +445,7 @@ void runCollection() {
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
-
-    // Temporary solution to the "we can't free classes before their instances": the sweep phase
-    // will avoid freeing classes, and will instead put them into this list for us to free at the end.
-    // XXX there are still corner cases with it:
-    // - there is no ordering enforced between different class objects, ie if you free a class and a metaclass
-    //   in the same collection we have the same issue
-    // - if there are weakreferences to the class, it gets freed slightly earlier
-    // These could both be fixed but I think the full fix will come with rudi's larger finalization changes.
-    std::vector<BoxedClass*> classes_to_free;
-
-    sweepPhase(weakly_referenced, classes_to_free);
+    sweepPhase(weakly_referenced);
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
@@ -480,11 +470,7 @@ void runCollection() {
                     weak_references.push_back(head);
             }
         }
-        global_heap._setFree(GCAllocation::fromUserData(o));
-    }
-
-    for (auto b : classes_to_free) {
-        global_heap._setFree(GCAllocation::fromUserData(b));
+        global_heap.free(GCAllocation::fromUserData(o));
     }
 
     should_not_reenter_gc = false; // end non-reentrant section
