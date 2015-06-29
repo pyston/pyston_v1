@@ -3009,8 +3009,12 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 
     bool rewrite_success = false;
     Box* oarg1, * oarg2 = NULL, *oarg3, ** oargs = NULL;
-    rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                       keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewrite_args)
+        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
+                           keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, NULL, "", NULL, rewrite_success, argspec, arg1, arg2, arg3, args,
+                                    keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;

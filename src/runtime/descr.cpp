@@ -291,8 +291,12 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     }
 
     bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewrite_args)
+        rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec,
+                           arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, NULL, self->method->ml_name, defaults, rewrite_success, argspec, arg1,
+                                    arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -531,8 +535,12 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
     Box** oargs = NULL;
 
     bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewrite_args)
+        rearrangeArguments(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_args, rewrite_success,
+                           argspec, arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_success, argspec,
+                                    arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
 
     assert(oarg1 && oarg1->cls == tuple_cls);
     if (!paramspec.takes_kwargs)

@@ -3171,7 +3171,7 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
                             void** extra_args) {
     Box** args = (Box**)extra_args[0];
     auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
-    return callFunc(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    return callFuncNoRewrite(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
@@ -3204,10 +3204,12 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteA
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
 }
 
-void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
-                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs) {
+template <bool rewritable>
+static void rearrangeArgumentsRewrite(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                                      Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success,
+                                      ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                      const std::vector<BoxedString*>* keyword_names, Box*& oarg1, Box*& oarg2,
+                                      Box*& oarg3, Box** oargs) {
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3522,9 +3524,27 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     }
 }
 
+void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
+                        Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
+                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs) {
+    assert(rewrite_args);
+    rearrangeArgumentsRewrite<true>(paramspec, param_names, func_name, defaults, rewrite_args, rewrite_success, argspec,
+                                    arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+}
+
+void rearrangeArgumentsNoRewrite(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                                 Box** defaults, bool& rewrite_success, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                                 Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names, Box*& oarg1,
+                                 Box*& oarg2, Box*& oarg3, Box** oargs) {
+    rearrangeArgumentsRewrite<false>(paramspec, param_names, func_name, defaults, NULL, rewrite_success, argspec, arg1,
+                                     arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+}
+
 static StatCounter slowpath_callfunc("slowpath_callfunc");
-Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+template <bool rewritable>
+static Box* callFuncRewrite(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                            Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
 #if STAT_TIMERS
     StatTimer::assertActive();
     STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
@@ -3534,7 +3554,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     CLFunction* f = func->f;
     ParamReceiveSpec paramspec = f->paramspec;
 
-    if (rewrite_args) {
+    if (rewritable && rewrite_args) {
         if (!rewrite_args->func_guarded) {
             rewrite_args->obj->addGuard((intptr_t)func);
             rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
@@ -3559,9 +3579,15 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         oargs = NULL;
     }
 
-    rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
-                       paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewritable && rewrite_args)
+        rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
+                           paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
+                           arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, &f->param_names, getFunctionName(f).data(),
+                                    paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_success, argspec,
+                                    arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+
 
 #if 0
     for (int i = 0; i < num_output_args; i++) {
@@ -3570,7 +3596,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 #endif
 
-    if (rewrite_args && !rewrite_success) {
+    if (rewritable && rewrite_args && !rewrite_success) {
 // These are the cases that we weren't able to rewrite.
 // So instead, just rewrite them to be a call to callFunc, which helps a little bit.
 // TODO we should extract the rest of this function from the end of this block,
@@ -3594,7 +3620,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         Stats::log(counter);
 #endif
 
-        if (rewrite_args) {
+        if (rewritable && rewrite_args) {
             Rewriter* rewriter = rewrite_args->rewriter;
             // rewriter->trap();
             RewriterVar* args_array = rewriter->allocate(2);
@@ -3643,10 +3669,25 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         // rewrite up to the call to it:
         res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
     } else {
-        res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);
+        if (rewritable && rewrite_args)
+            res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3,
+                             oargs);
+        else
+            res = callCLFuncNoRewrite(f, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);
     }
 
     return res;
+}
+
+Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    assert(rewrite_args);
+    return callFuncRewrite<true>(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+}
+
+Box* callFuncNoRewrite(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                       Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    return callFuncRewrite<false>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* oarg1,
@@ -3674,12 +3715,13 @@ static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closur
     return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+template <bool rewritable>
+Box* callCLFuncRewrite(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                       BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
-        if (rewrite_args) {
+        if (rewritable && rewrite_args) {
             RewriterVar::SmallVector arg_vec;
 
             rewrite_args->rewriter->addDependenceOn(f->dependent_interp_callsites);
@@ -3715,7 +3757,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
     ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
-    if (rewrite_args) {
+    if (rewritable && rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
 
         RewriterVar::SmallVector arg_vec;
@@ -3754,6 +3796,18 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     assert(!PyErr_Occurred());
 
     return r;
+}
+
+Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+    assert(rewrite_args);
+    return callCLFuncRewrite<true>(f, rewrite_args, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
+                                   oargs);
+}
+
+Box* callCLFuncNoRewrite(CLFunction* f, int num_output_args, BoxedClosure* closure, BoxedGenerator* generator,
+                         Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+    return callCLFuncRewrite<false>(f, NULL, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
 }
 
 
@@ -3831,7 +3885,10 @@ static Box* runtimeCallInternalRewrite(Box* obj, CallRewriteArgs* rewrite_args, 
         }
 
         if (callable == NULL) {
-            callable = callFunc;
+            if (rewritable)
+                callable = callFunc;
+            else
+                callable = callFuncNoRewrite;
         }
         Box* res = callable(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         return res;
@@ -3851,7 +3908,7 @@ static Box* runtimeCallInternalRewrite(Box* obj, CallRewriteArgs* rewrite_args, 
         // Guard on which type of instancemethod (bound or unbound)
         // That is, if im->obj is NULL, guard on it being NULL
         // otherwise, guard on it being non-NULL
-        if (rewrite_args && rewrite_args) {
+        if (rewritable && rewrite_args) {
             rewrite_args->obj->addAttrGuard(offsetof(BoxedInstanceMethod, obj), 0, im->obj != NULL);
         }
 

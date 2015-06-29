@@ -123,6 +123,8 @@ Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPas
 
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
+Box* callFuncNoRewrite(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                       Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
 enum LookupScope {
     CLASS_ONLY = 1,
@@ -175,6 +177,8 @@ Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
+Box* callCLFuncNoRewrite(CLFunction* f, int num_output_args, BoxedClosure* closure, BoxedGenerator* generator,
+                         Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
 static const char* objectNewParameterTypeErrorMsg() {
     if (PYTHON_VERSION_HEX >= version_hex(2, 7, 4)) {

@@ -691,8 +691,14 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         ParamReceiveSpec paramspec(1, false, true, true);
         bool rewrite_success = false;
         Box* oarg1, *oarg2, *oarg3, ** oargs = NULL;
-        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           keyword_names, oarg1, oarg2, oarg3, oargs);
+
+        if (rewrite_args)
+            rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3,
+                               args, keyword_names, oarg1, oarg2, oarg3, oargs);
+        else
+            rearrangeArgumentsNoRewrite(paramspec, NULL, "", NULL, rewrite_success, argspec, arg1, arg2, arg3, args,
+                                        keyword_names, oarg1, oarg2, oarg3, oargs);
+
         assert(oarg1 == cls);
 
         if (!rewrite_success)
