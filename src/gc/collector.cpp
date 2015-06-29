@@ -199,8 +199,9 @@ bool isValidGCObject(void* p) {
 }
 
 void setIsPythonObject(Box* b) {
-    auto al = global_heap.getAllocationFromInteriorPointer(b);
-    assert(al->user_data == (char*)b);
+    assert(isValidGCMemory(b));
+    auto al = GCAllocation::fromUserData(b);
+
     if (al->kind_id == GCKind::CONSERVATIVE) {
         al->kind_id = GCKind::CONSERVATIVE_PYTHON;
     } else {
