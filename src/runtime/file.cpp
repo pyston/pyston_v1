@@ -1752,7 +1752,7 @@ void setupFile() {
 
     file_cls->giveAttr("flush", new BoxedFunction(boxRTFunction((void*)fileFlush, NONE, 1)));
     file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2)));
-    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NONE, 1)));
+    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, UNKNOWN, 1)));
     file_cls->giveAttr("fileno", new BoxedFunction(boxRTFunction((void*)fileFileno, BOXED_INT, 1)));
 
     file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, STR, 1)));

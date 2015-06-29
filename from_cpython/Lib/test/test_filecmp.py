@@ -1,5 +1,3 @@
-# expected: fail
-
 import os, filecmp, shutil, tempfile
 import unittest
 from test import test_support

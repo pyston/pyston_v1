@@ -1,4 +1,3 @@
-# expected: fail
 # Python test set -- part 2, opcodes
 
 from test.test_support import run_unittest, check_py3k_warnings
