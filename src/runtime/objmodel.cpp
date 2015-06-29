@@ -1920,11 +1920,15 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
         val = getattrInternal(obj, attr, &rewrite_args);
 
-        // should make sure getattrInternal calls finishes using obj itself
-        // if it is successful
-
-        if (rewrite_args.out_success && val) {
-            if (recorder) {
+        if (rewrite_args.out_success) {
+            if (!val) {
+                if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
+                    rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
+                                   rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
+                                   rewriter->loadConst(attr->size(), Location::forArg(2)));
+                    rewriter->commit();
+                }
+            } else if (recorder) {
                 RewriterVar* record_rtn = rewriter->call(false, (void*)recordType,
                                                          rewriter->loadConst((intptr_t)recorder, Location::forArg(0)),
                                                          rewrite_args.out_rtn);
