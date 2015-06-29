@@ -1,4 +1,3 @@
-# expected: fail
 import unittest
 import os
 from test.test_support import TESTFN, run_unittest
