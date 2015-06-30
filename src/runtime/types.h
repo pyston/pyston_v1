@@ -580,14 +580,26 @@ public:
     }
     static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
 
-    static BoxedTuple* create(int64_t size, BoxedClass* cls) { return new (cls, size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t size, BoxedClass* cls) {
+        if (cls == tuple_cls)
+            return new (size) BoxedTuple(size);
+        else
+            return new (cls, size) BoxedTuple(size);
+    }
     static BoxedTuple* create(int64_t nelts, Box** elts, BoxedClass* cls) {
-        BoxedTuple* rtn = new (cls, nelts) BoxedTuple(nelts);
+        BoxedTuple* rtn;
+        if (cls == tuple_cls)
+            rtn = new (nelts) BoxedTuple(nelts);
+        else
+            rtn = new (cls, nelts) BoxedTuple(nelts);
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create(std::initializer_list<Box*> members, BoxedClass* cls) {
-        return new (cls, members.size()) BoxedTuple(members);
+        if (cls == tuple_cls)
+            return new (members.size()) BoxedTuple(members);
+        else
+            return new (cls, members.size()) BoxedTuple(members);
     }
 
     static int Resize(BoxedTuple** pt, size_t newsize) noexcept;
@@ -605,6 +617,7 @@ public:
         assert(cls->tp_itemsize == sizeof(Box*));
         return BoxVar::operator new(size, cls, nitems);
     }
+
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
         ALLOC_STATS_VAR(tuple_cls)
 
