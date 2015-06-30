@@ -32,15 +32,6 @@
 #include "valgrind.h"
 #endif
 
-//#undef VERBOSITY
-//#define VERBOSITY(x) 2
-
-#ifndef NDEBUG
-#define DEBUG 1
-#else
-#define DEBUG 0
-#endif
-
 namespace pyston {
 namespace gc {
 
@@ -283,7 +274,84 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
 
 static int ncollections = 0;
 
-void markPhase() {
+static inline void visitByGCKind(void* p, GCVisitor& visitor) {
+    assert(((intptr_t)p) % 8 == 0);
+
+    GCAllocation* al = GCAllocation::fromUserData(p);
+
+    GCKind kind_id = al->kind_id;
+    if (kind_id == GCKind::UNTRACKED) {
+        // Nothing to do here.
+    } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PRECISE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
+    } else if (kind_id == GCKind::HIDDEN_CLASS) {
+        HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
+        hcls->gc_visit(&visitor);
+    } else {
+        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    }
+}
+
+static void getMarkPhaseRoots(GCVisitor& visitor) {
+    GC_TRACE_LOG("Looking at the stack\n");
+    threading::visitAllStacks(&visitor);
+
+    GC_TRACE_LOG("Looking at root handles\n");
+    for (auto h : *getRootHandles()) {
+        visitor.visit(h->value);
+    }
+
+    GC_TRACE_LOG("Looking at potential root ranges\n");
+    for (auto& e : potential_root_ranges) {
+        visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
+    }
+}
+
+static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
+    static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
+    static StatCounter sc_marked_objs("gc_marked_object_count");
+    Timer _t("traversing", /*min_usec=*/10000);
+
+    while (void* p = stack.pop()) {
+        sc_marked_objs.log();
+
+        GCAllocation* al = GCAllocation::fromUserData(p);
+
+#if TRACE_GC_MARKING
+        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
+            GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
+        else
+            GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
+#endif
+
+        assert(isMarked(al));
+        visitByGCKind(p, visitor);
+    }
+
+    long us = _t.end();
+    sc_us.log(us);
+}
+
+static void markPhase() {
+    static StatCounter sc_us("us_gc_mark_phase");
+    Timer _t("markPhase", /*min_usec=*/10000);
+
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
     // since we'll be looking at potentially-uninitialized values:
@@ -305,75 +373,9 @@ void markPhase() {
     TraceStack stack(roots);
     GCVisitor visitor(&stack);
 
-    GC_TRACE_LOG("Looking at the stack\n");
-    threading::visitAllStacks(&visitor);
+    getMarkPhaseRoots(visitor);
 
-    GC_TRACE_LOG("Looking at root handles\n");
-    for (auto h : *getRootHandles()) {
-        visitor.visit(h->value);
-    }
-
-    GC_TRACE_LOG("Looking at potential root ranges\n");
-    for (auto& e : potential_root_ranges) {
-        visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
-    }
-
-    // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
-    while (void* p = stack.pop()) {
-        assert(((intptr_t)p) % 8 == 0);
-        GCAllocation* al = GCAllocation::fromUserData(p);
-
-#if TRACE_GC_MARKING
-        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
-            GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
-        else
-            GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
-#endif
-
-        assert(isMarked(al));
-
-        // printf("Marking + scanning %p\n", p);
-
-        GCKind kind_id = al->kind_id;
-        if (kind_id == GCKind::UNTRACKED) {
-            continue;
-        } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PRECISE) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PYTHON) {
-            Box* b = reinterpret_cast<Box*>(p);
-            BoxedClass* cls = b->cls;
-
-            if (cls) {
-                // The cls can be NULL since we use 'new' to construct them.
-                // An arbitrary amount of stuff can happen between the 'new' and
-                // the call to the constructor (ie the args get evaluated), which
-                // can trigger a collection.
-                ASSERT(cls->gc_visit, "%s", getTypeName(b));
-                cls->gc_visit(&visitor, b);
-            }
-        } else if (kind_id == GCKind::HIDDEN_CLASS) {
-            HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
-            hcls->gc_visit(&visitor);
-        } else {
-            RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
-        }
-    }
+    graphTraversalMarking(stack, visitor);
 
 #if TRACE_GC_MARKING
     fclose(trace_fp);
@@ -383,12 +385,21 @@ void markPhase() {
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+    static StatCounter sc_us("us_gc_sweep_phase");
+    Timer _t("sweepPhase", /*min_usec=*/10000);
+
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
     global_heap.freeUnmarked(weakly_referenced);
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
 static bool gc_enabled = true;
@@ -415,6 +426,7 @@ void endGCUnexpectedRegion() {
 }
 
 void runCollection() {
+    static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
     sc.log();
 
@@ -492,7 +504,6 @@ void runCollection() {
         printf("Collection #%d done\n\n", ncollections);
 
     long us = _t.end();
-    static StatCounter sc_us("gc_collections_us");
     sc_us.log(us);
 
     // dumpHeapStatistics();

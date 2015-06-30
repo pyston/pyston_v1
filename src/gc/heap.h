@@ -596,8 +596,6 @@ public:
     }
 
     void dumpHeapStatistics(int level);
-
-    friend void markPhase();
 };
 
 extern Heap global_heap;
