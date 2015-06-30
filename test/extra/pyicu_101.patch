@@ -1,22 +1,3 @@
-diff -ur PyICU-1.0.1_o/common.h PyICU-1.0.1/common.h
---- PyICU-1.0.1_o/common.h	2010-03-29 20:04:02.000000000 +0200
-+++ PyICU-1.0.1/common.h	2015-05-18 22:38:10.625582065 +0200
-@@ -199,9 +199,15 @@
- 
- #else
- 
-+// Pyston change:
-+/*
- #define parseArgs(args, types, rest...) \
-     _parseArgs(((PyTupleObject *)(args))->ob_item, \
-                ((PyTupleObject *)(args))->ob_size, types, ##rest)
-+*/
-+#define parseArgs(args, types, rest...) \
-+    _parseArgs(PyTuple_Items(args), PyTuple_Size(args), types, ##rest)
-+
- 
- #define parseArg(arg, types, rest...) \
-     _parseArgs(&(arg), 1, types, ##rest)
 diff -ur PyICU-1.0.1_o/_icu.cpp PyICU-1.0.1/_icu.cpp
 --- PyICU-1.0.1_o/_icu.cpp	2010-04-02 00:12:54.000000000 +0200
 +++ PyICU-1.0.1/_icu.cpp	2015-05-19 15:26:15.131375981 +0200

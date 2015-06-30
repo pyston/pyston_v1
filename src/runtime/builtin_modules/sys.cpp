@@ -510,7 +510,7 @@ void setupSys() {
 }
 
 void setupSysEnd() {
-    BoxedTuple::GCVector builtin_module_names;
+    std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
     for (auto& p : sys_modules_dict->d) {
         builtin_module_names.push_back(p.first);
     }

@@ -311,7 +311,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
         return &l->elts->elts[0];
     }
 
-    BoxedTuple::GCVector elts;
+    std::vector<Box*, StlCompatAllocator<Box*>> elts;
     for (auto e : obj->pyElements()) {
         elts.push_back(e);
         if (elts.size() > expected_size)
