@@ -135,10 +135,6 @@ void Location::dump() const {
     RELEASE_ASSERT(0, "%d", type);
 }
 
-static bool isLargeConstant(int64_t val) {
-    return (val < (-1L << 31) || val >= (1L << 31) - 1);
-}
-
 Rewriter::ConstLoader::ConstLoader(Rewriter* rewriter) : rewriter(rewriter) {
 }
 
@@ -554,7 +550,7 @@ void RewriterVar::dump() {
 }
 
 assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
-    if (this->is_constant && !isLargeConstant(this->constant_value)) {
+    if (this->is_constant && !Rewriter::isLargeConstant(this->constant_value)) {
         *is_immediate = true;
         return assembler::Immediate(this->constant_value);
     } else {
@@ -568,7 +564,7 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
 
 #ifndef NDEBUG
     if (!allow_constant_in_reg) {
-        assert(!is_constant || isLargeConstant(constant_value));
+        assert(!is_constant || Rewriter::isLargeConstant(constant_value));
     }
 #endif
 
@@ -753,6 +749,18 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
     return call(has_side_effects, func_addr, args, args_xmm);
 }
 
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
+                            RewriterVar* arg2, RewriterVar* arg3, RewriterVar* arg4) {
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
+    args.push_back(arg1);
+    args.push_back(arg2);
+    args.push_back(arg3);
+    args.push_back(arg4);
+    return call(has_side_effects, func_addr, args, args_xmm);
+}
+
 static const Location caller_save_registers[]{
     assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
     assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
@@ -918,10 +926,14 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         if (need_to_spill) {
             if (check_reg.type == Location::Register) {
                 spillRegister(check_reg.asRegister());
+                if (failed)
+                    return;
             } else {
                 assert(check_reg.type == Location::XMMRegister);
                 assert(var->locations.size() == 1);
                 spillRegister(check_reg.asXMMRegister());
+                if (failed)
+                    return;
             }
         } else {
             removeLocationFromVar(var, check_reg);
@@ -1358,7 +1370,8 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
             consec = 0;
         }
     }
-    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_size);
+    failed = true;
+    return 0;
 }
 
 RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
@@ -1675,9 +1688,6 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
       done_guarding(false) {
     initPhaseCollecting();
 
-#ifndef NDEBUG
-    start_vars = RewriterVar::nvars;
-#endif
     finished = false;
 
     for (int i = 0; i < num_args; i++) {
@@ -1822,10 +1832,6 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
     log_ic_attempts_started(debug_name);
     return new Rewriter(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
 }
-
-#ifndef NDEBUG
-int RewriterVar::nvars = 0;
-#endif
 
 static const int INITIAL_CALL_SIZE = 13;
 static const int DWARF_RBP_REGNUM = 6;
