@@ -827,6 +827,10 @@ template <bool rewritable> Box* Box::getattr(llvm::StringRef attr, GetattrRewrit
     return NULL;
 }
 
+Box* Box::getattr(llvm::StringRef attr) {
+    return getattr<false>(attr, NULL);
+}
+
 void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
