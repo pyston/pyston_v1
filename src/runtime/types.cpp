@@ -2756,10 +2756,10 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
     assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
 
-    gc::setIsPythonObject(op);
-
     Py_TYPE(op) = tp;
     op->ob_size = size;
+
+    gc::registerPythonObject(op);
 
     return op;
 }
@@ -2771,9 +2771,9 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(gc::isValidGCMemory(op));
     assert(gc::isValidGCObject(tp));
 
-    gc::setIsPythonObject(op);
-
     Py_TYPE(op) = tp;
+
+    gc::registerPythonObject(op);
 
     if (PyType_SUPPORTS_WEAKREFS(tp)) {
         *PyObject_GET_WEAKREFS_LISTPTR(op) = NULL;

@@ -42,6 +42,9 @@ FILE* trace_fp;
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
 
+// BoxedClasses in the program that are still needed.
+static std::unordered_set<BoxedClass*> class_objects;
+
 static std::unordered_set<void*> nonheap_roots;
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap
@@ -126,8 +129,12 @@ public:
             pop_chunk();
             assert(cur == end);
             return *--cur; // no need for any bounds checks here since we're guaranteed we're CHUNK_SIZE from the start
+        } else {
+            // We emptied the stack, but we should prepare a new chunk in case another item
+            // gets added onto the stack.
+            get_chunk();
+            return NULL;
         }
-        return NULL;
     }
 
 
@@ -200,7 +207,7 @@ bool isValidGCObject(void* p) {
     return al->user_data == p && (al->kind_id == GCKind::CONSERVATIVE_PYTHON || al->kind_id == GCKind::PYTHON);
 }
 
-void setIsPythonObject(Box* b) {
+void registerPythonObject(Box* b) {
     assert(isValidGCMemory(b));
     auto al = GCAllocation::fromUserData(b);
 
@@ -208,6 +215,11 @@ void setIsPythonObject(Box* b) {
         al->kind_id = GCKind::CONSERVATIVE_PYTHON;
     } else {
         assert(al->kind_id == GCKind::PYTHON);
+    }
+
+    assert(b->cls);
+    if (PyType_Check(b)) {
+        class_objects.insert((BoxedClass*)b);
     }
 }
 
@@ -276,7 +288,7 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-static inline void visitByGCKind(void* p, GCVisitor& visitor) {
+static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
 
     GCAllocation* al = GCAllocation::fromUserData(p);
@@ -310,7 +322,7 @@ static inline void visitByGCKind(void* p, GCVisitor& visitor) {
     }
 }
 
-static void getMarkPhaseRoots(GCVisitor& visitor) {
+static void markRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
@@ -375,9 +387,38 @@ static void markPhase() {
     TraceStack stack(roots);
     GCVisitor visitor(&stack);
 
-    getMarkPhaseRoots(visitor);
+    markRoots(visitor);
 
     graphTraversalMarking(stack, visitor);
+
+    // Some classes might be unreachable. Unfortunately, we have to keep them around for
+    // one more collection, because during the sweep phase, instances of unreachable
+    // classes might still end up looking at the class. So we visit those unreachable
+    // classes remove them from the list of class objects so that it can be freed
+    // in the next collection.
+    std::vector<BoxedClass*> classes_to_remove;
+    for (BoxedClass* cls : class_objects) {
+        GCAllocation* al = GCAllocation::fromUserData(cls);
+        if (!isMarked(al)) {
+            visitor.visit(cls);
+            classes_to_remove.push_back(cls);
+        }
+    }
+
+    // We added new objects to the stack again from visiting classes so we nee to do
+    // another (mini) traversal.
+    graphTraversalMarking(stack, visitor);
+
+    for (BoxedClass* cls : classes_to_remove) {
+        class_objects.erase(cls);
+    }
+
+    // The above algorithm could fail if we have a class and a metaclass -- they might
+    // both have been added to the classes to remove. In case that happens, make sure
+    // that the metaclass is retained for at least another collection.
+    for (BoxedClass* cls : classes_to_remove) {
+        class_objects.insert(cls->cls);
+    }
 
 #if TRACE_GC_MARKING
     fclose(trace_fp);

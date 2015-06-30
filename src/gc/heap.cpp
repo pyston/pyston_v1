@@ -117,6 +117,7 @@ void _bytesAllocatedTripped() {
         return;
 
     threading::GLPromoteRegion _lock;
+
     runCollection();
 }
 
@@ -140,6 +141,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
+        assert(b->cls);
         if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
             PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
             if (list && *list) {
