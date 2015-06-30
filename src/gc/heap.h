@@ -75,8 +75,11 @@ class conservative_unordered_map
 
 namespace gc {
 
-extern unsigned bytesAllocatedSinceCollection;
-#define ALLOCBYTES_PER_COLLECTION 10000000
+
+extern size_t bytesAllocatedSinceCollection;
+extern size_t allocBytesForNextCollection;
+#define INITIAL_ALLOCBYTES_PER_COLLECTION 10000000
+
 void _bytesAllocatedTripped();
 
 // Notify the gc of n bytes as being under GC management.
@@ -86,7 +89,7 @@ void _bytesAllocatedTripped();
 // such as memory that will get freed by a gc destructor.
 inline void registerGCManagedBytes(size_t bytes) {
     bytesAllocatedSinceCollection += bytes;
-    if (unlikely(bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION)) {
+    if (unlikely(bytesAllocatedSinceCollection >= allocBytesForNextCollection)) {
         _bytesAllocatedTripped();
     }
 }
@@ -429,6 +432,8 @@ private:
     LargeObj* _alloc(size_t size);
     void _freeLargeObj(LargeObj* obj);
 
+    int findAllocation(uintptr_t addr);
+
 public:
     LargeArena(Heap* heap) : heap(heap), head(NULL), blocks(NULL) {}
 
@@ -595,6 +600,9 @@ public:
     }
 
     void dumpHeapStatistics(int level);
+
+private:
+    friend long runCollection();
 };
 
 extern Heap global_heap;

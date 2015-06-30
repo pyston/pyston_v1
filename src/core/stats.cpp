@@ -65,7 +65,7 @@ std::unordered_map<uint64_t*, std::string>* Stats::names;
 bool Stats::enabled;
 
 timespec Stats::start_ts;
-uint64_t Stats::start_tick;
+uint64_t Stats::start_tick = 0;
 
 StatCounter::StatCounter(const std::string& name) : counter(Stats::getStatCounter(name)) {
 }
@@ -104,7 +104,7 @@ void Stats::clear() {
 }
 
 void Stats::startEstimatingCPUFreq() {
-    if (!Stats::enabled)
+    if (Stats::start_tick != 0)
         return;
 
     clock_gettime(CLOCK_REALTIME, &Stats::start_ts);

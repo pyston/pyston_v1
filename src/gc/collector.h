@@ -58,7 +58,7 @@ public:
     Box* operator->() { return value; }
 };
 
-void runCollection();
+long runCollection();
 
 // Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,
 // but does not seem to pause manual calls to gc.collect().  So, callers should check gcIsEnabled(),

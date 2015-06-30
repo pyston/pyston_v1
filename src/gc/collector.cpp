@@ -110,6 +110,7 @@ public:
 
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
+        assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
         if (isMarked(al))
             return;
@@ -467,7 +468,7 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
-void runCollection() {
+long runCollection() {
     static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
     sc.log();
@@ -545,10 +546,14 @@ void runCollection() {
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
 
+    global_heap.cleanupAfterCollection();
+
     long us = _t.end();
     sc_us.log(us);
 
     // dumpHeapStatistics();
+
+    return (long)(us / Stats::estimateCPUFreq());
 }
 
 } // namespace gc
