@@ -102,9 +102,6 @@ void Stats::clear() {
 }
 
 void Stats::startEstimatingCPUFreq() {
-    if (!Stats::enabled)
-        return;
-
     clock_gettime(CLOCK_REALTIME, &Stats::start_ts);
     Stats::start_tick = getCPUTicks();
 }

@@ -85,14 +85,15 @@ template <class ListT, typename Func> inline void forEach(ListT* list, Func func
     }
 }
 
-template <class ListT, typename Free>
+template <class ListT, typename Free, typename NotFree>
 inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free,
-                      Free free_func) {
+                      Free free_func, NotFree not_free_func) {
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
         if (isMarked(al)) {
             clearMark(al);
+            not_free_func(cur);
             cur = cur->next;
         } else {
             if (_doFree(al, &weakly_referenced, &classes_to_free)) {
@@ -108,7 +109,14 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, std::ve
     }
 }
 
-unsigned bytesAllocatedSinceCollection;
+size_t heap_size = INITIAL_HEAP_SIZE;
+size_t bytesAllocatedSinceCollection = 0;
+size_t allocBytesForNextCollection = INITIAL_HEAP_SIZE * HEAP_OCCUPANCY_FRACTION;
+size_t heap_occupancy;
+int num_quick_gcs = NUM_QUICK_GCS;
+
+struct timeval last_gc;
+
 static StatCounter gc_registered_bytes("gc_registered_bytes");
 void _bytesAllocatedTripped() {
     gc_registered_bytes.log(bytesAllocatedSinceCollection);
@@ -118,7 +126,44 @@ void _bytesAllocatedTripped() {
         return;
 
     threading::GLPromoteRegion _lock;
+
+    bool resize_due_to_frequency = false;
+
+    struct timeval this_gc;
+    gettimeofday(&this_gc, NULL);
+    uint64_t us = (this_gc.tv_sec - last_gc.tv_sec) * 1000000 + (this_gc.tv_usec - last_gc.tv_usec);
+    if (us / 1000 < QUICK_GC_FREQUENCY) {
+        num_quick_gcs--;
+        if (num_quick_gcs <= 0) {
+            resize_due_to_frequency = true;
+            num_quick_gcs = NUM_QUICK_GCS;
+        }
+    } else {
+        num_quick_gcs = NUM_QUICK_GCS;
+    }
+    last_gc = this_gc;
+
     runCollection();
+    heap_occupancy = 0;
+
+    bool resize_due_to_occupancy = heap_occupancy > heap_size * HEAP_OCCUPANCY_FRACTION;
+
+    if (resize_due_to_occupancy || resize_due_to_frequency) {
+        heap_size *= 1 + HEAP_OCCUPANCY_FRACTION;
+        allocBytesForNextCollection = heap_size * HEAP_OCCUPANCY_FRACTION - heap_occupancy;
+    }
+
+#if GC_COLLECTION_STATS
+    if (resize_due_to_frequency) {
+        printf("after %d gcs occuring more frequently than %dms, heap was resized to %.02fM\n", NUM_QUICK_GCS,
+               QUICK_GC_FREQUENCY, heap_size / (1024.0 * 1024.0));
+    } else if (resize_due_to_occupancy) {
+        printf("after gc heap was more than %.02f%% full (occupancy = %.02fM), resizing heap to %.02fM.  bytes "
+               "available to before next collection: %.02fM\n",
+               100 * HEAP_OCCUPANCY_FRACTION, heap_occupancy / (1024 * 1024.0), heap_size / (1024 * 1024.0),
+               allocBytesForNextCollection / (1024 * 1024.0));
+    }
+#endif
 }
 
 Heap global_heap;
@@ -462,6 +507,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
 
             if (isMarked(al)) {
                 clearMark(al);
+                heap_occupancy += b->size;
             } else {
                 if (_doFree(al, &weakly_referenced, &classes_to_free)) {
                     b->isfree.set(atom_idx);
@@ -661,21 +707,46 @@ void LargeArena::free(GCAllocation* al) {
     _freeLargeObj(LargeObj::fromAllocation(al));
 }
 
-GCAllocation* LargeArena::allocationFrom(void* ptr) {
-    LargeObj* obj = NULL;
-
-    for (obj = head; obj; obj = obj->next) {
-        char* end = (char*)&obj->data + obj->size;
-
-        if (ptr >= obj->data && ptr < end) {
-            return &obj->data[0];
+int LargeArena::findAllocation(uintptr_t addr) {
+    int l = 0;
+    int r = lookup.size() - 1;
+    while (l <= r) {
+        int mid = l + (r - l) / 2;
+        auto mid_ptr = lookup[mid];
+        if (addr < (uintptr_t)&mid_ptr->data) {
+            r = mid - 1;
+        } else if (addr >= (uintptr_t)&mid_ptr->data + mid_ptr->size) {
+            l = mid + 1;
+        } else {
+            return mid;
         }
     }
-    return NULL;
+    return -(l + 1);
+}
+
+GCAllocation* LargeArena::allocationFrom(void* ptr) {
+    if (lookup.size()) {
+        int idx = findAllocation((uintptr_t)ptr);
+        if (idx < 0)
+            return NULL;
+        return &lookup[idx]->data[0];
+    } else {
+        LargeObj* obj = NULL;
+
+        for (obj = head; obj; obj = obj->next) {
+            char* end = (char*)&obj->data + obj->size;
+
+            if (ptr >= obj->data && ptr < end) {
+                return &obj->data[0];
+            }
+        }
+        return NULL;
+    }
 }
 
 void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
-    sweepList(head, weakly_referenced, classes_to_free, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
+    sweepList(head, weakly_referenced, classes_to_free, [this](LargeObj* ptr) { _freeLargeObj(ptr); },
+              [](LargeObj* ptr) { heap_occupancy += ptr->size; });
 }
 
 void LargeArena::getStatistics(HeapStatistics* stats) {
@@ -858,17 +929,22 @@ void HugeArena::free(GCAllocation* al) {
 }
 
 GCAllocation* HugeArena::allocationFrom(void* ptr) {
-    HugeObj* cur = head;
-    while (cur) {
-        if (ptr >= cur && ptr < &cur->data[cur->obj_size])
-            return &cur->data[0];
-        cur = cur->next;
+    if (false && lookup.size()) {
+        abort();
+    } else {
+        HugeObj* cur = head;
+        while (cur) {
+            if (ptr >= cur && ptr < &cur->data[cur->obj_size])
+                return &cur->data[0];
+            cur = cur->next;
+        }
+        return NULL;
     }
-    return NULL;
 }
 
 void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
-    sweepList(head, weakly_referenced, classes_to_free, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
+    sweepList(head, weakly_referenced, classes_to_free, [this](HugeObj* ptr) { _freeHugeObj(ptr); },
+              [](HugeObj* ptr) { heap_occupancy += ptr->obj_size; });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {
