@@ -1115,10 +1115,6 @@ AST_Module* caching_parse_file(const char* fn) {
 
         if (result == ParseResult::PYC_UNWRITABLE)
             return parse_file(fn);
-
-        code = stat(cache_fn.c_str(), &cache_stat);
-        if (code != 0)
-            return parse_file(fn);
     }
 
     static const int MAX_TRIES = 5;
@@ -1159,6 +1155,7 @@ AST_Module* caching_parse_file(const char* fn) {
                 if (VERBOSITY() || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
                     fprintf(stderr, "%d %d %d %d\n", file_data[0], file_data[1], file_data[2], file_data[3]);
+                    fprintf(stderr, "%d %d %d %d\n", getMagic()[0], getMagic()[1], getMagic()[2], getMagic()[3]);
                 }
                 good = false;
             }
@@ -1227,10 +1224,6 @@ AST_Module* caching_parse_file(const char* fn) {
                 return mod;
 
             if (result == ParseResult::PYC_UNWRITABLE)
-                return parse_file(fn);
-
-            code = stat(cache_fn.c_str(), &cache_stat);
-            if (code != 0)
                 return parse_file(fn);
         }
     }
