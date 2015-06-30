@@ -24,6 +24,8 @@
 #include "core/threading.h"
 #include "core/types.h"
 
+//#define GC_COLLECTION_STATS 1
+
 namespace pyston {
 
 namespace gc {
@@ -75,8 +77,24 @@ class conservative_unordered_map
 
 namespace gc {
 
-extern unsigned bytesAllocatedSinceCollection;
-#define ALLOCBYTES_PER_COLLECTION 10000000
+// we tune our gc's using two knobs:
+//   heap occupancy (expressed as a percentage of the total heap sie)
+//   collection frequency (expressed in milliseconds)
+//
+// The collector will expand the heap (and set allocBytesForNextCollection accordingly)
+// to try to collect no sooner than collectionFrequency ms.
+//
+// The heap is expanded by 1.0 + HEAP_OCCUPANCY_FRACTION% until we reach this steady state.
+//
+#define INITIAL_HEAP_SIZE 32 * 1024 * 1024
+#define HEAP_OCCUPANCY_FRACTION 0.9 // we gc when the heap is >90% full
+// we don't want to collect more often than every 500ms (except if the heap fills up quicker than that)
+#define QUICK_GC_FREQUENCY 500
+#define NUM_QUICK_GCS 2 // the number of gc's below the minimum frequency before we bump the heap size
+
+extern size_t bytesAllocatedSinceCollection;
+extern size_t allocBytesForNextCollection;
+
 void _bytesAllocatedTripped();
 
 // Notify the gc of n bytes as being under GC management.
@@ -86,7 +104,7 @@ void _bytesAllocatedTripped();
 // such as memory that will get freed by a gc destructor.
 inline void registerGCManagedBytes(size_t bytes) {
     bytesAllocatedSinceCollection += bytes;
-    if (unlikely(bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION)) {
+    if (unlikely(bytesAllocatedSinceCollection >= allocBytesForNextCollection)) {
         _bytesAllocatedTripped();
     }
 }
@@ -226,6 +244,9 @@ public:
     void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
+
+    void prepareForCollection() {}
+    void cleanupAfterCollection() {}
 
 private:
     template <int N> class Bitmap {
@@ -407,6 +428,7 @@ private:
 
     static constexpr int NUM_FREE_LISTS = 32;
 
+    std::vector<LargeObj*> lookup;
     Heap* heap;
     LargeObj* head;
     LargeBlock* blocks;
@@ -416,6 +438,8 @@ private:
     LargeFreeChunk* get_from_size_list(LargeFreeChunk** list, size_t size);
     LargeObj* _alloc(size_t size);
     void _freeLargeObj(LargeObj* obj);
+
+    int findAllocation(uintptr_t addr);
 
 public:
     LargeArena(Heap* heap) : heap(heap), head(NULL), blocks(NULL) {}
@@ -431,6 +455,17 @@ public:
     void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
+
+    void prepareForCollection() {
+        for (LargeObj* lo = head; lo; lo = lo->next) {
+            lookup.push_back(lo);
+        }
+        std::sort(lookup.begin(), lookup.end());
+#if GC_COLLECTION_STATS
+        printf(" large objects: %zu", lookup.size());
+#endif
+    }
+    void cleanupAfterCollection() { lookup.clear(); }
 };
 
 // The HugeArena allocates objects where size > 1024*1024 bytes.
@@ -449,6 +484,17 @@ public:
     void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
+
+    void prepareForCollection() {
+        for (HugeObj* ho = head; ho; ho = ho->next) {
+            lookup.push_back(ho);
+        }
+        std::sort(lookup.begin(), lookup.end());
+#if GC_COLLECTION_STATS
+        printf(" huge objects: %zu", lookup.size());
+#endif
+    }
+    void cleanupAfterCollection() { lookup.clear(); }
 
 private:
     struct HugeObj {
@@ -474,6 +520,7 @@ private:
     void _freeHugeObj(HugeObj* lobj);
 
     HugeObj* head;
+    std::vector<HugeObj*> lookup;
 
     Heap* heap;
 };
@@ -550,6 +597,18 @@ public:
         small_arena.freeUnmarked(weakly_referenced, classes_to_free);
         large_arena.freeUnmarked(weakly_referenced, classes_to_free);
         huge_arena.freeUnmarked(weakly_referenced, classes_to_free);
+    }
+
+    void prepareForCollection() {
+        small_arena.prepareForCollection();
+        large_arena.prepareForCollection();
+        huge_arena.prepareForCollection();
+    }
+
+    void cleanupAfterCollection() {
+        small_arena.cleanupAfterCollection();
+        large_arena.cleanupAfterCollection();
+        huge_arena.cleanupAfterCollection();
     }
 
     void dumpHeapStatistics(int level);

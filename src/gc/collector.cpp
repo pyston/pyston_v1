@@ -96,6 +96,7 @@ public:
 
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
+        assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
         if (isMarked(al))
             return;
@@ -416,6 +417,8 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
+extern size_t heap_size;
+extern size_t heap_occupancy;
 void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
@@ -426,6 +429,10 @@ void runCollection() {
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ncollections);
+#if GC_COLLECTION_STATS
+    printf("Collection #%d, heap size = %.02fM, pre-gc occupancy ~= %.02fM", ncollections,
+           heap_size / (1024.0 * 1024.0), heap_size * HEAP_OCCUPANCY_FRACTION / (1024.0 * 1024.0));
+#endif
 
     // The bulk of the GC work is not reentrant-safe.
     // In theory we should never try to reenter that section, but it's happened due to bugs,
@@ -437,6 +444,8 @@ void runCollection() {
     should_not_reenter_gc = true; // begin non-reentrant section
 
     Timer _t("collecting", /*min_usec=*/10000);
+
+    global_heap.prepareForCollection();
 
     markPhase();
 
@@ -456,6 +465,10 @@ void runCollection() {
     std::vector<BoxedClass*> classes_to_free;
 
     sweepPhase(weakly_referenced, classes_to_free);
+
+#if GC_COLLECTION_STATS
+    printf(", post-gc occupancy = %.02fM) . ", heap_occupancy / (1024 * 1024.0));
+#endif
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
@@ -503,10 +516,15 @@ void runCollection() {
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
 
+    global_heap.cleanupAfterCollection();
+
     long us = _t.end();
     static StatCounter sc_us("gc_collections_us");
     sc_us.log(us);
 
+#if GC_COLLECTION_STATS
+    printf("  %ldms\n", (uint64_t)(us / 1000 / Stats::estimateCPUFreq()));
+#endif
     // dumpHeapStatistics();
 }
 
