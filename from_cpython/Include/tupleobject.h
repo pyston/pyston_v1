@@ -22,8 +22,6 @@ inserted in the tuple.  Similarly, PyTuple_GetItem does not increment the
 returned item's reference count.
 */
 
-// Pyston change: this is not the format we're using (but maybe it should be)
-#if 0
 typedef struct {
     PyObject_VAR_HEAD
     PyObject *ob_item[1];
@@ -33,9 +31,6 @@ typedef struct {
      * the tuple is not yet visible outside the function that builds it.
      */
 } PyTupleObject;
-#endif
-struct _PyTupleObject;
-typedef struct _PyTupleObject PyTupleObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) tuple_cls;
@@ -54,18 +49,11 @@ PyAPI_FUNC(int) _PyTuple_Resize(PyObject **, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyTuple_Pack(Py_ssize_t, ...) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _PyTuple_MaybeUntrack(PyObject *) PYSTON_NOEXCEPT;
 
-// Pyston addition:
-PyAPI_FUNC(PyObject **) PyTuple_Items(PyObject *) PYSTON_NOEXCEPT;
-
 /* Macro, trading safety for speed */
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyTuple_GET_ITEM(op, i) PyTuple_GetItem(op, i)
-#define PyTuple_GET_SIZE(op)    PyTuple_Size(op)
-//#define PyTuple_GET_ITEM(op, i) (((PyTupleObject *)(op))->ob_item[i])
-//#define PyTuple_GET_SIZE(op)    Py_SIZE(op)
+#define PyTuple_GET_ITEM(op, i) (((PyTupleObject *)(op))->ob_item[i])
+#define PyTuple_GET_SIZE(op)    Py_SIZE(op)
 /* Macro, *only* to be used to fill in brand new tuples */
-#define PyTuple_SET_ITEM(op, i, v) PyTuple_SetItem((PyObject*)op, i, v)
-//#define PyTuple_SET_ITEM(op, i, v) (((PyTupleObject *)(op))->ob_item[i] = v)
+#define PyTuple_SET_ITEM(op, i, v) (((PyTupleObject *)(op))->ob_item[i] = v)
 
 PyAPI_FUNC(int) PyTuple_ClearFreeList(void) PYSTON_NOEXCEPT;
 
@@ -73,4 +61,3 @@ PyAPI_FUNC(int) PyTuple_ClearFreeList(void) PYSTON_NOEXCEPT;
 }
 #endif
 #endif /* !Py_TUPLEOBJECT_H */
-

@@ -554,10 +554,6 @@ public:
 
 class BoxedTuple : public BoxVar {
 public:
-    typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
-
-    DEFAULT_CLASS_VAR_SIMPLE(tuple_cls, sizeof(Box*));
-
     static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
         BoxedTuple* rtn = new (nelts) BoxedTuple(nelts);
@@ -584,14 +580,26 @@ public:
     }
     static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
 
-    static BoxedTuple* create(int64_t size, BoxedClass* cls) { return new (cls, size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t size, BoxedClass* cls) {
+        if (cls == tuple_cls)
+            return new (size) BoxedTuple(size);
+        else
+            return new (cls, size) BoxedTuple(size);
+    }
     static BoxedTuple* create(int64_t nelts, Box** elts, BoxedClass* cls) {
-        BoxedTuple* rtn = new (cls, nelts) BoxedTuple(nelts);
+        BoxedTuple* rtn;
+        if (cls == tuple_cls)
+            rtn = new (nelts) BoxedTuple(nelts);
+        else
+            rtn = new (cls, nelts) BoxedTuple(nelts);
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create(std::initializer_list<Box*> members, BoxedClass* cls) {
-        return new (cls, members.size()) BoxedTuple(members);
+        if (cls == tuple_cls)
+            return new (members.size()) BoxedTuple(members);
+        else
+            return new (cls, members.size()) BoxedTuple(members);
     }
 
     static int Resize(BoxedTuple** pt, size_t newsize) noexcept;
@@ -601,6 +609,32 @@ public:
     Box*& operator[](size_t index) { return elts[index]; }
 
     size_t size() const { return ob_size; }
+
+    // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of declaring 1 element in 'elts'
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
+        ALLOC_STATS_VAR(tuple_cls)
+
+        assert(cls->tp_itemsize == sizeof(Box*));
+        return BoxVar::operator new(size, cls, nitems);
+    }
+
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
+        ALLOC_STATS_VAR(tuple_cls)
+
+        assert(tuple_cls->tp_alloc == PystonType_GenericAlloc);
+        assert(tuple_cls->tp_itemsize == sizeof(Box*));
+        assert(tuple_cls->tp_basicsize == offsetof(BoxedTuple, elts));
+        assert(tuple_cls->is_pyston_class);
+        assert(tuple_cls->attrs_offset == 0);
+
+        void* mem = gc_alloc(sizeof(BoxedTuple) + nitems * sizeof(Box*), gc::GCKind::PYTHON);
+        assert(mem);
+
+        BoxVar* rtn = static_cast<BoxVar*>(mem);
+        rtn->cls = tuple_cls;
+        rtn->ob_size = nitems;
+        return rtn;
+    }
 
 private:
     BoxedTuple(size_t size) { memset(elts, 0, sizeof(Box*) * size); }
@@ -614,8 +648,18 @@ private:
     }
 
 public:
-    Box* elts[0];
+    // CPython declares ob_item (their version of elts) to have 1 element.  We want to
+    // copy that behavior so that the sizes of the objects match, but we want to also
+    // have a zero-length array in there since we have some extra compiler warnings turned
+    // on.  _elts[1] will throw an error, but elts[1] will not.
+    union {
+        Box* elts[0];
+        Box* _elts[1];
+    };
 };
+static_assert(sizeof(BoxedTuple) == sizeof(PyTupleObject), "");
+static_assert(offsetof(BoxedTuple, ob_size) == offsetof(PyTupleObject, ob_size), "");
+static_assert(offsetof(BoxedTuple, elts) == offsetof(PyTupleObject, ob_item), "");
 
 extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;

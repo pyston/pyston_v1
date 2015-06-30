@@ -19,6 +19,8 @@ USE_CLANG  := 1
 USE_CCACHE := 1
 USE_DISTCC := 0
 
+PYPY := pypy
+
 ENABLE_VALGRIND := 0
 
 GDB := gdb
@@ -1024,7 +1026,7 @@ $(call make_target,_gcc)
 nosearch_runpy_% nosearch_pyrun_%: %.py ext_python
 	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
 nosearch_pypyrun_%: %.py ext_python
-	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time pypy $<'
+	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time $(PYPY) $<'
 $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 $(call make_search,pypyrun_%)

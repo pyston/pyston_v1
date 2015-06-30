@@ -329,7 +329,7 @@ extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
 }
 
 extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
+    assert(PyString_Check(lhs));
 
     if (isSubclass(_rhs->cls, unicode_cls)) {
         Box* rtn = PyUnicode_Concat(lhs, _rhs);
@@ -337,7 +337,7 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
         return rtn;
     }
 
-    if (!isSubclass(_rhs->cls, str_cls)) {
+    if (!PyString_Check(_rhs)) {
         // Note: this is deliberately not returning NotImplemented, even though
         // that would be more usual.  I assume this behavior of CPython's is
         // for backwards compatibility.
@@ -1140,7 +1140,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
 }
 
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
-    assert(isSubclass(lhs->cls, str_cls));
+    assert(PyString_Check(lhs));
 
     int n;
     if (isSubclass(rhs->cls, int_cls))
@@ -1160,7 +1160,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
 }
 
 Box* str_richcompare(Box* lhs, Box* rhs, int op) {
-    assert(isSubclass(lhs->cls, str_cls));
+    assert(PyString_Check(lhs));
 
     // Note: it is somehow about 50% faster to do this check inside the switch
     // statement, rather than out here.  It's functionally equivalent but the
@@ -1206,7 +1206,7 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
 #define JUST_CENTER 2
 static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
     assert(width->cls == int_cls);
-    assert(isSubclass(fillchar->cls, str_cls));
+    assert(PyString_Check(fillchar));
     assert(static_cast<BoxedString*>(fillchar)->size() == 1);
     int64_t curWidth = self->size();
     int64_t targetWidth = static_cast<BoxedInt*>(width)->n;
@@ -1255,13 +1255,13 @@ extern "C" Box* strCenter(BoxedString* lhs, Box* width, Box* fillchar) {
 }
 
 extern "C" Box* strLen(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     return boxInt(self->size());
 }
 
 extern "C" Box* strStr(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     if (self->cls == str_cls)
         return self;
@@ -1290,7 +1290,7 @@ static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but cla
 
 extern "C" PyObject* PyString_Repr(PyObject* obj, int smartquotes) noexcept {
     BoxedString* self = (BoxedString*)obj;
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     std::ostringstream os("");
 
@@ -1534,14 +1534,14 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     StringHash<char> H;
     return boxInt(H(self->data(), self->size()));
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
-    ASSERT(isSubclass(self->cls, str_cls), "%s", self->cls->tp_name);
+    ASSERT(PyString_Check(self), "%s", self->cls->tp_name);
 
     return boxBool(self->size() != 0);
 }
@@ -1550,7 +1550,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     assert(isSubclass(cls, str_cls));
 
     Box* rtn = str(obj);
-    assert(isSubclass(rtn->cls, str_cls));
+    assert(PyString_Check(rtn));
 
     if (cls == str_cls)
         return rtn;
@@ -1565,7 +1565,7 @@ extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
 }
 
 Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef s = self->s();
 
@@ -1587,7 +1587,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
 }
 
 Box* strIsAlpha(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
     if (str.empty())
@@ -1602,7 +1602,7 @@ Box* strIsAlpha(BoxedString* self) {
 }
 
 Box* strIsDigit(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
     if (str.empty())
@@ -1617,7 +1617,7 @@ Box* strIsDigit(BoxedString* self) {
 }
 
 Box* strIsAlnum(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
     if (str.empty())
@@ -1632,7 +1632,7 @@ Box* strIsAlnum(BoxedString* self) {
 }
 
 Box* strIsLower(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
     bool lowered = false;
@@ -1654,7 +1654,7 @@ Box* strIsLower(BoxedString* self) {
 }
 
 Box* strIsUpper(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
 
@@ -1673,7 +1673,7 @@ Box* strIsUpper(BoxedString* self) {
 }
 
 Box* strIsSpace(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
     if (str.empty())
@@ -1688,7 +1688,7 @@ Box* strIsSpace(BoxedString* self) {
 }
 
 Box* strIsTitle(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     llvm::StringRef str(self->s());
 
@@ -1723,12 +1723,12 @@ Box* strIsTitle(BoxedString* self) {
 }
 
 extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(sep), "");
     return string_join((PyStringObject*)sep, x);
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
-    if (!isSubclass(_self->cls, str_cls))
+    if (!PyString_Check(_self))
         raiseExcHelper(TypeError, "descriptor 'replace' requires a 'str' object but received a '%s'",
                        getTypeName(_self));
     BoxedString* self = static_cast<BoxedString*>(_self);
@@ -1738,11 +1738,11 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
         return PyUnicode_Replace((PyObject*)self, _old, _new, -1 /*count*/);
 #endif
 
-    if (!isSubclass(_old->cls, str_cls))
+    if (!PyString_Check(_old))
         raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* old = static_cast<BoxedString*>(_old);
 
-    if (!isSubclass(_new->cls, str_cls))
+    if (!PyString_Check(_new))
         raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* new_ = static_cast<BoxedString*>(_new);
 
@@ -1764,8 +1764,8 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
 }
 
 Box* strPartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(self), "");
+    RELEASE_ASSERT(PyString_Check(sep), "");
 
     size_t found_idx = self->s().find(sep->s());
     if (found_idx == std::string::npos)
@@ -1779,8 +1779,8 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
 }
 
 Box* strRpartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(self), "");
+    RELEASE_ASSERT(PyString_Check(sep), "");
 
     size_t found_idx = self->s().rfind(sep->s());
     if (found_idx == std::string::npos)
@@ -1805,10 +1805,10 @@ Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 Box* strStrip(BoxedString* self, Box* chars) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     auto str = self->s();
 
-    if (isSubclass(chars->cls, str_cls)) {
+    if (PyString_Check(chars)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxString(str.trim(chars_str));
     } else if (chars->cls == none_cls) {
@@ -1829,10 +1829,10 @@ Box* strStrip(BoxedString* self, Box* chars) {
 }
 
 Box* strLStrip(BoxedString* self, Box* chars) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     auto str = self->s();
 
-    if (isSubclass(chars->cls, str_cls)) {
+    if (PyString_Check(chars)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxString(str.ltrim(chars_str));
     } else if (chars->cls == none_cls) {
@@ -1853,10 +1853,10 @@ Box* strLStrip(BoxedString* self, Box* chars) {
 }
 
 Box* strRStrip(BoxedString* self, Box* chars) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     auto str = self->s();
 
-    if (isSubclass(chars->cls, str_cls)) {
+    if (PyString_Check(chars)) {
         auto chars_str = static_cast<BoxedString*>(chars)->s();
         return boxString(str.rtrim(chars_str));
     } else if (chars->cls == none_cls) {
@@ -1877,7 +1877,7 @@ Box* strRStrip(BoxedString* self, Box* chars) {
 }
 
 Box* strCapitalize(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     std::string s(self->s());
 
@@ -1893,7 +1893,7 @@ Box* strCapitalize(BoxedString* self) {
 }
 
 Box* strTitle(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     std::string s(self->s());
     bool start_of_word = false;
@@ -1917,20 +1917,20 @@ Box* strTitle(BoxedString* self) {
 }
 
 Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_chars) {
-    if (!isSubclass(self->cls, str_cls))
+    if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'translate' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
     std::unordered_set<char> delete_set;
     if (delete_chars) {
-        if (!isSubclass(delete_chars->cls, str_cls))
+        if (!PyString_Check(delete_chars))
             raiseExcHelper(TypeError, "expected a character buffer object");
         delete_set.insert(delete_chars->s().begin(), delete_chars->s().end());
     }
 
     bool have_table = table != None;
     if (have_table) {
-        if (!isSubclass(table->cls, str_cls))
+        if (!PyString_Check(table))
             raiseExcHelper(TypeError, "expected a character buffer object");
         if (table->size() != 256)
             raiseExcHelper(ValueError, "translation table must be 256 characters long");
@@ -1945,7 +1945,7 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
 }
 
 Box* strLower(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++)
@@ -1954,7 +1954,7 @@ Box* strLower(BoxedString* self) {
 }
 
 Box* strUpper(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::toupper(rtn->data()[i]);
@@ -1962,7 +1962,7 @@ Box* strUpper(BoxedString* self) {
 }
 
 Box* strSwapcase(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++) {
         char c = rtn->data()[i];
@@ -1975,7 +1975,7 @@ Box* strSwapcase(BoxedString* self) {
 }
 
 Box* strContains(BoxedString* self, Box* elt) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     if (PyUnicode_Check(elt)) {
         int r = PyUnicode_Contains(self, elt);
@@ -1984,7 +1984,7 @@ Box* strContains(BoxedString* self, Box* elt) {
         return boxBool(r);
     }
 
-    if (!isSubclass(elt->cls, str_cls))
+    if (!PyString_Check(elt))
         raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -2016,7 +2016,7 @@ extern "C" int _PyString_Eq(PyObject* o1, PyObject* o2) noexcept {
 Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     Box* end = _args[0];
 
-    if (!isSubclass(self->cls, str_cls))
+    if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
@@ -2051,7 +2051,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return boxBool(r);
     }
 
-    if (!isSubclass(elt->cls, str_cls))
+    if (!PyString_Check(elt))
         raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -2079,7 +2079,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     Box* end = _args[0];
 
-    if (!isSubclass(self->cls, str_cls))
+    if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
@@ -2114,7 +2114,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return False;
     }
 
-    if (!isSubclass(elt->cls, str_cls))
+    if (!PyString_Check(elt))
         raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -2142,7 +2142,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 }
 
 Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
-    if (!isSubclass(self->cls, str_cls))
+    if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'decode' requires a 'str' object but received a '%s'", getTypeName(self));
 
     BoxedString* encoding_str = (BoxedString*)encoding;
@@ -2151,13 +2151,13 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
 
-    if (encoding_str && !isSubclass(encoding_str->cls, str_cls))
+    if (encoding_str && !PyString_Check(encoding_str))
         raiseExcHelper(TypeError, "decode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
 
     if (error_str && error_str->cls == unicode_cls)
         error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
-    if (error_str && !isSubclass(error_str->cls, str_cls))
+    if (error_str && !PyString_Check(error_str))
         raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
     Box* result = PyString_AsDecodedObject(self, encoding_str ? encoding_str->data() : NULL,
@@ -2167,7 +2167,7 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
 }
 
 Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
-    if (!isSubclass(self->cls, str_cls))
+    if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
 
     BoxedString* encoding_str = (BoxedString*)encoding;
@@ -2176,13 +2176,13 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
 
-    if (encoding_str && !isSubclass(encoding_str->cls, str_cls))
+    if (encoding_str && !PyString_Check(encoding_str))
         raiseExcHelper(TypeError, "encode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
 
     if (error_str && error_str->cls == unicode_cls)
         error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
-    if (error_str && !isSubclass(error_str->cls, str_cls))
+    if (error_str && !PyString_Check(error_str))
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
     Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
@@ -2192,7 +2192,7 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
 }
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     if (PyIndex_Check(slice)) {
         Py_ssize_t n = PyNumber_AsSsize_t(slice, PyExc_IndexError);
@@ -2267,7 +2267,7 @@ extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
 }
 
 Box* strIter(BoxedString* self) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     return new BoxedStringIterator(self);
 }
 
@@ -2338,7 +2338,7 @@ extern "C" char* PyString_AsString(PyObject* o) noexcept {
 }
 
 extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
-    if (isSubclass(op->cls, str_cls))
+    if (PyString_Check(op))
         return static_cast<BoxedString*>(op)->size();
 
     char* _s;
@@ -2362,7 +2362,7 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
 
     assert(pv);
-    assert(isSubclass((*pv)->cls, str_cls));
+    assert(PyString_Check(*pv));
     BoxedString* s = static_cast<BoxedString*>(*pv);
 
     if (newsize == s->size())
@@ -2609,7 +2609,7 @@ static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, con
     RELEASE_ASSERT(index == 0, "");
     // I think maybe this can just be a non-release assert?  shouldn't be able to call this with
     // the wrong type
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(self), "");
 
     auto s = static_cast<BoxedString*>(self);
     *ptr = s->data();
@@ -2618,7 +2618,7 @@ static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, con
 
 static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexcept {
     RELEASE_ASSERT(lenp == NULL, "");
-    RELEASE_ASSERT(isSubclass(o->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(o), "");
 
     return 1;
 }
@@ -2632,7 +2632,7 @@ static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t inde
 }
 
 static int string_buffer_getbuffer(BoxedString* self, Py_buffer* view, int flags) noexcept {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
     return PyBuffer_FillInfo(view, (PyObject*)self, self->data(), self->size(), 1, flags);
 }
 

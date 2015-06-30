@@ -83,7 +83,7 @@ public:
         if (!param_names.takes_param_names)
             return EmptyTuple;
 
-        BoxedTuple::GCVector elts;
+        std::vector<Box*, StlCompatAllocator<Box*>> elts;
         for (auto sr : param_names.args)
             elts.push_back(boxString(sr));
         if (param_names.vararg.size())

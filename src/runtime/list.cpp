@@ -435,10 +435,10 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         if (v_as_seq == NULL)
             throwCAPIException();
 
-        v_size = PySequence_Fast_GET_SIZE(v_as_seq);
+        v_size = PySequence_Fast_GET_SIZE((Box*)v_as_seq);
         // If lv->size is 0, lv->elts->elts is garbage
         if (v_size)
-            v_elts = PySequence_Fast_ITEMS(v_as_seq);
+            v_elts = PySequence_Fast_ITEMS((Box*)v_as_seq);
         else
             v_elts = NULL;
     }

@@ -202,7 +202,8 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
     ALLOC_STATS_VAR(cls);
 
     assert(cls);
-    ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
+    // See definition of BoxedTuple for some notes on why we need this special case:
+    ASSERT(isSubclass(cls, tuple_cls) || cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_itemsize > 0);
     assert(cls->tp_alloc);
 
@@ -516,6 +517,8 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
 // TODO: should we use C++11 `noexcept' here?
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
                               std::initializer_list<Box*> defaults) {
+    STAT_TIMER(t0, "us_timer_boxclfunction", 10);
+
     if (closure)
         assert(closure->cls == closure_cls);
 
@@ -2909,8 +2912,10 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
+    // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
+    // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0)
-        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxString("tuple"));
+        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, boxString("tuple"));
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });

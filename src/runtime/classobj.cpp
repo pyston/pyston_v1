@@ -246,6 +246,8 @@ Box* classobjStr(Box* _obj) {
 }
 
 static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
+    STAT_TIMER(t0, "us_timer_instance_getattribute", 0);
+
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 

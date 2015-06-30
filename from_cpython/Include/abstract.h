@@ -1185,7 +1185,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 #define PySequence_Fast_ITEMS(sf) \
     (PyList_Check(sf) ? (PyList_Items(sf)) \
-                      : (PyTuple_Items(sf)))
+                      : ((PyTupleObject *)(sf))->ob_item)
     /* Return a pointer to the underlying item array for
        an object retured by PySequence_Fast */
 

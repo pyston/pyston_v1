@@ -231,9 +231,7 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
-#if EXPENSIVE_STAT_TIMERS
     STAT_TIMER(t0, "us_timer_isSubclass", 10);
-#endif
     return PyType_IsSubtype(child, parent);
 }
 
@@ -311,7 +309,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
         return &l->elts->elts[0];
     }
 
-    BoxedTuple::GCVector elts;
+    std::vector<Box*, StlCompatAllocator<Box*>> elts;
     for (auto e : obj->pyElements()) {
         elts.push_back(e);
         if (elts.size() > expected_size)
@@ -1844,6 +1842,29 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
+
+#if 0 && STAT_TIMERS
+    static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_getattr_patchable");
+    static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_getattr_nopatch");
+    static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_getattr_megamorphic");
+    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    uint64_t* counter;
+    if (!icinfo)
+        counter = st_id_nopatch;
+    else if (icinfo->isMegamorphic())
+        counter = st_id_megamorphic;
+    else {
+        //counter = Stats::getStatCounter("us_timer_slowpath_getattr_patchable_" + std::string(obj->cls->tp_name));
+        //counter = Stats::getStatCounter("us_timer_slowpath_getattr_patchable_" + std::string(attr->s()));
+        counter = st_id;
+        if (!rewriter.get())
+            printf("");
+    }
+
+    if (icinfo && icinfo->start_addr == (void*)0x2aaaadb1477b)
+        printf("");
+    ScopedStatTimer st(counter, 10);
+#endif
 
     Box* val;
     if (rewriter.get()) {
@@ -3947,6 +3968,8 @@ Box* nonzeroAndBox(Box* b, bool negate) {
 }
 
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args) {
+    STAT_TIMER(t0, "us_timer_compareinternal", 0);
+
     if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
         bool neg = (op_type == AST_TYPE::IsNot);
 
