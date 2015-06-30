@@ -226,6 +226,28 @@ extern "C" bool softspace(Box* b, bool newval) {
     return r;
 }
 
+extern "C" void printHelper(Box* dest, Box* var, bool nl) {
+    static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+    static BoxedString* newline_str = static_cast<BoxedString*>(PyString_InternFromString("\n"));
+    static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
+
+    if (var) {
+        // begin code for handling of softspace
+        bool new_softspace = !nl;
+        if (softspace(dest, new_softspace))
+            callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0, 0);
+
+        Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+    }
+
+    if (nl) {
+        callattrInternal(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
+        if (!var)
+            softspace(dest, false);
+    }
+}
+
 extern "C" void my_assert(bool b) {
     assert(b);
 }

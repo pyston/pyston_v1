@@ -578,6 +578,23 @@ public:
         rtn->elts[2] = elt2;
         return rtn;
     }
+    static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
+        BoxedTuple* rtn = new (4) BoxedTuple(4);
+        rtn->elts[0] = elt0;
+        rtn->elts[1] = elt1;
+        rtn->elts[2] = elt2;
+        rtn->elts[3] = elt3;
+        return rtn;
+    }
+    static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
+        BoxedTuple* rtn = new (5) BoxedTuple(5);
+        rtn->elts[0] = elt0;
+        rtn->elts[1] = elt1;
+        rtn->elts[2] = elt2;
+        rtn->elts[3] = elt3;
+        rtn->elts[4] = elt4;
+        return rtn;
+    }
     static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
 
     static BoxedTuple* create(int64_t size, BoxedClass* cls) {

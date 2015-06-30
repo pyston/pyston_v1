@@ -958,7 +958,7 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assembler->callq(r);
     } else {
         assembler->call(assembler::Immediate(offset));
-        assert(asm_address == (uint64_t)assembler->curInstPointer());
+        assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
     assert(vars_by_location.count(assembler::RAX) == 0);

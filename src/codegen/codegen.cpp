@@ -25,6 +25,7 @@
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/FileSystem.h"
 
+#include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/compvars.h"
 #include "core/ast.h"
@@ -60,6 +61,10 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
             RELEASE_ASSERT(0, "Unknown type: %d", ast->type);
             break;
     }
+}
+
+SourceInfo::~SourceInfo() {
+    // TODO: release memory..
 }
 
 void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length,

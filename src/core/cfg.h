@@ -36,6 +36,7 @@
 namespace pyston {
 
 class AST_stmt;
+class Box;
 
 class CFG;
 class CFGBlock {
@@ -43,6 +44,12 @@ private:
     CFG* cfg;
 
 public:
+    // Baseline JIT helper fields:
+    // contains address to the start of the code of this basic block
+    void* code;
+    // contains the address of the entry function
+    std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block);
+
     std::vector<AST_stmt*> body;
     std::vector<CFGBlock*> predecessors, successors;
     int idx; // index in the CFG
@@ -50,7 +57,7 @@ public:
 
     typedef std::vector<AST_stmt*>::iterator iterator;
 
-    CFGBlock(CFG* cfg, int idx) : cfg(cfg), idx(idx), info(NULL) {}
+    CFGBlock(CFG* cfg, int idx) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(NULL) {}
 
     void connectTo(CFGBlock* successor, bool allow_backedge = false);
     void unconnectFrom(CFGBlock* successor);

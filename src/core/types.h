@@ -65,7 +65,6 @@ using gc::GCVisitor;
 
 enum class EffortLevel {
     INTERPRETED = 0,
-    MINIMAL = 1,
     MODERATE = 2,
     MAXIMAL = 3,
 };
@@ -221,6 +220,7 @@ class BoxedClosure;
 class BoxedGenerator;
 class ICInfo;
 class LocationMap;
+class JitCodeBlock;
 
 struct CompiledFunction {
 private:
@@ -249,21 +249,10 @@ public:
     LocationMap* location_map; // only meaningful if this is a compiled frame
 
     std::vector<ICInfo*> ics;
+    std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                     EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
-        : clfunc(NULL),
-          func(func),
-          spec(spec),
-          entry_descriptor(entry_descriptor),
-          is_interpreted(is_interpreted),
-          code(code),
-          effort(effort),
-          times_called(0),
-          times_speculation_failed(0),
-          location_map(nullptr) {
-        assert((spec != NULL) + (entry_descriptor != NULL) == 1);
-    }
+                     EffortLevel effort, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();
 
@@ -282,6 +271,7 @@ typedef int FutureFlags;
 class BoxedModule;
 class ScopeInfo;
 class InternedStringPool;
+class LivenessAnalysis;
 class SourceInfo {
 public:
     BoxedModule* parent_module;
@@ -295,6 +285,7 @@ public:
     InternedStringPool& getInternedStrings();
 
     ScopeInfo* getScopeInfo();
+    LivenessAnalysis* getLiveness();
 
     // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
@@ -307,6 +298,10 @@ public:
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
                std::vector<AST_stmt*> body, std::string fn);
+    ~SourceInfo();
+
+private:
+    std::unique_ptr<LivenessAnalysis> liveness_info;
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;

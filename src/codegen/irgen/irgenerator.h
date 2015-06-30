@@ -56,7 +56,6 @@ class IRGenState {
 private:
     CompiledFunction* cf;
     SourceInfo* source_info;
-    std::unique_ptr<LivenessAnalysis> liveness;
     std::unique_ptr<PhiAnalysis> phis;
     ParamNames* param_names;
     GCBuilder* gc;
@@ -70,8 +69,8 @@ private:
 
 
 public:
-    IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<LivenessAnalysis> liveness,
-               std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
+    IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
+               ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
     ~IRGenState();
 
     CompiledFunction* getCurFunction() { return cf; }
@@ -90,7 +89,7 @@ public:
 
     SourceInfo* getSourceInfo() { return source_info; }
 
-    LivenessAnalysis* getLiveness() { return liveness.get(); }
+    LivenessAnalysis* getLiveness() { return source_info->getLiveness(); }
     PhiAnalysis* getPhis() { return phis.get(); }
 
     ScopeInfo* getScopeInfo();
@@ -133,11 +132,13 @@ public:
 };
 
 class IREmitter;
+class AST_Call;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
+std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
 }
 
 #endif
