@@ -231,9 +231,7 @@ extern "C" void my_assert(bool b) {
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
-#if EXPENSIVE_STAT_TIMERS
     STAT_TIMER(t0, "us_timer_isSubclass", 10);
-#endif
     return PyType_IsSubtype(child, parent);
 }
 
