@@ -269,7 +269,12 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     while (start < end) {
 #if TRACE_GC_MARKING
         if (global_heap.getAllocationFromInteriorPointer(*start)) {
-            GC_TRACE_LOG("Found conservative reference to %p from %p\n", *start, start);
+            if (*start >= (void*)HUGE_ARENA_START)
+                GC_TRACE_LOG("Found conservative reference to huge object %p from %p\n", *start, start);
+            else if (*start >= (void*)LARGE_ARENA_START && *start < (void*)HUGE_ARENA_START)
+                GC_TRACE_LOG("Found conservative reference to large object %p from %p\n", *start, start);
+            else
+                GC_TRACE_LOG("Found conservative reference to %p from %p\n", *start, start);
         }
 #endif
 
@@ -317,9 +322,15 @@ void markPhase() {
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
-        GC_TRACE_LOG("Looking at heap object %p\n", p);
         assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
+
+#if TRACE_GC_MARKING
+        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
+            GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
+        else
+            GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
+#endif
 
         assert(isMarked(al));
 
