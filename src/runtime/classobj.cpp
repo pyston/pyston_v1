@@ -245,53 +245,72 @@ Box* classobjStr(Box* _obj) {
     return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s()) + "." + cls->name->s());
 }
 
-static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
-    STAT_TIMER(t0, "us_timer_instance_getattribute", 0);
-
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-
-    RELEASE_ASSERT(_attr->cls == str_cls, "");
-    BoxedString* attr = static_cast<BoxedString*>(_attr);
-
-    // These are special cases in CPython as well:
-    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
-        if (attr->s() == "__dict__")
-            return inst->getAttrWrapper();
-
-        if (attr->s() == "__class__")
-            return inst->inst_cls;
-    }
-
-    Box* r = inst->getattr(attr->s());
+// Analogous to CPython's instance_getattr2
+static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_str) {
+    Box* r = inst->getattr(attr_str->s());
     if (r)
         return r;
 
-    r = classLookup(inst->inst_cls, attr->s());
+    r = classLookup(inst->inst_cls, attr_str->s());
     if (r) {
         return processDescriptor(r, inst, inst->inst_cls);
     }
-    RELEASE_ASSERT(!r, "");
+
+    return NULL;
+}
+
+static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* attr_str) {
+    Box* attr_obj = instanceGetattributeSimple(inst, attr_str);
+
+    if (attr_obj) {
+        return attr_obj;
+    }
 
     static const std::string getattr_str("__getattr__");
     Box* getattr = classLookup(inst->inst_cls, getattr_str);
 
     if (getattr) {
         getattr = processDescriptor(getattr, inst, inst->inst_cls);
-        return runtimeCall(getattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
+        return runtimeCall(getattr, ArgPassSpec(1), attr_str, NULL, NULL, NULL, NULL);
     }
 
-    if (!raise_on_missing)
-        return NULL;
+    return NULL;
+}
 
-    raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->data(), attr->data());
+static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    // These are special cases in CPython as well:
+    if (attr_str->s()[0] == '_' && attr_str->s()[1] == '_') {
+        if (attr_str->s() == "__dict__")
+            return inst->getAttrWrapper();
+
+        if (attr_str->s() == "__class__")
+            return inst->inst_cls;
+    }
+
+    Box* attr = instanceGetattributeWithFallback(inst, attr_str);
+    if (attr) {
+        return attr;
+    } else if (!raise_on_missing) {
+        return NULL;
+    } else {
+        raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->data(),
+                       attr_str->data());
+    }
 }
 
 Box* instanceGetattribute(Box* _inst, Box* _attr) {
-    return _instanceGetattribute(_inst, _attr, true);
+    STAT_TIMER(t0, "us_timer_instance_getattribute", 0);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+    return _instanceGetattribute(_inst, attr, true);
 }
 
-static Box* instance_getattro(Box* cls, Box* attr) noexcept {
+// Analogous to CPython's instance_getattr
+static Box* instance_getattr(Box* cls, Box* attr) noexcept {
     try {
         return instanceGetattribute(cls, attr);
     } catch (ExcInfo e) {
@@ -719,7 +738,7 @@ static PyObject* instance_index(PyObject* self) noexcept {
             return NULL;
     }
     */
-    if ((func = instance_getattro(self, boxString("__index__"))) == NULL) {
+    if ((func = instance_getattr(self, boxString("__index__"))) == NULL) {
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
         PyErr_Clear();
@@ -729,6 +748,18 @@ static PyObject* instance_index(PyObject* self) noexcept {
     res = PyEval_CallObject(func, (PyObject*)NULL);
     Py_DECREF(func);
     return res;
+}
+
+static void instance_dealloc(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    // Note that trying to call __del__ as a finalizer does not fallback to
+    // __getattr__ unlike other attributes (like __index__).
+    static BoxedString* del_str = static_cast<BoxedString*>(PyString_InternFromString("__del__"));
+    Box* func = instanceGetattributeSimple(inst, del_str);
+    if (func)
+        runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
 Box* _instanceBinary(Box* _inst, Box* other, const char* attr) {
@@ -858,8 +889,10 @@ void setupClassobj() {
     instance_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)instanceNe, UNKNOWN, 2)));
 
     instance_cls->freeze();
-    instance_cls->tp_getattro = instance_getattro;
+    instance_cls->tp_getattro = instance_getattr;
     instance_cls->tp_setattro = instance_setattro;
     instance_cls->tp_as_number->nb_index = instance_index;
+    instance_cls->tp_dealloc = instance_dealloc;
+    instance_cls->has_safe_tp_dealloc = false;
 }
 }

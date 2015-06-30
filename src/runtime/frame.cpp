@@ -152,7 +152,8 @@ Box* getFrame(int depth) {
 void setupFrame() {
     frame_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false,
                                        "frame");
-    frame_cls->simple_destructor = BoxedFrame::simpleDestructor;
+    frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
+    frame_cls->has_safe_tp_dealloc = true;
 
     frame_cls->giveAttr("f_code", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::code, NULL, NULL));
     frame_cls->giveAttr("f_locals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::locals, NULL, NULL));

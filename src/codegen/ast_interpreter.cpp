@@ -207,7 +207,7 @@ public:
         assert(inter->cls == astinterpreter_cls);
         if (inter->frame_addr)
             RegisterHelper::deregister(inter->frame_addr);
-        inter->~ASTInterpreter();
+        // inter->~ASTInterpreter();
     }
 
     friend class RegisterHelper;
@@ -1485,7 +1485,8 @@ BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
 void setupInterpreter() {
     astinterpreter_cls = BoxedHeapClass::create(type_cls, object_cls, ASTInterpreter::gcHandler, 0, 0,
                                                 sizeof(ASTInterpreter), false, "astinterpreter");
-    astinterpreter_cls->simple_destructor = ASTInterpreter::simpleDestructor;
+    astinterpreter_cls->tp_dealloc = ASTInterpreter::simpleDestructor;
+    astinterpreter_cls->has_safe_tp_dealloc = true;
     astinterpreter_cls->freeze();
 }
 }

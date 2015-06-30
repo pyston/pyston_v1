@@ -548,6 +548,16 @@ void allowGLReadPreemption() {
     }
 #endif
 
+    // We need to call the finalizers on dead objects at some point. This is a safe place to do so.
+    // This needs to be done before checking for other threads waiting on the GIL since there could
+    // be only one thread doing a lot of work.
+    //
+    // The conditional is an optimization - the function will do nothing if the lists are empty,
+    // but it's worth checking for to avoid the overhead of making a function call.
+    if (!gc::pending_finalization_list.empty() || !gc::weakrefs_needing_callback_list.empty()) {
+        gc::callPendingFinalizers();
+    }
+
     // Double-checked locking: first read with no ordering constraint:
     if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
         return;

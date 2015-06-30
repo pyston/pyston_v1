@@ -40,6 +40,10 @@ void _printStacktrace();
 
 extern "C" Box* deopt(AST_expr* expr, Box* value);
 
+// Finalizer-related
+void default_free(void*);
+void dealloc_null(Box* box);
+
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 void raiseExcHelper(BoxedClass*, Box* arg) __attribute__((__noreturn__));

@@ -973,6 +973,23 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     }
 }
 
+static PyObject* slot_tp_del(PyObject* self) noexcept {
+    static BoxedString* del_str = static_cast<BoxedString*>(PyString_InternFromString("__del__"));
+    try {
+        // TODO: runtime ICs?
+        Box* del_attr = typeLookup(self->cls, del_str->s(), NULL);
+        assert(del_attr);
+
+        return callattr(self, del_str, {.cls_only = false, .null_on_nonexistent = true },
+                        ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        // Python does not support exceptions thrown inside finalizers. Instead, it just
+        // prints a warning that an exception was throw to stderr but ignores it.
+        fprintf(stderr, "Warning: exception thrown in %s of %s ignored\n", del_str->data(), self->cls->tp_name);
+        return NULL;
+    }
+}
+
 static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpinit", SLOT_AVOIDABILITY(self));
 
@@ -1461,6 +1478,7 @@ static slotdef slotdefs[]
                                                                           "see help(type(x)) for signature",
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+        TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
@@ -2993,6 +3011,17 @@ void commonClassSetup(BoxedClass* cls) {
     assert(cls->tp_dict && cls->tp_dict->cls == attrwrapper_cls);
 }
 
+static void checkIfExceptionType(BoxedClass* cls) {
+    BoxedClass* base = cls;
+    while (base) {
+        if (base == PyExc_BaseException) {
+            exception_types.push_back(cls);
+            break;
+        }
+        base = base->tp_base;
+    }
+}
+
 extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
     // We don't cache anything yet that would need to be invalidated:
 }
@@ -3091,6 +3120,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     // this should get automatically initialized to 0 on this path:
     assert(cls->attrs_offset == 0);
+
+    checkIfExceptionType(cls);
 
     return 0;
 }

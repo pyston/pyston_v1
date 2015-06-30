@@ -20,6 +20,8 @@
 #include <list>
 #include <sys/mman.h>
 
+#include "llvm/ADT/SmallPtrSet.h"
+
 #include "core/common.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -79,6 +81,11 @@ extern unsigned bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 10000000
 void _bytesAllocatedTripped();
 
+#define ALLOC_CLASSES_PER_CLASS_COLLECTION 2000
+extern unsigned classesAllocatedSinceCollection;
+void classesAllocatedTripped();
+
+
 // Notify the gc of n bytes as being under GC management.
 // This is called internally for anything allocated through gc_alloc,
 // but it can also be called by clients to say that they have memory that
@@ -113,6 +120,20 @@ static_assert(sizeof(GCAllocation) <= sizeof(void*),
               "we should try to make sure the gc header is word-sized or smaller");
 
 #define MARK_BIT 0x1
+// reserved bit - along with MARK_BIT, encodes the states of finalization order
+#define ORDERING_EXTRA_BIT 0x2
+#define FINALIZER_HAS_RUN_BIT 0x4
+
+#define ORDERING_BITS (MARK_BIT | ORDERING_EXTRA_BIT)
+
+enum FinalizationState {
+    UNREACHABLE = 0x0,
+    TEMPORARY = ORDERING_EXTRA_BIT,
+
+    // Note that these two states have MARK_BIT set.
+    ALIVE = MARK_BIT,
+    REACHABLE_FROM_FINALIZER = ORDERING_BITS,
+};
 
 inline bool isMarked(GCAllocation* header) {
     return (header->gc_flags & MARK_BIT) != 0;
@@ -123,12 +144,50 @@ inline void setMark(GCAllocation* header) {
     header->gc_flags |= MARK_BIT;
 }
 
+inline void setMarkForced(GCAllocation* header) {
+    header->gc_flags |= MARK_BIT;
+}
+
 inline void clearMark(GCAllocation* header) {
     assert(isMarked(header));
     header->gc_flags &= ~MARK_BIT;
 }
 
+inline void clearMarkForced(GCAllocation* header) {
+    header->gc_flags &= ~MARK_BIT;
+}
+
+inline bool hasFinalized(GCAllocation* header) {
+    return (header->gc_flags & FINALIZER_HAS_RUN_BIT) != 0;
+}
+
+inline void setFinalized(GCAllocation* header) {
+    assert(!hasFinalized(header));
+    header->gc_flags |= FINALIZER_HAS_RUN_BIT;
+}
+
+inline FinalizationState orderingState(GCAllocation* header) {
+    int state = header->gc_flags & ORDERING_BITS;
+    assert(state <= static_cast<int>(FinalizationState::REACHABLE_FROM_FINALIZER));
+    return static_cast<FinalizationState>(state);
+}
+
+inline void setOrderingState(GCAllocation* header, FinalizationState state) {
+    header->gc_flags = (header->gc_flags & ~ORDERING_BITS) | static_cast<int>(state);
+}
+
+inline void clearOrderingState(GCAllocation* header) {
+    header->gc_flags &= ~ORDERING_EXTRA_BIT;
+}
+
 #undef MARK_BIT
+#undef ORDERING_EXTRA_BIT
+#undef FINALIZER_HAS_RUN_BIT
+#undef ORDERING_BITS
+
+bool hasOrderedFinalizer(Box* b);
+void finalize(Box* b);
+bool isWeaklyReferenced(Box* b);
 
 #define PAGE_SIZE 4096
 
@@ -178,7 +237,6 @@ constexpr uintptr_t SMALL_ARENA_START = 0x1270000000L;
 constexpr uintptr_t LARGE_ARENA_START = 0x2270000000L;
 constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
 
-
 //
 // The SmallArena allocates objects <= 3584 bytes.
 //
@@ -223,7 +281,8 @@ public:
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -355,7 +414,8 @@ private:
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
-    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
+    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void _traverseForClassesFromBlock(GCVisitor& visitor, Block** head);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -428,7 +488,8 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -446,7 +507,8 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes);
+    void traverseForClasses(GCVisitor& visitor);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -478,6 +540,7 @@ private:
     Heap* heap;
 };
 
+extern Heap global_heap;
 
 class Heap {
 private:
@@ -529,7 +592,18 @@ public:
     void free(GCAllocation* alloc) {
         destructContents(alloc);
 
-        _setFree(alloc);
+        if (large_arena.contains(alloc)) {
+            large_arena.free(alloc);
+            return;
+        }
+
+        if (huge_arena.contains(alloc)) {
+            huge_arena.free(alloc);
+            return;
+        }
+
+        assert(small_arena.contains(alloc));
+        small_arena.free(alloc);
     }
 
     // not thread safe:
@@ -546,37 +620,28 @@ public:
     }
 
     // not thread safe:
-    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
-        small_arena.freeUnmarked(weakly_referenced, classes_to_free);
-        large_arena.freeUnmarked(weakly_referenced, classes_to_free);
-        huge_arena.freeUnmarked(weakly_referenced, classes_to_free);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, bool can_free_classes) {
+        small_arena.freeUnmarked(weakly_referenced, can_free_classes);
+        large_arena.freeUnmarked(weakly_referenced, can_free_classes);
+        huge_arena.freeUnmarked(weakly_referenced, can_free_classes);
+    }
+
+    void traverseForClasses(GCVisitor& visitor) {
+        small_arena.traverseForClasses(visitor);
+        large_arena.traverseForClasses(visitor);
+        huge_arena.traverseForClasses(visitor);
     }
 
     void dumpHeapStatistics(int level);
 
-private:
-    // Internal function that just marks the allocation as being freed, without doing any
-    // Python-semantics on it.
-    void _setFree(GCAllocation* alloc) {
-        if (large_arena.contains(alloc)) {
-            large_arena.free(alloc);
-            return;
+    void assertSmallArenaContains(void* p, uint32_t bytes) {
+        if (global_heap.small_arena.contains(p)) {
+            SmallArena::Block* b = SmallArena::Block::forPointer(p);
+            assert(b->size >= bytes + sizeof(GCAllocation));
         }
-
-        if (huge_arena.contains(alloc)) {
-            huge_arena.free(alloc);
-            return;
-        }
-
-        assert(small_arena.contains(alloc));
-        small_arena.free(alloc);
     }
-
-    friend void markPhase();
-    friend void runCollection();
 };
 
-extern Heap global_heap;
 void dumpHeapStatistics(int level);
 
 } // namespace gc
