@@ -227,6 +227,9 @@ public:
 
     void getStatistics(HeapStatistics* stats);
 
+    void prepareForCollection() {}
+    void cleanupAfterCollection() {}
+
 private:
     template <int N> class Bitmap {
         static_assert(N % 64 == 0, "");
@@ -361,6 +364,15 @@ private:
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
 };
 
+struct ObjLookupCache {
+    void* objptr;
+    void* data;
+    size_t size;
+
+    ObjLookupCache(void* objptr, void* data, size_t size) : objptr(objptr), data(data), size(size) {}
+};
+
+
 //
 // The LargeArena allocates objects where 3584 < size <1024*1024-CHUNK_SIZE-sizeof(LargeObject) bytes.
 //
@@ -407,6 +419,7 @@ private:
 
     static constexpr int NUM_FREE_LISTS = 32;
 
+    std::vector<ObjLookupCache> lookup; // used during gc's to speed up finding large object GCAllocations
     Heap* heap;
     LargeObj* head;
     LargeBlock* blocks;
@@ -431,6 +444,9 @@ public:
     void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
+
+    void prepareForCollection();
+    void cleanupAfterCollection();
 };
 
 // The HugeArena allocates objects where size > 1024*1024 bytes.
@@ -450,14 +466,17 @@ public:
 
     void getStatistics(HeapStatistics* stats);
 
+    void prepareForCollection();
+    void cleanupAfterCollection();
+
 private:
     struct HugeObj {
         HugeObj* next, **prev;
-        size_t obj_size;
+        size_t size;
         GCAllocation data[0];
 
         int mmap_size() {
-            size_t total_size = obj_size + sizeof(HugeObj);
+            size_t total_size = size + sizeof(HugeObj);
             total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
             return total_size;
         }
@@ -474,6 +493,7 @@ private:
     void _freeHugeObj(HugeObj* lobj);
 
     HugeObj* head;
+    std::vector<ObjLookupCache> lookup; // used during gc's to speed up finding large object GCAllocations
 
     Heap* heap;
 };
@@ -550,6 +570,18 @@ public:
         small_arena.freeUnmarked(weakly_referenced, classes_to_free);
         large_arena.freeUnmarked(weakly_referenced, classes_to_free);
         huge_arena.freeUnmarked(weakly_referenced, classes_to_free);
+    }
+
+    void prepareForCollection() {
+        small_arena.prepareForCollection();
+        large_arena.prepareForCollection();
+        huge_arena.prepareForCollection();
+    }
+
+    void cleanupAfterCollection() {
+        small_arena.cleanupAfterCollection();
+        large_arena.cleanupAfterCollection();
+        huge_arena.cleanupAfterCollection();
     }
 
     void dumpHeapStatistics(int level);
