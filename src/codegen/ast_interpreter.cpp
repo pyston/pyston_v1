@@ -1150,10 +1150,10 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs, node->kwargs);
 
     if (is_callattr) {
-        return callattr(func.o, attr.getBox(),
-                        CallattrFlags({.cls_only = callattr_clsonly, .null_on_nonexistent = false }), argspec,
-                        args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0,
-                        args.size() > 3 ? &args[3] : 0, &keywords);
+        CallattrFlags callattr_flags{.cls_only = callattr_clsonly, .null_on_nonexistent = false, .argspec = argspec };
+        return callattr(func.o, attr.getBox(), callattr_flags, args.size() > 0 ? args[0] : 0,
+                        args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0,
+                        &keywords);
     } else {
         return runtimeCall(func.o, argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
                            args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, &keywords);

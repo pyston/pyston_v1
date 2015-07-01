@@ -652,8 +652,8 @@ BoxedFloat* _floatNew(Box* a) {
         return new BoxedFloat(r);
     } else {
         static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
-        Box* r = callattr(a, float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
-                          NULL, NULL, NULL, NULL, NULL);
+        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+        Box* r = callattr(a, float_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
             fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n", getTypeName(a));

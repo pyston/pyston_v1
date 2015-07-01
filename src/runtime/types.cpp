@@ -235,8 +235,9 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
     }
 
     static BoxedString* hasnext_str = static_cast<BoxedString*>(PyString_InternFromString("__hasnext__"));
-    return ic->call(obj, hasnext_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = null_on_nonexistent }),
-                    ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
+    CallattrFlags callattr_flags
+        = {.cls_only = true, .null_on_nonexistent = null_on_nonexistent, .argspec = ArgPassSpec(0) };
+    return ic->call(obj, hasnext_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
@@ -278,8 +279,8 @@ Box* BoxedClass::callNextIC(Box* obj) {
     }
 
     static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
-    return ic->call(obj, next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
-                    nullptr, nullptr, nullptr, nullptr, nullptr);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+    return ic->call(obj, next_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
 Box* BoxedClass::callReprIC(Box* obj) {
@@ -292,8 +293,8 @@ Box* BoxedClass::callReprIC(Box* obj) {
     }
 
     static BoxedString* repr_str = static_cast<BoxedString*>(PyString_InternFromString("__repr__"));
-    return ic->call(obj, repr_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
-                    nullptr, nullptr, nullptr, nullptr, nullptr);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+    return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
 bool BoxedClass::callNonzeroIC(Box* obj) {
