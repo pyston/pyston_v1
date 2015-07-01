@@ -37,6 +37,8 @@
 
 namespace pyston {
 
+bool DEBUG_PARSING = false;
+
 class BufferedReader {
 private:
     static const int BUFSIZE = 1024;
@@ -1043,6 +1045,11 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn, AST_Mod
     if (!cache_fp)
         return ParseResult::PYC_UNWRITABLE;
 
+    if (DEBUG_PARSING) {
+        fprintf(stderr, "_reparse('%s', '%s'), pypa=%d\n", fn, cache_fn.c_str(), ENABLE_PYPA_PARSER);
+        fprintf(stderr, "writing magic string: %d %d %d %d\n", getMagic()[0], getMagic()[1], getMagic()[2],
+                getMagic()[3]);
+    }
     fwrite(getMagic(), 1, MAGIC_STRING_LENGTH, cache_fp);
 
     int checksum_start = ftell(cache_fp);
@@ -1094,6 +1101,9 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn, AST_Mod
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse_file(const char* fn) {
+    if (DEBUG_PARSING) {
+        fprintf(stderr, "caching_parse_file('%s'), pypa=%d\n", fn, ENABLE_PYPA_PARSER);
+    }
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_caching_parse_file");
     static StatCounter us_parsing("us_parsing");
     Timer _t("parsing");
@@ -1214,6 +1224,9 @@ AST_Module* caching_parse_file(const char* fn) {
         assert(!good);
         tries++;
         RELEASE_ASSERT(tries <= MAX_TRIES, "repeatedly failing to parse file");
+        if (tries == MAX_TRIES)
+            DEBUG_PARSING = true;
+
         if (!good) {
             assert(!fp);
             file_data.clear();
