@@ -661,17 +661,46 @@ void LargeArena::free(GCAllocation* al) {
     _freeLargeObj(LargeObj::fromAllocation(al));
 }
 
-GCAllocation* LargeArena::allocationFrom(void* ptr) {
-    LargeObj* obj = NULL;
-
-    for (obj = head; obj; obj = obj->next) {
-        char* end = (char*)&obj->data + obj->size;
-
-        if (ptr >= obj->data && ptr < end) {
-            return &obj->data[0];
-        }
+struct CompareObjLookupCache {
+    int operator()(const void* p, const ObjLookupCache& obj) {
+        if (p < (char*)obj.data)
+            return -1;
+        if (p >= (char*)obj.data + obj.size)
+            return 1;
+        return 0;
     }
-    return NULL;
+};
+
+GCAllocation* LargeArena::allocationFrom(void* ptr) {
+    if (lookup.size()) {
+        int idx = binarySearch(ptr, lookup.begin(), lookup.end(), CompareObjLookupCache());
+        if (idx < 0)
+            return NULL;
+        return (GCAllocation*)lookup[idx].data;
+    } else {
+        LargeObj* obj = NULL;
+
+        for (obj = head; obj; obj = obj->next) {
+            char* end = (char*)&obj->data + obj->size;
+
+            if (ptr >= obj->data && ptr < end) {
+                return &obj->data[0];
+            }
+        }
+        return NULL;
+    }
+}
+
+void LargeArena::prepareForCollection() {
+    for (LargeObj* lo = head; lo; lo = lo->next) {
+        lookup.push_back(ObjLookupCache(lo, &lo->data[0], lo->size));
+    }
+    std::sort(lookup.begin(), lookup.end(),
+              [](const ObjLookupCache& lo1, const ObjLookupCache& lo2) { return lo1.data < lo2.data; });
+}
+
+void LargeArena::cleanupAfterCollection() {
+    lookup.clear();
 }
 
 void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
@@ -681,7 +710,6 @@ void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<
 void LargeArena::getStatistics(HeapStatistics* stats) {
     forEach(head, [stats](LargeObj* obj) { addStatistic(stats, obj->data, obj->size); });
 }
-
 
 void LargeArena::add_free_chunk(LargeFreeChunk* free_chunks, size_t size) {
     size_t num_chunks = size >> CHUNK_BITS;
@@ -831,7 +859,7 @@ GCAllocation* HugeArena::alloc(size_t size) {
     total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     extendMapping(total_size);
     HugeObj* rtn = (HugeObj*)allocFromArena(total_size);
-    rtn->obj_size = size;
+    rtn->size = size;
 
     nullNextPrev(rtn);
     insertIntoLL(&head, rtn);
@@ -847,7 +875,7 @@ GCAllocation* HugeArena::realloc(GCAllocation* al, size_t bytes) {
         return al;
 
     GCAllocation* rtn = heap->alloc(bytes);
-    memcpy(rtn, al, std::min(bytes, obj->obj_size));
+    memcpy(rtn, al, std::min(bytes, obj->size));
 
     _freeHugeObj(obj);
     return rtn;
@@ -858,13 +886,32 @@ void HugeArena::free(GCAllocation* al) {
 }
 
 GCAllocation* HugeArena::allocationFrom(void* ptr) {
-    HugeObj* cur = head;
-    while (cur) {
-        if (ptr >= cur && ptr < &cur->data[cur->obj_size])
-            return &cur->data[0];
-        cur = cur->next;
+    if (lookup.size()) {
+        int idx = binarySearch(ptr, lookup.begin(), lookup.end(), CompareObjLookupCache());
+        if (idx < 0)
+            return NULL;
+        return (GCAllocation*)lookup[idx].data;
+    } else {
+        HugeObj* cur = head;
+        while (cur) {
+            if (ptr >= cur && ptr < &cur->data[cur->size])
+                return &cur->data[0];
+            cur = cur->next;
+        }
+        return NULL;
     }
-    return NULL;
+}
+
+void HugeArena::prepareForCollection() {
+    for (HugeObj* lo = head; lo; lo = lo->next) {
+        lookup.push_back(ObjLookupCache(lo, &lo->data[0], lo->size));
+    }
+    std::sort(lookup.begin(), lookup.end(),
+              [](const ObjLookupCache& lo1, const ObjLookupCache& lo2) { return lo1.data < lo2.data; });
+}
+
+void HugeArena::cleanupAfterCollection() {
+    lookup.clear();
 }
 
 void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {

@@ -438,6 +438,8 @@ void runCollection() {
 
     Timer _t("collecting", /*min_usec=*/10000);
 
+    global_heap.prepareForCollection();
+
     markPhase();
 
     // The sweep phase will not free weakly-referenced objects, so that we can inspect their
@@ -499,6 +501,8 @@ void runCollection() {
             head->wr_callback = NULL;
         }
     }
+
+    global_heap.cleanupAfterCollection();
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);

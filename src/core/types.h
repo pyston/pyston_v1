@@ -749,6 +749,29 @@ struct CallattrFlags {
     uint64_t asInt() { return (uint64_t(argspec.asInt()) << 32) | (cls_only << 0) | (null_on_nonexistent << 1); }
 };
 static_assert(sizeof(CallattrFlags) == sizeof(uint64_t), "");
+
+// similar to Java's Array.binarySearch:
+// return values are either:
+//   >= 0 : the index where a given item was found
+//   < 0  : a negative number that can be transformed (using "-num-1") into the insertion point
+//
+template <typename T, typename RandomAccessIterator, typename Cmp>
+int binarySearch(T needle, RandomAccessIterator start, RandomAccessIterator end, Cmp cmp) {
+    int l = 0;
+    int r = end - start - 1;
+    while (l <= r) {
+        int mid = l + (r - l) / 2;
+        auto mid_item = *(start + mid);
+        int c = cmp(needle, mid_item);
+        if (c < 0)
+            r = mid - 1;
+        else if (c > 0)
+            l = mid + 1;
+        else
+            return mid;
+    }
+    return -(l + 1);
+}
 }
 
 namespace std {
