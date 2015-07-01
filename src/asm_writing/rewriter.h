@@ -344,7 +344,7 @@ protected:
     std::vector<RewriterVar*> args;
     std::vector<RewriterVar*> live_outs;
 
-    Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs);
+    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
     std::vector<RewriterAction> actions;
     void addAction(const std::function<void()>& action, std::vector<RewriterVar*> const& vars, ActionType type) {

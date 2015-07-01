@@ -1676,11 +1676,11 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
-    : rewrite(rewrite),
-      assembler(rewrite->getAssembler()),
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs)
+    : rewrite(std::move(rewrite)),
+      assembler(this->rewrite->getAssembler()),
       const_loader(this),
-      return_location(rewrite->returnRegister()),
+      return_location(this->rewrite->returnRegister()),
       failed(false),
       added_changing_action(false),
       marked_inside_ic(false),

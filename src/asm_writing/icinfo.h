@@ -119,7 +119,7 @@ public:
     llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
     const std::vector<int>& getLiveOuts() { return live_outs; }
 
-    ICSlotRewrite* startRewrite(const char* debug_name);
+    std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
 
     bool shouldAttempt();
