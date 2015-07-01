@@ -40,7 +40,7 @@ Box* listiterHasnext(Box* s) {
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!self->l) {
-        raiseExcHelper(StopIteration, "");
+        return False;
     }
 
     bool ans = (self->pos < self->l->size);
@@ -55,7 +55,7 @@ i1 listiterHasnextUnboxed(Box* s) {
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!self->l) {
-        raiseExcHelper(StopIteration, "");
+        return false;
     }
 
     bool ans = (self->pos < self->l->size);

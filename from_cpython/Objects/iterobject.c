@@ -66,7 +66,7 @@ calliter_next(calliterobject *it)
                 Py_CLEAR(it->it_sentinel);
             }
         }
-        else if (PyErr_ExceptionMatches(PyExc_StopIteration) || PyErr_ExceptionMatches(PyExc_IndexError)) {
+        else if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
             PyErr_Clear();
             Py_CLEAR(it->it_callable);
             Py_CLEAR(it->it_sentinel);
