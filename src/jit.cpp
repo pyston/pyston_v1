@@ -31,6 +31,7 @@
 
 #include "osdefs.h"
 
+#include "asm_writing/disassemble.h"
 #include "capi/types.h"
 #include "codegen/entry.h"
 #include "codegen/irgen/hooks.h"
@@ -187,6 +188,8 @@ int handleArg(char code) {
         Py_InspectFlag = true;
     else if (code == 'n') {
         ENABLE_INTERPRETER = false;
+    } else if (code == 'a') {
+        ASSEMBLY_LOGGING = true;
     } else if (code == 'p') {
         PROFILE = true;
     } else if (code == 'j') {
@@ -290,7 +293,7 @@ static int main(int argc, char** argv) {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPTGm:")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEac:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;
@@ -327,6 +330,10 @@ static int main(int argc, char** argv) {
             setvbuf(stdin, (char*)NULL, _IONBF, BUFSIZ);
             setvbuf(stdout, (char*)NULL, _IONBF, BUFSIZ);
             setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
+        }
+
+        if (ASSEMBLY_LOGGING) {
+            assembler::disassemblyInitialize();
         }
 
         {
