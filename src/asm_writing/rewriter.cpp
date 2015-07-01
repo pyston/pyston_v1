@@ -1961,9 +1961,9 @@ void setSlowpathFunc(uint8_t* pp_addr, void* func) {
     *(void**)&pp_addr[2] = func;
 }
 
-std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
-                                                    int scratch_offset, int scratch_size,
-                                                    const std::unordered_set<int>& live_outs, SpillMap& remapped) {
+PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
+                                                   int scratch_offset, int scratch_size,
+                                                   const std::unordered_set<int>& live_outs, SpillMap& remapped) {
     assert(start_addr < end_addr);
 
     int est_slowpath_size = INITIAL_CALL_SIZE;
@@ -2019,8 +2019,21 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
     // if (regs_to_spill.size())
     // assem.trap();
     assem.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
-    uint8_t* rtn = assem.emitCall(slowpath_func, assembler::R11);
+    uint8_t* slowpath_rtn_addr = assem.emitCall(slowpath_func, assembler::R11);
     assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
+
+    // The place we should continue if we took a fast path.
+    // If we have to reload things, make sure to set it to the beginning
+    // of the reloading section.
+    // If there's nothing to reload, as a small optimization, set it to the end of
+    // the patchpoint, past any nops.
+    // (Actually I think the calculations of the size above were exact so there should
+    // always be 0 nops, but this optimization shouldn't hurt.)
+    uint8_t* continue_addr;
+    if (regs_to_reload.empty())
+        continue_addr = end_addr;
+    else
+        continue_addr = assem.curInstPointer();
 
     for (assembler::Register r : regs_to_reload) {
         StackMap::Record::Location& l = remapped[r];
@@ -2033,6 +2046,6 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return std::make_pair(slowpath_start, rtn);
+    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr);
 }
 }

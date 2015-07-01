@@ -273,12 +273,13 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
 
 
         SpillMap _spill_map;
-        std::pair<uint8_t*, uint8_t*> p
+        PatchpointInitializationInfo initialization_info
             = initializePatchpoint3(func_addr, pp_start, pp_end, 0 /* scratch_offset */, 0 /* scratch_size */,
                                     std::unordered_set<int>(), _spill_map);
         assert(_spill_map.size() == 0);
-        assert(p.first == pp_start + patchable_size);
-        assert(p.second == pp_end);
+        assert(initialization_info.slowpath_start == pp_start + patchable_size);
+        assert(initialization_info.slowpath_rtn_addr == pp_end);
+        assert(initialization_info.continue_addr == pp_end);
 
         StackInfo stack_info(SCRATCH_BYTES, 0);
         icinfo = registerCompiledPatchpoint(pp_start, pp_start + patchable_size, pp_end, pp_end, setup_info.get(),

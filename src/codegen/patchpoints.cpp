@@ -244,13 +244,10 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         }
 
 
+        auto initialization_info = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset,
+                                                         scratch_size, live_outs, frame_remapped);
 
-        auto _p = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size,
-                                        live_outs, frame_remapped);
-        uint8_t* slowpath_start = _p.first;
-        uint8_t* slowpath_rtn_addr = _p.second;
-
-        ASSERT(slowpath_start - start_addr >= ic->num_slots * ic->slot_size,
+        ASSERT(initialization_info.slowpath_start - start_addr >= ic->num_slots * ic->slot_size,
                "Used more slowpath space than expected; change ICSetupInfo::totalSize()?");
 
         assert(pp->numICStackmapArgs() == 0); // don't do anything with these for now
@@ -269,7 +266,8 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         int scratch_rsp_offset = scratch_rbp_offset + (stack_size - 8);
 
         std::unique_ptr<ICInfo> icinfo
-            = registerCompiledPatchpoint(start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
+            = registerCompiledPatchpoint(start_addr, initialization_info.slowpath_start,
+                                         initialization_info.continue_addr, initialization_info.slowpath_rtn_addr, ic,
                                          StackInfo(scratch_size, scratch_rsp_offset), std::move(live_outs));
 
         assert(cf);

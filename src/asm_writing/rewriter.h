@@ -534,10 +534,18 @@ typedef std::map<assembler::GenericRegister, StackMap::Record::Location, GRCompa
 bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst_addr, uint8_t* inst_end,
                                    int& scratch_offset, int& scratch_size, SpillMap& remapped);
 
-// returns (start_of_slowpath, return_addr_of_slowpath_call)
-std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
-                                                    int scratch_offset, int scratch_size,
-                                                    const std::unordered_set<int>& live_outs, SpillMap& remapped);
+struct PatchpointInitializationInfo {
+    uint8_t* slowpath_start;
+    uint8_t* slowpath_rtn_addr;
+    uint8_t* continue_addr;
+
+    PatchpointInitializationInfo(uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr, uint8_t* continue_addr)
+        : slowpath_start(slowpath_start), slowpath_rtn_addr(slowpath_rtn_addr), continue_addr(continue_addr) {}
+};
+
+PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
+                                                   int scratch_offset, int scratch_size,
+                                                   const std::unordered_set<int>& live_outs, SpillMap& remapped);
 
 template <> inline RewriterVar* RewriterVar::getAttrCast<bool, bool>(int offset, Location loc) {
     return getAttr(offset, loc, assembler::MovType::ZBL);
