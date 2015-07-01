@@ -151,8 +151,8 @@ assembler::GenericRegister ICSlotRewrite::returnRegister() {
 
 
 
-ICSlotRewrite* ICInfo::startRewrite(const char* debug_name) {
-    return new ICSlotRewrite(this, debug_name);
+std::unique_ptr<ICSlotRewrite> ICInfo::startRewrite(const char* debug_name) {
+    return std::unique_ptr<ICSlotRewrite>(new ICSlotRewrite(this, debug_name));
 }
 
 ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
@@ -236,11 +236,11 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
         // writer->emitNop();
         // writer->emitGuardFalse();
 
-        std::unique_ptr<Assembler> writer(new Assembler(start, ic->slot_size));
-        writer->nop();
-        // writer->trap();
-        // writer->jmp(JumpDestination::fromStart(ic->slot_size * (ic->num_slots - i)));
-        writer->jmp(JumpDestination::fromStart(slowpath_start_addr - start));
+        Assembler writer(start, ic->slot_size);
+        writer.nop();
+        // writer.trap();
+        // writer.jmp(JumpDestination::fromStart(ic->slot_size * (ic->num_slots - i)));
+        writer.jmp(JumpDestination::fromStart(slowpath_start_addr - start));
     }
 
     ICInfo* icinfo = new ICInfo(start_addr, slowpath_rtn_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
@@ -272,10 +272,10 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     if (VERBOSITY() >= 4)
         printf("clearing patchpoint %p, slot at %p\n", start_addr, start);
 
-    std::unique_ptr<Assembler> writer(new Assembler(start, getSlotSize()));
-    writer->nop();
-    writer->jmp(JumpDestination::fromStart(getSlotSize()));
-    assert(writer->bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
+    Assembler writer(start, getSlotSize());
+    writer.nop();
+    writer.jmp(JumpDestination::fromStart(getSlotSize()));
+    assert(writer.bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
 
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();

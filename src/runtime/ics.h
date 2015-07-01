@@ -25,9 +25,10 @@ class ICInfo;
 class EHFrameManager {
 private:
     void* eh_frame_addr;
+    bool omit_frame_pointer;
 
 public:
-    EHFrameManager() : eh_frame_addr(NULL) {}
+    EHFrameManager(bool omit_frame_pointer) : eh_frame_addr(NULL), omit_frame_pointer(omit_frame_pointer) {}
     ~EHFrameManager();
     void writeAndRegister(void* func_addr, uint64_t func_size);
 };
@@ -76,11 +77,83 @@ public:
     }
 };
 
+class RuntimeCallIC : public RuntimeIC {
+public:
+    RuntimeCallIC() : RuntimeIC((void*)runtimeCall, 2, 320) {}
+
+    Box* call(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        return (Box*)call_ptr(obj, argspec, arg1, arg2, arg3, args);
+    }
+};
+
+class UnaryopIC : public RuntimeIC {
+public:
+    UnaryopIC() : RuntimeIC((void*)unaryop, 2, 160) {}
+
+    Box* call(Box* obj, int op_type) { return (Box*)call_ptr(obj, op_type); }
+};
+
+class AugBinopIC : public RuntimeIC {
+public:
+    AugBinopIC() : RuntimeIC((void*)augbinop, 2, 240) {}
+
+    Box* call(Box* lhs, Box* rhs, int op_type) { return (Box*)call_ptr(lhs, rhs, op_type); }
+};
+
 class BinopIC : public RuntimeIC {
 public:
     BinopIC() : RuntimeIC((void*)binop, 2, 240) {}
 
     Box* call(Box* lhs, Box* rhs, int op_type) { return (Box*)call_ptr(lhs, rhs, op_type); }
+};
+
+class CompareIC : public RuntimeIC {
+public:
+    CompareIC() : RuntimeIC((void*)compare, 2, 240) {}
+
+    Box* call(Box* lhs, Box* rhs, int op_type) { return (Box*)call_ptr(lhs, rhs, op_type); }
+};
+
+class GetItemIC : public RuntimeIC {
+public:
+    GetItemIC() : RuntimeIC((void*)getitem, 2, 512) {}
+
+    Box* call(Box* obj, Box* attr) { return (Box*)call_ptr(obj, attr); }
+};
+
+class SetItemIC : public RuntimeIC {
+public:
+    SetItemIC() : RuntimeIC((void*)setitem, 2, 512) {}
+
+    Box* call(Box* obj, Box* attr, Box* v) { return (Box*)call_ptr(obj, attr, v); }
+};
+
+class GetAttrIC : public RuntimeIC {
+public:
+    GetAttrIC() : RuntimeIC((void*)getattr, 2, 512) {}
+
+    Box* call(Box* obj, BoxedString* attr) { return (Box*)call_ptr(obj, attr); }
+};
+
+class SetAttrIC : public RuntimeIC {
+public:
+    SetAttrIC() : RuntimeIC((void*)setattr, 2, 512) {}
+
+    Box* call(Box* obj, BoxedString* attr, Box* v) { return (Box*)call_ptr(obj, attr, v); }
+};
+
+class GetGlobalIC : public RuntimeIC {
+public:
+    GetGlobalIC() : RuntimeIC((void*)getGlobal, 2, 512) {}
+
+    Box* call(Box* obj, BoxedString* s) { return (Box*)call_ptr(obj, s); }
+};
+
+class SetGlobalIC : public RuntimeIC {
+public:
+    SetGlobalIC() : RuntimeIC((void*)setGlobal, 2, 512) {}
+
+    Box* call(Box* obj, BoxedString* s, Box* v) { return (Box*)call_ptr(obj, s, v); }
 };
 
 class NonzeroIC : public RuntimeIC {

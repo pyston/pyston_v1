@@ -64,7 +64,7 @@ namespace pyston {
 // readelf -w test
 //
 
-#if RUNTIMEICS_OMIT_FRAME_PTR
+
 // clang++ test.cpp -o test -O3 -fomit-frame-pointer -c -DN=40
 // The generated assembly is:
 //
@@ -77,7 +77,7 @@ namespace pyston {
 //
 //  (I believe the push/pop are for stack alignment)
 //
-static const char _eh_frame_template[] =
+static const char _eh_frame_template_ofp[] =
     // CIE
     "\x14\x00\x00\x00" // size of the CIE
     "\x00\x00\x00\x00" // specifies this is an CIE
@@ -105,7 +105,7 @@ static const char _eh_frame_template[] =
 
     "\x00\x00\x00\x00" // terminator
     ;
-#else
+
 // clang++ test.cpp -o test -O3 -fno-omit-frame-pointer -c -DN=40
 // The generated assembly is:
 //  0:   55                      push   %rbp
@@ -118,7 +118,7 @@ static const char _eh_frame_template[] =
 // 1a:   5d                      pop    %rbp
 // 1b:   c3                      retq
 //
-static const char _eh_frame_template[] =
+static const char _eh_frame_template_fp[] =
     // CIE
     "\x14\x00\x00\x00" // size of the CIE
     "\x00\x00\x00\x00" // specifies this is an CIE
@@ -150,13 +150,19 @@ static const char _eh_frame_template[] =
 
     "\x00\x00\x00\x00" // terminator
     ;
-#endif
+
+static constexpr int _eh_frame_template_ofp_size = sizeof(_eh_frame_template_ofp) - 1;
+static constexpr int _eh_frame_template_fp_size = sizeof(_eh_frame_template_fp) - 1;
+
 #define EH_FRAME_SIZE (sizeof(_eh_frame_template) - 1) // omit string-terminating null byte
 
 static_assert(sizeof("") == 1, "strings are null-terminated");
 
-static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t func_size) {
-    memcpy(eh_frame_addr, _eh_frame_template, EH_FRAME_SIZE);
+static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t func_size, bool omit_frame_pointer) {
+    if (omit_frame_pointer)
+        memcpy(eh_frame_addr, _eh_frame_template_ofp, _eh_frame_template_ofp_size);
+    else
+        memcpy(eh_frame_addr, _eh_frame_template_fp, _eh_frame_template_fp_size);
 
     int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
     int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
@@ -171,27 +177,29 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
 
 void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
     assert(eh_frame_addr == NULL);
+    const int size = omit_frame_pointer ? _eh_frame_template_ofp_size : _eh_frame_template_fp_size;
 #ifdef NVALGRIND
-    eh_frame_addr = malloc(EH_FRAME_SIZE);
+    eh_frame_addr = malloc(size);
 #else
-    eh_frame_addr = mmap(NULL, (EH_FRAME_SIZE + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE,
+    eh_frame_addr = mmap(NULL, (size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     RELEASE_ASSERT(eh_frame_addr != MAP_FAILED, "");
 #endif
-    writeTrivialEhFrame(eh_frame_addr, func_addr, func_size);
+    writeTrivialEhFrame(eh_frame_addr, func_addr, func_size, omit_frame_pointer);
     // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
     // TODO: can we omit the terminator in general?
-    registerDynamicEhFrame((uint64_t)func_addr, func_size, (uint64_t)eh_frame_addr, EH_FRAME_SIZE - 4);
-    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+    registerDynamicEhFrame((uint64_t)func_addr, func_size, (uint64_t)eh_frame_addr, size - 4);
+    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 }
 
 EHFrameManager::~EHFrameManager() {
     if (eh_frame_addr) {
-        deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+        const int size = omit_frame_pointer ? _eh_frame_template_ofp_size : _eh_frame_template_fp_size;
+        deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 #ifdef NVALGRIND
         free(eh_frame_addr);
 #else
-        munmap(eh_frame_addr, (EH_FRAME_SIZE + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1));
+        munmap(eh_frame_addr, (size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1));
 #endif
     }
 }
@@ -204,7 +212,7 @@ EHFrameManager::~EHFrameManager() {
 #define SCRATCH_BYTES 0x30
 #endif
 
-RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
+RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(RUNTIMEICS_OMIT_FRAME_PTR) {
     static StatCounter sc("runtime_ics_num");
     sc.log();
 
