@@ -2850,6 +2850,14 @@ out:
     return result;
 }
 
+void unicode_visit(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    PyUnicodeObject* u = (PyUnicodeObject*)b;
+    v->visit(u->str);
+    v->visit(u->defenc);
+}
+
 extern "C" PyUnicodeObject* unicode_empty;
 extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     PyUnicodeObject* unicode;
@@ -2868,7 +2876,7 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     // Do a bunch of inlining + constant folding of this line of CPython's:
     // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
     assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
-    unicode = (PyUnicodeObject*)gc_alloc(sizeof(PyUnicodeObject), gc::GCKind::CONSERVATIVE_PYTHON);
+    unicode = (PyUnicodeObject*)gc_alloc(sizeof(PyUnicodeObject), gc::GCKind::PYTHON);
     if (unicode == NULL)
         return (PyUnicodeObject*)PyErr_NoMemory();
 
@@ -2879,12 +2887,13 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     unicode->ob_type = (struct _typeobject*)&PyUnicode_Type;
 
     size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-    unicode->str = (Py_UNICODE*)PyMem_MALLOC(new_size); // why is this faster than gc_compat_malloc or gc_alloc??
+    unicode->str = (Py_UNICODE*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
 
     if (!unicode->str) {
         PyErr_NoMemory();
         goto onError;
     }
+
     /* Initialize the first element to guard against cases where
      * the caller fails before initializing str -- unicode_resize()
      * reads str[0], and the Keep-Alive optimization can keep memory
@@ -3405,6 +3414,11 @@ void setupRuntime() {
     weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
     weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
     weakref_callableproxy->is_pyston_class = true;
+
+    unicode_cls->tp_alloc = PystonType_GenericAlloc;
+    unicode_cls->gc_visit = unicode_visit;
+    unicode_cls->tp_dealloc = NULL;
+    unicode_cls->is_pyston_class = true;
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
