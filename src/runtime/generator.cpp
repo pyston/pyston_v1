@@ -436,7 +436,8 @@ void setupGenerator() {
     generator_cls
         = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, 0, offsetof(BoxedGenerator, weakreflist),
                                  sizeof(BoxedGenerator), false, "generator");
-    generator_cls->simple_destructor = generatorDestructor;
+    generator_cls->tp_dealloc = generatorDestructor;
+    generator_cls->has_safe_tp_dealloc = true;
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
 

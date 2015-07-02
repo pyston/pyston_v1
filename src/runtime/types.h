@@ -94,6 +94,35 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
 
+#define unicode_cls (&PyUnicode_Type)
+#define memoryview_cls (&PyMemoryView_Type)
+
+#define SystemError ((BoxedClass*)PyExc_SystemError)
+#define StopIteration ((BoxedClass*)PyExc_StopIteration)
+#define NameError ((BoxedClass*)PyExc_NameError)
+#define UnboundLocalError ((BoxedClass*)PyExc_UnboundLocalError)
+#define BaseException ((BoxedClass*)PyExc_BaseException)
+#define TypeError ((BoxedClass*)PyExc_TypeError)
+#define AssertionError ((BoxedClass*)PyExc_AssertionError)
+#define ValueError ((BoxedClass*)PyExc_ValueError)
+#define SystemExit ((BoxedClass*)PyExc_SystemExit)
+#define SyntaxError ((BoxedClass*)PyExc_SyntaxError)
+#define Exception ((BoxedClass*)PyExc_Exception)
+#define AttributeError ((BoxedClass*)PyExc_AttributeError)
+#define RuntimeError ((BoxedClass*)PyExc_RuntimeError)
+#define ZeroDivisionError ((BoxedClass*)PyExc_ZeroDivisionError)
+#define ImportError ((BoxedClass*)PyExc_ImportError)
+#define IndexError ((BoxedClass*)PyExc_IndexError)
+#define GeneratorExit ((BoxedClass*)PyExc_GeneratorExit)
+#define IOError ((BoxedClass*)PyExc_IOError)
+#define KeyError ((BoxedClass*)PyExc_KeyError)
+#define OverflowError ((BoxedClass*)PyExc_OverflowError)
+
+// Contains a list classes that have BaseException as a parent. This list is NOT guaranteed to be
+// comprehensive - it will not contain user-defined exception types. This is mainly for optimization
+// purposes, where it's useful to speed up the garbage collection of some exceptions.
+extern std::vector<BoxedClass*> exception_types;
+
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
 }
@@ -163,13 +192,6 @@ public:
 
     gcvisit_func gc_visit;
 
-    // A "simple" destructor -- one that is allowed to be called at any point after the object is dead.
-    // In particular, this means that it can't touch any Python objects or other gc-managed memory,
-    // since it will be in an undefined state.
-    // (Context: in Python destructors are supposed to be called in topological order, due to reference counting.
-    // We don't support that yet, but still want some simple ability to run code when an object gets freed.)
-    void (*simple_destructor)(Box*);
-
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Negative offset is from the end of the class (useful for variable-size objects with the attrs at the end)
     // Analogous to tp_dictoffset
@@ -179,6 +201,17 @@ public:
 
     bool instancesHaveHCAttrs() { return attrs_offset != 0; }
     bool instancesHaveDictAttrs() { return tp_dictoffset != 0; }
+
+    // A "safe" tp_dealloc destructor/finalizer is one we believe:
+    //  1) Can be called at any point after the object is dead.
+    //      (implies it's references could be finalized already)
+    //  2) Won't take a lot of time to run.
+    //  3) Won't take up a lot of memory (requiring another GC run).
+    //  4) Won't resurrect itself.
+    //
+    // We specify that such destructors are safe for optimization purposes. We call the tp_dealloc
+    // as the object gets freed.
+    bool has_safe_tp_dealloc;
 
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
@@ -1024,27 +1057,6 @@ void attrwrapperDel(Box* b, llvm::StringRef attr);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);
-
-#define SystemError ((BoxedClass*)PyExc_SystemError)
-#define StopIteration ((BoxedClass*)PyExc_StopIteration)
-#define NameError ((BoxedClass*)PyExc_NameError)
-#define UnboundLocalError ((BoxedClass*)PyExc_UnboundLocalError)
-#define BaseException ((BoxedClass*)PyExc_BaseException)
-#define TypeError ((BoxedClass*)PyExc_TypeError)
-#define AssertionError ((BoxedClass*)PyExc_AssertionError)
-#define ValueError ((BoxedClass*)PyExc_ValueError)
-#define SystemExit ((BoxedClass*)PyExc_SystemExit)
-#define SyntaxError ((BoxedClass*)PyExc_SyntaxError)
-#define Exception ((BoxedClass*)PyExc_Exception)
-#define AttributeError ((BoxedClass*)PyExc_AttributeError)
-#define RuntimeError ((BoxedClass*)PyExc_RuntimeError)
-#define ZeroDivisionError ((BoxedClass*)PyExc_ZeroDivisionError)
-#define ImportError ((BoxedClass*)PyExc_ImportError)
-#define IndexError ((BoxedClass*)PyExc_IndexError)
-#define GeneratorExit ((BoxedClass*)PyExc_GeneratorExit)
-#define IOError ((BoxedClass*)PyExc_IOError)
-#define KeyError ((BoxedClass*)PyExc_KeyError)
-#define OverflowError ((BoxedClass*)PyExc_OverflowError)
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;

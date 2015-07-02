@@ -456,9 +456,8 @@ struct _typeobject {
     void* _hcattrs;
     char _ics[32];
     void* _gcvisit_func;
-    void* _dtor;
     int _attrs_offset;
-    bool _flags[3];
+    bool _flags[4];
     void* _tpp_descr_get;
     void* _tpp_hasnext;
     void* _tpp_call;

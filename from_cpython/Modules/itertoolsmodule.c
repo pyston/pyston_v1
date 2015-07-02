@@ -4080,6 +4080,34 @@ static PyMethodDef module_methods[] = {
     {NULL,              NULL}           /* sentinel */
 };
 
+// Pyston change: These are types defined in this file that I manually
+// checked. The ones that aren't commented out have a `tp_dealloc` that
+// doesn't do anything in Pyston as we switched to garbage collection and
+// the finalizer logic in Pyston wants to know that for optimization purposes.
+PyTypeObject* Itertool_SafeDealloc_Types[] = {
+    // &combinations_type,
+    // &cwr_type,
+    &cycle_type,
+    &dropwhile_type,
+    &takewhile_type,
+    &islice_type,
+    &starmap_type,
+    &imap_type,
+    &chain_type,
+    &compress_type,
+    &ifilter_type,
+    &ifilterfalse_type,
+    &count_type,
+    &izip_type,
+    &iziplongest_type,
+    // &permutations_type,
+    // &product_type,
+    &repeat_type,
+    &groupby_type,
+    NULL
+};
+
+
 PyMODINIT_FUNC
 inititertools(void)
 {

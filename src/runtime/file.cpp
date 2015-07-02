@@ -1757,7 +1757,8 @@ void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void setupFile() {
-    file_cls->simple_destructor = fileDestructor;
+    file_cls->tp_dealloc = fileDestructor;
+    file_cls->has_safe_tp_dealloc = true;
 
     file_cls->giveAttr("read",
                        new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
