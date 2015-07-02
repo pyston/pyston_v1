@@ -670,7 +670,24 @@ void Assembler::decl(Indirect mem) {
     }
 }
 
+void Assembler::incl(Immediate imm) {
+    emitByte(0xff);
+    emitByte(0x04);
+    emitByte(0x25);
+    emitInt(imm.val, 4);
+}
 
+void Assembler::decl(Immediate imm) {
+    emitByte(0xff);
+    emitByte(0x0c);
+    emitByte(0x25);
+    emitInt(imm.val, 4);
+}
+
+void Assembler::call(Immediate imm) {
+    emitByte(0xe8);
+    emitInt(imm.val, 4);
+}
 
 void Assembler::callq(Register r) {
     assert(r == R11 && "untested");

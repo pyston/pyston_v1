@@ -317,6 +317,8 @@ protected:
 
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
+    ICSlotInfo* picked_slot;
+
     ConstLoader const_loader;
     std::vector<RewriterVar*> vars;
 
@@ -370,7 +372,6 @@ protected:
     }
     bool added_changing_action;
     bool marked_inside_ic;
-    std::vector<void**> mark_addr_addrs;
 
     int last_guard_action;
 
@@ -408,7 +409,7 @@ protected:
     // Do the bookkeeping to say that var is no longer in location l
     void removeLocationFromVar(RewriterVar* var, Location l);
 
-    bool finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
+    bool finishAssembly(int continue_offset) override;
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);

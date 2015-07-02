@@ -813,17 +813,14 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     if (has_side_effects) {
         if (!marked_inside_ic) {
-            // assembler->trap();
-
-            // TODO this is super hacky: we don't know the address that we want to inc/dec, since
-            // it depends on the slot that we end up picking, so just write out an arbitrary
-            // constant an we'll rewrite it later
-            // TODO if we can guarantee that the mark_addr will fit in 32 bits,
-            // we can use a more compact instruction encoding
-            mark_addr_addrs.push_back((void**)(assembler->curInstPointer() + 2));
-            assembler::Register reg = allocReg(Location::any());
-            assembler->mov(assembler::Immediate(0x1234567890abcdefL), reg);
-            assembler->incl(assembler::Indirect(reg, 0));
+            uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
+            if (isLargeConstant(counter_addr)) {
+                assembler::Register reg = allocReg(Location::any(), getReturnDestination());
+                assembler->mov(assembler::Immediate(counter_addr), reg);
+                assembler->incl(assembler::Indirect(reg, 0));
+            } else {
+                assembler->incl(assembler::Immediate(counter_addr));
+            }
 
             assertConsistent();
             marked_inside_ic = true;
@@ -953,8 +950,16 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
     }
 #endif
 
-    const_loader.loadConstIntoReg((uint64_t)func_addr, r);
-    assembler->callq(r);
+    uint64_t asm_address = (uint64_t)assembler->curInstPointer() + 5;
+    uint64_t real_asm_address = asm_address + (uint64_t)rewrite->getSlotStart() - (uint64_t)assembler->startAddr();
+    int64_t offset = (int64_t)((uint64_t)func_addr - real_asm_address);
+    if (isLargeConstant(offset)) {
+        const_loader.loadConstIntoReg((uint64_t)func_addr, r);
+        assembler->callq(r);
+    } else {
+        assembler->call(assembler::Immediate(offset));
+        assert(asm_address == (uint64_t)assembler->curInstPointer());
+    }
 
     assert(vars_by_location.count(assembler::RAX) == 0);
     result->initializeInReg(assembler::RAX);
@@ -1071,6 +1076,12 @@ void Rewriter::commit() {
         on_done_guarding();
     }
 
+    picked_slot = rewrite->prepareEntry();
+    if (picked_slot == NULL) {
+        on_assemblyfail();
+        return;
+    }
+
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
         actions[i].action();
@@ -1090,15 +1101,14 @@ void Rewriter::commit() {
     if (marked_inside_ic) {
         assembler->comment("mark inside ic");
 
-        // TODO this is super hacky: we don't know the address that we want to inc/dec, since
-        // it depends on the slot that we end up picking, so just write out an arbitrary
-        // constant an we'll rewrite it later
-        // TODO if we can guarantee that the mark_addr will fit in 32 bits,
-        // we can use a more compact instruction encoding
-        mark_addr_addrs.push_back((void**)(assembler->curInstPointer() + 2));
-        assembler::Register reg = allocReg(Location::any(), getReturnDestination());
-        assembler->mov(assembler::Immediate(0x1234567890abcdefL), reg);
-        assembler->decl(assembler::Indirect(reg, 0));
+        uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
+        if (isLargeConstant(counter_addr)) {
+            assembler::Register reg = allocReg(Location::any(), getReturnDestination());
+            assembler->mov(assembler::Immediate(counter_addr), reg);
+            assembler->decl(assembler::Indirect(reg, 0));
+        } else {
+            assembler->decl(assembler::Immediate(counter_addr));
+        }
     }
 
     assembler->comment("live outs");
@@ -1242,16 +1252,8 @@ void Rewriter::commit() {
     ic_rewrites_total_bytes.log(asm_size_bytes);
 }
 
-bool Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
-    if (marked_inside_ic) {
-        void* mark_addr = &picked_slot->num_inside;
-
-        // Go back and rewrite the faked constants to point to the correct address:
-        for (void** mark_addr_addr : mark_addr_addrs) {
-            assert(*mark_addr_addr == (void*)0x1234567890abcdefL);
-            *mark_addr_addr = mark_addr;
-        }
-    }
+bool Rewriter::finishAssembly(int continue_offset) {
+    assert(picked_slot);
 
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
@@ -1679,6 +1681,7 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
+      picked_slot(NULL),
       const_loader(this),
       return_location(this->rewrite->returnRegister()),
       failed(false),

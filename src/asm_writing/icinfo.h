@@ -48,7 +48,7 @@ public:
     class CommitHook {
     public:
         virtual ~CommitHook() {}
-        virtual bool finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
+        virtual bool finishAssembly(int fastpath_offset) = 0;
     };
 
 private:
@@ -60,6 +60,8 @@ private:
 
     std::vector<std::pair<ICInvalidator*, int64_t>> dependencies;
 
+    ICSlotInfo* ic_entry;
+
     ICSlotRewrite(ICInfo* ic, const char* debug_name);
 
 public:
@@ -69,10 +71,13 @@ public:
     int getSlotSize();
     int getScratchRspOffset();
     int getScratchSize();
+    uint8_t* getSlotStart();
 
     TypeRecorder* getTypeRecorder();
 
     assembler::GenericRegister returnRegister();
+
+    ICSlotInfo* prepareEntry();
 
     void addDependenceOn(ICInvalidator&);
     void commit(CommitHook* hook);
