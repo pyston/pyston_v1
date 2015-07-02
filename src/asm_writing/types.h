@@ -158,6 +158,11 @@ struct Immediate {
 
     explicit Immediate(uint64_t val) : val(val) {}
     explicit Immediate(void* val) : val((uint64_t)val) {}
+
+    bool fitsInto32Bit() const {
+        uint32_t val_32bit = (uint32_t)val;
+        return val_32bit == val;
+    }
 };
 
 struct JumpDestination {

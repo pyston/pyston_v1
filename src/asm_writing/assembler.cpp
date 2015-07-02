@@ -145,18 +145,20 @@ void Assembler::emitSIB(uint8_t scalebits, uint8_t index, uint8_t base) {
     emitByte((scalebits << 6) | (index << 3) | base);
 }
 
-void Assembler::mov(Immediate val, Register dest) {
-    int rex = REX_W;
+void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
+    force_64bit_load = force_64bit_load || !val.fitsInto32Bit();
 
+    int rex = force_64bit_load ? REX_W : 0;
     int dest_idx = dest.regnum;
     if (dest_idx >= 8) {
         rex |= REX_B;
         dest_idx -= 8;
     }
 
-    emitRex(rex);
+    if (rex)
+        emitRex(rex);
     emitByte(0xb8 + dest_idx);
-    emitInt(val.val, 8);
+    emitInt(val.val, force_64bit_load ? 8 : 4);
 }
 
 void Assembler::movq(Immediate src, Indirect dest) {
@@ -975,7 +977,9 @@ void Assembler::leave() {
 }
 
 uint8_t* Assembler::emitCall(void* ptr, Register scratch) {
-    mov(Immediate(ptr), scratch);
+    // emit a 64bit movabs because some caller expect a fixed number of bytes.
+    // until they are fixed use the largest encoding.
+    mov(Immediate(ptr), scratch, true /* force_64bit_load */);
     callq(scratch);
     return addr;
 }

@@ -114,8 +114,8 @@ public:
     void nop() { emitByte(0x90); }
     void trap() { emitByte(0xcc); }
 
-    // some things (such as objdump) call this "movabs" if the immediate is 64-bit
-    void mov(Immediate imm, Register dest);
+    // emits a movabs if the immediate is a 64bit value or force_64bit_load = true otherwise it emits a 32bit mov
+    void mov(Immediate imm, Register dest, bool force_64bit_load = false);
     // not sure if we should use the 'q' suffix here, but this is the most ambiguous one;
     // this does a 64-bit store of a 32-bit value.
     void movq(Immediate imm, Indirect dest);
