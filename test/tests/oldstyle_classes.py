@@ -133,26 +133,16 @@ class LessEqualTest:
         self._a = a
 
     def __lt__(self, other):
+        print "lt"
         return self._a < other._a
 
-    def __eq__(self, other):
-        return self._a == other._a
-
-    def __ne__(self, other):
-        return self._a != other._a
-
     def __le__(self, other):
+        print "le"
         return self._a <= other._a
 
 ca = LessEqualTest(3)
 cb = LessEqualTest(2)
 cc = LessEqualTest(2)
-
-print(ca == cb)
-print(ca == cc)
-
-print(ca != cb)
-print(ca != cc)
 
 print(ca < cb)
 print(cb < ca)
@@ -163,7 +153,7 @@ print(ca <= cc)
 # CompareA only defines __lt__ and __le__ but appears on the right-hand-side
 print(ca > cb)
 print(ca >= cb)
-print(ca > cb)
+print(cb > ca)
 print(cb > cc)
 
 class GreatEqualTest:
@@ -171,9 +161,11 @@ class GreatEqualTest:
         self._a = a
 
     def __gt__(self, other):
+        print "gt"
         return self._a > other._a
 
     def __ge__(self, other):
+        print "ge"
         return self._a >= other._a
 
 cd = GreatEqualTest(4)
