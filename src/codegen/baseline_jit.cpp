@@ -27,13 +27,13 @@
 namespace pyston {
 
 static llvm::DenseSet<CFGBlock*> blocks_aborted;
+static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 
 JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     : frame_manager(false /* don't omit frame pointers */),
       code(new uint8_t[code_size]),
       entry_offset(0),
-      epilog_offset(0),
-      a(code.get(), code_size - epilog_size),
+      a(code.get(), code_size),
       is_currently_writing(false),
       asm_failed(false) {
     static StatCounter num_jit_code_blocks("num_baselinejit_code_blocks");
@@ -52,13 +52,6 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     a.jmp(assembler::Indirect(assembler::RSI, offsetof(CFGBlock, code))); // jump to block
 
     entry_offset = a.bytesWritten();
-
-    // emit epilog
-    epilog_offset = code_size - epilog_size;
-    assembler::Assembler endAsm(code.get() + epilog_offset, epilog_size);
-    endAsm.leave();
-    endAsm.retq();
-    RELEASE_ASSERT(!endAsm.hasFailed(), "");
 
     // generate eh frame...
     frame_manager.writeAndRegister(code.get(), code_size);
@@ -82,9 +75,8 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
                                                llvm::CallingConv::C, live_outs, assembler::RAX, 0));
     std::unique_ptr<ICSlotRewrite> rewrite(new ICSlotRewrite(ic_info.get(), ""));
 
-    return std::unique_ptr<JitFragmentWriter>(new JitFragmentWriter(block, std::move(ic_info), std::move(rewrite),
-                                                                    fragment_offset, epilog_offset - fragment_offset,
-                                                                    patch_jump_offset, a.getStartAddr(), *this));
+    return std::unique_ptr<JitFragmentWriter>(new JitFragmentWriter(
+        block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset, a.getStartAddr(), *this));
 }
 
 void JitCodeBlock::fragmentAbort(bool not_enough_space) {
@@ -102,14 +94,13 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
 
 
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
-                                     std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int epilog_offset,
-                                     int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block)
+                                     std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
+                                     void* entry_code, JitCodeBlock& code_block)
     : Rewriter(std::move(rewrite), 0, {}),
       block(block),
       code_offset(code_offset),
-      epilog_offset(epilog_offset),
+      num_bytes_exit(0),
       num_bytes_overlapping(num_bytes_overlapping),
-      num_bytes_forward_jump(0),
       entry_code(entry_code),
       code_block(code_block),
       interp(0),
@@ -387,7 +378,7 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     RewriterVar* next = imm(b);
-    addAction([=]() { _emitJump(b, next, num_bytes_forward_jump); }, { next }, ActionType::NORMAL);
+    addAction([=]() { _emitJump(b, next, num_bytes_exit); }, { next }, ActionType::NORMAL);
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
@@ -505,9 +496,31 @@ int JitFragmentWriter::finishCompilation() {
     block->code = (void*)((uint64_t)entry_code + code_offset);
     block->entry_code = (decltype(block->entry_code))entry_code;
 
+    // if any side exits point to this block patch them to a direct jump to this block
+    auto it = block_patch_locations.find(block);
+    if (it != block_patch_locations.end()) {
+        for (void* patch_location : it->second) {
+            assembler::Assembler patch_asm((uint8_t*)patch_location, min_patch_size);
+            int64_t offset = (uint64_t)block->code - (uint64_t)patch_location;
+            if (isLargeConstant(offset)) {
+                patch_asm.mov(assembler::Immediate(block->code), assembler::R11);
+                patch_asm.jmpq(assembler::R11);
+            } else
+                patch_asm.jmp(assembler::JumpDestination::fromStart(offset));
+            RELEASE_ASSERT(!patch_asm.hasFailed(), "you may have to increase 'min_patch_size'");
+        }
+        block_patch_locations.erase(it);
+    }
+
+    // if we have a side exit, remember its location for patching
+    if (side_exit_patch_location.first) {
+        void* patch_location = (uint8_t*)block->code + side_exit_patch_location.second;
+        block_patch_locations[side_exit_patch_location.first].push_back(patch_location);
+    }
+
     void* next_fragment_start = (uint8_t*)block->code + assembler->bytesWritten();
     code_block.fragmentFinished(assembler->bytesWritten(), num_bytes_overlapping, next_fragment_start);
-    return num_bytes_forward_jump;
+    return num_bytes_exit;
 }
 
 bool JitFragmentWriter::finishAssembly(int continue_offset) {
@@ -669,8 +682,8 @@ Box* JitFragmentWriter::unaryopICHelper(UnaryopIC* ic, Box* obj, int op) {
 }
 
 
-void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_indirect_jump) {
-    size_of_indirect_jump = 0;
+void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp) {
+    size_of_exit_to_interp = 0;
     if (b->code) {
         int64_t offset = (uint64_t)b->code - ((uint64_t)entry_code + code_offset);
         if (isLargeConstant(offset)) {
@@ -681,11 +694,15 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
     } else {
         int num_bytes = assembler->bytesWritten();
         block_next->getInReg(assembler::RAX, true);
-        assembler->mov(assembler::Indirect(assembler::RAX, 8), assembler::RSI);
-        assembler->test(assembler::RSI, assembler::RSI);
-        assembler->je(assembler::JumpDestination::fromStart(epilog_offset));
-        assembler->jmp(assembler::Indirect(assembler::RAX, offsetof(CFGBlock, code)));
-        size_of_indirect_jump = assembler->bytesWritten() - num_bytes;
+        assembler->leave();
+        assembler->retq();
+
+        // make sure we have at least 'min_patch_size' of bytes available.
+        for (int i = assembler->bytesWritten() - num_bytes; i < min_patch_size; ++i)
+            assembler->trap(); // we could use nops but traps may help if something goes wrong
+
+        size_of_exit_to_interp = assembler->bytesWritten() - num_bytes;
+        assert(assembler->hasFailed() || size_of_exit_to_interp >= min_patch_size);
     }
     block_next->bumpUse();
 }
@@ -702,7 +719,8 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
     {
         assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
         assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
-        assembler->jmp(assembler::JumpDestination::fromStart(epilog_offset));
+        assembler->leave();
+        assembler->retq();
     }
 
     assertConsistent();
@@ -711,7 +729,8 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
 void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
     assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
-    assembler->jmp(assembler::JumpDestination::fromStart(epilog_offset));
+    assembler->leave();
+    assembler->retq();
     return_val->bumpUse();
 }
 
@@ -731,11 +750,12 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
 
     {
         assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
-        int bytes = 0;
-        _emitJump(next_block, next_block_var, bytes);
-        if (bytes) {
-            // TODO: We generated an indirect jump.
-            // If we later on JIT the dest block we could patch this code to a direct jump to the dest.
+        int exit_size = 0;
+        _emitJump(next_block, next_block_var, exit_size);
+        if (exit_size) {
+            RELEASE_ASSERT(!side_exit_patch_location.first,
+                           "if we start to emit more than one side exit we should make this a vector");
+            side_exit_patch_location = std::make_pair(next_block, assembler->bytesWritten() - exit_size);
         }
     }
 

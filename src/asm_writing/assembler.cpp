@@ -899,6 +899,7 @@ void Assembler::jmp(JumpDestination dest) {
         emitByte(0xeb);
         emitByte(offset);
     } else {
+        assert((-1L << 31) <= dest.offset && dest.offset < (1L << 31) - 1);
         offset -= 3;
         emitByte(0xe9);
         emitInt(offset, 4);
