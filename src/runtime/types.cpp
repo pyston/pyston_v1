@@ -2850,6 +2850,63 @@ out:
     return result;
 }
 
+extern "C" PyUnicodeObject* unicode_empty;
+extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
+    PyUnicodeObject* unicode;
+
+    /* Optimization for empty strings */
+    if (length == 0 && unicode_empty != NULL) {
+        Py_INCREF(unicode_empty);
+        return unicode_empty;
+    }
+
+    /* Ensure we won't overflow the size. */
+    if (length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1)) {
+        return (PyUnicodeObject*)PyErr_NoMemory();
+    }
+
+    // Do a bunch of inlining + constant folding of this line of CPython's:
+    // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
+    assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
+    unicode = (PyUnicodeObject*)gc_alloc(sizeof(PyUnicodeObject), gc::GCKind::CONSERVATIVE_PYTHON);
+    if (unicode == NULL)
+        return (PyUnicodeObject*)PyErr_NoMemory();
+
+    // Inline PyObject_INIT:
+    assert(!PyType_SUPPORTS_WEAKREFS(&PyUnicode_Type));
+    assert(!PyUnicode_Type.instancesHaveHCAttrs());
+    assert(!PyUnicode_Type.instancesHaveDictAttrs());
+    unicode->ob_type = (struct _typeobject*)&PyUnicode_Type;
+
+    size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+    unicode->str = (Py_UNICODE*)PyMem_MALLOC(new_size); // why is this faster than gc_compat_malloc or gc_alloc??
+
+    if (!unicode->str) {
+        PyErr_NoMemory();
+        goto onError;
+    }
+    /* Initialize the first element to guard against cases where
+     * the caller fails before initializing str -- unicode_resize()
+     * reads str[0], and the Keep-Alive optimization can keep memory
+     * allocated for str alive across a call to unicode_dealloc(unicode).
+     * We don't want unicode_resize to read uninitialized memory in
+     * that case.
+     */
+    unicode->str[0] = 0;
+    unicode->str[length] = 0;
+    unicode->length = length;
+    unicode->hash = -1;
+    unicode->defenc = NULL;
+    return unicode;
+
+onError:
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    _Py_ForgetReference((PyObject*)unicode);
+    PyObject_Del(unicode);
+    return NULL;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
