@@ -148,14 +148,17 @@ private:
     void abortJITing();
     void finishJITing(CFGBlock* continue_block = NULL);
 
+    // this variables are used by the baseline JIT, make sure they have an offset < 0x80 so we can use shorter
+    // instructions
+    CFGBlock* next_block, *current_block;
+    AST_stmt* current_inst;
+
     CompiledFunction* compiled_func;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
     PhiAnalysis* phis;
 
     SymMap sym_table;
-    CFGBlock* next_block, *current_block;
-    AST_stmt* current_inst;
     ExcInfo last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
@@ -259,12 +262,12 @@ void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : compiled_func(compiled_function),
+    : current_block(0),
+      current_inst(0),
+      compiled_func(compiled_function),
       source_info(compiled_function->clfunc->source.get()),
       scope_info(0),
       phis(NULL),
-      current_block(0),
-      current_inst(0),
       last_exception(NULL, NULL, NULL),
       passed_closure(0),
       created_closure(0),
