@@ -977,6 +977,26 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     }
 }
 
+static PyObject* slot_tp_del(PyObject* self) noexcept {
+    static BoxedString* del_str = internStringImmortal("__del__");
+    try {
+        // TODO: runtime ICs?
+        Box* del_attr = typeLookup(self->cls, del_str, NULL);
+        assert(del_attr);
+
+        CallattrFlags flags{.cls_only = false,
+                            .null_on_nonexistent = true,
+                            .argspec = ArgPassSpec(0, 0, false, false) };
+        return callattr(self, del_str, flags, NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        // Python does not support exceptions thrown inside finalizers. Instead, it just
+        // prints a warning that an exception was throw to stderr but ignores it.
+        setCAPIException(e);
+        PyErr_WriteUnraisable(self);
+        return NULL;
+    }
+}
+
 static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpinit", SLOT_AVOIDABILITY(self));
 
@@ -1467,6 +1487,7 @@ static slotdef slotdefs[]
                                                                           "see help(type(x)) for signature",
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+        TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
