@@ -51,6 +51,8 @@ extern "C" {
    performed on failure (no exception is set, no warning is printed, etc).
 */
 
+PyAPI_FUNC(void *) gc_compat_malloc_untracked(size_t) PYSTON_NOEXCEPT;
+
 PyAPI_FUNC(void *) gc_compat_malloc(size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void *) gc_compat_realloc(void *, size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) gc_compat_free(void *) PYSTON_NOEXCEPT;

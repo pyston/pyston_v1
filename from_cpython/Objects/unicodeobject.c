@@ -349,7 +349,9 @@ PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
         }
         else {
             size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-            unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+            // Pyston change: use gc_compat_malloc_untracked, so we won't scan this
+            //unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+            unicode->str = (Py_UNICODE*) gc_compat_malloc_untracked(new_size);
         }
         PyObject_INIT(unicode, &PyUnicode_Type);
     }
@@ -359,7 +361,9 @@ PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
         if (unicode == NULL)
             return NULL;
         new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-        unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+        // Pyston change: use gc_compat_malloc_untracked here:
+        //unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+        unicode->str = (Py_UNICODE*) gc_compat_malloc_untracked(new_size);
     }
 
     if (!unicode->str) {
