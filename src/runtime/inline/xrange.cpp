@@ -22,7 +22,7 @@ BoxedClass* xrange_cls, *xrange_iterator_cls;
 
 class BoxedXrangeIterator;
 class BoxedXrange : public Box {
-private:
+public:
     const int64_t start, stop, step;
     int64_t len;
 
@@ -53,8 +53,6 @@ private:
             return 0LL;
     }
 
-
-public:
     BoxedXrange(int64_t start, int64_t stop, int64_t step) : start(start), stop(stop), step(step) {
         len = get_len_of_range(start, stop, step);
     }
@@ -174,6 +172,27 @@ Box* xrangeReversed(Box* self) {
     return rtn;
 }
 
+Box* xrangeGetitem(Box* self, Box* slice) {
+    assert(isSubclass(self->cls, xrange_cls));
+    BoxedXrange* r = static_cast<BoxedXrange*>(self);
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i < 0 || i >= r->len) {
+            raiseExcHelper(IndexError, "xrange object index out of range");
+        }
+        /* do calculation entirely using unsigned longs, to avoid
+           undefined behaviour due to signed overflow. */
+        return PyInt_FromLong((long)(r->start + (unsigned long)i * r->step));
+    } else {
+        RELEASE_ASSERT(false, "unimplemented");
+    }
+}
+
+Box* xrangeLen(Box* self) {
+    assert(isSubclass(self->cls, xrange_cls));
+    return boxInt(static_cast<BoxedXrange*>(self)->len);
+}
+
 void setupXrange() {
     xrange_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange");
     xrange_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
@@ -186,6 +205,10 @@ void setupXrange() {
                          new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
     xrange_cls->giveAttr(
         "__reversed__", new BoxedFunction(boxRTFunction((void*)xrangeReversed, typeFromClass(xrange_iterator_cls), 1)));
+
+    xrange_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)xrangeGetitem, BOXED_INT, 2)));
+
+    xrange_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)xrangeLen, BOXED_INT, 1)));
 
     CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);

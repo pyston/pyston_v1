@@ -163,17 +163,21 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleMul(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != int_cls) {
+    Py_ssize_t n;
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+    } else {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
 
-    int n = static_cast<BoxedInt*>(rhs)->n;
     int s = self->size();
 
     if (n < 0)
         n = 0;
 
-    if (s == 0 || n == 1) {
+    if ((s == 0 || n == 1) && PyTuple_CheckExact(self)) {
         return self;
     } else {
         BoxedTuple* rtn = BoxedTuple::create(n * s);
@@ -236,9 +240,31 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
     return False;
 }
 
-Box* tupleIndex(BoxedTuple* self, Box* elt) {
-    int size = self->size();
-    for (int i = 0; i < size; i++) {
+Box* tupleIndex(BoxedTuple* self, Box* elt, Box* startBox, Box** args) {
+    Box* endBox = args[0];
+
+    Py_ssize_t start, end;
+    _PyEval_SliceIndex(startBox, &start);
+    _PyEval_SliceIndex(endBox, &end);
+
+    Py_ssize_t size = self->size();
+
+    if (start < 0) {
+        start += size;
+        if (start < 0) {
+            start = 0;
+        }
+    }
+    if (end < 0) {
+        end += size;
+        if (end < 0) {
+            end = 0;
+        }
+    } else if (end > size) {
+        end = size;
+    }
+
+    for (Py_ssize_t i = start; i < end; i++) {
         Box* e = self->elts[i];
 
         int r = PyObject_RichCompareBool(e, elt, Py_EQ);
@@ -250,6 +276,20 @@ Box* tupleIndex(BoxedTuple* self, Box* elt) {
     }
 
     raiseExcHelper(ValueError, "tuple.index(x): x not in tuple");
+}
+
+Box* tupleCount(BoxedTuple* self, Box* elt) {
+    int size = self->size();
+    int count = 0;
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts[i];
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+        if (r)
+            count++;
+    }
+    return boxInt(count);
 }
 
 extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
@@ -448,6 +488,34 @@ static PyObject* tuplerichcompare(PyObject* v, PyObject* w, int op) noexcept {
     return PyObject_RichCompare(vt->elts[i], wt->elts[i], op);
 }
 
+static PyObject* tupleslice(PyTupleObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) {
+    PyTupleObject* np;
+    PyObject** src, **dest;
+    Py_ssize_t i;
+    Py_ssize_t len;
+    if (ilow < 0)
+        ilow = 0;
+    if (ihigh > Py_SIZE(a))
+        ihigh = Py_SIZE(a);
+    if (ihigh < ilow)
+        ihigh = ilow;
+    if (ilow == 0 && ihigh == Py_SIZE(a) && PyTuple_CheckExact((PyObject*)a)) {
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    len = ihigh - ilow;
+    np = (PyTupleObject*)PyTuple_New(len);
+    if (np == NULL)
+        return NULL;
+    src = a->ob_item + ilow;
+    dest = np->ob_item;
+    for (i = 0; i < len; i++) {
+        PyObject* v = src[i];
+        Py_INCREF(v);
+        dest[i] = v;
+    }
+    return (PyObject*)np;
+}
 
 void setupTuple() {
     tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
@@ -460,8 +528,12 @@ void setupTuple() {
     addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
+    tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;
+
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
-    tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 2)));
+    tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 4, 2, false, false),
+                                                   { boxInt(0), boxInt(std::numeric_limits<Py_ssize_t>::max()) }));
+    tuple_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)tupleCount, BOXED_INT, 2)));
 
     tuple_cls->giveAttr("__iter__",
                         new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1)));
