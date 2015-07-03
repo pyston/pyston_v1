@@ -248,10 +248,10 @@ private:
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
-    bool is_constant;
 
+    bool is_constant;
     uint64_t constant_value;
-    Location arg_loc;
+
     std::pair<int /*offset*/, int /*size*/> scratch_allocation;
 
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
@@ -355,6 +355,7 @@ protected:
     LocMap<RewriterVar*> vars_by_location;
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
+    llvm::SmallVector<RewriterVar*, 8> second_slowpath_args;
 
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
@@ -372,7 +373,7 @@ protected:
                 failed = true;
                 return;
             }
-            for (RewriterVar* arg : args) {
+            for (RewriterVar* arg : (second_slowpath ? second_slowpath_args : args)) {
                 arg->uses.push_back(actions.size());
             }
             assert(!added_changing_action);
@@ -382,6 +383,61 @@ protected:
     bool added_changing_action;
     bool marked_inside_ic;
 
+    bool should_use_second_guard_destination;
+    llvm::SmallVector<uint8_t*, 8> second_jump_positions;
+    void emitGuardJump(bool jumpIfNe) {
+        if (should_use_second_guard_destination) {
+            if (jumpIfNe) {
+                assembler->jne(assembler::JumpDestination::fromStart((1 << 31) - 2));
+            } else {
+                assembler->je(assembler::JumpDestination::fromStart((1 << 31) - 2));
+            }
+            second_jump_positions.push_back(assembler->curInstPointer());
+        } else {
+            if (jumpIfNe) {
+                assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+            } else {
+                assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+            }
+        }
+    }
+    void finishJumps() {
+        // XXX super hacky
+        // fill in the offsets of the je and jne guards
+        uint8_t* dest_addr = assembler->curInstPointer();
+        for (uint8_t* addr : second_jump_positions) {
+            int offset = dest_addr - addr;
+            *((int*)(addr - 4)) = offset;
+        }
+    }
+    void useSecondGuardDestination() {
+        assertPhaseEmitting();
+
+        for (RewriterVar* v : args) {
+            v->is_arg = false;
+        }
+        args = std::move(second_slowpath_args);
+        for (int i = 0; i < args.size(); i++) {
+            RewriterVar* v = args[i];
+            v->is_arg = true;
+        }
+
+        should_use_second_guard_destination = true;
+    }
+
+    void* second_slowpath;
+    int action_where_second_slowpath_starts;
+
+public:
+    void addSecondSlowpath(void* new_slowpath, const llvm::SmallVector<RewriterVar*, 8>& args) {
+        assertPhaseCollecting();
+        added_changing_action = false;
+        this->second_slowpath = new_slowpath;
+        action_where_second_slowpath_starts = actions.size();
+        second_slowpath_args = args;
+    }
+
+protected:
     // Move the original IC args back into their original registers:
     void restoreArgs();
     // Assert that our original args are correctly placed in case we need to
@@ -500,6 +556,8 @@ public:
     RewriterVar* allocate(int n);
     RewriterVar* allocateAndCopy(RewriterVar* array, int n);
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
+
+    bool hasAddedChangingAction() { return added_changing_action; }
 
     void abort();
     void commit();

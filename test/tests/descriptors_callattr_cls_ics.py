@@ -1,13 +1,5 @@
-# expected: statfail
 # run_args: -n
 # statcheck: stats['slowpath_callattr'] <= 100
-
-# Right now this won't work because callattr involves two calls
-# one call to __get__ and then another call to the returned function.
-# Of course, if the callattr were split up into getattr and a call,
-# each could be re-written separately...
-# Not sure if this is a case worth handling or what is the best way
-# to handle it, but I'm throwing the test in here anyway to remind us.
 
 # Note: difference between DataDescriptor and NonDataDescriptor shouldn't matter
 #  __enter__ is looked up via callattr with class_only set to true

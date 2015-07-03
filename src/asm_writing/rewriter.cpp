@@ -241,7 +241,15 @@ void Rewriter::restoreArgs() {
 
         if (!args[i]->isInLocation(l)) {
             allocReg(r);
-            args[i]->getInReg(r);
+            args[i]->getInReg(r, true /* allow_constant_in_reg */);
+        }
+    }
+
+    if (should_use_second_guard_destination) {
+        for (int i = 6; i < args.size(); i++) {
+            allocReg(assembler::R11);
+            args[6]->getInReg(assembler::R11, true);
+            assembler->mov(assembler::R11, assembler::Indirect(assembler::RSP, -((args.size() - i) * 8)));
         }
     }
 
@@ -261,8 +269,8 @@ void Rewriter::restoreArgs() {
 }
 
 void Rewriter::assertArgsInPlace() {
-    for (int i = 0; i < args.size(); i++) {
-        assert(args[i]->isInLocation(args[i]->arg_loc));
+    for (int i = 0; i < std::min(6, (int)args.size()); i++) {
+        assert(args[i]->isInLocation(Location::forArg(i)));
     }
     for (int i = 0; i < live_outs.size(); i++) {
         assembler::GenericRegister r = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
@@ -293,7 +301,7 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+    emitGuardJump(true /* true = jne */);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -324,7 +332,7 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+    emitGuardJump(false /* false = jne */);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -374,10 +382,7 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    if (negate)
-        assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
-    else
-        assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+    emitGuardJump(!negate);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -1123,6 +1128,10 @@ void Rewriter::commit() {
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
+        if (second_slowpath && i == action_where_second_slowpath_starts) {
+            this->useSecondGuardDestination();
+        }
+
         actions[i].action();
 
         if (failed) {
@@ -1305,6 +1314,26 @@ bool Rewriter::finishAssembly(int continue_offset) {
     assert(picked_slot);
 
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
+
+    // secondary guards will jump here
+    if (second_slowpath) {
+        finishJumps();
+
+        // All the args are set up, but need to adjust %RSP
+        int stackSpace = 8 * std::max((int)args.size() - 6, 0);
+        if (stackSpace > 0)
+            assembler->sub(assembler::Immediate(stackSpace), assembler::RSP);
+
+        // TODO Inefficient way to write a call
+        assembler::Register r = allocReg(assembler::R11);
+        assembler->mov(assembler::Immediate(second_slowpath), r);
+        assembler->callq(r);
+
+        if (stackSpace > 0)
+            assembler->add(assembler::Immediate(stackSpace), assembler::RSP);
+
+        assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
+    }
 
     assembler->fillWithNops();
 
@@ -1723,7 +1752,9 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
       return_location(this->rewrite->returnRegister()),
       failed(false),
       added_changing_action(false),
-      marked_inside_ic(false) {
+      marked_inside_ic(false),
+      should_use_second_guard_destination(false),
+      second_slowpath(NULL) {
     initPhaseCollecting();
 
     finished = false;
@@ -1734,7 +1765,6 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
         addLocationToVar(var, l);
 
         var->is_arg = true;
-        var->arg_loc = l;
 
         args.push_back(var);
     }
