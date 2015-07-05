@@ -231,11 +231,7 @@ assembler::Register Rewriter::ConstLoader::loadConst(uint64_t val, Location othe
 }
 
 void Rewriter::restoreArgs() {
-    ASSERT(!done_guarding, "this will probably work but why are we calling this at this time");
-
     for (int i = 0; i < args.size(); i++) {
-        args[i]->bumpUse();
-
         Location l = Location::forArg(i);
         if (l.type == Location::Stack)
             continue;
@@ -265,8 +261,6 @@ void Rewriter::restoreArgs() {
 }
 
 void Rewriter::assertArgsInPlace() {
-    ASSERT(!done_guarding, "this will probably work but why are we calling this at this time");
-
     for (int i = 0; i < args.size(); i++) {
         assert(args[i]->isInLocation(args[i]->arg_loc));
     }
@@ -821,9 +815,6 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
 
 void Rewriter::_setupCall(bool has_side_effects, const RewriterVar::SmallVector& args,
                           const RewriterVar::SmallVector& args_xmm) {
-    if (has_side_effects)
-        assert(done_guarding);
-
     if (has_side_effects) {
         // We need some fixed amount of space at the beginning of the IC that we can use to invalidate
         // it by writing a jmp.
@@ -1024,11 +1015,6 @@ void RewriterVar::bumpUse() {
     next_use++;
     assert(next_use <= uses.size());
     if (next_use == uses.size()) {
-        // shouldn't be clearing an arg unless we are done guarding
-        if (!rewriter->done_guarding && this->is_arg) {
-            return;
-        }
-
         for (Location loc : locations) {
             rewriter->vars_by_location.erase(loc);
         }
@@ -1119,34 +1105,20 @@ void Rewriter::commit() {
     // Emit assembly for each action, and set done_guarding when
     // we reach the last guard.
 
-    // Note: If an arg finishes its uses before we're done guarding, we don't release it at that point;
-    // instead, we release it here, at the point when we set done_guarding.
-    // An alternate, maybe cleaner, way to accomplish this would be to add a use for each arg
-    // at each guard in the var's `uses` list.
-
-    // First: check if we're done guarding before we even begin emitting.
-
-    auto on_done_guarding = [&]() {
-        done_guarding = true;
-        for (RewriterVar* arg : args) {
-            if (arg->next_use == arg->uses.size()) {
-                for (Location loc : arg->locations) {
-                    vars_by_location.erase(loc);
-                }
-                arg->locations.clear();
-            }
-        }
-        assertConsistent();
-    };
-
-    if (last_guard_action == -1) {
-        on_done_guarding();
-    }
-
     picked_slot = rewrite->prepareEntry();
     if (picked_slot == NULL) {
         on_assemblyfail();
         return;
+    }
+
+    for (RewriterVar& var : vars) {
+        // XXX we're doing extra work if we have any of these
+        if (var.uses.size() == 0) {
+            for (Location loc : var.locations) {
+                vars_by_location.erase(loc);
+            }
+            var.locations.clear();
+        }
     }
 
     // Now, start emitting assembly; check if we're dong guarding after each.
@@ -1160,8 +1132,12 @@ void Rewriter::commit() {
         }
 
         assertConsistent();
-        if (i == last_guard_action) {
-            on_done_guarding();
+
+        if (actions[i].type == ActionType::GUARD) {
+            for (RewriterVar* var : args) {
+                var->bumpUse();
+            }
+            assertConsistent();
         }
     }
 
@@ -1600,9 +1576,6 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
                     return reg;
                 }
                 RewriterVar* var = vars_by_location[reg];
-                if (!done_guarding && var->is_arg && var->arg_loc == Location(reg)) {
-                    continue;
-                }
                 if (var->uses[var->next_use] > best) {
                     found = true;
                     best = var->uses[var->next_use];
@@ -1707,14 +1680,6 @@ RewriterVar* Rewriter::createNewConstantVar(uint64_t val) {
 assembler::Register RewriterVar::initializeInReg(Location l) {
     rewriter->assertPhaseEmitting();
 
-    // TODO um should we check this in more places, or what?
-    // The thing is: if we aren't done guarding, and the register we want to use
-    // is taken by an arg, we can't spill it, so we shouldn't ask to alloc it.
-    if (l.type == Location::Register && !rewriter->done_guarding && rewriter->vars_by_location[l] != NULL
-        && rewriter->vars_by_location[l]->is_arg) {
-        l = Location::any();
-    }
-
     assembler::Register reg = rewriter->allocReg(l);
     l = Location(reg);
 
@@ -1758,9 +1723,7 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
       return_location(this->rewrite->returnRegister()),
       failed(false),
       added_changing_action(false),
-      marked_inside_ic(false),
-      last_guard_action(-1),
-      done_guarding(false) {
+      marked_inside_ic(false) {
     initPhaseCollecting();
 
     finished = false;
