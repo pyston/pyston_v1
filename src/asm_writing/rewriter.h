@@ -283,14 +283,15 @@ public:
     friend class JitFragmentWriter;
 };
 
+enum class ActionType { NORMAL, GUARD, MUTATION };
+
 class RewriterAction {
 public:
     std::function<void()> action;
+    ActionType type;
 
-    RewriterAction(std::function<void()> f) : action(std::move(f)) {}
+    RewriterAction(std::function<void()> f, ActionType type) : action(std::move(f)), type(type) {}
 };
-
-enum class ActionType { NORMAL, GUARD, MUTATION };
 
 // non-NULL fake pointer, definitely legit
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
@@ -375,20 +376,11 @@ protected:
                 arg->uses.push_back(actions.size());
             }
             assert(!added_changing_action);
-            last_guard_action = (int)actions.size();
         }
-        actions.emplace_back(std::move(action));
+        actions.emplace_back(std::move(action), type);
     }
     bool added_changing_action;
     bool marked_inside_ic;
-
-    int last_guard_action;
-
-    bool done_guarding;
-    bool isDoneGuarding() {
-        assertPhaseEmitting();
-        return done_guarding;
-    }
 
     // Move the original IC args back into their original registers:
     void restoreArgs();
@@ -463,11 +455,6 @@ protected:
                 }
                 assert(found);
                 assert(p.second->locations.count(p.first) == 1);
-            }
-        }
-        if (!done_guarding) {
-            for (RewriterVar* arg : args) {
-                assert(!arg->locations.empty());
             }
         }
 #endif
