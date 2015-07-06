@@ -2873,6 +2873,13 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
         return (PyUnicodeObject*)PyErr_NoMemory();
     }
 
+    // Pyston change: allocate ->str first, so that if this allocation
+    // causes a collection, we don't see a half-created unicode object:
+    size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+    Py_UNICODE* str = (Py_UNICODE*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
+    if (!str)
+        return (PyUnicodeObject*)PyErr_NoMemory();
+
     // Do a bunch of inlining + constant folding of this line of CPython's:
     // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
     assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
@@ -2886,13 +2893,7 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     assert(!PyUnicode_Type.instancesHaveDictAttrs());
     unicode->ob_type = (struct _typeobject*)&PyUnicode_Type;
 
-    size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-    unicode->str = (Py_UNICODE*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
-
-    if (!unicode->str) {
-        PyErr_NoMemory();
-        goto onError;
-    }
+    unicode->str = str;
 
     /* Initialize the first element to guard against cases where
      * the caller fails before initializing str -- unicode_resize()
@@ -2907,13 +2908,6 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     unicode->hash = -1;
     unicode->defenc = NULL;
     return unicode;
-
-onError:
-    /* XXX UNREF/NEWREF interface should be more symmetrical */
-    _Py_DEC_REFTOTAL;
-    _Py_ForgetReference((PyObject*)unicode);
-    PyObject_Del(unicode);
-    return NULL;
 }
 
 bool TRACK_ALLOCATIONS = false;
