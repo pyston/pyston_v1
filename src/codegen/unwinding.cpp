@@ -404,12 +404,12 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
 
 static bool inASTInterpreterExecuteInner(unw_word_t ip) {
     static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
-    return ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end);
+    return ((unw_word_t)interpreter_instr_addr < ip && ip <= interpreter_instr_end);
 }
 
 static bool inGeneratorEntry(unw_word_t ip) {
     static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
-    return ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end);
+    return ((unw_word_t)generatorEntry < ip && ip <= generator_entry_end);
 }
 
 
@@ -419,7 +419,7 @@ static inline unw_word_t get_cursor_reg(unw_cursor_t* cursor, int reg) {
     return v;
 }
 static inline unw_word_t get_cursor_ip(unw_cursor_t* cursor) {
-    return get_cursor_reg(cursor, UNW_REG_IP) - 1;
+    return get_cursor_reg(cursor, UNW_REG_IP);
 }
 static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
