@@ -34,6 +34,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		capi/object.cpp
 		capi/typeobject.cpp
 		codegen/ast_interpreter.cpp
+		codegen/baseline_jit.cpp
 		codegen/codegen.cpp
 		codegen/compvars.cpp
 		codegen/entry.cpp

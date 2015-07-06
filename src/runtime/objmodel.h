@@ -48,6 +48,7 @@ BoxedModule* getCurrentModule();
 
 // TODO sort this
 extern "C" bool softspace(Box* b, bool newval);
+extern "C" void printHelper(Box* dest, Box* var, bool nl);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, BoxedString* attr);
 extern "C" Box* getattrMaybeNonstring(Box* obj, Box* attr);

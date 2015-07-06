@@ -21,6 +21,7 @@
 #include "analysis/scoping_analysis.h"
 #include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
+#include "codegen/baseline_jit.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen.h"
@@ -120,6 +121,12 @@ ScopeInfo* SourceInfo::getScopeInfo() {
     return scoping->getScopeInfoForNode(ast);
 }
 
+LivenessAnalysis* SourceInfo::getLiveness() {
+    if (!liveness_info)
+        liveness_info = computeLivenessInfo(cfg);
+    return liveness_info.get();
+}
+
 EffortLevel initialEffort() {
     if (FORCE_INTERPRETER)
         return EffortLevel::INTERPRETED;
@@ -127,7 +134,7 @@ EffortLevel initialEffort() {
         return EffortLevel::MAXIMAL;
     if (ENABLE_INTERPRETER)
         return EffortLevel::INTERPRETED;
-    return EffortLevel::MINIMAL;
+    return EffortLevel::MODERATE;
 }
 
 static void compileIR(CompiledFunction* cf, EffortLevel effort) {
@@ -267,13 +274,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             static StatCounter us_compiling("us_compiling_0_interpreted");
             us_compiling.log(us);
             static StatCounter num_compiles("num_compiles_0_interpreted");
-            num_compiles.log();
-            break;
-        }
-        case EffortLevel::MINIMAL: {
-            static StatCounter us_compiling("us_compiling_1_minimal");
-            us_compiling.log(us);
-            static StatCounter num_compiles("num_compiles_1_minimal");
             num_compiles.log();
             break;
         }
@@ -742,6 +742,21 @@ void CompiledFunction::speculationFailed() {
     }
 }
 
+CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
+                                   EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
+    : clfunc(NULL),
+      func(func),
+      spec(spec),
+      entry_descriptor(entry_descriptor),
+      is_interpreted(is_interpreted),
+      code(code),
+      effort(effort),
+      times_called(0),
+      times_speculation_failed(0),
+      location_map(nullptr) {
+    assert((spec != NULL) + (entry_descriptor != NULL) == 1);
+}
+
 ConcreteCompilerType* CompiledFunction::getReturnType() {
     if (spec)
         return spec->rtn_type;
@@ -803,7 +818,7 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     assert(exit->parent_cf->clfunc);
     CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
-        EffortLevel new_effort = exit->parent_cf->effort == EffortLevel::INTERPRETED ? EffortLevel::MINIMAL
+        EffortLevel new_effort = exit->parent_cf->effort == EffortLevel::INTERPRETED ? EffortLevel::MODERATE
                                                                                      : EffortLevel::MAXIMAL;
         CompiledFunction* compiled = compileFunction(exit->parent_cf->clfunc, NULL, new_effort, exit->entry);
         assert(compiled == new_cf);
@@ -830,8 +845,6 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
 
     EffortLevel new_effort;
     if (cf->effort == EffortLevel::INTERPRETED)
-        new_effort = EffortLevel::MINIMAL;
-    else if (cf->effort == EffortLevel::MINIMAL)
         new_effort = EffortLevel::MODERATE;
     else if (cf->effort == EffortLevel::MODERATE)
         new_effort = EffortLevel::MAXIMAL;

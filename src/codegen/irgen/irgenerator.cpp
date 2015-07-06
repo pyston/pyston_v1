@@ -42,12 +42,10 @@ extern "C" void dumpLLVM(llvm::Value* v) {
     v->dump();
 }
 
-IRGenState::IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<LivenessAnalysis> liveness,
-                       std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
-                       llvm::MDNode* func_dbg_info)
+IRGenState::IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
+                       ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info)
     : cf(cf),
       source_info(source_info),
-      liveness(std::move(liveness)),
       phis(std::move(phis)),
       param_names(param_names),
       gc(gc),
@@ -426,13 +424,22 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
 }
 
 static std::unordered_map<AST_expr*, std::vector<BoxedString*>*> made_keyword_storage;
-static std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node) {
+std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node) {
     auto it = made_keyword_storage.find(node);
     if (it != made_keyword_storage.end())
         return it->second;
 
     auto rtn = new std::vector<BoxedString*>();
     made_keyword_storage.insert(it, std::make_pair(node, rtn));
+
+    // Only add the keywords to the array the first time, since
+    // the later times we will hit the cache which will have the
+    // keyword names already populated:
+    if (!rtn->size()) {
+        for (auto kw : node->keywords)
+            rtn->push_back(kw->arg.getBox());
+    }
+
     return rtn;
 }
 
@@ -833,21 +840,9 @@ private:
         }
 
         std::vector<CompilerVariable*> args;
-        std::vector<BoxedString*>* keyword_names;
-        if (node->keywords.size()) {
+        std::vector<BoxedString*>* keyword_names = NULL;
+        if (node->keywords.size())
             keyword_names = getKeywordNameStorage(node);
-
-            // Only add the keywords to the array the first time, since
-            // the later times we will hit the cache which will have the
-            // keyword names already populated:
-            if (!keyword_names->size()) {
-                for (auto kw : node->keywords) {
-                    keyword_names->push_back(kw->arg.getBox());
-                }
-            }
-        } else {
-            keyword_names = NULL;
-        }
 
         for (int i = 0; i < node->args.size(); i++) {
             CompilerVariable* a = evalExpr(node->args[i], unw_info);
@@ -1887,6 +1882,7 @@ private:
         static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
 
         // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
+        // (=printHelper())
         int nvals = node->values.size();
         for (int i = 0; i < nvals; i++) {
             CompilerVariable* var = evalExpr(node->values[i], unw_info);
@@ -2027,9 +2023,7 @@ private:
 
         auto effort = irstate->getEffortLevel();
         int osr_threshold;
-        if (effort == EffortLevel::MINIMAL)
-            osr_threshold = OSR_THRESHOLD_BASELINE;
-        else if (effort == EffortLevel::MODERATE)
+        if (effort == EffortLevel::MODERATE)
             osr_threshold = OSR_THRESHOLD_T2;
         else
             RELEASE_ASSERT(0, "Unknown effort: %d", (int)effort);

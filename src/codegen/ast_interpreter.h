@@ -25,6 +25,7 @@ class GCVisitor;
 
 class AST_expr;
 class AST_stmt;
+class AST_Jump;
 class Box;
 class BoxedClosure;
 class BoxedDict;
@@ -32,6 +33,43 @@ struct CompiledFunction;
 struct LineInfo;
 
 extern const void* interpreter_instr_addr;
+
+struct ASTInterpreterJitInterface {
+    static int getCurrentBlockOffset();
+    static int getCurrentInstOffset();
+
+    static Box* derefHelper(void* interp, InternedString s);
+    static Box* doOSRHelper(void* interp, AST_Jump* node);
+    static Box* getBoxedLocalHelper(void* interp, BoxedString* s);
+    static Box* getBoxedLocalsHelper(void* interp);
+    static Box* getLocalHelper(void* interp, InternedString id);
+    static Box* landingpadHelper(void* interp);
+    static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
+    static Box* uncacheExcInfoHelper(void* interp);
+    static Box* yieldHelper(void* interp, Box* val);
+    static void setItemNameHelper(void* interp, Box* str, Box* val);
+    static void setLocalClosureHelper(void* interp, InternedString id, Box* v);
+    static void setLocalHelper(void* interp, InternedString id, Box* v);
+};
+
+class RewriterVar;
+struct Value {
+    union {
+        bool b;
+        int64_t n;
+        double d;
+        Box* o;
+    };
+    RewriterVar* var;
+
+    operator RewriterVar*() { return var; }
+
+    Value() : o(0), var(0) {}
+    Value(bool b, RewriterVar* var) : b(b), var(var) {}
+    Value(int64_t n, RewriterVar* var) : n(n), var(var) {}
+    Value(double d, RewriterVar* var) : d(d), var(var) {}
+    Value(Box* o, RewriterVar* var) : o(o), var(var) {}
+};
 
 void setupInterpreter();
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,

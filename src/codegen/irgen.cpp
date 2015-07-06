@@ -544,9 +544,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 emitter->getBuilder()->CreateStore(new_call_count, call_count_ptr);
 
                 int reopt_threshold;
-                if (effort == EffortLevel::MINIMAL)
-                    reopt_threshold = REOPT_THRESHOLD_BASELINE;
-                else if (effort == EffortLevel::MODERATE)
+                if (effort == EffortLevel::MODERATE)
                     reopt_threshold = REOPT_THRESHOLD_T2;
                 else
                     RELEASE_ASSERT(0, "Unknown effort: %d", (int)effort);
@@ -1059,15 +1057,15 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         computeBlockSetClosure(blocks);
     }
 
-    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(source->cfg);
+    LivenessAnalysis* liveness = source->getLiveness();
     std::unique_ptr<PhiAnalysis> phis;
 
     if (entry_descriptor)
-        phis = computeRequiredPhis(entry_descriptor, liveness.get(), source->getScopeInfo());
+        phis = computeRequiredPhis(entry_descriptor, liveness, source->getScopeInfo());
     else
-        phis = computeRequiredPhis(*param_names, source->cfg, liveness.get(), source->getScopeInfo());
+        phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
 
-    IRGenState irstate(cf, source, std::move(liveness), std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
+    IRGenState irstate(cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 
