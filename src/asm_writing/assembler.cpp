@@ -145,6 +145,15 @@ void Assembler::emitSIB(uint8_t scalebits, uint8_t index, uint8_t base) {
     emitByte((scalebits << 6) | (index << 3) | base);
 }
 
+int Assembler::getModeFromOffset(int offset) const {
+    if (offset == 0)
+        return 0b00;
+    else if (-0x80 <= offset && offset < 0x80)
+        return 0b01;
+    else
+        return 0b10;
+}
+
 void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
     force_64bit_load = force_64bit_load || !val.fitsInto32Bit();
 
@@ -178,15 +187,7 @@ void Assembler::movq(Immediate src, Indirect dest) {
     emitByte(0xc7);
 
     bool needssib = (dest_idx == 0b100);
-
-    int mode;
-    if (dest.offset == 0)
-        mode = 0b00;
-    else if (-0x80 <= dest.offset && dest.offset < 0x80)
-        mode = 0b01;
-    else
-        mode = 0b10;
-
+    int mode = getModeFromOffset(dest.offset);
     emitModRM(mode, 0, dest_idx);
 
     if (needssib)
@@ -246,15 +247,7 @@ void Assembler::mov(Register src, Indirect dest) {
     emitByte(0x89);
 
     bool needssib = (dest_idx == 0b100);
-
-    int mode;
-    if (dest.offset == 0)
-        mode = 0b00;
-    else if (-0x80 <= dest.offset && dest.offset < 0x80)
-        mode = 0b01;
-    else
-        mode = 0b10;
-
+    int mode = getModeFromOffset(dest.offset);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -450,15 +443,7 @@ void Assembler::movsd(XMMRegister src, Indirect dest) {
     emitByte(0x11);
 
     bool needssib = (dest_idx == 0b100);
-
-    int mode;
-    if (dest.offset == 0)
-        mode = 0b00;
-    else if (-0x80 <= dest.offset && dest.offset < 0x80)
-        mode = 0b01;
-    else
-        mode = 0b10;
-
+    int mode = getModeFromOffset(dest.offset);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -809,8 +794,6 @@ void Assembler::cmp(Indirect mem, Register reg) {
 }
 
 void Assembler::lea(Indirect mem, Register reg) {
-    RELEASE_ASSERT(mem.base != RSP && mem.base != R12, "We have to generate the SIB byte...");
-
     int mem_idx = mem.base.regnum;
     int reg_idx = reg.regnum;
 
@@ -830,14 +813,17 @@ void Assembler::lea(Indirect mem, Register reg) {
     emitRex(rex);
     emitByte(0x8D);
 
-    if (mem.offset == 0) {
-        emitModRM(0b00, reg_idx, mem_idx);
-    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
-        emitModRM(0b01, reg_idx, mem_idx);
+    bool needssib = (mem_idx == 0b100);
+    int mode = getModeFromOffset(mem.offset);
+    emitModRM(mode, reg_idx, mem_idx);
+
+    if (needssib)
+        emitSIB(0b00, 0b100, mem_idx);
+
+    if (mode == 0b01) {
         emitByte(mem.offset);
-    } else {
+    } else if (mode == 0b10) {
         assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
-        emitModRM(0b10, reg_idx, mem_idx);
         emitInt(mem.offset, 4);
     }
 }
