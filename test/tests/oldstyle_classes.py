@@ -128,6 +128,61 @@ print issubclass(OldStyleClass, object)
 print isinstance(OldStyleClass(), OldStyleClass)
 print issubclass(OldStyleClass, OldStyleClass)
 
+class LessEqualTest:
+    def __init__(self, a):
+        self._a = a
+
+    def __lt__(self, other):
+        print "lt"
+        return self._a < other._a
+
+    def __le__(self, other):
+        print "le"
+        return self._a <= other._a
+
+ca = LessEqualTest(3)
+cb = LessEqualTest(2)
+cc = LessEqualTest(2)
+
+print(ca < cb)
+print(cb < ca)
+
+print(ca <= cb)
+print(ca <= cc)
+
+# CompareA only defines __lt__ and __le__ but appears on the right-hand-side
+print(ca > cb)
+print(ca >= cb)
+print(cb > ca)
+print(cb > cc)
+
+class GreatEqualTest:
+    def __init__(self, a):
+        self._a = a
+
+    def __gt__(self, other):
+        print "gt"
+        return self._a > other._a
+
+    def __ge__(self, other):
+        print "ge"
+        return self._a >= other._a
+
+cd = GreatEqualTest(4)
+ce = GreatEqualTest(5)
+cf = GreatEqualTest(4)
+
+print(cd >= ce)
+print(cd > ce)
+print(cd >= cf)
+print(cd > cf)
+
+# CompareB only defines __gt__ and __ge__ but appears on the right-hand-side
+print(cd <= ce)
+print(cd < ce)
+print(cd <= cf)
+print(cd < cf)
+
 class GetattrTest:
     def __getattr__(self, attr):
         print "getattr", attr

@@ -741,6 +741,22 @@ Box* _instanceBinary(Box* _inst, Box* other, const char* attr) {
     return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 
+Box* instanceGt(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__gt__");
+}
+
+Box* instanceGe(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__ge__");
+}
+
+Box* instanceLt(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__lt__");
+}
+
+Box* instanceLe(Box* _inst, Box* other) {
+    return _instanceBinary(_inst, other, "__le__");
+}
+
 Box* instanceEq(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, "__eq__");
 }
@@ -856,6 +872,10 @@ void setupClassobj() {
                            new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
     instance_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instanceEq, UNKNOWN, 2)));
     instance_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)instanceNe, UNKNOWN, 2)));
+    instance_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)instanceLt, UNKNOWN, 2)));
+    instance_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)instanceLe, UNKNOWN, 2)));
+    instance_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)instanceGt, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)instanceGe, UNKNOWN, 2)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
