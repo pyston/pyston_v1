@@ -3029,6 +3029,12 @@ static void setupDefaultClassGCParticipation() {
     setTypeGCNone(&Match_Type);
     setTypeGCNone(&Pattern_Type);
     setTypeGCNone(&PyCallIter_Type);
+
+    // We just changed the has_safe_tp_dealloc field on a few classes, changing
+    // them from having an ordered finalizer to an unordered one.
+    // If some instances of those classes have already been allocated (e.g.
+    // preallocated exceptions), they need to be invalidated.
+    gc::invalidateOrderedFinalizerList();
 }
 
 bool TRACK_ALLOCATIONS = false;

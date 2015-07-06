@@ -91,6 +91,7 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free fr
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
+        clearOrderingState(al);
         if (isMarked(al)) {
             clearMark(al);
             cur = cur->next;
@@ -122,6 +123,39 @@ void _bytesAllocatedTripped() {
     runCollection();
 }
 
+//////
+/// Finalizers
+
+bool hasOrderedFinalizer(BoxedClass* cls) {
+    if (cls->has_safe_tp_dealloc) {
+        assert(!cls->tp_del);
+        return false;
+    } else if (cls->hasNonDefaultTpDealloc()) {
+        return true;
+    } else {
+        // The default tp_dealloc calls tp_del if there is one.
+        return cls->tp_del != NULL;
+    }
+}
+
+void finalize(Box* b) {
+    GCAllocation* al = GCAllocation::fromUserData(b);
+    assert(!hasFinalized(al));
+    setFinalized(al);
+    b->cls->tp_dealloc(b);
+}
+
+__attribute__((always_inline)) bool isWeaklyReferenced(Box* b) {
+    if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
+        PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
+        if (list && *list) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 Heap global_heap;
 
 __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
@@ -145,17 +179,23 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 #endif
 
         assert(b->cls);
-        if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
-            PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
-            if (list && *list) {
-                assert(weakly_referenced && "attempting to free a weakly referenced object manually");
-                weakly_referenced->push_back(b);
-                return false;
-            }
+        if (isWeaklyReferenced(b)) {
+            assert(weakly_referenced && "attempting to free a weakly referenced object manually");
+            weakly_referenced->push_back(b);
+            return false;
         }
+
+        ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
+               getTypeName(b));
 
         if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
             gc_safe_destructors.log();
+
+            GCAllocation* al = GCAllocation::fromUserData(b);
+            assert(!hasFinalized(al));
+            assert(!hasOrderedFinalizer(b->cls));
+
+            // Don't bother setting the finalized flag since the object is getting freed right now.
             b->cls->tp_dealloc(b);
         }
     }
@@ -452,6 +492,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
 
+            clearOrderingState(al);
             if (isMarked(al)) {
                 clearMark(al);
             } else {

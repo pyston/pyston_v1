@@ -170,6 +170,10 @@ inline void clearOrderingState(GCAllocation* header) {
 #undef FINALIZER_HAS_RUN_BIT
 #undef ORDERING_BITS
 
+bool hasOrderedFinalizer(BoxedClass* cls);
+void finalize(Box* b);
+bool isWeaklyReferenced(Box* b);
+
 #define PAGE_SIZE 4096
 
 template <uintptr_t arena_start, uintptr_t arena_size, uintptr_t initial_mapsize, uintptr_t increment> class Arena {
