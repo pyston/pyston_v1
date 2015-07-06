@@ -144,7 +144,8 @@ private:
     Value visit_jump(AST_Jump* node);
     Value visit_langPrimitive(AST_LangPrimitive* node);
 
-    void startJITing(CFGBlock* block, int jump_offset = 0);
+    // for doc on 'exit_offset' have a look at JitFragmentWriter::num_bytes_exit and num_bytes_overlapping
+    void startJITing(CFGBlock* block, int exit_offset = 0);
     void abortJITing();
     void finishJITing(CFGBlock* continue_block = NULL);
 
@@ -339,7 +340,7 @@ void RegisterHelper::deregister(void* frame_addr) {
     s_interpreterMap.erase(frame_addr);
 }
 
-void ASTInterpreter::startJITing(CFGBlock* block, int jump_offset) {
+void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
@@ -351,10 +352,10 @@ void ASTInterpreter::startJITing(CFGBlock* block, int jump_offset) {
     if (!code_block || code_block->shouldCreateNewBlock()) {
         code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(source_info->getName())));
         code_block = code_blocks[code_blocks.size() - 1].get();
-        jump_offset = 0;
+        exit_offset = 0;
     }
 
-    jit = code_block->newFragment(block, jump_offset);
+    jit = code_block->newFragment(block, exit_offset);
 }
 
 void ASTInterpreter::abortJITing() {
@@ -367,10 +368,10 @@ void ASTInterpreter::abortJITing() {
 void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
     if (!jit)
         return;
-    int jump_offset = jit->finishCompilation();
+    int exit_offset = jit->finishCompilation();
     jit.reset();
     if (continue_block && !continue_block->code)
-        startJITing(continue_block, jump_offset);
+        startJITing(continue_block, exit_offset);
 }
 
 Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at,

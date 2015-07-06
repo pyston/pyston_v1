@@ -74,7 +74,7 @@ class JitFragmentWriter;
 // Currently a JitFragment always contains the code of a single CFGBlock*.
 // A JitFragment can get called from the Interpreter by calling 'entry_code' which will jump to the fragment start or
 // it can get executed by a jump from another fragment.
-// At every fragment end we can jump to another fragment, fallback to the Interpreter or exit.
+// At every fragment end we can jump to another fragment or exit to the interpreter.
 // This means we are not allowed to assume that a register contains a specific value between JitFragments.
 // This also means that we are allowed to store a Python variable which only lives in the current CFGBLock* inside a
 // register or stack slot but we aren't if it outlives the block - we have to store it in the interpreter instance.
@@ -109,38 +109,34 @@ class JitFragmentWriter;
 //      movabs $0x1270014108,%rcx   ; rcx = True
 //      cmp    %rax,%rcx            ; rax == True
 //      jne    end_side_exit
-//      mov    %rax,0x10(%rsp)      ;
-//      movabs $0x215bb60,%rax      ; rax = CFGBlock* to call next (rax is also the 1. return reg)
-//      mov    0x8(%rax),%rsi       ; load CFGBlock->code
-//      test   %rsi,%rsi            ; CFGBlock->code == 0
-//      je     epilog               ; exit to interpreter if code == 0
-//      jmpq   *0x8(%rax)           ; jump to new jit fragment (e.g second_JitFragment)
+//      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
+//      leave
+//      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
 //      ....
 
 // second_JitFragment:
 //      ...
+//    ; this shows how a AST_Return looks like
+//      mov    $0,%rax              ; rax contains the next block to interpret.
+//                                    in this case 0 which means we are finished
+//      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
+//      leave
+//      ret
 //
 // nth_JitFragment:
 //      ...                         ; direct jump previous JITed block
 //      jmp first_JitFragment
 //
-// epilog:                          ; code which jumps to epilog has to make sure that
-//                                  ; rax contains the next block to execute
-//                                  ; or 0 if we are finished but then rdx must contain the Box* value to return
-//      leave
-//      ret
 //
 class JitCodeBlock {
 private:
     static constexpr int scratch_size = 256;
     static constexpr int code_size = 4096 * 2;
-    static constexpr int epilog_size = 2; // size of [leave, ret] in bytes
 
     EHFrameManager frame_manager;
     std::unique_ptr<uint8_t[]> code;
     int entry_offset;
-    int epilog_offset;
     assembler::Assembler a;
     bool is_currently_writing;
     bool asm_failed;
@@ -156,23 +152,35 @@ public:
 
 class JitFragmentWriter : public Rewriter {
 private:
+    static constexpr int min_patch_size = 13;
+
     CFGBlock* block;
-    int code_offset;            // offset inside the JitCodeBlock to the start of this block
-    int epilog_offset;          // offset inside the JitCodeBlock to the epilog
-    int num_bytes_overlapping;  // num of bytes this block overlaps with the prev. used to patch unessary forward jumps
-    int num_bytes_forward_jump; // number of bytes emited for the last forward jump to the next block. This is used to
-                                // patch unessary forward jumps when the next fragment is emited (it becomes
-                                // num_bytes_overlapping)
-    void* entry_code;           // JitCodeBlock start address. Mmust have an offset of 0 into the code block
+    int code_offset; // offset inside the JitCodeBlock to the start of this block
+
+    // If the next block is not yet JITed we will set this field to the number of bytes we emitted for the exit to the
+    // interpreter which continues interpreting the next block.
+    // If we immediatelly start JITing the next block we will set 'num_bytes_overlapping' on the new fragment to this
+    // value which will make the fragment start at the instruction where the last block is exiting to the interpreter to
+    // interpret the new block -> we overwrite the exit with the code of the new block.
+    // If there is nothing to overwrite this field will be 0.
+    int num_bytes_exit;
+    int num_bytes_overlapping; // num of bytes this block overlaps with the prev. used to patch unessary jumps
+
+    void* entry_code; // JitCodeBlock start address. Must have an offset of 0 into the code block
     JitCodeBlock& code_block;
     RewriterVar* interp;
     llvm::DenseMap<InternedString, RewriterVar*> local_syms;
     std::unique_ptr<ICInfo> ic_info;
 
+    // Optional points to a CFGBlock and a patch location which should get patched to a direct jump if
+    // the specified block gets JITed. The patch location is guaranteed to be at least 'min_patch_size' bytes long.
+    // We can't directly mark the offset for patching because JITing the current fragment may fail. That's why we store
+    // it in this field and process it only when we know we successfully generated the code.
+    std::pair<CFGBlock*, int /* offset from fragment start*/> side_exit_patch_location;
+
 public:
     JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
-                      int code_offset, int epilog_offset, int num_bytes_overlapping, void* entry_code,
-                      JitCodeBlock& code_block);
+                      int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block);
 
     RewriterVar* imm(uint64_t val);
     RewriterVar* imm(void* val);
@@ -269,7 +277,7 @@ private:
     static Box* runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args);
 #endif
 
-    void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_indirect_jump);
+    void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
