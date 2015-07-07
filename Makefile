@@ -108,11 +108,7 @@ else
 	LLVM_BUILD := $(LLVM_TRUNK_BUILD)
 endif
 
-ifeq ($(FORCE_TRUNK_BINARIES),1)
-	LLVM_BIN := $(LLVM_TRUNK_BUILD)/Release/bin
-else
-	LLVM_BIN := $(LLVM_BUILD)/Release/bin
-endif
+LLVM_BIN := ./build/Release/llvm/bin
 
 LLVM_LINK_LIBS := core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
