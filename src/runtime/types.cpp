@@ -232,7 +232,7 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
         hasnext_ic.reset(ic);
     }
 
-    static BoxedString* hasnext_str = static_cast<BoxedString*>(PyString_InternFromString("__hasnext__"));
+    static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
     CallattrFlags callattr_flags
         = {.cls_only = true, .null_on_nonexistent = null_on_nonexistent, .argspec = ArgPassSpec(0) };
     return ic->call(obj, hasnext_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -276,7 +276,7 @@ Box* BoxedClass::callNextIC(Box* obj) {
         next_ic.reset(ic);
     }
 
-    static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+    static BoxedString* next_str = internStringImmortal("next");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, next_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -290,7 +290,7 @@ Box* BoxedClass::callReprIC(Box* obj) {
         repr_ic.reset(ic);
     }
 
-    static BoxedString* repr_str = static_cast<BoxedString*>(PyString_InternFromString("__repr__"));
+    static BoxedString* repr_str = internStringImmortal("__repr__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -1240,7 +1240,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         assert(msg);
         // TODO this is an extra Pyston check and I don't think we should have to do it:
         if (isSubclass(e.value->cls, BaseException)) {
-            static BoxedString* message_str = static_cast<BoxedString*>(PyString_InternFromString("message"));
+            static BoxedString* message_str = internStringImmortal("message");
             msg = getattr(e.value, message_str);
         }
 
@@ -1396,7 +1396,7 @@ static Box* functionGlobals(Box* self, void*) {
     assert(func->f->source);
     assert(func->f->source->scoping->areGlobalsFromModule());
 
-    static BoxedString* dict_str = static_cast<BoxedString*>(PyString_InternFromString("__dict__"));
+    static BoxedString* dict_str = internStringImmortal("__dict__");
     return getattr(func->f->source->parent_module, dict_str);
 }
 
@@ -1521,7 +1521,7 @@ static Box* instancemethodRepr(Box* b) {
     Box* funcname = NULL, * klassname = NULL, * result = NULL;
     const char* sfuncname = "?", * sklassname = "?";
 
-    static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
+    static BoxedString* name_str = internStringImmortal("__name__");
     funcname = getattrInternal(func, name_str, NULL);
 
     if (funcname != NULL) {
@@ -2173,7 +2173,7 @@ public:
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
-        static BoxedString* eq_str = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
+        static BoxedString* eq_str = internStringImmortal("__eq__");
         return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
                                 NULL);
     }

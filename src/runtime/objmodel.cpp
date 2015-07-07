@@ -200,7 +200,7 @@ extern "C" bool softspace(Box* b, bool newval) {
         return (bool)r;
     }
 
-    static BoxedString* softspace_str = static_cast<BoxedString*>(PyString_InternFromString("softspace"));
+    static BoxedString* softspace_str = internStringImmortal("softspace");
 
     bool r;
     Box* gotten = NULL;
@@ -225,9 +225,9 @@ extern "C" bool softspace(Box* b, bool newval) {
 }
 
 extern "C" void printHelper(Box* dest, Box* var, bool nl) {
-    static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
-    static BoxedString* newline_str = static_cast<BoxedString*>(PyString_InternFromString("\n"));
-    static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
+    static BoxedString* write_str = internStringImmortal("write");
+    static BoxedString* newline_str = internStringImmortal("\n");
+    static BoxedString* space_str = internStringImmortal(" ");
 
     if (var) {
         // begin code for handling of softspace
@@ -2302,8 +2302,8 @@ extern "C" bool nonzero(Box* obj) {
     }
 
     // TODO: rewrite these.
-    static BoxedString* nonzero_str = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
-    static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+    static BoxedString* nonzero_str = internStringImmortal("__nonzero__");
+    static BoxedString* len_str = internStringImmortal("__len__");
     // go through descriptor logic
     Box* func = getclsattrInternal(obj, nonzero_str, NULL);
     if (!func)
@@ -2341,7 +2341,7 @@ extern "C" BoxedString* str(Box* obj) {
     static StatCounter slowpath_str("slowpath_str");
     slowpath_str.log();
 
-    static BoxedString* str_box = static_cast<BoxedString*>(PyString_InternFromString(str_str.c_str()));
+    static BoxedString* str_box = internStringImmortal(str_str.c_str());
     if (obj->cls != str_cls) {
         // TODO could do an IC optimization here (once we do rewrites here at all):
         // if __str__ is objectStr, just guard on that and call repr directly.
@@ -2373,7 +2373,7 @@ extern "C" BoxedString* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 
-    static BoxedString* repr_box = static_cast<BoxedString*>(PyString_InternFromString(repr_str.c_str()));
+    static BoxedString* repr_box = internStringImmortal(repr_str.c_str());
     obj = callattrInternal(obj, repr_box, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
     if (isSubclass(obj->cls, unicode_cls)) {
@@ -2455,7 +2455,7 @@ extern "C" BoxedInt* hash(Box* obj) {
 }
 
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
-    static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+    static BoxedString* len_str = internStringImmortal("__len__");
 
     // Corresponds to the first part of PyObject_Size:
     PySequenceMethods* m = obj->cls->tp_as_sequence;
@@ -3640,7 +3640,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             assert((obj->cls->tp_call == NULL) == (typeLookup(obj->cls, call_str, NULL) == NULL));
         }
 
-        static BoxedString* call_box = static_cast<BoxedString*>(PyString_InternFromString(call_str.c_str()));
+        static BoxedString* call_box = internStringImmortal(call_str.c_str());
 
         if (rewrite_args) {
             rtn = callattrInternal(obj, call_box, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
@@ -4056,7 +4056,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
-        static BoxedString* contains_str = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
+        static BoxedString* contains_str = internStringImmortal("__contains__");
 
         // The checks for this branch are taken from CPython's PySequence_Contains
         if (PyType_HasFeature(rhs->cls, Py_TPFLAGS_HAVE_SEQUENCE_IN)) {
@@ -4240,7 +4240,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (rrtn != NULL && rrtn != NotImplemented)
         return rrtn;
 
-    static BoxedString* cmp_str = static_cast<BoxedString*>(PyString_InternFromString("__cmp__"));
+    static BoxedString* cmp_str = internStringImmortal("__cmp__");
     lrtn = callattrInternal1(lhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
     if (lrtn && lrtn != NotImplemented) {
         return boxBool(convert3wayCompareResultToBool(lrtn, op_type));
@@ -4390,7 +4390,7 @@ extern "C" Box* getitem(Box* value, Box* slice) {
         return r;
     }
 
-    static BoxedString* getitem_str = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
+    static BoxedString* getitem_str = internStringImmortal("__getitem__");
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
@@ -4432,7 +4432,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
 
-    static BoxedString* setitem_str = static_cast<BoxedString*>(PyString_InternFromString("__setitem__"));
+    static BoxedString* setitem_str = internStringImmortal("__setitem__");
 
     Box* rtn;
     if (rewriter.get()) {
@@ -4468,7 +4468,7 @@ extern "C" void delitem(Box* target, Box* slice) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
 
-    static BoxedString* delitem_str = static_cast<BoxedString*>(PyString_InternFromString("__delitem__"));
+    static BoxedString* delitem_str = internStringImmortal("__delitem__");
 
     Box* rtn;
     if (rewriter.get()) {
@@ -4674,7 +4674,7 @@ extern "C" Box* getiterHelper(Box* o) {
 
 Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
-    static BoxedString* iter_str = static_cast<BoxedString*>(PyString_InternFromString("__iter__"));
+    static BoxedString* iter_str = internStringImmortal("__iter__");
     Box* r = callattrInternal0(o, iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
     if (r)
         return r;
@@ -4763,7 +4763,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
                                   "of the metaclasses of all its bases");
     }
 
-    static BoxedString* new_box = static_cast<BoxedString*>(PyString_InternFromString(new_str.c_str()));
+    static BoxedString* new_box = internStringImmortal(new_str.c_str());
     if (winner != metatype) {
         if (getattr(winner, new_box) != getattr(type_cls, new_box)) {
             CallattrFlags callattr_flags

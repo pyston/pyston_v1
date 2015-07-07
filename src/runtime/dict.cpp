@@ -192,7 +192,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     if (it == self->d.end()) {
         // Try calling __missing__ if this is a subclass
         if (self->cls != dict_cls) {
-            static BoxedString* missing_str = static_cast<BoxedString*>(PyString_InternFromString("__missing__"));
+            static BoxedString* missing_str = internStringImmortal("__missing__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(1) };
             Box* r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
             if (r)
@@ -524,7 +524,7 @@ void dictMerge(BoxedDict* self, Box* other) {
         return;
     }
 
-    static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
+    static BoxedString* keys_str = internStringImmortal("keys");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     assert(keys);
@@ -588,7 +588,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
     if (args->size()) {
         Box* arg = args->elts[0];
-        static BoxedString* keys_str = static_cast<BoxedString*>(PyString_InternFromString("keys"));
+        static BoxedString* keys_str = internStringImmortal("keys");
         if (getattrInternal(arg, keys_str, NULL)) {
             dictMerge(self, arg);
         } else {

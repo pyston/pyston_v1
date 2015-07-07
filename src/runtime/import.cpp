@@ -188,7 +188,7 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
     if (!meta_path || meta_path->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
 
-    static BoxedString* findmodule_str = static_cast<BoxedString*>(PyString_InternFromString("find_module"));
+    static BoxedString* findmodule_str = internStringImmortal("find_module");
     for (int i = 0; i < meta_path->size; i++) {
         Box* finder = meta_path->elts->elts[i];
 
@@ -279,7 +279,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
     if (globals == NULL || globals == None || level == 0)
         return None;
 
-    static BoxedString* package_str = static_cast<BoxedString*>(PyString_InternFromString("__package__"));
+    static BoxedString* package_str = internStringImmortal("__package__");
     BoxedString* pkgname = static_cast<BoxedString*>(getFromGlobals(globals, package_str));
     if (pkgname != NULL && pkgname != None) {
         /* __package__ is set, so use it */
@@ -298,14 +298,14 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
         }
         buf += pkgname->s();
     } else {
-        static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
+        static BoxedString* name_str = internStringImmortal("__name__");
 
         /* __package__ not set, so figure it out and set it */
         BoxedString* modname = static_cast<BoxedString*>(getFromGlobals(globals, name_str));
         if (modname == NULL || modname->cls != str_cls)
             return None;
 
-        static BoxedString* path_str = static_cast<BoxedString*>(PyString_InternFromString("__path__"));
+        static BoxedString* path_str = internStringImmortal("__path__");
         Box* modpath = getFromGlobals(globals, path_str);
 
         if (modpath != NULL) {
@@ -378,7 +378,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     if (parent_module == NULL || parent_module == None) {
         path_list = NULL;
     } else {
-        static BoxedString* path_str = static_cast<BoxedString*>(PyString_InternFromString("__path__"));
+        static BoxedString* path_str = internStringImmortal("__path__");
         path_list = static_cast<BoxedList*>(getattrInternal(parent_module, path_str, NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
             return None;
@@ -398,8 +398,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
             else if (sr.type == SearchResult::C_EXTENSION)
                 module = importCExtension(full_name, name, sr.path);
             else if (sr.type == SearchResult::IMP_HOOK) {
-                static BoxedString* loadmodule_str
-                    = static_cast<BoxedString*>(PyString_InternFromString("load_module"));
+                static BoxedString* loadmodule_str = internStringImmortal("load_module");
                 CallattrFlags callattr_flags{.cls_only = false,
                                              .null_on_nonexistent = false,
                                              .argspec = ArgPassSpec(1) };
@@ -557,7 +556,7 @@ extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* glob
 }
 
 static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive) {
-    static BoxedString* path_str = static_cast<BoxedString*>(PyString_InternFromString("__path__"));
+    static BoxedString* path_str = internStringImmortal("__path__");
     Box* pathlist = NULL;
     try {
         pathlist = getattrInternal(module, path_str, NULL);
@@ -580,7 +579,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
             if (recursive)
                 continue;
 
-            static BoxedString* all_str = static_cast<BoxedString*>(PyString_InternFromString("__all__"));
+            static BoxedString* all_str = internStringImmortal("__all__");
             Box* all = getattrInternal(module, all_str, NULL);
             if (all) {
                 ensureFromlist(module, all, buf, true);

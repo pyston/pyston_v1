@@ -95,14 +95,14 @@ extern "C" Box* abs_(Box* x) {
     } else if (x->cls == long_cls) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
-        static BoxedString* abs_str = static_cast<BoxedString*>(PyString_InternFromString("__abs__"));
+        static BoxedString* abs_str = internStringImmortal("__abs__");
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
         return callattr(x, abs_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     }
 }
 
 extern "C" Box* hexFunc(Box* x) {
-    static BoxedString* hex_str = static_cast<BoxedString*>(PyString_InternFromString("__hex__"));
+    static BoxedString* hex_str = internStringImmortal("__hex__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, hex_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -115,7 +115,7 @@ extern "C" Box* hexFunc(Box* x) {
 }
 
 extern "C" Box* octFunc(Box* x) {
-    static BoxedString* oct_str = static_cast<BoxedString*>(PyString_InternFromString("__oct__"));
+    static BoxedString* oct_str = internStringImmortal("__oct__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, oct_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -209,7 +209,7 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
 
 extern "C" Box* next(Box* iterator, Box* _default) {
     try {
-        static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+        static BoxedString* next_str = internStringImmortal("next");
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
         return callattr(iterator, next_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
@@ -862,9 +862,9 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     Box* dest, *end;
 
-    static BoxedString* file_str = static_cast<BoxedString*>(PyString_InternFromString("file"));
-    static BoxedString* end_str = static_cast<BoxedString*>(PyString_InternFromString("end"));
-    static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
+    static BoxedString* file_str = internStringImmortal("file");
+    static BoxedString* end_str = internStringImmortal("end");
+    static BoxedString* space_str = internStringImmortal(" ");
 
     auto it = kwargs->d.find(file_str);
     if (it != kwargs->d.end()) {
@@ -884,7 +884,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
-    static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+    static BoxedString* write_str = internStringImmortal("write");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
 
     // TODO softspace handling?
@@ -908,7 +908,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 Box* getreversed(Box* o) {
-    static BoxedString* reversed_str = static_cast<BoxedString*>(PyString_InternFromString("__reversed__"));
+    static BoxedString* reversed_str = internStringImmortal("__reversed__");
 
     // TODO add rewriting to this?  probably want to try to avoid this path though
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };

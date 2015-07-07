@@ -456,6 +456,13 @@ struct SetattrRewriteArgs;
 struct GetattrRewriteArgs;
 struct DelattrRewriteArgs;
 
+// Helper function around PyString_InternFromString:
+inline BoxedString* internStringImmortal(const char* s) {
+    BoxedString* r = (BoxedString*)PyString_InternFromString(s);
+    assert(r);
+    return r;
+}
+
 struct HCAttrs {
 public:
     struct AttrList {

@@ -1133,7 +1133,7 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
 #endif
 
-    static BoxedString* AssertionError_str = static_cast<BoxedString*>(PyString_InternFromString("AssertionError"));
+    static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
     Box* assertion_type = getGlobal(globals, AssertionError_str);
     assertFail(assertion_type, node->msg ? visit_expr(node->msg).o : 0);
 

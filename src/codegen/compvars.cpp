@@ -357,7 +357,7 @@ public:
     }
 
     CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* iter_box = static_cast<BoxedString*>(PyString_InternFromString("__iter__"));
+        static BoxedString* iter_box = internStringImmortal("__iter__");
 
         CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         CompilerVariable* iter_call = var->callattr(emitter, info, iter_box, flags, {}, 0);
@@ -1705,7 +1705,7 @@ public:
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
-        static BoxedString* attr = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
+        static BoxedString* attr = internStringImmortal("__getitem__");
         bool no_attribute = false;
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(
             emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute);
@@ -1731,7 +1731,7 @@ public:
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
-        static BoxedString* attr = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+        static BoxedString* attr = internStringImmortal("__len__");
         ConcreteCompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
         if (called_constant)
@@ -1741,7 +1741,7 @@ public:
     }
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* attr = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
+        static BoxedString* attr = internStringImmortal("__nonzero__");
 
         bool no_attribute = false;
         ConcreteCompilerVariable* called_constant
@@ -1765,7 +1765,7 @@ public:
     }
 
     ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* attr = static_cast<BoxedString*>(PyString_InternFromString("__hasnext__"));
+        static BoxedString* attr = internStringImmortal("__hasnext__");
 
         ConcreteCompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, NULL);

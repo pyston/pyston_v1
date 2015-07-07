@@ -302,7 +302,7 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
 
     Box* doc_string = cl->source->getDocString();
     if (doc_string != None) {
-        static BoxedString* doc_box = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
+        static BoxedString* doc_box = internStringImmortal("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 

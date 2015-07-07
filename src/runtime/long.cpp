@@ -642,7 +642,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (val->cls == float_cls) {
             mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
-            static BoxedString* long_str = static_cast<BoxedString*>(PyString_InternFromString("__long__"));
+            static BoxedString* long_str = internStringImmortal("__long__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
             Box* r = callattr(val, long_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 

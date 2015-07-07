@@ -651,7 +651,7 @@ BoxedFloat* _floatNew(Box* a) {
             raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
         return new BoxedFloat(r);
     } else {
-        static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
+        static BoxedString* float_str = internStringImmortal("__float__");
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         Box* r = callattr(a, float_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 

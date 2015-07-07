@@ -114,31 +114,31 @@ BoxedString* getOpName(int op_type) {
 
     static bool initialized = false;
     if (!initialized) {
-        strAdd = static_cast<BoxedString*>(PyString_InternFromString("__add__"));
-        strBitAnd = static_cast<BoxedString*>(PyString_InternFromString("__and__"));
-        strBitOr = static_cast<BoxedString*>(PyString_InternFromString("__or__"));
-        strBitXor = static_cast<BoxedString*>(PyString_InternFromString("__xor__"));
-        strDiv = static_cast<BoxedString*>(PyString_InternFromString("__div__"));
-        strTrueDiv = static_cast<BoxedString*>(PyString_InternFromString("__truediv__"));
-        strDivMod = static_cast<BoxedString*>(PyString_InternFromString("__divmod__"));
-        strEq = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
-        strFloorDiv = static_cast<BoxedString*>(PyString_InternFromString("__floordiv__"));
-        strLShift = static_cast<BoxedString*>(PyString_InternFromString("__lshift__"));
-        strLt = static_cast<BoxedString*>(PyString_InternFromString("__lt__"));
-        strLtE = static_cast<BoxedString*>(PyString_InternFromString("__le__"));
-        strGt = static_cast<BoxedString*>(PyString_InternFromString("__gt__"));
-        strGtE = static_cast<BoxedString*>(PyString_InternFromString("__ge__"));
-        strIn = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
-        strInvert = static_cast<BoxedString*>(PyString_InternFromString("__invert__"));
-        strMod = static_cast<BoxedString*>(PyString_InternFromString("__mod__"));
-        strMult = static_cast<BoxedString*>(PyString_InternFromString("__mul__"));
-        strNot = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
-        strNotEq = static_cast<BoxedString*>(PyString_InternFromString("__ne__"));
-        strPow = static_cast<BoxedString*>(PyString_InternFromString("__pow__"));
-        strRShift = static_cast<BoxedString*>(PyString_InternFromString("__rshift__"));
-        strSub = static_cast<BoxedString*>(PyString_InternFromString("__sub__"));
-        strUAdd = static_cast<BoxedString*>(PyString_InternFromString("__pos__"));
-        strUSub = static_cast<BoxedString*>(PyString_InternFromString("__neg__"));
+        strAdd = internStringImmortal("__add__");
+        strBitAnd = internStringImmortal("__and__");
+        strBitOr = internStringImmortal("__or__");
+        strBitXor = internStringImmortal("__xor__");
+        strDiv = internStringImmortal("__div__");
+        strTrueDiv = internStringImmortal("__truediv__");
+        strDivMod = internStringImmortal("__divmod__");
+        strEq = internStringImmortal("__eq__");
+        strFloorDiv = internStringImmortal("__floordiv__");
+        strLShift = internStringImmortal("__lshift__");
+        strLt = internStringImmortal("__lt__");
+        strLtE = internStringImmortal("__le__");
+        strGt = internStringImmortal("__gt__");
+        strGtE = internStringImmortal("__ge__");
+        strIn = internStringImmortal("__contains__");
+        strInvert = internStringImmortal("__invert__");
+        strMod = internStringImmortal("__mod__");
+        strMult = internStringImmortal("__mul__");
+        strNot = internStringImmortal("__nonzero__");
+        strNotEq = internStringImmortal("__ne__");
+        strPow = internStringImmortal("__pow__");
+        strRShift = internStringImmortal("__rshift__");
+        strSub = internStringImmortal("__sub__");
+        strUAdd = internStringImmortal("__pos__");
+        strUSub = internStringImmortal("__neg__");
 
         initialized = true;
     }
@@ -203,7 +203,7 @@ BoxedString* getOpName(int op_type) {
 BoxedString* getInplaceOpName(int op_type) {
     BoxedString* normal_name = getOpName(op_type);
     // TODO inefficient
-    return static_cast<BoxedString*>(PyString_InternFromString(("__i" + normal_name->s().substr(2).str()).c_str()));
+    return internStringImmortal(("__i" + normal_name->s().substr(2).str()).c_str());
 }
 
 // Maybe better name is "swapped" -- it's what the runtime will try if the normal op
@@ -234,7 +234,7 @@ BoxedString* getReverseOpName(int op_type) {
         return getOpName(op_type);
     BoxedString* normal_name = getOpName(op_type);
     // TODO inefficient
-    return static_cast<BoxedString*>(PyString_InternFromString(("__r" + normal_name->s().substr(2).str()).c_str()));
+    return internStringImmortal(("__r" + normal_name->s().substr(2).str()).c_str());
 }
 
 template <class T> static void visitVector(const std::vector<T*>& vec, ASTVisitor* v) {
