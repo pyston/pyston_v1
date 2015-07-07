@@ -15,6 +15,7 @@
 #ifndef PYSTON_CORE_THREADING_H
 #define PYSTON_CORE_THREADING_H
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <ucontext.h>
@@ -81,7 +82,36 @@ void acquireGLRead();
 void releaseGLRead();
 void acquireGLWrite();
 void releaseGLWrite();
-void allowGLReadPreemption();
+void _allowGLReadPreemption();
+
+#define GIL_CHECK_INTERVAL 1000
+// Note: this doesn't need to be an atomic, since it should
+// only be accessed by the thread that holds the gil:
+extern int gil_check_count;
+extern std::atomic<int> threads_waiting_on_gil;
+inline void allowGLReadPreemption() {
+#if ENABLE_SAMPLING_PROFILER
+    if (unlikely(sigprof_pending)) {
+        // Output multiple stacktraces if we received multiple signals
+        // between being able to handle it (such as being in LLVM or the GC),
+        // to try to fully account for that time.
+        while (sigprof_pending) {
+            _printStacktrace();
+            sigprof_pending--;
+        }
+    }
+#endif
+
+    // Double-checked locking: first read with no ordering constraint:
+    if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
+        return;
+
+    gil_check_count++;
+    if (likely(gil_check_count < GIL_CHECK_INTERVAL))
+        return;
+
+    _allowGLReadPreemption();
+}
 // Note: promoteGL is free to drop the lock and then reacquire
 void promoteGL();
 void demoteGL();

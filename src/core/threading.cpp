@@ -14,7 +14,6 @@
 
 #include "core/threading.h"
 
-#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <err.h>
@@ -481,7 +480,7 @@ extern "C" void endAllowThreads() noexcept {
 
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
-static std::atomic<int> threads_waiting_on_gil(0);
+std::atomic<int> threads_waiting_on_gil(0);
 static pthread_cond_t gil_acquired = PTHREAD_COND_INITIALIZER;
 
 extern "C" void PyEval_ReInitThreads() noexcept {
@@ -524,9 +523,6 @@ void releaseGLWrite() {
     pthread_mutex_unlock(&gil);
 }
 
-#define GIL_CHECK_INTERVAL 1000
-// Note: this doesn't need to be an atomic, since it should
-// only be accessed by the thread that holds the gil:
 int gil_check_count = 0;
 
 // TODO: this function is fair in that it forces a thread to give up the GIL
@@ -535,37 +531,19 @@ int gil_check_count = 0;
 // switching back and forth, and a third that never gets run.
 // We could enforce fairness by having a FIFO of events (implementd with mutexes?)
 // and make sure to always wake up the longest-waiting one.
-void allowGLReadPreemption() {
-#if ENABLE_SAMPLING_PROFILER
-    if (unlikely(sigprof_pending)) {
-        // Output multiple stacktraces if we received multiple signals
-        // between being able to handle it (such as being in LLVM or the GC),
-        // to try to fully account for that time.
-        while (sigprof_pending) {
-            _printStacktrace();
-            sigprof_pending--;
-        }
-    }
-#endif
+void _allowGLReadPreemption() {
+    assert(gil_check_count >= GIL_CHECK_INTERVAL);
+    gil_check_count = 0;
 
-    // Double-checked locking: first read with no ordering constraint:
-    if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
+    // Double check this, since if we are wrong about there being a thread waiting on the gil,
+    // we're going to get stuck in the following pthread_cond_wait:
+    if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
         return;
 
-    gil_check_count++;
-    if (gil_check_count >= GIL_CHECK_INTERVAL) {
-        gil_check_count = 0;
-
-        // Double check this, since if we are wrong about there being a thread waiting on the gil,
-        // we're going to get stuck in the following pthread_cond_wait:
-        if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
-            return;
-
-        threads_waiting_on_gil++;
-        pthread_cond_wait(&gil_acquired, &gil);
-        threads_waiting_on_gil--;
-        pthread_cond_signal(&gil_acquired);
-    }
+    threads_waiting_on_gil++;
+    pthread_cond_wait(&gil_acquired, &gil);
+    threads_waiting_on_gil--;
+    pthread_cond_signal(&gil_acquired);
 }
 #elif THREADING_USE_GRWL
 static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
