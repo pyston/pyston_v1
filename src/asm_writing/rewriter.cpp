@@ -1358,11 +1358,9 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
 
                 assembler::Register r = result->initializeInReg();
 
-                // TODO should be a LEA instruction
-                // In fact, we could do something like we do for constants and only load
+                // TODO we could do something like we do for constants and only load
                 // this when necessary, so it won't spill. Is that worth?
-                assembler->mov(assembler::RSP, r);
-                assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRspOffset()), r);
+                assembler->lea(assembler::Indirect(assembler::RSP, 8 * a + rewrite->getScratchRspOffset()), r);
 
                 assertConsistent();
                 result->releaseIfNoUses();
