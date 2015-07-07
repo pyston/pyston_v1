@@ -412,6 +412,8 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
+    internStringMortalInplace(str);
+
     delattr(obj, str);
     return None;
 }
@@ -424,6 +426,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
+    internStringMortalInplace(str);
 
     Box* rtn = NULL;
     try {
@@ -451,6 +454,8 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
+    internStringMortalInplace(str);
+
     setattr(obj, str, value);
     return None;
 }
@@ -463,6 +468,8 @@ Box* hasattr(Box* obj, Box* _str) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
+    internStringMortalInplace(str);
+
     Box* attr;
     try {
         attr = getattrInternal(obj, str, NULL);
@@ -656,7 +663,8 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
 
 Box* exceptionStr(Box* b) {
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    Box* message = b->getattr("message");
+    static BoxedString* message_str = internStringImmortal("message");
+    Box* message = b->getattr(message_str);
     assert(message);
     message = str(message);
     assert(message->cls == str_cls);
@@ -666,7 +674,8 @@ Box* exceptionStr(Box* b) {
 
 Box* exceptionRepr(Box* b) {
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    Box* message = b->getattr("message");
+    static BoxedString* message_str = internStringImmortal("message");
+    Box* message = b->getattr(message_str);
     assert(message);
     message = repr(message);
     assert(message->cls == str_cls);
@@ -916,7 +925,8 @@ Box* getreversed(Box* o) {
     if (r)
         return r;
 
-    if (!typeLookup(o->cls, "__getitem__", NULL)) {
+    static BoxedString* getitem_str = internStringImmortal("__getitem__");
+    if (!typeLookup(o->cls, getitem_str, NULL)) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }
     int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there

@@ -490,7 +490,7 @@ void setupSet() {
 
     set_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
-    frozenset_cls->giveAttr("__new__", set_cls->getattr("__new__"));
+    frozenset_cls->giveAttr("__new__", set_cls->getattr(internStringMortal("__new__")));
 
     Box* set_repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
     set_cls->giveAttr("__repr__", set_repr);
@@ -515,14 +515,14 @@ void setupSet() {
     v_fu.push_back(FROZENSET);
     v_fu.push_back(UNKNOWN);
 
-    auto add = [&](llvm::StringRef name, void* func) {
+    auto add = [&](const char* name, void* func) {
         CLFunction* func_obj = createRTFunction(2, 0, false, false);
         addRTFunction(func_obj, (void*)func, SET, v_ss);
         addRTFunction(func_obj, (void*)func, SET, v_sf);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_ff);
         set_cls->giveAttr(name, new BoxedFunction(func_obj));
-        frozenset_cls->giveAttr(name, set_cls->getattr(name));
+        frozenset_cls->giveAttr(name, set_cls->getattr(internStringMortal(name)));
     };
 
     add("__or__", (void*)setOrSet);
@@ -531,21 +531,21 @@ void setupSet() {
     add("__and__", (void*)setAndSet);
 
     set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
-    frozenset_cls->giveAttr("__iter__", set_cls->getattr("__iter__"));
+    frozenset_cls->giveAttr("__iter__", set_cls->getattr(internStringMortal("__iter__")));
 
     set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
-    frozenset_cls->giveAttr("__len__", set_cls->getattr("__len__"));
+    frozenset_cls->giveAttr("__len__", set_cls->getattr(internStringMortal("__len__")));
 
     set_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)setContains, BOXED_BOOL, 2)));
-    frozenset_cls->giveAttr("__contains__", set_cls->getattr("__contains__"));
+    frozenset_cls->giveAttr("__contains__", set_cls->getattr(internStringMortal("__contains__")));
 
     set_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)setEq, UNKNOWN, 2)));
-    frozenset_cls->giveAttr("__eq__", set_cls->getattr("__eq__"));
+    frozenset_cls->giveAttr("__eq__", set_cls->getattr(internStringMortal("__eq__")));
     set_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)setNe, UNKNOWN, 2)));
-    frozenset_cls->giveAttr("__ne__", set_cls->getattr("__ne__"));
+    frozenset_cls->giveAttr("__ne__", set_cls->getattr(internStringMortal("__ne__")));
 
     set_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)setNonzero, BOXED_BOOL, 1)));
-    frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
+    frozenset_cls->giveAttr("__nonzero__", set_cls->getattr(internStringMortal("__nonzero__")));
 
     frozenset_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)setHash, BOXED_INT, 1)));
 
@@ -556,12 +556,12 @@ void setupSet() {
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
     set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
-    frozenset_cls->giveAttr("union", set_cls->getattr("union"));
+    frozenset_cls->giveAttr("union", set_cls->getattr(internStringMortal("union")));
     set_cls->giveAttr("intersection",
                       new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
-    frozenset_cls->giveAttr("intersection", set_cls->getattr("intersection"));
+    frozenset_cls->giveAttr("intersection", set_cls->getattr(internStringMortal("intersection")));
     set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, 0, true, false)));
-    frozenset_cls->giveAttr("difference", set_cls->getattr("difference"));
+    frozenset_cls->giveAttr("difference", set_cls->getattr(internStringMortal("difference")));
     set_cls->giveAttr("difference_update",
                       new BoxedFunction(boxRTFunction((void*)setDifferenceUpdate, UNKNOWN, 1, 0, true, false)));
     set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));

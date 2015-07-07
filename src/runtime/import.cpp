@@ -32,7 +32,6 @@ namespace pyston {
 static const std::string all_str("__all__");
 static const std::string name_str("__name__");
 static const std::string package_str("__package__");
-static const std::string path_str("__path__");
 static BoxedClass* null_importer_cls;
 
 static void removeModule(const std::string& name) {
@@ -67,6 +66,7 @@ static Box* createAndRunModule(const std::string& name, const std::string& fn, c
     BoxedList* path_list = new BoxedList();
     listAppendInternal(path_list, b_path);
 
+    static BoxedString* path_str = internStringImmortal("__path__");
     module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
@@ -184,7 +184,7 @@ struct SearchResult {
 };
 
 SearchResult findModule(const std::string& name, const std::string& full_name, BoxedList* path_list) {
-    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr("meta_path"));
+    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(internStringMortal("meta_path")));
     if (!meta_path || meta_path->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
 
@@ -208,11 +208,12 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
     }
 
-    BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr("path_hooks"));
+    BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr(internStringMortal("path_hooks")));
     if (!path_hooks || path_hooks->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.path_hooks must be a list of import hooks");
 
-    BoxedDict* path_importer_cache = static_cast<BoxedDict*>(sys_module->getattr("path_importer_cache"));
+    BoxedDict* path_importer_cache
+        = static_cast<BoxedDict*>(sys_module->getattr(internStringMortal("path_importer_cache")));
     if (!path_importer_cache || path_importer_cache->cls != dict_cls)
         raiseExcHelper(RuntimeError, "sys.path_importer_cache must be a dict");
 
@@ -412,7 +413,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         }
 
         if (parent_module && parent_module != None)
-            parent_module->setattr(name, module, NULL);
+            parent_module->setattr(internStringMortal(name), module, NULL);
         return module;
     }
 
@@ -573,6 +574,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
     for (Box* _s : fromlist->pyElements()) {
         RELEASE_ASSERT(PyString_Check(_s), "");
         BoxedString* s = static_cast<BoxedString*>(_s);
+        internStringMortalInplace(s);
 
         if (s->s()[0] == '*') {
             // If __all__ contains a '*', just skip it:
@@ -641,7 +643,8 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
         if (module == NULL)
             return NULL;
 
-        module->setattr("__file__", boxString(pathname), NULL);
+        static BoxedString* file_str = internStringImmortal("__file__");
+        module->setattr(file_str, boxString(pathname), NULL);
         AST_Module* ast = parse_string(code->data());
         compileAndRunModule(ast, module);
         return module;
@@ -825,7 +828,8 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
     assert(_m->cls == module_cls);
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
-    m->setattr("__file__", boxString(path), NULL);
+    static BoxedString* file_str = internStringImmortal("__file__");
+    m->setattr(file_str, boxString(path), NULL);
     return m;
 }
 
@@ -861,7 +865,7 @@ Box* impIsBuiltin(Box* _name) {
     if (!PyString_Check(_name))
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_name));
 
-    BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr("builtin_module_names");
+    BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr(internStringMortal("builtin_module_names"));
     RELEASE_ASSERT(PyTuple_Check(builtin_modules), "");
     for (Box* m : builtin_modules->pyElements()) {
         if (compare(m, _name, AST_TYPE::Eq) == True)

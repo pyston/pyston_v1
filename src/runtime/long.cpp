@@ -1373,7 +1373,7 @@ void setupLong() {
         "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
-    long_cls->giveAttr("__rmul__", long_cls->getattr("__mul__"));
+    long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));
 
     long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)longRdiv, UNKNOWN, 2)));
@@ -1390,17 +1390,17 @@ void setupLong() {
     long_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)longRsub, UNKNOWN, 2)));
 
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
-    long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
+    long_cls->giveAttr("__radd__", long_cls->getattr(internStringMortal("__add__")));
 
     long_cls->giveAttr("__pow__",
                        new BoxedFunction(boxRTFunction((void*)longPow, UNKNOWN, 3, 1, false, false), { None }));
 
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
-    long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
+    long_cls->giveAttr("__rand__", long_cls->getattr(internStringMortal("__and__")));
     long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
-    long_cls->giveAttr("__ror__", long_cls->getattr("__or__"));
+    long_cls->giveAttr("__ror__", long_cls->getattr(internStringMortal("__or__")));
     long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
-    long_cls->giveAttr("__rxor__", long_cls->getattr("__xor__"));
+    long_cls->giveAttr("__rxor__", long_cls->getattr(internStringMortal("__xor__")));
 
     // Note: CPython implements long comparisons using tp_compare
     long_cls->tp_richcompare = long_richcompare;

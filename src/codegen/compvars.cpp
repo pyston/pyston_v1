@@ -34,10 +34,9 @@
 
 namespace pyston {
 
-static const std::string iter_str = "__iter__";
-static const std::string hasnext_str = "__hasnext__";
-
 CompilerType* CompilerType::getPystonIterType() {
+    static BoxedString* iter_str = internStringImmortal("__iter__");
+    static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
     if (hasattr(iter_str) == Yes) {
         CompilerType* iter_type = getattrType(iter_str, true)->callType(ArgPassSpec(0), {}, NULL);
         if (iter_type->hasattr(hasnext_str) == Yes)
@@ -48,7 +47,7 @@ CompilerType* CompilerType::getPystonIterType() {
     return UNKNOWN;
 }
 
-CompilerType::Result CompilerType::hasattr(llvm::StringRef attr) {
+CompilerType::Result CompilerType::hasattr(BoxedString* attr) {
     CompilerType* type = getattrType(attr, true);
     if (type == UNKNOWN)
         return Result::Maybe;
@@ -299,7 +298,7 @@ public:
         return rtn;
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override { return UNKNOWN; }
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override { return UNKNOWN; }
     CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
                            const std::vector<llvm::StringRef>* keyword_names) override {
         return UNKNOWN;
@@ -780,7 +779,7 @@ public:
 
     bool canConvertTo(ConcreteCompilerType* other_type) override { return other_type == UNKNOWN; }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override { return UNDEF; }
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override { return UNDEF; }
 
     CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
                            const std::vector<llvm::StringRef>* keyword_names) override {
@@ -861,7 +860,7 @@ public:
         // pass
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         /*
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
@@ -903,8 +902,9 @@ public:
         }
 
         // we can handle those operations when the rhs is a float
-        if (attr == "__add__" || attr == "__sub__" || attr == "__mul__" || attr == "__div__" || attr == "__pow__"
-            || attr == "__floordiv__" || attr == "__mod__" || attr == "__pow__") {
+        if (attr->s() == "__add__" || attr->s() == "__sub__" || attr->s() == "__mul__" || attr->s() == "__div__"
+            || attr->s() == "__pow__" || attr->s() == "__floordiv__" || attr->s() == "__mod__"
+            || attr->s() == "__pow__") {
             return AbstractFunctionType::get(sigs);
         }
         return BOXED_INT->getattrType(attr, cls_only);
@@ -1118,7 +1118,7 @@ public:
         // pass
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
             AbstractFunctionType::Sig* float_sig = new AbstractFunctionType::Sig();
@@ -1137,13 +1137,15 @@ public:
             sigs.push_back(unknown_sig);
         }
 
-        if (attr == "__add__" || attr == "__sub__" || attr == "__mul__" || attr == "__div__" || attr == "__pow__"
-            || attr == "__floordiv__" || attr == "__mod__" || attr == "__pow__") {
+        if (attr->s() == "__add__" || attr->s() == "__sub__" || attr->s() == "__mul__" || attr->s() == "__div__"
+            || attr->s() == "__pow__" || attr->s() == "__floordiv__" || attr->s() == "__mod__"
+            || attr->s() == "__pow__") {
             return AbstractFunctionType::get(sigs);
         }
 
-        if (attr == "__iadd__" || attr == "__isub__" || attr == "__imul__" || attr == "__idiv__" || attr == "__ipow__"
-            || attr == "__ifloordiv__" || attr == "__imod__" || attr == "__ipow__") {
+        if (attr->s() == "__iadd__" || attr->s() == "__isub__" || attr->s() == "__imul__" || attr->s() == "__idiv__"
+            || attr->s() == "__ipow__" || attr->s() == "__ifloordiv__" || attr->s() == "__imod__"
+            || attr->s() == "__ipow__") {
             return AbstractFunctionType::get(sigs);
         }
 
@@ -1446,7 +1448,7 @@ public:
                 && cls->hasGenericGetattr());
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
@@ -1474,7 +1476,7 @@ public:
                               bool cls_only) override {
         // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = typeLookup(cls, attr->s(), nullptr);
+            Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall3(
                     info.unw_info, g.funcs.raiseAttributeErrorStr, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
@@ -1524,7 +1526,7 @@ public:
         if (!canStaticallyResolveGetattrs())
             return NULL;
 
-        Box* rtattr = cls->getattr(attr->s());
+        Box* rtattr = cls->getattr(attr);
         if (rtattr == NULL) {
             if (no_attribute) {
                 *no_attribute = true;
@@ -2027,7 +2029,7 @@ public:
         return new ConcreteCompilerVariable(other_type, boxed, true);
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         return BOXED_BOOL->getattrType(attr, cls_only);
     }
 
@@ -2228,7 +2230,7 @@ public:
         return new ConcreteCompilerVariable(INT, getConstantInt(var->getValue()->size(), g.i64), true);
     }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         return BOXED_TUPLE->getattrType(attr, cls_only);
     }
 
@@ -2429,7 +2431,7 @@ public:
 
     ConcreteCompilerType* getConcreteType() override { return this; }
 
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override { return UNDEF; }
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override { return UNDEF; }
 
     bool canConvertTo(ConcreteCompilerType* other_type) override { return true; }
 

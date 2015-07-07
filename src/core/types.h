@@ -457,10 +457,23 @@ struct GetattrRewriteArgs;
 struct DelattrRewriteArgs;
 
 // Helper function around PyString_InternFromString:
-inline BoxedString* internStringImmortal(const char* s) {
-    BoxedString* r = (BoxedString*)PyString_InternFromString(s);
-    assert(r);
-    return r;
+BoxedString* internStringImmortal(llvm::StringRef s);
+
+// Callers should use this function if they can accept mortal string objects.
+// FIXME For now it just returns immortal strings, but at least we can use it
+// to start documenting the places that can take mortal strings.
+inline BoxedString* internStringMortal(const char* s) {
+    return internStringImmortal(s);
+}
+
+inline BoxedString* internStringMortal(llvm::StringRef s) {
+    assert(s.data()[s.size()] == '\0');
+    return internStringMortal(s.data());
+}
+
+// TODO this is an immortal intern for now
+inline void internStringMortalInplace(BoxedString*& s) {
+    PyString_InternInPlace((PyObject**)&s);
 }
 
 struct HCAttrs {
@@ -503,18 +516,19 @@ public:
     BoxedDict* getDict();
 
 
-    void setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args);
-    void giveAttr(llvm::StringRef attr, Box* val) {
+    void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
+    void giveAttr(BoxedString* attr, Box* val) {
         assert(!this->hasattr(attr));
         this->setattr(attr, val, NULL);
     }
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
-    Box* getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
-    Box* getattr(llvm::StringRef attr) { return getattr(attr, NULL); }
-    bool hasattr(llvm::StringRef attr) { return getattr(attr) != NULL; }
-    void delattr(llvm::StringRef attr, DelattrRewriteArgs* rewrite_args);
+    Box* getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args);
+    Box* getattr(BoxedString* attr) { return getattr(attr, NULL); }
+    bool hasattr(BoxedString* attr) { return getattr(attr) != NULL; }
+    void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
     Box* getAttrWrapper();

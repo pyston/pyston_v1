@@ -308,7 +308,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
 
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
     if (dict->cls == attrwrapper_cls)
-        return unwrapAttrWrapper(dict)->getattr(key);
+        return unwrapAttrWrapper(dict)->getattr(internStringMortal(key));
 
     Box* key_s;
     try {
@@ -697,7 +697,7 @@ void setupDict() {
                        new BoxedFunction(boxRTFunction((void*)dictIterValues, typeFromClass(dict_iterator_cls), 1)));
 
     dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, LIST, 1)));
-    dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
+    dict_cls->giveAttr("iterkeys", dict_cls->getattr(internStringMortal("__iter__")));
 
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
     dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));

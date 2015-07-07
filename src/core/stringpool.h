@@ -80,6 +80,7 @@ public:
 
     llvm::StringRef s() const;
     operator llvm::StringRef() const { return s(); }
+    operator BoxedString*() const { return getBox(); }
 
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;

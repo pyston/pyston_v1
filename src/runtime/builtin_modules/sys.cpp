@@ -84,7 +84,7 @@ BoxedDict* getSysModulesDict() {
 
 BoxedList* getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
-    Box* _sys_path = sys_module->getattr("path");
+    Box* _sys_path = sys_module->getattr(internStringMortal("path"));
     assert(_sys_path);
 
     if (_sys_path->cls != list_cls) {
@@ -97,7 +97,7 @@ BoxedList* getSysPath() {
 }
 
 Box* getSysStdout() {
-    Box* sys_stdout = sys_module->getattr("stdout");
+    Box* sys_stdout = sys_module->getattr(internStringMortal("stdout"));
     RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");
     return sys_stdout;
 }
@@ -135,10 +135,10 @@ Box* sysGetRecursionLimit() {
 extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
-            if (sys_module->getattr(name))
-                sys_module->delattr(name, NULL);
+            if (sys_module->getattr(internStringMortal(name)))
+                sys_module->delattr(internStringMortal(name), NULL);
         } else
-            sys_module->setattr(name, v, NULL);
+            sys_module->setattr(internStringMortal(name), v, NULL);
     } catch (ExcInfo e) {
         abort();
     }
@@ -146,7 +146,7 @@ extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
-    return sys_module->getattr(name);
+    return sys_module->getattr(internStringMortal(name));
 }
 
 static void mywrite(const char* name, FILE* fp, const char* format, va_list va) noexcept {
@@ -192,7 +192,7 @@ extern "C" void PySys_WriteStderr(const char* format, ...) noexcept {
 }
 
 void addToSysArgv(const char* str) {
-    Box* sys_argv = sys_module->getattr("argv");
+    Box* sys_argv = sys_module->getattr(internStringMortal("argv"));
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
     listAppendInternal(sys_argv, boxString(str));
@@ -422,9 +422,9 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
     sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
-    sys_module->giveAttr("__stdout__", sys_module->getattr("stdout"));
-    sys_module->giveAttr("__stdin__", sys_module->getattr("stdin"));
-    sys_module->giveAttr("__stderr__", sys_module->getattr("stderr"));
+    sys_module->giveAttr("__stdout__", sys_module->getattr(internStringMortal("stdout")));
+    sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
+    sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
 
     sys_module->giveAttr(
         "exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0), "exc_info"));

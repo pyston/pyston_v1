@@ -642,8 +642,9 @@ private:
                 const std::string& name = ast_str->str_data;
                 assert(name.size());
 
-                llvm::Value* name_arg = embedRelocatablePtr(
-                    irstate->getSourceInfo()->parent_module->getStringConstant(name), g.llvm_boxedstring_type_ptr);
+                llvm::Value* name_arg
+                    = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(name, true),
+                                          g.llvm_boxedstring_type_ptr);
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
 

@@ -849,7 +849,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         const std::string& name = ast_str->str_data;
         assert(name.size());
         // TODO: shouldn't have to rebox here
-        v.o = importFrom(module.o, boxString(name));
+        v.o = importFrom(module.o, internStringMortal(name));
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
         abortJITing();
         assert(node->args.size() == 3);

@@ -1776,7 +1776,7 @@ void setupFile() {
     file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
     file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
 
-    file_cls->giveAttr("__iter__", file_cls->getattr("__enter__"));
+    file_cls->giveAttr("__iter__", file_cls->getattr(internStringMortal("__enter__")));
     file_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)fileIterHasNext, BOXED_BOOL, 1)));
     file_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)fileIterNext, STR, 1)));
 
