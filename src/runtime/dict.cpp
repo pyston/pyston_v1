@@ -249,6 +249,8 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
         return d->getOrNull(key);
     }
 
+    // XXX this would be easy to make much faster.
+
     // This path doesn't exist in CPython; we have it to support extension modules that do
     // something along the lines of PyDict_GetItem(PyModule_GetDict()):
     try {
@@ -304,6 +306,9 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
 }
 
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
+    if (dict->cls == attrwrapper_cls)
+        return unwrapAttrWrapper(dict)->getattr(key);
+
     Box* key_s;
     try {
         key_s = boxString(key);

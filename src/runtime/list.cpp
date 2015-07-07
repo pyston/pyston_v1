@@ -594,6 +594,10 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
         int s1 = self->size;
         int s2 = rhs->size;
+
+        if (s2 == 0)
+            return self;
+
         self->ensure(s1 + s2);
 
         memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
