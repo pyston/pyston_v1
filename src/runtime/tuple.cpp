@@ -226,9 +226,12 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
     int size = self->size();
     for (int i = 0; i < size; i++) {
         Box* e = self->elts[i];
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
-        if (b)
+
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r)
             return True;
     }
     return False;
@@ -238,9 +241,12 @@ Box* tupleIndex(BoxedTuple* self, Box* elt) {
     int size = self->size();
     for (int i = 0; i < size; i++) {
         Box* e = self->elts[i];
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
-        if (b)
+
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r)
             return boxInt(i);
     }
 

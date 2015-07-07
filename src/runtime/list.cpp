@@ -781,9 +781,11 @@ Box* listContains(BoxedList* self, Box* elt) {
         if (identity_eq)
             return True;
 
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
-        if (b)
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r)
             return True;
     }
     return False;
@@ -797,9 +799,12 @@ Box* listCount(BoxedList* self, Box* elt) {
 
     for (int i = 0; i < size; i++) {
         Box* e = self->elts->elts[i];
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
-        if (b)
+
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r)
             count++;
     }
     return boxInt(count);
@@ -829,9 +834,12 @@ Box* listIndex(BoxedList* self, Box* elt, BoxedInt* _start, Box** args) {
 
     for (int64_t i = start; i < stop; i++) {
         Box* e = self->elts->elts[i];
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
-        if (b)
+
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r)
             return boxInt(i);
     }
 
@@ -846,10 +854,12 @@ Box* listRemove(BoxedList* self, Box* elt) {
 
     for (int i = 0; i < self->size; i++) {
         Box* e = self->elts->elts[i];
-        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
-        bool b = nonzero(cmp);
 
-        if (b) {
+        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+
+        if (r) {
             memmove(self->elts->elts + i, self->elts->elts + i + 1, (self->size - i - 1) * sizeof(Box*));
             self->size--;
             return None;
@@ -927,10 +937,11 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
         if (identity_eq)
             continue;
 
-        Box* is_eq = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], AST_TYPE::Eq, NULL);
-        bool bis_eq = nonzero(is_eq);
+        int r = PyObject_RichCompareBool(lhs->elts->elts[i], rhs->elts->elts[i], Py_EQ);
+        if (r == -1)
+            throwCAPIException();
 
-        if (bis_eq)
+        if (r)
             continue;
 
         if (op_type == AST_TYPE::Eq) {
