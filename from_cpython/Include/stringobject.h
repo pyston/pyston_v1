@@ -112,10 +112,8 @@ PyAPI_FUNC(int) _PyString_CheckInterned(PyObject *) PYSTON_NOEXCEPT;
 // length of the unicode string, not the length of the bytes it encodes to in the default
 // encoding.
 // So, set up a different function for those callers to use.
-PyAPI_FUNC(Py_ssize_t) _PyString_SizeMacro(PyObject *) PYSTON_NOEXCEPT;
-#define PyString_GET_SIZE(op)  _PyString_SizeMacro((PyObject*)op)
 //#define PyString_AS_STRING(op) (((PyStringObject *)(op))->ob_sval)
-//#define PyString_GET_SIZE(op)  Py_SIZE(op)
+#define PyString_GET_SIZE(op)  Py_SIZE(op)
 
 /* _PyString_Join(sep, x) is like sep.join(x).  sep must be PyStringObject*,
    x must be an iterable object. */

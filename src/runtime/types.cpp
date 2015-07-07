@@ -2850,6 +2850,66 @@ out:
     return result;
 }
 
+void unicode_visit(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    PyUnicodeObject* u = (PyUnicodeObject*)b;
+    v->visit(u->str);
+    v->visit(u->defenc);
+}
+
+extern "C" PyUnicodeObject* unicode_empty;
+extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
+    PyUnicodeObject* unicode;
+
+    /* Optimization for empty strings */
+    if (length == 0 && unicode_empty != NULL) {
+        Py_INCREF(unicode_empty);
+        return unicode_empty;
+    }
+
+    /* Ensure we won't overflow the size. */
+    if (length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1)) {
+        return (PyUnicodeObject*)PyErr_NoMemory();
+    }
+
+    // Pyston change: allocate ->str first, so that if this allocation
+    // causes a collection, we don't see a half-created unicode object:
+    size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+    Py_UNICODE* str = (Py_UNICODE*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
+    if (!str)
+        return (PyUnicodeObject*)PyErr_NoMemory();
+
+    // Do a bunch of inlining + constant folding of this line of CPython's:
+    // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
+    assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
+    unicode = (PyUnicodeObject*)gc_alloc(sizeof(PyUnicodeObject), gc::GCKind::PYTHON);
+    if (unicode == NULL)
+        return (PyUnicodeObject*)PyErr_NoMemory();
+
+    // Inline PyObject_INIT:
+    assert(!PyType_SUPPORTS_WEAKREFS(&PyUnicode_Type));
+    assert(!PyUnicode_Type.instancesHaveHCAttrs());
+    assert(!PyUnicode_Type.instancesHaveDictAttrs());
+    unicode->ob_type = (struct _typeobject*)&PyUnicode_Type;
+
+    unicode->str = str;
+
+    /* Initialize the first element to guard against cases where
+     * the caller fails before initializing str -- unicode_resize()
+     * reads str[0], and the Keep-Alive optimization can keep memory
+     * allocated for str alive across a call to unicode_dealloc(unicode).
+     * We don't want unicode_resize to read uninitialized memory in
+     * that case.
+     */
+    unicode->str[0] = 0;
+    unicode->str[length] = 0;
+    unicode->length = length;
+    unicode->hash = -1;
+    unicode->defenc = NULL;
+    return unicode;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -3348,6 +3408,11 @@ void setupRuntime() {
     weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
     weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
     weakref_callableproxy->is_pyston_class = true;
+
+    unicode_cls->tp_alloc = PystonType_GenericAlloc;
+    unicode_cls->gc_visit = unicode_visit;
+    unicode_cls->tp_dealloc = NULL;
+    unicode_cls->is_pyston_class = true;
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
