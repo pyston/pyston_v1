@@ -278,7 +278,7 @@ class RewriterAction {
 public:
     std::function<void()> action;
 
-    RewriterAction(std::function<void()> f) : action(f) {}
+    RewriterAction(std::function<void()> f) : action(std::move(f)) {}
 };
 
 enum class ActionType { NORMAL, GUARD, MUTATION };
@@ -349,7 +349,7 @@ protected:
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
     std::vector<RewriterAction> actions;
-    void addAction(const std::function<void()>& action, std::vector<RewriterVar*> const& vars, ActionType type) {
+    void addAction(std::function<void()> action, std::vector<RewriterVar*> const& vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -368,7 +368,7 @@ protected:
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
-        actions.emplace_back(action);
+        actions.emplace_back(std::move(action));
     }
     bool added_changing_action;
     bool marked_inside_ic;
