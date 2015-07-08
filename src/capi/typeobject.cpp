@@ -1006,7 +1006,7 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     }
 }
 
-static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
+/* Pyston change: static */ Py_ssize_t slot_sq_length(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqlength", SLOT_AVOIDABILITY(self));
 
     static PyObject* len_str;

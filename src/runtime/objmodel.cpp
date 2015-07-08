@@ -2422,6 +2422,35 @@ extern "C" BoxedInt* hash(Box* obj) {
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
 
+    // Corresponds to the first part of PyObject_Size:
+    PySequenceMethods* m = obj->cls->tp_as_sequence;
+    if (m != NULL && m->sq_length != NULL && m->sq_length != slot_sq_length) {
+        if (rewrite_args) {
+            RewriterVar* r_obj = rewrite_args->obj;
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+            r_m->addGuardNotEq(0);
+
+            // Currently, guard that the value of sq_length didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of sq_length and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            r_m->addAttrGuard(offsetof(PySequenceMethods, sq_length), (intptr_t)m->sq_length);
+            RewriterVar* r_n = rewrite_args->rewriter->call(true, (void*)m->sq_length, r_obj);
+            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n);
+
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_r;
+        }
+
+        int r = (*m->sq_length)(obj);
+        if (r == -1)
+            throwCAPIException();
+        return (BoxedInt*)boxInt(r);
+    }
+
     Box* rtn;
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
