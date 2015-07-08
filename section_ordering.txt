@@ -3,7 +3,11 @@
 .text.boxBool
 .text._ZN6pyston2gc10SmallArena6_allocEmi
 .text._ZNSt17_Function_handlerIFvPN6pyston2gc10SmallArena16ThreadBlockCacheEEZNS2_12freeUnmarkedERSt6vectorIPNS0_3BoxESaIS8_EEE3$_0E9_M_invokeERKSt9_Any_dataS4_
+.text._ZN6pyston2gc10SmallArena10_freeChainEPPNS1_5BlockERSt6vectorIPNS_3BoxESaIS7_EERS5_IPNS_10BoxedClassESaISC_EE
+.text._ZN6pyston9getICInfoEPv
 .text.memset
+.text.__memcmp_sse4_1
+.text.__memcpy_sse2_unaligned
 .text.gc_alloc
 .text.gc_realloc
 .text._ZN6pyston9BoxedList6ensureEi
@@ -19,3 +23,13 @@
 .text.intModInt
 .text.intAddInt
 .text.intMulInt
+.text._ZNK4llvm9StringRef4findES0_m
+.text._ZNK4llvm13StringMapImpl7FindKeyENS_9StringRefE
+.text._int_malloc
+.text._int_free
+.text.malloc
+.text.free
+.text._ULx86_64_dwarf_extract_proc_info_from_fde
+.text.createTuple
+.text._ZN6pyston18rearrangeArgumentsENS_16ParamReceiveSpecEPKNS_10ParamNamesEPKcPPNS_3BoxEPNS_15CallRewriteArgsERbNS_11ArgPassSpecES7_S7_S7_S8_PKSt6vectorIPNS_11BoxedStringESaISF_EERS7_SK_SK_S8_
+.text.sre_match

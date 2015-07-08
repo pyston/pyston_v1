@@ -57,6 +57,7 @@ void force() {
     FORCE(unboxCLFunction);
     FORCE(boxInstanceMethod);
     FORCE(boxBool);
+    FORCE(boxBoolNegated);
     FORCE(unboxBool);
     FORCE(createTuple);
     FORCE(createDict);

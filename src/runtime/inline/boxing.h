@@ -37,6 +37,12 @@ extern "C" inline Box* boxBool(bool b) {
     return rtn;
 }
 
+extern "C" inline Box* boxBoolNegated(bool b) __attribute__((visibility("default")));
+extern "C" inline Box* boxBoolNegated(bool b) {
+    Box* rtn = b ? False : True;
+    return rtn;
+}
+
 extern "C" inline bool unboxBool(Box* b) __attribute__((visibility("default")));
 extern "C" inline bool unboxBool(Box* b) {
     assert(b->cls == bool_cls);

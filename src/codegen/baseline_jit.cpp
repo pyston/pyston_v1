@@ -56,7 +56,7 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     // generate eh frame...
     frame_manager.writeAndRegister(code.get(), code_size);
 
-    g.func_addr_registry.registerFunction(("bjit: " + name).str(), code.get(), code_size, NULL);
+    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code.get(), code_size, NULL);
 }
 
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
@@ -176,6 +176,8 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
 }
 
 RewriterVar* JitFragmentWriter::emitCompare(RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+// TODO: can directly emit the assembly for Is/IsNot
+
 #if ENABLE_BASELINEJIT_ICS
     return call(false, (void*)compareICHelper, imm(new CompareIC), lhs, rhs, imm(op_type));
 #else

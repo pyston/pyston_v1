@@ -1006,7 +1006,7 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     }
 }
 
-static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
+/* Pyston change: static */ Py_ssize_t slot_sq_length(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqlength", SLOT_AVOIDABILITY(self));
 
     static PyObject* len_str;
@@ -1078,7 +1078,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
     return 0;
 }
 
-static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
+/* Pyston change: static*/ int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqcontains", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *res, *args;
@@ -1116,7 +1116,7 @@ static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     }
 
 #define SLOT1(FUNCNAME, OPSTR, ARG1TYPE, ARGCODES)                                                                     \
-    static PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                                                \
+    /* Pyston change: static */ PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                           \
         static PyObject* cache_str;                                                                                    \
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }

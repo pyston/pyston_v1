@@ -2254,6 +2254,16 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commitReturning(r_rtn);
         }
         return r;
+    } else if (obj->cls == unicode_cls) {
+        PyUnicodeObject* unicode_obj = reinterpret_cast<PyUnicodeObject*>(obj);
+        bool r = (unicode_obj->length != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(PyUnicodeObject, length))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
     }
 
     // TODO: rewrite these.
@@ -2411,6 +2421,35 @@ extern "C" BoxedInt* hash(Box* obj) {
 
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+
+    // Corresponds to the first part of PyObject_Size:
+    PySequenceMethods* m = obj->cls->tp_as_sequence;
+    if (m != NULL && m->sq_length != NULL && m->sq_length != slot_sq_length) {
+        if (rewrite_args) {
+            RewriterVar* r_obj = rewrite_args->obj;
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+            r_m->addGuardNotEq(0);
+
+            // Currently, guard that the value of sq_length didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of sq_length and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            r_m->addAttrGuard(offsetof(PySequenceMethods, sq_length), (intptr_t)m->sq_length);
+            RewriterVar* r_n = rewrite_args->rewriter->call(true, (void*)m->sq_length, r_obj);
+            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n);
+
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_r;
+        }
+
+        int r = (*m->sq_length)(obj);
+        if (r == -1)
+            throwCAPIException();
+        return (BoxedInt*)boxInt(r);
+    }
 
     Box* rtn;
     if (rewrite_args) {
@@ -4008,6 +4047,46 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
         static BoxedString* contains_str = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
 
+        // The checks for this branch are taken from CPython's PySequence_Contains
+        if (PyType_HasFeature(rhs->cls, Py_TPFLAGS_HAVE_SEQUENCE_IN)) {
+            PySequenceMethods* sqm = rhs->cls->tp_as_sequence;
+            if (sqm != NULL && sqm->sq_contains != NULL && sqm->sq_contains != slot_sq_contains) {
+                if (rewrite_args) {
+                    RewriterVar* r_lhs = rewrite_args->lhs;
+                    RewriterVar* r_rhs = rewrite_args->rhs;
+                    RewriterVar* r_cls = r_rhs->getAttr(offsetof(Box, cls));
+                    RewriterVar* r_sqm = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+                    r_sqm->addGuardNotEq(0);
+                    // We might need to guard on tp_flags if they can change?
+
+                    // Currently, guard that the value of sq_contains didn't change, and then
+                    // emit a call to the current function address.
+                    // It might be better to just load the current value of sq_contains and call it
+                    // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+                    // support calling a RewriterVar (can only call fixed function addresses).
+                    r_sqm->addAttrGuard(offsetof(PySequenceMethods, sq_contains), (intptr_t)sqm->sq_contains);
+                    RewriterVar* r_b = rewrite_args->rewriter->call(true, (void*)sqm->sq_contains, r_rhs, r_lhs);
+                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                    // This could be inlined:
+                    RewriterVar* r_r;
+                    if (op_type == AST_TYPE::NotIn)
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBoolNegated, r_b);
+                    else
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBool, r_b);
+
+                    rewrite_args->out_success = true;
+                    rewrite_args->out_rtn = r_r;
+                }
+
+                int r = (*sqm->sq_contains)(rhs, lhs);
+                if (r == -1)
+                    throwCAPIException();
+                if (op_type == AST_TYPE::NotIn)
+                    r = !r;
+                return boxBool(r);
+            }
+        }
+
         Box* contained;
         RewriterVar* r_contained;
         if (rewrite_args) {
@@ -4266,6 +4345,39 @@ extern "C" Box* getitem(Box* value, Box* slice) {
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
+
+    // The PyObject_GetItem logic is:
+    // - call mp_subscript if it exists
+    // - if tp_as_sequence exists, try using that (with a number of conditions)
+    // - else throw an exception.
+    //
+    // For now, just use the first clause: call mp_subscript if it exists.
+    // And only if we think it's better than calling __getitem__, which should
+    // exist if mp_subscript exists.
+    PyMappingMethods* m = value->cls->tp_as_mapping;
+    if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
+        if (rewriter.get()) {
+            RewriterVar* r_obj = rewriter->getArg(0);
+            RewriterVar* r_slice = rewriter->getArg(1);
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
+            r_m->addGuardNotEq(0);
+
+            // Currently, guard that the value of mp_subscript didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of mp_subscript and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
+            RewriterVar* r_rtn = rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
+            rewriter->call(true, (void*)checkAndThrowCAPIException);
+            rewriter->commitReturning(r_rtn);
+        }
+        Box* r = m->mp_subscript(value, slice);
+        if (!r)
+            throwCAPIException();
+        return r;
+    }
 
     static BoxedString* getitem_str = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
     Box* rtn;
