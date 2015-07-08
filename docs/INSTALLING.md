@@ -1,7 +1,5 @@
 Pyston currently only supports installing from source; the following instructions have fairly tested as working on Ubuntu, and are extensively verified as not working on Mac.  (Please see issue [#165](https://github.com/dropbox/pyston/issues/165) for discussion on enabling OSX support, which is pretty difficult.)
 
-The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  If you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `CMakeLists.txt`.
-
 # CMake build system
 
 We use a Makefile as a sort of "lite development environment"; it helps manage multiple cmake configurations and has some testing helpers.
@@ -32,14 +30,10 @@ sudo yum install cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake li
 ```
 git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 
-git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
-git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
-
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 
 cd ~/pyston
-make llvm_up
 make
 make check
 ```
