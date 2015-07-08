@@ -393,9 +393,11 @@ Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexce
     if (inst == None)
         return self;
 
-    if (!isSubclass(inst->cls, self->type))
+    if (!isSubclass(inst->cls, self->type)) {
         PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
                      getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
+        return NULL;
+    }
 
     return new BoxedWrapperObject(self, inst);
 }

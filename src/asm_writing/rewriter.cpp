@@ -186,8 +186,9 @@ void Rewriter::ConstLoader::moveImmediate(uint64_t val, assembler::Register dst_
 assembler::Register Rewriter::ConstLoader::findConst(uint64_t val, bool& found_value) {
     assert(rewriter->phase_emitting);
 
-    if (constToVar.count(val) > 0) {
-        RewriterVar* var = constToVar[val];
+    auto it = constToVar.find(val);
+    if (it != constToVar.end()) {
+        RewriterVar* var = it->second;
         for (Location l : var->locations) {
             if (l.type == Location::Register) {
                 found_value = true;

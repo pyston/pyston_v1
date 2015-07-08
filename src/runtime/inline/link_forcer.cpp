@@ -17,6 +17,7 @@
 
 #include "codegen/irgen/hooks.h"
 #include "core/ast.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "gc/heap.h"
 #include "runtime/complex.h"
@@ -137,6 +138,8 @@ void force() {
     FORCE(boxedLocalsSet);
     FORCE(boxedLocalsGet);
     FORCE(boxedLocalsDel);
+
+    FORCE(threading::allowGLReadPreemption);
 
     // FORCE(listIter);
 }

@@ -15,6 +15,8 @@
 #ifndef PYSTON_ANALYSIS_SCOPINGANALYSIS_H
 #define PYSTON_ANALYSIS_SCOPINGANALYSIS_H
 
+#include "llvm/ADT/DenseMap.h"
+
 #include "core/common.h"
 #include "core/stringpool.h"
 
@@ -146,14 +148,14 @@ public:
 class ScopingAnalysis {
 public:
     struct ScopeNameUsage;
-    typedef std::unordered_map<AST*, ScopeNameUsage*> NameUsageMap;
+    typedef llvm::DenseMap<AST*, ScopeNameUsage*> NameUsageMap;
 
 private:
-    std::unordered_map<AST*, ScopeInfo*> scopes;
+    llvm::DenseMap<AST*, ScopeInfo*> scopes;
     AST_Module* parent_module;
     InternedStringPool* interned_strings;
 
-    std::unordered_map<AST*, AST*> scope_replacements;
+    llvm::DenseMap<AST*, AST*> scope_replacements;
 
     ScopeInfo* analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
