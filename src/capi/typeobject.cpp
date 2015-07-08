@@ -1116,7 +1116,7 @@ static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     }
 
 #define SLOT1(FUNCNAME, OPSTR, ARG1TYPE, ARGCODES)                                                                     \
-    static PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                                                \
+    /* Pyston change: static */ PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                           \
         static PyObject* cache_str;                                                                                    \
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }

@@ -4267,6 +4267,39 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
+    // The PyObject_GetItem logic is:
+    // - call mp_subscript if it exists
+    // - if tp_as_sequence exists, try using that (with a number of conditions)
+    // - else throw an exception.
+    //
+    // For now, just use the first clause: call mp_subscript if it exists.
+    // And only if we think it's better than calling __getitem__, which should
+    // exist if mp_subscript exists.
+    PyMappingMethods* m = value->cls->tp_as_mapping;
+    if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
+        if (rewriter.get()) {
+            RewriterVar* r_obj = rewriter->getArg(0);
+            RewriterVar* r_slice = rewriter->getArg(1);
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
+            r_m->addGuardNotEq(0);
+
+            // Currently, guard that the value of mp_subscript didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of mp_subscript and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
+            RewriterVar* r_rtn = rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
+            rewriter->call(true, (void*)checkAndThrowCAPIException);
+            rewriter->commitReturning(r_rtn);
+        }
+        Box* r = m->mp_subscript(value, slice);
+        if (!r)
+            throwCAPIException();
+        return r;
+    }
+
     static BoxedString* getitem_str = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
     Box* rtn;
     if (rewriter.get()) {
