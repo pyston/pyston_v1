@@ -46,8 +46,12 @@ private:
     RuntimeIC(const RuntimeIC&) = delete;
     void operator=(const RuntimeIC&) = delete;
 
+    static constexpr int MAX_NUM_STACK_ARGS = 2;
+
 protected:
-    RuntimeIC(void* addr, int num_slots, int slot_size);
+    // You have to set 'passes_args_on_stack' to true if the target function has more than 6args (x64_64bit linux CC).
+    // If enabled we support 'max_num_stack_args' additional args passed on the stack.
+    RuntimeIC(void* addr, int num_slots, int slot_size, bool passes_args_on_stack = false);
     ~RuntimeIC();
 
     template <class... Args> uint64_t call_int(Args... args) {
@@ -69,7 +73,7 @@ protected:
 
 class CallattrIC : public RuntimeIC {
 public:
-    CallattrIC() : RuntimeIC((void*)callattr, 1, 320) {}
+    CallattrIC() : RuntimeIC((void*)callattr, 1, 512, true) {}
 
     Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
               const std::vector<BoxedString*>* keyword_names) {
@@ -79,10 +83,11 @@ public:
 
 class RuntimeCallIC : public RuntimeIC {
 public:
-    RuntimeCallIC() : RuntimeIC((void*)runtimeCall, 2, 320) {}
+    RuntimeCallIC() : RuntimeIC((void*)runtimeCall, 2, 512, true) {}
 
-    Box* call(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args) {
-        return (Box*)call_ptr(obj, argspec, arg1, arg2, arg3, args);
+    Box* call(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+              std::vector<BoxedString*>* keyword_names) {
+        return (Box*)call_ptr(obj, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 };
 

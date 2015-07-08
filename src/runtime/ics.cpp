@@ -97,10 +97,10 @@ static const char _eh_frame_template_ofp[] =
     "\x00\x00\x00\x00" // prcel offset to function address [to be filled in]
     "\x0d\x00\x00\x00" // function size [to be filled in]
     "\x00"             // augmentation data (none)
-    "\x44\x0e\x30"
+    "\x44\x0e\x60"
     // Instructions:
     // - DW_CFA_advance_loc: 4 to 00000004
-    // - DW_CFA_def_cfa_offset: 48
+    // - DW_CFA_def_cfa_offset: 96
     "\x00\x00\x00\x00" // padding
 
     "\x00\x00\x00\x00" // terminator
@@ -207,12 +207,13 @@ EHFrameManager::~EHFrameManager() {
 #if RUNTIMEICS_OMIT_FRAME_PTR
 // If you change this, you *must* update the value in _eh_frame_template
 // (set the -9'th byte to this value plus 8)
-#define SCRATCH_BYTES 0x28
+#define SCRATCH_BYTES (0x60 - 8)
 #else
-#define SCRATCH_BYTES 0x30
+#define SCRATCH_BYTES 0x60
 #endif
 
-RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(RUNTIMEICS_OMIT_FRAME_PTR) {
+RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size, bool passes_args_on_stack)
+    : eh_frame(RUNTIMEICS_OMIT_FRAME_PTR) {
     static StatCounter sc("runtime_ics_num");
     sc.log();
 
@@ -220,6 +221,9 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
         assert(SCRATCH_BYTES >= 0);
         assert(SCRATCH_BYTES < 0x80); // This would break both the instruction encoding and the dwarf encoding
         assert(SCRATCH_BYTES % 8 == 0);
+
+        static_assert(MAX_NUM_STACK_ARGS == 2, "You have to adjust the STACK_ARGS_MOVE_SIZE constant!");
+        const int STACK_ARGS_MOVE_SIZE = passes_args_on_stack ? 19 : 0;
 
 #if RUNTIMEICS_OMIT_FRAME_PTR
         /*
@@ -231,8 +235,8 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
          * retq             # c3
          *
          */
-        static const int PROLOGUE_SIZE = 4;
-        static const int EPILOGUE_SIZE = 5;
+        const int PROLOGUE_SIZE = 4 + STACK_ARGS_MOVE_SIZE;
+        const int EPILOGUE_SIZE = 5;
         assert(SCRATCH_BYTES % 16 == 8);
 #else
         /*
@@ -246,11 +250,11 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
          * pop %rbp         # 5d
          * retq             # c3
          */
-        static const int PROLOGUE_SIZE = 8;
-        static const int EPILOGUE_SIZE = 6;
+        const int PROLOGUE_SIZE = 8 + STACK_ARGS_MOVE_SIZE;
+        const int EPILOGUE_SIZE = 6;
         assert(SCRATCH_BYTES % 16 == 0);
 #endif
-        static const int CALL_SIZE = 13;
+        const int CALL_SIZE = 13;
 
         int patchable_size = num_slots * slot_size;
 
@@ -280,7 +284,8 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
         assert(p.first == pp_start + patchable_size);
         assert(p.second == pp_end);
 
-        StackInfo stack_info(SCRATCH_BYTES, 0);
+        int stack_args_size = MAX_NUM_STACK_ARGS * sizeof(void*);
+        StackInfo stack_info(SCRATCH_BYTES - stack_args_size, stack_args_size);
         icinfo = registerCompiledPatchpoint(pp_start, pp_start + patchable_size, pp_end, pp_end, setup_info.get(),
                                             stack_info, std::unordered_set<int>());
 
@@ -294,6 +299,19 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
         prologue_assem.mov(assembler::RSP, assembler::RBP);
         prologue_assem.sub(assembler::Immediate(SCRATCH_BYTES), assembler::RSP);
 #endif
+        if (passes_args_on_stack) {
+            int offset_stack_args = SCRATCH_BYTES;
+#if !(RUNTIMEICS_OMIT_FRAME_PTR)
+            offset_stack_args += sizeof(void*); // saved RBP
+#endif
+            offset_stack_args += sizeof(void*); // return address
+            for (int i = 0; i < MAX_NUM_STACK_ARGS; ++i) {
+                int arg_offset = sizeof(void*) * i;
+                prologue_assem.mov(assembler::Indirect(assembler::RSP, offset_stack_args + arg_offset), assembler::RAX);
+                prologue_assem.mov(assembler::RAX, assembler::Indirect(assembler::RSP, arg_offset));
+            }
+        }
+
         assert(!prologue_assem.hasFailed());
         assert(prologue_assem.isExactlyFull());
 
