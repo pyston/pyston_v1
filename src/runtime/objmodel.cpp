@@ -4008,6 +4008,46 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
         static BoxedString* contains_str = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
 
+        // The checks for this branch are taken from CPython's PySequence_Contains
+        if (PyType_HasFeature(rhs->cls, Py_TPFLAGS_HAVE_SEQUENCE_IN)) {
+            PySequenceMethods* sqm = rhs->cls->tp_as_sequence;
+            if (sqm != NULL && sqm->sq_contains != NULL && sqm->sq_contains != slot_sq_contains) {
+                if (rewrite_args) {
+                    RewriterVar* r_lhs = rewrite_args->lhs;
+                    RewriterVar* r_rhs = rewrite_args->rhs;
+                    RewriterVar* r_cls = r_rhs->getAttr(offsetof(Box, cls));
+                    RewriterVar* r_sqm = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+                    r_sqm->addGuardNotEq(0);
+                    // We might need to guard on tp_flags if they can change?
+
+                    // Currently, guard that the value of sq_contains didn't change, and then
+                    // emit a call to the current function address.
+                    // It might be better to just load the current value of sq_contains and call it
+                    // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+                    // support calling a RewriterVar (can only call fixed function addresses).
+                    r_sqm->addAttrGuard(offsetof(PySequenceMethods, sq_contains), (intptr_t)sqm->sq_contains);
+                    RewriterVar* r_b = rewrite_args->rewriter->call(true, (void*)sqm->sq_contains, r_rhs, r_lhs);
+                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                    // This could be inlined:
+                    RewriterVar* r_r;
+                    if (op_type == AST_TYPE::NotIn)
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBoolNegated, r_b);
+                    else
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBool, r_b);
+
+                    rewrite_args->out_success = true;
+                    rewrite_args->out_rtn = r_r;
+                }
+
+                int r = (*sqm->sq_contains)(rhs, lhs);
+                if (r == -1)
+                    throwCAPIException();
+                if (op_type == AST_TYPE::NotIn)
+                    r = !r;
+                return boxBool(r);
+            }
+        }
+
         Box* contained;
         RewriterVar* r_contained;
         if (rewrite_args) {

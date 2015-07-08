@@ -106,6 +106,7 @@ extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *t
 }
 
 extern "C" Box* boxBool(bool);
+extern "C" Box* boxBoolNegated(bool);
 extern "C" Box* boxInt(i64) __attribute__((visibility("default")));
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);

@@ -1078,7 +1078,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
     return 0;
 }
 
-static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
+/* Pyston change: static*/ int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqcontains", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *res, *args;
