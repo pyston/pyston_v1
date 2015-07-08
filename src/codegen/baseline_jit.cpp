@@ -176,6 +176,8 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
 }
 
 RewriterVar* JitFragmentWriter::emitCompare(RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+// TODO: can directly emit the assembly for Is/IsNot
+
 #if ENABLE_BASELINEJIT_ICS
     return call(false, (void*)compareICHelper, imm(new CompareIC), lhs, rhs, imm(op_type));
 #else
