@@ -56,7 +56,7 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     // generate eh frame...
     frame_manager.writeAndRegister(code.get(), code_size);
 
-    g.func_addr_registry.registerFunction(("bjit: " + name).str(), code.get(), code_size, NULL);
+    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code.get(), code_size, NULL);
 }
 
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
