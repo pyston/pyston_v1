@@ -2254,6 +2254,16 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commitReturning(r_rtn);
         }
         return r;
+    } else if (obj->cls == unicode_cls) {
+        PyUnicodeObject* unicode_obj = reinterpret_cast<PyUnicodeObject*>(obj);
+        bool r = (unicode_obj->length != 0);
+
+        if (rewriter.get()) {
+            RewriterVar* r_rtn
+                = r_obj->getAttr(offsetof(PyUnicodeObject, length))->toBool(rewriter->getReturnDestination());
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
     }
 
     // TODO: rewrite these.
