@@ -339,7 +339,9 @@ std::string builtinStr("__builtin__");
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
     if (f->source) {
-        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
+        assert(f->source->scoping->areGlobalsFromModule());
+        Box* globals_for_name = f->source->parent_module;
+        this->modname = globals_for_name->getattr("__name__");
         this->doc = f->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
@@ -350,8 +352,18 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
-                                                BoxedClosure* closure)
-    : in_weakreflist(NULL), f(f), closure(closure), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
+                                                BoxedClosure* closure, Box* globals)
+    : in_weakreflist(NULL),
+      f(f),
+      closure(closure),
+      globals(globals),
+      ndefaults(0),
+      defaults(NULL),
+      modname(NULL),
+      name(NULL),
+      doc(NULL) {
+    assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
+
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -361,7 +373,20 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
     }
 
     if (f->source) {
-        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
+        Box* globals_for_name = globals;
+        if (!globals_for_name) {
+            assert(f->source->scoping->areGlobalsFromModule());
+            globals_for_name = f->source->parent_module;
+        }
+
+        if (globals_for_name->cls == module_cls) {
+            this->modname = globals_for_name->getattr("__name__");
+        } else {
+            static Box* name_str = PyString_InternFromString("__name__");
+            this->modname = PyDict_GetItem(globals_for_name, name_str);
+        }
+        // It's ok for modname to be NULL
+
         this->doc = f->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
@@ -375,10 +400,7 @@ BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure, Box* globals)
-    : BoxedFunctionBase(f, defaults, closure) {
-
-    assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
-    this->globals = globals;
+    : BoxedFunctionBase(f, defaults, closure, globals) {
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
     // some builtin functions that are BoxedFunctions but really ought to be a type that
@@ -515,9 +537,8 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
 
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
-// TODO: should we use C++11 `noexcept' here?
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
-                              std::initializer_list<Box*> defaults) {
+                              std::initializer_list<Box*> defaults) noexcept {
     STAT_TIMER(t0, "us_timer_boxclfunction", 10);
 
     if (closure)

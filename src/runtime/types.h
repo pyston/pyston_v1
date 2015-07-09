@@ -129,7 +129,8 @@ char* getWriteableStringContents(BoxedString* s);
 
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals, std::initializer_list<Box*> defaults);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
+                              std::initializer_list<Box*> defaults) noexcept;
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
@@ -738,7 +739,8 @@ public:
     Box* doc;          // __doc__
 
     BoxedFunctionBase(CLFunction* f);
-    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL);
+    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+                      Box* globals = NULL);
 };
 
 class BoxedFunction : public BoxedFunctionBase {
