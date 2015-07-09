@@ -276,6 +276,9 @@ struct PythonFrameId {
 class PythonFrameIteratorImpl {
 public:
     PythonFrameId id;
+    CLFunction* cl; // always exists
+
+    // These only exist if id.type==COMPILED:
     CompiledFunction* cf;
     // We have to save a copy of the regs since it's very difficult to keep the unw_context_t
     // structure valid.
@@ -284,15 +287,26 @@ public:
 
     PythonFrameIteratorImpl() : regs_valid(0) {}
 
-    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CompiledFunction* cf)
-        : id(PythonFrameId(type, ip, bp)), cf(cf), regs_valid(0) {}
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CLFunction* cl,
+                            CompiledFunction* cf)
+        : id(PythonFrameId(type, ip, bp)), cl(cl), cf(cf), regs_valid(0) {
+        assert(cl);
+        assert((type == PythonFrameId::COMPILED) == (cf != NULL));
+    }
 
     CompiledFunction* getCF() const {
         assert(cf);
         return cf;
     }
 
+    CLFunction* getCL() const {
+        assert(cl);
+        return cl;
+    }
+
     uint64_t readLocation(const StackMap::Record::Location& loc) {
+        assert(id.type == PythonFrameId::COMPILED);
+
         if (loc.type == StackMap::Record::Location::LocationType::Register) {
             // TODO: need to make sure we deal with patchpoints appropriately
             return getReg(loc.regnum);
@@ -412,6 +426,11 @@ static bool inGeneratorEntry(unw_word_t ip) {
     return ((unw_word_t)generatorEntry < ip && ip <= generator_entry_end);
 }
 
+static bool inDeopt(unw_word_t ip) {
+    static unw_word_t deopt_end = getFunctionEnd((unw_word_t)deopt);
+    return ((unw_word_t)deopt < ip && ip <= deopt_end);
+}
+
 
 static inline unw_word_t get_cursor_reg(unw_cursor_t* cursor, int reg) {
     unw_word_t v;
@@ -430,18 +449,16 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
+    CLFunction* cl = cf ? cf->clfunc : NULL;
     bool jitted = cf != NULL;
-    if (!cf) {
-        if (inASTInterpreterExecuteInner(ip)) {
-            cf = getCFForInterpretedFrame((void*)bp);
-            assert(cf);
-        }
-    }
+    bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
+    if (interpreted)
+        cl = getCLForInterpretedFrame((void*)bp);
 
-    if (!cf)
+    if (!jitted && !interpreted)
         return false;
 
-    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
+    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cl, cf);
     if (jitted) {
         // Try getting all the callee-save registers, and save the ones we were able to get.
         // Some of them may be inaccessible, I think because they weren't defined by that
@@ -576,10 +593,10 @@ void throwingException(PythonUnwindSession* unwind) {
 
 static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     AST_stmt* current_stmt = frame_it->getCurrentStatement();
-    auto* cf = frame_it->getCF();
-    assert(cf);
+    auto* cl = frame_it->getCL();
+    assert(cl);
 
-    auto source = cf->clfunc->source.get();
+    auto source = cl->source.get();
 
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
@@ -609,12 +626,16 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
     unw_word_t bp = get_cursor_bp(cursor);
 
     PythonFrameIteratorImpl frame_iter;
-    if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
+    if (inDeopt(ip)) {
+        assert(!unwind_session->shouldSkipFrame());
+        unwind_session->setShouldSkipNextFrame(true);
+    } else if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
         if (!unwind_session->shouldSkipFrame())
             unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
 
         // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-        unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+        bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
+        unwind_session->setShouldSkipNextFrame(was_osr);
     }
 }
 
@@ -641,16 +662,21 @@ template <typename Func> void unwindPythonStack(Func func) {
 
         unw_word_t ip = get_cursor_ip(&cursor);
         unw_word_t bp = get_cursor_bp(&cursor);
+        // TODO: this should probably just call unwindingThroughFrame?
 
         bool stop_unwinding = false;
 
         PythonFrameIteratorImpl frame_iter;
-        if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
+        if (inDeopt(ip)) {
+            assert(!unwind_session->shouldSkipFrame());
+            unwind_session->setShouldSkipNextFrame(true);
+        } else if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
             if (!unwind_session->shouldSkipFrame())
                 stop_unwinding = func(&frame_iter);
 
             // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-            unwind_session->setShouldSkipNextFrame((bool)frame_iter.cf->entry_descriptor);
+            bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
+            unwind_session->setShouldSkipNextFrame(was_osr);
         }
 
         if (stop_unwinding)
@@ -791,11 +817,11 @@ ExcInfo* getFrameExcInfo() {
     return cur_exc;
 }
 
-CompiledFunction* getTopCompiledFunction() {
+CLFunction* getTopPythonFunction() {
     auto rtn = getTopPythonFrame();
     if (!rtn)
         return NULL;
-    return getTopPythonFrame()->getCF();
+    return getTopPythonFrame()->getCL();
 }
 
 Box* getGlobals() {
@@ -810,10 +836,10 @@ Box* getGlobalsDict() {
 }
 
 BoxedModule* getCurrentModule() {
-    CompiledFunction* compiledFunction = getTopCompiledFunction();
-    if (!compiledFunction)
+    CLFunction* clfunc = getTopPythonFunction();
+    if (!clfunc)
         return NULL;
-    return compiledFunction->clfunc->source->parent_module;
+    return clfunc->source->parent_module;
 }
 
 PythonFrameIterator getPythonFrame(int depth) {
@@ -844,11 +870,11 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
     std::swap(this->impl, impl);
 }
 
-// TODO factor getStackLocalsIncludingUserHidden and fastLocalsToBoxedLocals
+// TODO factor getDeoptState and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
-FrameStackState getFrameStackState() {
-    FrameStackState rtn(NULL, NULL);
+DeoptState getDeoptState() {
+    DeoptState rtn;
     bool found = false;
     unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         BoxedDict* d;
@@ -917,7 +943,9 @@ FrameStackState getFrameStackState() {
             abort();
         }
 
-        rtn = FrameStackState(d, frame_iter->getFrameInfo());
+        rtn.frame_state = FrameStackState(d, frame_iter->getFrameInfo());
+        rtn.cf = cf;
+        rtn.current_stmt = frame_iter->getCurrentStatement();
         found = true;
         return true;
     });
@@ -937,17 +965,18 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     BoxedClosure* closure;
     FrameInfo* frame_info;
 
-    CompiledFunction* cf = impl->getCF();
-    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+    CLFunction* clfunc = impl->getCL();
+    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
 
     if (scope_info->areLocalsFromModule()) {
         // TODO we should cache this in frame_info->locals or something so that locals()
         // (and globals() too) will always return the same dict
-        RELEASE_ASSERT(cf->clfunc->source->scoping->areGlobalsFromModule(), "");
-        return cf->clfunc->source->parent_module->getAttrWrapper();
+        RELEASE_ASSERT(clfunc->source->scoping->areGlobalsFromModule(), "");
+        return clfunc->source->parent_module->getAttrWrapper();
     }
 
     if (impl->getId().type == PythonFrameId::COMPILED) {
+        CompiledFunction* cf = impl->getCF();
         d = new BoxedDict();
 
         uint64_t ip = impl->getId().ip;
@@ -1081,22 +1110,16 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     return frame_info->boxedLocals;
 }
 
-ExecutionPoint getExecutionPoint() {
-    auto frame = getTopPythonFrame();
-    auto cf = frame->getCF();
-    auto current_stmt = frame->getCurrentStatement();
-    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
-}
-
-std::unique_ptr<ExecutionPoint> PythonFrameIterator::getExecutionPoint() {
-    assert(impl.get());
-    auto cf = impl->getCF();
-    auto stmt = impl->getCurrentStatement();
-    return std::unique_ptr<ExecutionPoint>(new ExecutionPoint({.cf = cf, .current_stmt = stmt }));
+AST_stmt* PythonFrameIterator::getCurrentStatement() {
+    return impl->getCurrentStatement();
 }
 
 CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
+}
+
+CLFunction* PythonFrameIterator::getCL() {
+    return impl->getCL();
 }
 
 Box* PythonFrameIterator::getGlobalsDict() {

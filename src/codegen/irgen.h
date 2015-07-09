@@ -100,8 +100,9 @@ extern const std::string PASSED_GENERATOR_NAME;
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
 bool isIsDefinedName(llvm::StringRef name);
 
-CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
+CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
+                            const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                            FunctionSpecialization* spec, std::string nameprefix);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is
 // potentially-undefined.  If it is potentially-undefined, we have to generate control-flow
@@ -134,7 +135,6 @@ public:
     OpInfo(EffortLevel effort, TypeRecorder* type_recorder, UnwindInfo unw_info)
         : effort(effort), type_recorder(type_recorder), unw_info(unw_info) {}
 
-    bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }
     TypeRecorder* getTypeRecorder() const { return type_recorder; }
 };
 }

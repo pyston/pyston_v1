@@ -64,7 +64,6 @@ public:
 using gc::GCVisitor;
 
 enum class EffortLevel {
-    INTERPRETED = 0,
     MODERATE = 2,
     MAXIMAL = 3,
 };
@@ -229,7 +228,6 @@ public:
     llvm::Function* func; // the llvm IR object
     FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
-    bool is_interpreted;
 
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
@@ -246,13 +244,12 @@ public:
     int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
 
-    LocationMap* location_map; // only meaningful if this is a compiled frame
+    LocationMap* location_map;
 
     std::vector<ICInfo*> ics;
-    std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
 
-    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                     EffortLevel effort, const OSREntryDescriptor* entry_descriptor);
+    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+                     const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();
 
@@ -322,6 +319,11 @@ public:
     // Please use codeForFunction() to access this:
     BoxedCode* code_obj;
 
+    // For use by the interpreter/baseline jit:
+    int times_interpreted;
+    std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
+    ICInvalidator dependent_interp_callsites;
+
     // Functions can provide an "internal" version, which will get called instead
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
@@ -331,22 +333,9 @@ public:
     InternalCallable internal_callable = NULL;
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
-               std::unique_ptr<SourceInfo> source)
-        : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
-          source(std::move(source)),
-          param_names(this->source->ast, this->source->getInternedStrings()),
-          always_use_version(NULL),
-          code_obj(NULL) {
-        assert(num_args >= num_defaults);
-    }
-    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-        : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
-          source(nullptr),
-          param_names(param_names),
-          always_use_version(NULL),
-          code_obj(NULL) {
-        assert(num_args >= num_defaults);
-    }
+               std::unique_ptr<SourceInfo> source);
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names);
+    ~CLFunction();
 
     int numReceivedArgs() { return paramspec.totalReceived(); }
 
@@ -354,7 +343,7 @@ public:
         assert(compiled);
         assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
         assert(compiled->clfunc == NULL);
-        assert(compiled->is_interpreted == (compiled->code == NULL));
+        assert(compiled->code);
         compiled->clfunc = this;
 
         if (compiled->entry_descriptor == NULL) {

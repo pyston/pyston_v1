@@ -849,7 +849,7 @@ Box* execfile(Box* _fn) {
     // Run directly inside the current module:
     AST_Module* ast = caching_parse_file(fn->data());
 
-    ASSERT(getExecutionPoint().cf->clfunc->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
+    ASSERT(getTopPythonFunction()->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
     compileAndRunModule(ast, getCurrentModule());
 
     return None;

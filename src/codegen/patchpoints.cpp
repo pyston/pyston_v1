@@ -143,15 +143,6 @@ static std::unordered_set<int> extractLiveOuts(StackMap::Record* r, llvm::Callin
 }
 
 void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
-    // FIXME: this is pretty hacky, that we don't delete the patchpoints here.
-    // We need them currently for the llvm interpreter.
-    // Eventually we'll get rid of that and use an AST interpreter, and then we won't need this hack.
-    if (cf->effort == EffortLevel::INTERPRETED) {
-        assert(!stackmap);
-        new_patchpoints.clear();
-        return;
-    }
-
     int nrecords = stackmap ? stackmap->records.size() : 0;
 
     assert(cf->location_map == NULL);

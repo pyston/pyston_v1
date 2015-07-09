@@ -127,23 +127,14 @@ LivenessAnalysis* SourceInfo::getLiveness() {
     return liveness_info.get();
 }
 
-EffortLevel initialEffort() {
-    if (FORCE_INTERPRETER)
-        return EffortLevel::INTERPRETED;
-    if (FORCE_OPTIMIZE)
-        return EffortLevel::MAXIMAL;
-    if (ENABLE_INTERPRETER)
-        return EffortLevel::INTERPRETED;
-    return EffortLevel::MODERATE;
-}
-
 static void compileIR(CompiledFunction* cf, EffortLevel effort) {
     assert(cf);
     assert(cf->func);
 
     void* compiled = NULL;
     cf->code = NULL;
-    if (effort > EffortLevel::INTERPRETED) {
+
+    {
         Timer _t("to jit the IR");
 #if LLVMREV < 215967
         g.engine->addModule(cf->func->getParent());
@@ -195,7 +186,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
-    if (VERBOSITY("irgen") >= 2 || (VERBOSITY("irgen") == 1 && effort > EffortLevel::INTERPRETED)) {
+    if (VERBOSITY("irgen") >= 1) {
         std::string s;
         llvm::raw_string_ostream ss(s);
 
@@ -233,13 +224,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         printf("%s", ss.str().c_str());
     }
 
-#ifndef NDEBUG
-    if (effort == EffortLevel::INTERPRETED) {
-        for (auto arg_type : spec->arg_types)
-            assert(arg_type == UNKNOWN);
-    }
-#endif
-
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
         source->cfg = computeCFG(source, source->body);
@@ -247,17 +231,10 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
 
 
-    CompiledFunction* cf = 0;
-    if (effort == EffortLevel::INTERPRETED) {
-        assert(!entry_descriptor);
-        cf = new CompiledFunction(0, spec, true, NULL, effort, 0);
-    } else {
-        cf = doCompile(source, &f->param_names, entry_descriptor, effort, spec, name);
-        compileIR(cf, effort);
-    }
+    CompiledFunction* cf = doCompile(f, source, &f->param_names, entry_descriptor, effort, spec, name);
+    compileIR(cf, effort);
 
     f->addVersion(cf);
-    assert(f->versions.size());
 
     long us = _t.end();
     static StatCounter us_compiling("us_compiling");
@@ -270,13 +247,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     num_compiles.log();
 
     switch (effort) {
-        case EffortLevel::INTERPRETED: {
-            static StatCounter us_compiling("us_compiling_0_interpreted");
-            us_compiling.log(us);
-            static StatCounter num_compiles("num_compiles_0_interpreted");
-            num_compiles.log();
-            break;
-        }
         case EffortLevel::MODERATE: {
             static StatCounter us_compiling("us_compiling_2_moderate");
             us_compiling.log(us);
@@ -299,7 +269,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
-    CompiledFunction* cf;
+    CLFunction* clfunc;
 
     { // scope for limiting the locked region:
         LOCK_REGION(codegen_rwlock.asWrite());
@@ -317,23 +287,12 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         if (!bm->hasattr("__builtins__"))
             bm->giveAttr("__builtins__", PyModule_GetDict(builtins_module));
 
-        CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
-
-        EffortLevel effort = initialEffort();
-
-        assert(scoping->areGlobalsFromModule());
-
-        cf = compileFunction(cl_f, new FunctionSpecialization(NONE), effort, NULL);
-        assert(cf->clfunc->versions.size());
+        clfunc = new CLFunction(0, 0, false, false, std::move(si));
     }
 
-    if (cf->is_interpreted) {
-        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
-        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-    } else {
-        UNAVOIDABLE_STAT_TIMER(t1, "us_timer_jitted_module_toplevel");
-        ((void (*)())cf->code)();
-    }
+    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
+    Box* r = astInterpretFunction(clfunc, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    assert(r == None);
 }
 
 Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
@@ -341,24 +300,13 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    // TODO Right now we only support going into an exec or eval through the
-    // intepretter, since the interpretter has a special function which lets
-    // us set the locals object. We should probably support it for optimized
-    // code as well, so we could use initialEffort() here instead of hard-coding
-    // INTERPRETED. This could actually be useful if we actually cache the parse
-    // results (since sometimes eval or exec might be called on constant strings).
-    EffortLevel effort = EffortLevel::INTERPRETED;
-
     Box* doc_string = cl->source->getDocString();
     if (doc_string != None) {
         static BoxedString* doc_box = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 
-    CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(NONE), effort, NULL);
-    assert(cf->clfunc->versions.size());
-
-    return astInterpretFunctionEval(cf, globals, boxedLocals);
+    return astInterpretFunctionEval(cl, globals, boxedLocals);
 }
 
 CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::string fn, PyCompilerFlags* flags) {
@@ -502,10 +450,10 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     if (dont_inherit) {
         future_flags = arg_future_flags;
     } else {
-        CompiledFunction* caller_cf = getTopCompiledFunction();
-        assert(caller_cf != NULL);
-        assert(caller_cf->clfunc->source != NULL);
-        FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
+        CLFunction* caller_cl = getTopPythonFunction();
+        assert(caller_cl != NULL);
+        assert(caller_cl->source != NULL);
+        FutureFlags caller_future_flags = caller_cl->source->future_flags;
         future_flags = arg_future_flags | caller_future_flags;
     }
 
@@ -602,10 +550,10 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
 }
 
 Box* eval(Box* boxedCode, Box* globals, Box* locals) {
-    CompiledFunction* caller_cf = getTopCompiledFunction();
-    assert(caller_cf != NULL);
-    assert(caller_cf->clfunc->source != NULL);
-    FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
+    CLFunction* caller_cl = getTopPythonFunction();
+    assert(caller_cl != NULL);
+    assert(caller_cl->source != NULL);
+    FutureFlags caller_future_flags = caller_cl->source->future_flags;
     PyCompilerFlags pcf;
     pcf.cf_flags = caller_future_flags;
 
@@ -742,13 +690,12 @@ void CompiledFunction::speculationFailed() {
     }
 }
 
-CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                                   EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
+CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+                                   const OSREntryDescriptor* entry_descriptor)
     : clfunc(NULL),
       func(func),
       spec(spec),
       entry_descriptor(entry_descriptor),
-      is_interpreted(is_interpreted),
       code(code),
       effort(effort),
       times_called(0),
@@ -758,9 +705,11 @@ CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization*
 }
 
 ConcreteCompilerType* CompiledFunction::getReturnType() {
+    assert(((bool)spec) ^ ((bool)entry_descriptor));
     if (spec)
         return spec->rtn_type;
-    return entry_descriptor->cf->getReturnType();
+    else
+        return UNKNOWN;
 }
 
 /// Reoptimizes the given function version at the new effort level.
@@ -809,18 +758,16 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     assert(exit);
-    assert(exit->parent_cf);
-    assert(exit->parent_cf->effort < EffortLevel::MAXIMAL);
     stat_osrexits.log();
 
     // if (VERBOSITY("irgen") >= 1) printf("In compilePartialFunc, handling %p\n", exit);
 
-    assert(exit->parent_cf->clfunc);
-    CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
+    CLFunction* clfunc = exit->entry->clfunc;
+    assert(clfunc);
+    CompiledFunction*& new_cf = clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
-        EffortLevel new_effort = exit->parent_cf->effort == EffortLevel::INTERPRETED ? EffortLevel::MODERATE
-                                                                                     : EffortLevel::MAXIMAL;
-        CompiledFunction* compiled = compileFunction(exit->parent_cf->clfunc, NULL, new_effort, exit->entry);
+        EffortLevel new_effort = EffortLevel::MAXIMAL;
+        CompiledFunction* compiled = compileFunction(clfunc, NULL, new_effort, exit->entry);
         assert(compiled == new_cf);
 
         stat_osr_compiles.log();
@@ -843,16 +790,9 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
     assert(cf->effort < EffortLevel::MAXIMAL);
     assert(cf->clfunc->versions.size());
 
-    EffortLevel new_effort;
-    if (cf->effort == EffortLevel::INTERPRETED)
-        new_effort = EffortLevel::MODERATE;
-    else if (cf->effort == EffortLevel::MODERATE)
-        new_effort = EffortLevel::MAXIMAL;
-    else
-        RELEASE_ASSERT(0, "unknown effort: %d", cf->effort);
+    EffortLevel new_effort = EffortLevel::MAXIMAL;
 
     CompiledFunction* new_cf = _doReopt(cf, new_effort);
-    assert(!new_cf->is_interpreted);
     return new_cf;
 }
 
@@ -905,6 +845,6 @@ void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-    cl_f->addVersion(new CompiledFunction(NULL, spec, false, f, EffortLevel::MAXIMAL, NULL));
+    cl_f->addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, NULL));
 }
 }

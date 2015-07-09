@@ -54,6 +54,9 @@ extern const std::string FRAME_INFO_PTR_NAME;
 // TODO this probably shouldn't be here
 class IRGenState {
 private:
+    // Note: due to some not-yet-fixed behavior, cf->clfunc is NULL will only get set to point
+    // to clfunc at the end of irgen.
+    CLFunction* clfunc;
     CompiledFunction* cf;
     SourceInfo* source_info;
     std::unique_ptr<PhiAnalysis> phis;
@@ -69,11 +72,12 @@ private:
 
 
 public:
-    IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
+    IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
     ~IRGenState();
 
     CompiledFunction* getCurFunction() { return cf; }
+    CLFunction* getCL() { return clfunc; }
 
     llvm::Function* getLLVMFunction() { return cf->func; }
 

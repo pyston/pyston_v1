@@ -249,7 +249,7 @@ public:
         // var->getValue()->dump(); llvm::errs() << '\n';
         // ptr->dump(); llvm::errs() << '\n';
         // converted->getValue()->dump(); llvm::errs() << '\n';
-        bool do_patchpoint = ENABLE_ICSETATTRS && !info.isInterpreted();
+        bool do_patchpoint = ENABLE_ICSETATTRS;
         if (do_patchpoint) {
             ICSetupInfo* pp = createSetattrIC(info.getTypeRecorder());
 
@@ -269,7 +269,7 @@ public:
         llvm::Constant* ptr = embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr);
 
         // TODO
-        // bool do_patchpoint = ENABLE_ICDELATTRS && !info.isInterpreted();
+        // bool do_patchpoint = ENABLE_ICDELATTRS;
         bool do_patchpoint = false;
 
         if (do_patchpoint) {
@@ -317,7 +317,7 @@ public:
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        bool do_patchpoint = ENABLE_ICGENERICS && !info.isInterpreted();
+        bool do_patchpoint = ENABLE_ICGENERICS;
         llvm::Value* rtn;
         if (do_patchpoint) {
             ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 256);
@@ -337,7 +337,7 @@ public:
                               CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
-        bool do_patchpoint = ENABLE_ICGETITEMS && !info.isInterpreted();
+        bool do_patchpoint = ENABLE_ICGETITEMS;
         llvm::Value* rtn;
         if (do_patchpoint) {
             ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder());
@@ -414,7 +414,7 @@ public:
         ConcreteCompilerVariable* converted_rhs = rhs->makeConverted(emitter, rhs->getBoxType());
 
         llvm::Value* rtn;
-        bool do_patchpoint = ENABLE_ICBINEXPS && !info.isInterpreted();
+        bool do_patchpoint = ENABLE_ICBINEXPS;
 
         llvm::Value* rt_func;
         void* rt_func_addr;
@@ -495,7 +495,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         raw_func = (void*)pyston::getattr;
     }
 
-    bool do_patchpoint = ENABLE_ICGETATTRS && !info.isInterpreted();
+    bool do_patchpoint = ENABLE_ICGETATTRS;
     if (do_patchpoint) {
         ICSetupInfo* pp = createGetattrIC(info.getTypeRecorder());
 
@@ -551,19 +551,13 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     if (args.size() >= 4) {
         llvm::Value* arg_array;
 
-        if (info.isInterpreted()) {
-            llvm::Value* n_bytes = getConstantInt((args.size() - 3) * sizeof(Box*), g.i64);
-            mallocsave = emitter.getBuilder()->CreateCall(g.funcs.malloc, n_bytes);
-            arg_array = emitter.getBuilder()->CreateBitCast(mallocsave, g.llvm_value_type_ptr->getPointerTo());
-        } else {
-            llvm::Value* n_varargs = getConstantInt(args.size() - 3, g.i64);
+        llvm::Value* n_varargs = getConstantInt(args.size() - 3, g.i64);
 
-            // Don't use the IRBuilder since we want to specifically put this in the entry block so it only gets called
-            // once.
-            // TODO we could take this further and use the same alloca for all function calls?
-            llvm::Instruction* insertion_point = emitter.currentFunction()->func->getEntryBlock().getFirstInsertionPt();
-            arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "arg_scratch", insertion_point);
-        }
+        // Don't use the IRBuilder since we want to specifically put this in the entry block so it only gets called
+        // once.
+        // TODO we could take this further and use the same alloca for all function calls?
+        llvm::Instruction* insertion_point = emitter.currentFunction()->func->getEntryBlock().getFirstInsertionPt();
+        arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "arg_scratch", insertion_point);
 
         for (int i = 3; i < args.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i - 3);
@@ -590,8 +584,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     // for (auto a : llvm_args)
     // a->dump();
 
-    bool do_patchpoint = ENABLE_ICCALLSITES && !info.isInterpreted()
-                         && (func_addr == runtimeCall || func_addr == pyston::callattr);
+    bool do_patchpoint = ENABLE_ICCALLSITES && (func_addr == runtimeCall || func_addr == pyston::callattr);
     if (do_patchpoint) {
         assert(func_addr);
 
@@ -685,7 +678,7 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
 }
 
 ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-    bool do_patchpoint = ENABLE_ICNONZEROS && !info.isInterpreted();
+    bool do_patchpoint = ENABLE_ICNONZEROS;
     llvm::Value* rtn_val;
     if (do_patchpoint) {
         ICSetupInfo* pp = createNonzeroIC(info.getTypeRecorder());
@@ -702,7 +695,7 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
 }
 
 ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-    bool do_patchpoint = ENABLE_ICS && !info.isInterpreted();
+    bool do_patchpoint = ENABLE_ICS;
     do_patchpoint = false; // we are currently using runtime ics for this
     llvm::Value* rtn_val;
     if (do_patchpoint) {
@@ -1573,7 +1566,6 @@ public:
         }
 
         assert(found);
-        assert(!cf->is_interpreted);
         assert(cf->code);
 
         std::vector<llvm::Type*> arg_types;

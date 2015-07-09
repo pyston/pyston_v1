@@ -27,6 +27,7 @@
 
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
+#include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/util.h"
@@ -34,6 +35,27 @@
 namespace pyston {
 
 DS_DEFINE_RWLOCK(codegen_rwlock);
+
+CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+                       std::unique_ptr<SourceInfo> source)
+    : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+      source(std::move(source)),
+      param_names(this->source->ast, this->source->getInternedStrings()),
+      always_use_version(NULL),
+      code_obj(NULL),
+      times_interpreted(0) {
+    assert(num_args >= num_defaults);
+}
+CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+                       const ParamNames& param_names)
+    : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+      source(nullptr),
+      param_names(param_names),
+      always_use_version(NULL),
+      code_obj(NULL),
+      times_interpreted(0) {
+    assert(num_args >= num_defaults);
+}
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
                        std::vector<AST_stmt*> body, std::string fn)
