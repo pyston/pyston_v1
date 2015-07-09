@@ -206,7 +206,17 @@ public:
                                 const std::vector<BoxedString*>*);
     pyston_call tpp_call;
 
-    bool hasGenericGetattr() { return tp_getattr == NULL; }
+    bool hasGenericGetattr() {
+        if (tp_getattr)
+            return false;
+
+        // instancemethod_cls should have a custom tp_getattr but is currently implemented
+        // as a hack within getattrInternalGeneric
+        if (this == instancemethod_cls)
+            return false;
+
+        return true;
+    }
 
     void freeze();
 

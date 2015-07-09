@@ -37,3 +37,9 @@ print type(C().foo.im_func), type(C().foo.__func__)
 print type(C().foo.im_self), type(C().foo.__self__)
 print type(C().foo.im_class)
 print repr(C().foo)
+
+def f(m):
+    print m.__name__
+
+f(C.foo)
+f(C().foo)
