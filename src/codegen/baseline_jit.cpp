@@ -203,7 +203,11 @@ RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*> values) {
-    return call(false, (void*)createSetHelper, imm(values.size()), allocArgs(values));
+    auto num = values.size();
+    if (num == 0)
+        return call(false, (void*)createSet);
+    else
+        return call(false, (void*)createSetHelper, imm(num), allocArgs(values));
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step) {
@@ -532,6 +536,7 @@ bool JitFragmentWriter::finishAssembly(int continue_offset) {
 
 RewriterVar* JitFragmentWriter::allocArgs(const llvm::ArrayRef<RewriterVar*> args) {
     auto num = args.size();
+    assert(num);
     RewriterVar* array = allocate(num);
     for (int i = 0; i < num; ++i)
         array->setAttr(sizeof(void*) * i, args[i]);
