@@ -17,6 +17,8 @@ Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only ha
 Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 > tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
 
+Pyston a fairly low-level program with a lot of necessary hacks for compatibility or performance purposes. We recommend taking a look at [development tips](docs/TIPS.md).
+
 ### Roadmap
 
 ##### v0.1: [released 4/2/2014](https://tech.dropbox.com/2014/04/introducing-pyston-an-upcoming-jit-based-python-implementation/)
@@ -67,29 +69,12 @@ You can get a simple REPL by simply typing `make run`; it is not very robust rig
 
 #### Makefile targets
 
+- `make pyston_release`: to compile in release mode and generate the `pyston_release` executable
 - `make check`: run the tests
 - `make run`: run the REPL
 - `make format`: run clang-format over the codebase
-- We have a number of helpers of the form `make VERB_TESTNAME`, where `TESTNAME` can be any of the tests/benchmarks, and `VERB` can be one of:
- - `make run_TESTNAME`: runs the file under pyston_dbg.
- - `make run_release_TESTNAME`: runs the file under pyston_release.
- - `make dbg_TESTNAME`: same as `run`, but runs pyston under gdb.
- - `make check_TESTNAME`: checks that the script has the same behavior under pyston_dbg as it does under CPython.  See tools/tester.py for information about test annotations.
- - `make perf_TESTNAME`: runs the script in pyston_release, and uses perf to record and display performance statistics.
- - A few lesser used ones; see the Makefile for details.
-- `make watch_cmd`: meta-command which uses inotifywait to run `make cmd` every time a source file changes.
- - For example, `make watch_pyston_dbg` will rebuild pyston_dbg every time you save a source file.  This is handy enough to have the alias `make watch`.
- - `make watch_run_TESTNAME` will rebuild pyston_dbg and run TESTNAME every time you change a file.
- - `make wdbg_TESTNAME` is mostly an alias for `make watch_dbg_TESTNAME`, but will automatically quit GDB for you.  This is handy if pyston is crashing and you want to get a C-level stacktrace.
 
-There are a number of common flags you can pass to your make invocations:
-- `V=1` or `VERBOSE=1`: display the full commands being executed
-- `ARGS=-v`: pass the given args (in this example, `-v`) to the executable.
- - Note: these will usually end up before the script name, and so apply to the pyston runtime as opposed to appearing in sys.argv.  For example, `make run_test ARGS=-v` will execute `./pyston_dbg -v test.py`.
-- `BR=breakpoint`: when running under gdb, automatically set a breakpoint at the given location.
-- `SELF_HOST=1`: run all of our Python scripts using pyston_dbg.
-
-For a full list, please check out the [Makefile](https://github.com/dropbox/pyston/blob/master/Makefile).
+For more, see [development tips](docs/TIPS.md)
 
 #### Pyston command-line options:
 
@@ -99,16 +84,16 @@ Pyston-specific flags:
   <dd>Set verbosity to 0</dd>
 <dt>-v</dt>
   <dd>Increase verbosity by 1</dd>
-  
+
 <dt>-s</dt>
   <dd>Print out the internal stats at exit.</dd>
-  
+
 <dt>-n</dt>
   <dd>Disable the Pyston interpreter.  This is mostly used for debugging, to force the use of higher compilation tiers in situations they wouldn't typically be used.</dd>
-  
+
 <dt>-O</dt>
   <dd>Force Pyston to always run at the highest compilation tier.  This doesn't always produce the fastest running time due to the lack of type recording from lower compilation tiers, but similar to -n can help test the code generator.</dd>
-  
+
 <dt>-I</dt>
   <dd>Force always using the Pyston interpreter.  This is mostly used for debugging / testing. (Takes precedence over -n and -O)</dd>
 
@@ -170,7 +155,7 @@ int square(int n) {
     int r = 0;
     for (int i = 0; i < n; i++) {
         r += n;
-        
+
         // OSR exit here:
         _backedge_trip_count++;
         if (_backedge_trip_count >= 10000) {

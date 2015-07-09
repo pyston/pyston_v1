@@ -49,6 +49,7 @@ The CPython tests I've included fail for various reasons. Recurring issues inclu
 - src/runtime/util.cpp: parseSlice: assert(isSubclass(start->cls, int_cls) || start->cls == none_cls)
 
 ** list of files & why they're failing
+```
 FILE                    REASONS
 ------------------------------------------------------
 test_augassign          missing oldstyle-class __add__, __iadd__, etc
@@ -131,3 +132,4 @@ test_weakset            unknown issues
 test_with               weird codegen assert
 test_wsgiref            unknown issue
 test_xrange             unknown type analysis issue
+```
