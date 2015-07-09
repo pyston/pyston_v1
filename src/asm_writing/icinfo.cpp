@@ -206,7 +206,7 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
     }
 }
 
-static std::unordered_map<void*, ICInfo*> ics_by_return_addr;
+static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
 std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
                                                    uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
                                                    const ICSetupInfo* ic, StackInfo stack_info,
@@ -263,7 +263,7 @@ void deregisterCompiledPatchpoint(ICInfo* ic) {
 
 ICInfo* getICInfo(void* rtn_addr) {
     // TODO: load this from the CF instead of tracking it separately
-    std::unordered_map<void*, ICInfo*>::iterator it = ics_by_return_addr.find(rtn_addr);
+    auto&& it = ics_by_return_addr.find(rtn_addr);
     if (it == ics_by_return_addr.end())
         return NULL;
     return it->second;
