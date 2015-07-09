@@ -67,8 +67,6 @@
 
 #define UNIMPLEMENTED() RELEASE_ASSERT(0, "unimplemented")
 
-#define OFFSET(cls, attr) ((char*)&(((cls*)0x01)->attr) - (char*)0x1)
-
 // Allow using std::pair as keys in hashtables:
 namespace std {
 template <typename T1, typename T2> struct hash<pair<T1, T2>> {

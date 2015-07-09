@@ -51,16 +51,6 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
-#define BOX_CLS_OFFSET ((char*)&(((Box*)0x01)->cls) - (char*)0x1)
-#define HCATTRS_HCLS_OFFSET ((char*)&(((HCAttrs*)0x01)->hcls) - (char*)0x1)
-#define HCATTRS_ATTRS_OFFSET ((char*)&(((HCAttrs*)0x01)->attr_list) - (char*)0x1)
-#define ATTRLIST_ATTRS_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->attrs) - (char*)0x1)
-#define ATTRLIST_KIND_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->gc_header.kind_id) - (char*)0x1)
-#define INSTANCEMETHOD_FUNC_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->func) - (char*)0x1)
-#define INSTANCEMETHOD_OBJ_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->obj) - (char*)0x1)
-#define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->n) - (char*)0x1)
-#define INT_N_OFFSET ((char*)&(((BoxedInt*)0x01)->n) - (char*)0x1)
-
 #ifndef NDEBUG
 #define DEBUG 1
 #else
@@ -680,7 +670,7 @@ static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
 
     if (rewrite_args)
-        rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+        rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (intptr_t)cls);
 
 #if 0
     if (attr.data()[0] == '_' && attr.data()[1] == '_') {
@@ -729,7 +719,7 @@ Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
                     REWRITE_ABORTED("");
                     rewrite_args = NULL;
                 } else {
-                    rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+                    rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
                     if (hcls->type == HiddenClass::SINGLETON)
                         hcls->addDependence(rewrite_args->rewriter);
                 }
@@ -750,9 +740,9 @@ Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
                 rewrite_args = NULL;
             } else {
                 RewriterVar* r_attrs
-                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
                 rewrite_args->out_rtn
-                    = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
+                    = r_attrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), Location::any());
             }
         }
 
@@ -811,7 +801,7 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
                 rewrite_args = NULL;
             } else {
                 RewriterVar* r_oldarray
-                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
                 RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
                 r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
             }
@@ -819,8 +809,8 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
     }
 
     if (rewrite_args) {
-        r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
-        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
+        r_new_array2->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval);
+        rewrite_args->obj->setAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), r_new_array2);
 
         rewrite_args->out_success = true;
     }
@@ -840,7 +830,7 @@ void Box::setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_ar
     // structure (ex user class) and the same hidden classes, because
     // otherwise the guard will fail anyway.;
     if (rewrite_args)
-        rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+        rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (intptr_t)cls);
 
     RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
 
@@ -869,7 +859,7 @@ void Box::setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_ar
                 REWRITE_ABORTED("");
                 rewrite_args = NULL;
             } else {
-                rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+                rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
                 if (hcls->type == HiddenClass::SINGLETON)
                     hcls->addDependence(rewrite_args->rewriter);
             }
@@ -887,9 +877,10 @@ void Box::setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_ar
                     rewrite_args = NULL;
                 } else {
                     RewriterVar* r_hattrs
-                        = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+                        = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
 
-                    r_hattrs->setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+                    r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
+                                      rewrite_args->attrval);
 
                     rewrite_args->out_success = true;
                 }
@@ -913,7 +904,7 @@ void Box::setattr(llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_ar
                     rewrite_args = NULL;
                 } else {
                     RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
-                    rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
+                    rewrite_args->obj->setAttr(cls->attrs_offset + offsetof(HCAttrs, hcls), r_hcls);
                     rewrite_args->out_success = true;
                 }
             }
@@ -1016,7 +1007,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         RewriterVar* r_im_self = NULL, * r_im_func = NULL, * r_im_class = NULL;
 
         if (rewrite_args) {
-            r_im_class = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
+            r_im_class = rewrite_args->obj->getAttr(offsetof(Box, cls));
         }
 
         if (descr->cls == function_cls) {
@@ -1130,7 +1121,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
     // Special case: functions
     if (descr->cls == function_cls || descr->cls == instancemethod_cls) {
         if (rewrite_args)
-            r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
+            r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
         if (!for_call && descr->cls == function_cls) {
             if (rewrite_args) {
@@ -1154,7 +1145,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
     // in instance lookups
     if (descr->cls == member_descriptor_cls || descr->cls == wrapperdescr_cls) {
         if (rewrite_args)
-            r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
+            r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
         if (rewrite_args) {
             rewrite_args->out_rtn = r_descr;
@@ -1518,7 +1509,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
     Box* descr = NULL;
     RewriterVar* r_descr = NULL;
     if (rewrite_args) {
-        RewriterVar* r_obj_cls = rewrite_args->obj->getAttr(BOX_CLS_OFFSET, Location::any());
+        RewriterVar* r_obj_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, rewrite_args->destination);
         descr = typeLookup(obj->cls, attr, &grewrite_args);
 
@@ -1541,7 +1532,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
         descr_get = descr->cls->tp_descr_get;
 
         if (rewrite_args)
-            r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
+            r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
         // Special-case data descriptors (e.g., member descriptors)
         Box* res = dataDescriptorInstanceSpecialCases(rewrite_args, attr, obj, descr, r_descr, for_call, bind_obj_out,
@@ -1556,14 +1547,14 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
         // special case nondata descriptors.
         if (!isNondataDescriptorInstanceSpecialCase(descr)) {
             if (rewrite_args) {
-                RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
+                RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                 r_descr_cls->addAttrGuard(offsetof(BoxedClass, tp_descr_get), (intptr_t)descr_get);
             }
 
             // Check if __get__ exists
             if (descr_get) {
                 if (rewrite_args) {
-                    RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
+                    RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _get_ = typeLookup(descr->cls, get_str, &grewrite_args);
                     assert(_get_);
@@ -1587,7 +1578,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                 // Check if __set__ exists
                 Box* _set_ = NULL;
                 if (rewrite_args) {
-                    RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
+                    RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
                     if (!grewrite_args.out_success) {
@@ -1619,7 +1610,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                         CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
                         crewrite_args.arg1 = r_descr;
                         crewrite_args.arg2 = rewrite_args->obj;
-                        crewrite_args.arg3 = rewrite_args->obj->getAttr(BOX_CLS_OFFSET, Location::any());
+                        crewrite_args.arg3 = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
                         res = runtimeCallInternal(_get_, &crewrite_args, ArgPassSpec(3), descr, obj, obj->cls, NULL,
                                                   NULL);
                         if (!crewrite_args.out_success) {
@@ -1698,7 +1689,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                 RewriterVar* r_get = NULL;
                 Box* local_get;
                 if (rewrite_args) {
-                    RewriterVar* r_val_cls = r_val->getAttr(BOX_CLS_OFFSET, Location::any());
+                    RewriterVar* r_val_cls = r_val->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_val_cls, Location::any());
                     local_get = typeLookup(val->cls, get_str, &grewrite_args);
                     if (!grewrite_args.out_success) {
@@ -1788,7 +1779,7 @@ Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* 
                 CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
                 crewrite_args.arg1 = r_descr;
                 crewrite_args.arg2 = rewrite_args->obj;
-                crewrite_args.arg3 = rewrite_args->obj->getAttr(BOX_CLS_OFFSET, Location::any());
+                crewrite_args.arg3 = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
                 res = runtimeCallInternal(_get_, &crewrite_args, ArgPassSpec(3), descr, obj, obj->cls, NULL, NULL);
                 if (!crewrite_args.out_success) {
                     rewrite_args = NULL;
@@ -1995,7 +1986,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     // (figure out exactly what)
     // (otherwise no need to check descriptor logic)
     if (rewrite_args) {
-        RewriterVar* r_cls = rewrite_args->obj->getAttr(BOX_CLS_OFFSET, Location::any());
+        RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
         GetattrRewriteArgs crewrite_args(rewrite_args->rewriter, r_cls, rewrite_args->rewriter->getReturnDestination());
         descr = typeLookup(obj->cls, attr->s(), &crewrite_args);
 
@@ -2018,7 +2009,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
         }
 
         if (rewrite_args) {
-            RewriterVar* r_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
+            RewriterVar* r_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
             GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, r_cls, Location::any());
             _set_ = typeLookup(descr->cls, set_str, &trewrite_args);
             if (!trewrite_args.out_success) {
@@ -2180,7 +2171,7 @@ extern "C" bool nonzero(Box* obj) {
     RewriterVar* r_obj = NULL;
     if (rewriter.get()) {
         r_obj = rewriter->getArg(0);
-        r_obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)obj->cls);
+        r_obj->addAttrGuard(offsetof(Box, cls), (intptr_t)obj->cls);
     }
 
     // Note: it feels silly to have all these special cases here, and we should probably be
@@ -2189,7 +2180,7 @@ extern "C" bool nonzero(Box* obj) {
     if (obj->cls == bool_cls) {
         // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
         if (rewriter.get()) {
-            RewriterVar* b = r_obj->getAttr(BOOL_B_OFFSET, rewriter->getReturnDestination());
+            RewriterVar* b = r_obj->getAttr(offsetof(BoxedBool, n), rewriter->getReturnDestination());
             rewriter->commitReturning(b);
         }
 
@@ -2197,7 +2188,7 @@ extern "C" bool nonzero(Box* obj) {
         return bool_obj->n;
     } else if (obj->cls == int_cls) {
         if (rewriter.get()) {
-            RewriterVar* n = r_obj->getAttr(INT_N_OFFSET, rewriter->getReturnDestination());
+            RewriterVar* n = r_obj->getAttr(offsetof(BoxedInt, n), rewriter->getReturnDestination());
             RewriterVar* b = n->toBool(rewriter->getReturnDestination());
             rewriter->commitReturning(b);
         }
@@ -2532,7 +2523,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     i64 rtn = lobj->n;
 
     if (rewriter.get()) {
-        RewriterVar* rtn = r_boxed->getAttr(INT_N_OFFSET, Location(assembler::RAX));
+        RewriterVar* rtn = r_boxed->getAttr(offsetof(BoxedInt, n), Location(assembler::RAX));
         rewriter->commitReturning(rtn);
     }
     return rtn;
@@ -2729,18 +2720,18 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
         // or because they only need to fit into an UNKNOWN slot.
 
         if (npassed_args >= 1)
-            rewrite_args->arg1->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg1->cls);
+            rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
         if (npassed_args >= 2)
-            rewrite_args->arg2->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg2->cls);
+            rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
         if (npassed_args >= 3)
-            rewrite_args->arg3->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg3->cls);
+            rewrite_args->arg3->addAttrGuard(offsetof(Box, cls), (intptr_t)arg3->cls);
 
         if (npassed_args > 3) {
             for (int i = 3; i < npassed_args; i++) {
                 // TODO if there are a lot of args (>16), might be better to increment a pointer
                 // rather index them directly?
                 RewriterVar* v = rewrite_args->args->getAttr((i - 3) * sizeof(Box*), Location::any());
-                v->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)args[i - 3]->cls);
+                v->addAttrGuard(offsetof(Box, cls), (intptr_t)args[i - 3]->cls);
             }
         }
 
@@ -3649,14 +3640,14 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             // or because they only need to fit into an UNKNOWN slot.
 
             if (npassed_args >= 1)
-                rewrite_args->arg1->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg1->cls);
+                rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
             if (npassed_args >= 2)
-                rewrite_args->arg2->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg2->cls);
+                rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
             if (npassed_args >= 3)
-                rewrite_args->arg3->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)arg3->cls);
+                rewrite_args->arg3->addAttrGuard(offsetof(Box, cls), (intptr_t)arg3->cls);
             for (int i = 3; i < npassed_args; i++) {
                 RewriterVar* v = rewrite_args->args->getAttr((i - 3) * sizeof(Box*), Location::any());
-                v->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)args[i - 3]->cls);
+                v->addAttrGuard(offsetof(Box, cls), (intptr_t)args[i - 3]->cls);
             }
             rewrite_args->args_guarded = true;
         }
@@ -3684,7 +3675,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         RewriterVar* r_im_func;
         if (rewrite_args) {
-            r_im_func = rewrite_args->obj->getAttr(INSTANCEMETHOD_FUNC_OFFSET, Location::any());
+            r_im_func = rewrite_args->obj->getAttr(offsetof(BoxedInstanceMethod, obj), Location::any());
         }
 
         if (rewrite_args && !rewrite_args->func_guarded) {
@@ -3696,7 +3687,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         // That is, if im->obj is NULL, guard on it being NULL
         // otherwise, guard on it being non-NULL
         if (rewrite_args) {
-            rewrite_args->obj->addAttrGuard(INSTANCEMETHOD_OBJ_OFFSET, 0, im->obj != NULL);
+            rewrite_args->obj->addAttrGuard(offsetof(BoxedInstanceMethod, obj), 0, im->obj != NULL);
         }
 
         if (im->obj == NULL) {
@@ -3715,7 +3706,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         RewriterVar* r_bind_obj = NULL;
         if (rewrite_args) {
-            r_bind_obj = rewrite_args->obj->getAttr(INSTANCEMETHOD_OBJ_OFFSET);
+            r_bind_obj = rewrite_args->obj->getAttr(offsetof(BoxedInstanceMethod, obj));
             rewrite_args->obj = r_im_func;
         }
 
@@ -3810,8 +3801,8 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         // removed is probably the later one.
         // ie we should have some way of specifying what we know about the values
         // of objects and their attributes, and the attributes' attributes.
-        rewrite_args->lhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
-        rewrite_args->rhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
+        rewrite_args->lhs->addAttrGuard(offsetof(Box, cls), (intptr_t)lhs->cls);
+        rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
     }
 
     Box* irtn = NULL;
@@ -4144,8 +4135,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         // removed is probably the later one.
         // ie we should have some way of specifying what we know about the values
         // of objects and their attributes, and the attributes' attributes.
-        rewrite_args->lhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
-        rewrite_args->rhs->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
+        rewrite_args->lhs->addAttrGuard(offsetof(Box, cls), (intptr_t)lhs->cls);
+        rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
     }
 
     // TODO: switch from our op types to cpythons
@@ -4619,7 +4610,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
 
     if (rewriter.get()) {
         RewriterVar* r_o = rewriter->getArg(0);
-        RewriterVar* r_cls = r_o->getAttr(BOX_CLS_OFFSET);
+        RewriterVar* r_cls = r_o->getAttr(offsetof(Box, cls));
         GetattrRewriteArgs rewrite_args(rewriter.get(), r_cls, rewriter->getReturnDestination());
         Box* r = typeLookup(o->cls, hasnext_str, &rewrite_args);
         if (!rewrite_args.out_success) {
@@ -5021,7 +5012,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 // Guard on it being a module rather than a dict
                 // TODO is this guard necessary? I'm being conservative now, but I think we can just
                 // insist that the type passed in is fixed for any given instance of a getGlobal call.
-                r_mod->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)module_cls);
+                r_mod->addAttrGuard(offsetof(Box, cls), (intptr_t)module_cls);
 
                 GetattrRewriteArgs rewrite_args(rewriter.get(), r_mod, rewriter->getReturnDestination());
                 r = m->getattr(name->s(), &rewrite_args);
