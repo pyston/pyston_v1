@@ -1965,14 +1965,6 @@ CompilerVariable* makeStr(BoxedString* s) {
     return new ValuedCompilerVariable<BoxedString*>(STR_CONSTANT, s, true);
 }
 
-class VoidType : public ConcreteCompilerType {
-public:
-    llvm::Type* llvmType() override { return g.void_; }
-
-    Box* deserializeFromFrame(const FrameVals& vals) override { abort(); }
-};
-ConcreteCompilerType* VOID = new VoidType();
-
 ConcreteCompilerType* typeFromClass(BoxedClass* c) {
     assert(c);
     return NormalObjectType::fromClass(c);

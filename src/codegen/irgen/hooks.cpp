@@ -323,7 +323,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         assert(scoping->areGlobalsFromModule());
 
-        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
+        cf = compileFunction(cl_f, new FunctionSpecialization(NONE), effort, NULL);
         assert(cf->clfunc->versions.size());
     }
 
@@ -355,7 +355,7 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 
-    CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
+    CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(NONE), effort, NULL);
     assert(cf->clfunc->versions.size());
 
     return astInterpretFunctionEval(cf, globals, boxedLocals);

@@ -579,11 +579,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // printf("%ld\n", args.size());
                 llvm::CallInst* postcall = emitter->getBuilder()->CreateCall(bitcast_r, args);
                 postcall->setTailCall(true);
-                if (rtn_type == VOID) {
-                    emitter->getBuilder()->CreateRetVoid();
-                } else {
-                    emitter->getBuilder()->CreateRet(postcall);
-                }
+                emitter->getBuilder()->CreateRet(postcall);
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }

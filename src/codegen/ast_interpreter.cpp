@@ -781,13 +781,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                                 std::get<3>(arg_tuple));
 
-    // This is one of the few times that we are allowed to have an invalid value in a Box* Value.
-    // Check for it, and return as an int so that we don't trigger a potential assert when
-    // creating the Value.
-    if (compiled_func->getReturnType() != VOID)
-        assert(r);
-
-    return r ? r : None;
+    assert(r);
+    return r;
 }
 
 Value ASTInterpreter::visit_invoke(AST_Invoke* node) {

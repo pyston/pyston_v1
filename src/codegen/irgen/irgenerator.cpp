@@ -531,10 +531,7 @@ private:
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
                                              embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
-        if (irstate->getReturnType() == VOID)
-            emitter.getBuilder()->CreateRetVoid();
-        else
-            emitter.getBuilder()->CreateRet(v);
+        emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
@@ -1955,12 +1952,6 @@ private:
 
         CompilerVariable* val;
         if (node->value == NULL) {
-            if (irstate->getReturnType() == VOID) {
-                endBlock(DEAD);
-                emitter.getBuilder()->CreateRetVoid();
-                return;
-            }
-
             val = getNone();
         } else {
             val = evalExpr(node->value, unw_info);
@@ -2185,10 +2176,7 @@ private:
             converted_args[i]->decvref(emitter);
         }
 
-        if (irstate->getReturnType() == VOID)
-            emitter.getBuilder()->CreateRetVoid();
-        else
-            emitter.getBuilder()->CreateRet(rtn);
+        emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
     }
