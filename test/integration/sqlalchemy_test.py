@@ -18,7 +18,7 @@ if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(EN
         print "Running", args
         subprocess.check_call(args)
 
-        subprocess.check_call([ENV_NAME + "/bin/pip", "install", "mock", "pytest"])
+        subprocess.check_call([ENV_NAME + "/bin/pip", "install", "mock==1.0.0", "pytest==2.7.2", "py==1.4.30"])
     except:
         print "Error occurred; trying to remove partially-created directory"
         ei = sys.exc_info()
