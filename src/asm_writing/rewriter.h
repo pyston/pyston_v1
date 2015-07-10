@@ -232,7 +232,7 @@ private:
     // Here "done" means that it would be okay to release all of the var's locations and
     // thus allocate new variables in that same location. To be safe, you can always just
     // only call bumpUse at the end, but in some cases it may be possible earlier.
-    std::vector<int> uses;
+    llvm::SmallVector<int, 32> uses;
     int next_use;
     void bumpUse();
     void releaseIfNoUses();
@@ -348,7 +348,7 @@ protected:
 
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
-    std::vector<RewriterAction> actions;
+    llvm::SmallVector<RewriterAction, 32> actions;
     void addAction(std::function<void()> action, std::vector<RewriterVar*> const& vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {

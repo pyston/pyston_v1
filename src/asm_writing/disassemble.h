@@ -17,6 +17,7 @@
 
 #include <unordered_map>
 
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace pyston {
@@ -31,7 +32,7 @@ private:
     void append_comments(llvm::raw_string_ostream&, size_t pos) const;
 
 public:
-    void log_comment(const std::string&, size_t offset);
+    void log_comment(const llvm::Twine&, size_t offset);
     std::string finalize_log(uint8_t const* start_addr, uint8_t const* end_addr) const;
 };
 }

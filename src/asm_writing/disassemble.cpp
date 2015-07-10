@@ -59,8 +59,8 @@ void disassemblyInitialize() {
     llvm::InitializeNativeTargetAsmParser();
 }
 
-void AssemblyLogger::log_comment(const std::string& comment, size_t offset) {
-    comments[offset].push_back(comment);
+void AssemblyLogger::log_comment(const llvm::Twine& comment, size_t offset) {
+    comments[offset].push_back(comment.str());
 }
 
 void AssemblyLogger::append_comments(llvm::raw_string_ostream& stream, size_t pos) const {
