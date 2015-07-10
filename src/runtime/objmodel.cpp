@@ -169,14 +169,6 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
-    printf("Deopt!\n");
-    print_ast(expr);
-    printf("\n");
-    dump(value);
-    printf("\n");
-
-    RELEASE_ASSERT(0, "deopt is currently broken...");
-
     auto deopt_state = getDeoptState();
 
     // Should we only do this selectively?
@@ -189,7 +181,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
         deopt_state.frame_state.frame_info->exc.value = NULL;
     }
 
-    return astInterpretFrom(deopt_state.cf->clfunc, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
+    return astInterpretDeopt(deopt_state.cf->clfunc, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
 extern "C" bool softspace(Box* b, bool newval) {

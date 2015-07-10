@@ -75,8 +75,8 @@ void setupInterpreter();
 Box* astInterpretFunction(CLFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args);
 Box* astInterpretFunctionEval(CLFunction* cf, Box* globals, Box* boxedLocals);
-Box* astInterpretFrom(CLFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      FrameStackState frame_state);
+Box* astInterpretDeopt(CLFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                       FrameStackState frame_state);
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 Box* getGlobalsForInterpretedFrame(void* frame_ptr);

@@ -74,10 +74,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
     if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id.s() == "xrange")
         return xrange_cls;
 
-    // if (node->func->type == AST_TYPE::Attribute && ast_cast<AST_Attribute>(node->func)->attr == "dot")
-    // return float_cls;
-
-    return NULL;
+    return predictClassFor(node);
 }
 
 typedef llvm::DenseMap<InternedString, CompilerType*> TypeMap;
@@ -114,10 +111,6 @@ private:
     CompilerType* processSpeculation(BoxedClass* speculated_cls, AST_expr* node, CompilerType* old_type) {
         assert(old_type);
         assert(speculation != TypeAnalysis::NONE);
-
-        if (VERBOSITY() >= 3)
-            printf("Would maybe try to speculate but deopt is currently broken\n");
-        return old_type;
 
         if (speculated_cls != NULL && speculated_cls->is_constant) {
             ConcreteCompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));

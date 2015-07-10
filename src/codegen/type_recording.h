@@ -30,6 +30,7 @@ class TypeRecorder;
 // (I think most compilers pass "this" as the argument 0 and then shift the rest of the
 // arguments, but I'd rather not depend on that behavior since I can't find where that's
 // specified.)
+// The return value of this function is 'obj' for ease of use.
 extern "C" Box* recordType(TypeRecorder* recorder, Box* obj);
 class TypeRecorder {
 private:

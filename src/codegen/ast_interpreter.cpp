@@ -1754,8 +1754,8 @@ Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      FrameStackState frame_state) {
+Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                       FrameStackState frame_state) {
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);

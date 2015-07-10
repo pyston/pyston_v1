@@ -670,6 +670,7 @@ void CompiledFunction::speculationFailed() {
 
         CLFunction* cl = this->clfunc;
         assert(cl);
+        assert(this != cl->always_use_version);
 
         bool found = false;
         for (int i = 0; i < clfunc->versions.size(); i++) {
@@ -678,6 +679,17 @@ void CompiledFunction::speculationFailed() {
                 this->dependent_callsites.invalidateAll();
                 found = true;
                 break;
+            }
+        }
+
+        if (!found) {
+            for (auto it = clfunc->osr_versions.begin(); it != clfunc->osr_versions.end(); ++it) {
+                if (it->second == this) {
+                    clfunc->osr_versions.erase(it);
+                    this->dependent_callsites.invalidateAll();
+                    found = true;
+                    break;
+                }
             }
         }
 
