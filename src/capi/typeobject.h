@@ -19,6 +19,14 @@
 
 namespace pyston {
 
+/*
+ * Type objects refer to Python's new-style classes that inherit from
+ * `object`. This, classes declared as:
+ *
+ * class Foo(object):
+ *  ...
+ */
+
 // Returns if a slot was updated
 bool update_slot(BoxedClass* self, llvm::StringRef attr) noexcept;
 

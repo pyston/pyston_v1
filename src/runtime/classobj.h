@@ -19,6 +19,17 @@
 
 namespace pyston {
 
+/*
+ * Class objects refer to Python's old-style classes that don't inherit from
+ * `object`. This, classes declared as:
+ *
+ * class Foo:
+ *  ...
+ *
+ * When debugging, "obj->cls->tp_name" will have value "instance" for all
+ * old-style classes rather than the name of the class itself.
+ */
+
 void setupClassobj();
 
 class BoxedClass;
