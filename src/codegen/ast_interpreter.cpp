@@ -91,7 +91,6 @@ public:
     __attribute__((__no_inline__)) __attribute__((noinline)) static Value
         executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at, RegisterHelper* reg);
 
-
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
@@ -148,6 +147,8 @@ private:
     void startJITing(CFGBlock* block, int exit_offset = 0);
     void abortJITing();
     void finishJITing(CFGBlock* continue_block = NULL);
+    // This method is not allowed to get inlined into 'executeInner' otherwise tracebacks are wrong.
+    __attribute__((__no_inline__)) __attribute__((noinline)) Box* execJITedBlock(CFGBlock* b);
 
     // this variables are used by the baseline JIT, make sure they have an offset < 0x80 so we can use shorter
     // instructions
@@ -374,6 +375,27 @@ void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
         startJITing(continue_block, exit_offset);
 }
 
+Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
+    try {
+        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
+        std::pair<CFGBlock*, Box*> rtn = b->entry_code(this, b);
+        next_block = rtn.first;
+        if (!next_block)
+            return rtn.second;
+    } catch (ExcInfo e) {
+        AST_stmt* stmt = getCurrentStatement();
+        if (stmt->type != AST_TYPE::Invoke)
+            throw e;
+
+        auto source = getCF()->clfunc->source.get();
+        exceptionCaughtInInterpreter(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);
+
+        next_block = ((AST_Invoke*)stmt)->exc_dest;
+        last_exception = e;
+    }
+    return nullptr;
+}
+
 Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at,
                                    RegisterHelper* reg) {
 
@@ -428,26 +450,10 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
             CFGBlock* b = interpreter.current_block;
             if (b->entry_code) {
                 should_jit = true;
-
-                try {
-                    UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
-                    std::pair<CFGBlock*, Box*> rtn = b->entry_code(&interpreter, b);
-                    interpreter.next_block = rtn.first;
-                    if (!interpreter.next_block)
-                        return Value(rtn.second, 0);
-                } catch (ExcInfo e) {
-                    AST_stmt* stmt = interpreter.getCurrentStatement();
-                    if (stmt->type != AST_TYPE::Invoke)
-                        throw e;
-
-                    auto source = interpreter.getCF()->clfunc->source.get();
-                    exceptionCaughtInInterpreter(
-                        LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);
-
-                    interpreter.next_block = ((AST_Invoke*)stmt)->exc_dest;
-                    interpreter.last_exception = e;
-                }
-                continue;
+                Box* rtn = interpreter.execJITedBlock(b);
+                if (interpreter.next_block)
+                    continue;
+                return Value(rtn, nullptr);
             }
         }
 
@@ -1604,7 +1610,7 @@ Box* ASTInterpreterJitInterface::getLocalHelper(void* _interpreter, InternedStri
 
 Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    auto& last_exception = interpreter->last_exception;
+    ExcInfo& last_exception = interpreter->last_exception;
     Box* type = last_exception.type;
     Box* value = last_exception.value ? last_exception.value : None;
     Box* traceback = last_exception.traceback ? last_exception.traceback : None;
