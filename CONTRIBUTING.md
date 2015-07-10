@@ -36,7 +36,7 @@ Notice that a large number tests are currently marked as failing (marked with an
 
 This kind of work will often happen where native libraries are defined (e.g. `src/runtime/builtin_modules/builtins.cpp`), implementation of types (e.g. `src/runtime/str.cpp`) and debugging may involve tracing through the interpreter (`src/codegen/ast_interpreter.cpp`). The code in those files should be relatively straightforward. Code that involve the JIT (function rewriting, assembly generation, etc) is more intricate and confusing in the beginning (e.g. `src/asm_writing/rewriter.cpp`). Keep in mind, it's perfectly fine to ask for help!
 
-To save you some time, the cause of failures for some of the tests [may have already been identified](test/cpython/NOTES.org). Do note, however, that not all of CPython's behavior can be matched exactly. For example, by nature of having a garbage collector over reference counting, the freeing of objects is non-deterministic and we can't necessarily call object finalizers in the same order as CPython does.
+To save you some time, the cause of failures for some of the tests [may have already been identified](test/CPYTHON_TEST_NOTES.md). Do note, however, that not all of CPython's behavior can be matched exactly. For example, by nature of having a garbage collector over reference counting, the freeing of objects is non-deterministic and we can't necessarily call object finalizers in the same order as CPython does.
 
 [Some tips on challenges you might run into and debugging tips](docs/TIPS.md).
 
