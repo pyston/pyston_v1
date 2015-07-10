@@ -86,14 +86,20 @@ void REWRITE_ABORTED(const char* reason) {
 #define REWRITE_ABORTED(reason) ((void)(reason))
 #endif
 
-static Box* (*runtimeCallInternal0)(Box*, CallRewriteArgs*, ArgPassSpec)
-    = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec))runtimeCallInternal;
-static Box* (*runtimeCallInternal1)(Box*, CallRewriteArgs*, ArgPassSpec, Box*)
-    = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec, Box*))runtimeCallInternal;
-static Box* (*runtimeCallInternal2)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*)
-    = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*))runtimeCallInternal;
-static Box* (*runtimeCallInternal3)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
-    = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))runtimeCallInternal;
+static inline Box* runtimeCallInternal0(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec) {
+    return runtimeCallInternal(obj, rewrite_args, argspec, NULL, NULL, NULL, NULL, NULL);
+}
+static inline Box* runtimeCallInternal1(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1) {
+    return runtimeCallInternal(obj, rewrite_args, argspec, arg1, NULL, NULL, NULL, NULL);
+}
+static inline Box* runtimeCallInternal2(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                        Box* arg2) {
+    return runtimeCallInternal(obj, rewrite_args, argspec, arg1, arg2, NULL, NULL, NULL);
+}
+static inline Box* runtimeCallInternal3(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                        Box* arg2, Box* arg3) {
+    return runtimeCallInternal(obj, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
+}
 
 bool checkClass(LookupScope scope) {
     return (scope & CLASS_ONLY) != 0;
@@ -101,14 +107,23 @@ bool checkClass(LookupScope scope) {
 bool checkInst(LookupScope scope) {
     return (scope & INST_ONLY) != 0;
 }
-static Box* (*callattrInternal0)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec)
-    = (Box * (*)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec))callattrInternal;
-static Box* (*callattrInternal1)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*)
-    = (Box * (*)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*))callattrInternal;
-static Box* (*callattrInternal2)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*)
-    = (Box * (*)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*))callattrInternal;
-static Box* (*callattrInternal3)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
-    = (Box * (*)(Box*, BoxedString*, LookupScope, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))callattrInternal;
+
+static inline Box* callattrInternal0(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+                                     ArgPassSpec argspec) {
+    return callattrInternal(obj, attr, scope, rewrite_args, argspec, NULL, NULL, NULL, NULL, NULL);
+}
+static inline Box* callattrInternal1(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+                                     ArgPassSpec argspec, Box* arg1) {
+    return callattrInternal(obj, attr, scope, rewrite_args, argspec, arg1, NULL, NULL, NULL, NULL);
+}
+static inline Box* callattrInternal2(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+                                     ArgPassSpec argspec, Box* arg1, Box* arg2) {
+    return callattrInternal(obj, attr, scope, rewrite_args, argspec, arg1, arg2, NULL, NULL, NULL);
+}
+static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+                                     ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3) {
+    return callattrInternal(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
+}
 
 #if STAT_TIMERS
 static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
