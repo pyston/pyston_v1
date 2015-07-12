@@ -462,20 +462,11 @@ protected:
                 arg->uses.push_back(actions.size());
             }
             assert(!added_changing_action);
-            last_guard_action = (int)actions.size();
         }
         actions.emplace_back(std::forward<F>(action));
     }
     bool added_changing_action;
     bool marked_inside_ic;
-
-    int last_guard_action;
-
-    bool done_guarding;
-    bool isDoneGuarding() {
-        assertPhaseEmitting();
-        return done_guarding;
-    }
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
@@ -544,11 +535,6 @@ protected:
                 }
                 assert(found);
                 assert(p.second->isInLocation(p.first));
-            }
-        }
-        if (!done_guarding) {
-            for (RewriterVar* arg : args) {
-                assert(!arg->locations.empty());
             }
         }
 #endif
