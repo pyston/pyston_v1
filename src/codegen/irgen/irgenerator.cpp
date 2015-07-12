@@ -42,9 +42,11 @@ extern "C" void dumpLLVM(llvm::Value* v) {
     v->dump();
 }
 
-IRGenState::IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
-                       ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info)
-    : cf(cf),
+IRGenState::IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info,
+                       std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
+                       llvm::MDNode* func_dbg_info)
+    : clfunc(clfunc),
+      cf(cf),
       source_info(source_info),
       phis(std::move(phis)),
       param_names(param_names),
@@ -402,8 +404,6 @@ public:
 
     llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
                           UnwindInfo unw_info) override {
-        assert(irstate->getEffortLevel() != EffortLevel::INTERPRETED);
-
         std::vector<llvm::Value*> stackmap_args;
 
         llvm::CallSite rtn
@@ -493,7 +493,7 @@ private:
         assert(ast);
 
         EffortLevel effort = irstate->getEffortLevel();
-        bool record_types = (effort != EffortLevel::INTERPRETED && effort != EffortLevel::MAXIMAL);
+        bool record_types = effort != EffortLevel::MAXIMAL;
 
         TypeRecorder* type_recorder;
         if (record_types) {
@@ -531,10 +531,7 @@ private:
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
                                              embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
-        if (irstate->getReturnType() == VOID)
-            emitter.getBuilder()->CreateRetVoid();
-        else
-            emitter.getBuilder()->CreateRet(v);
+        emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
@@ -594,38 +591,29 @@ private:
 
                 llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
 
-                if (irstate->getEffortLevel() != EffortLevel::INTERPRETED) {
-                    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
-                    auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
-                                                                              std_module_catch->getFunctionType());
-                    assert(begin_catch_func);
+                llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+                auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
+                                                                          std_module_catch->getFunctionType());
+                assert(begin_catch_func);
 
-                    llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
-                    llvm::Value* excinfo_pointer_casted
-                        = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+                llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
+                llvm::Value* excinfo_pointer_casted
+                    = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
 
-                    auto* builder = emitter.getBuilder();
-                    llvm::Value* exc_type
-                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-                    llvm::Value* exc_value
-                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
-                    llvm::Value* exc_traceback
-                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
-                    assert(exc_type->getType() == g.llvm_value_type_ptr);
-                    assert(exc_value->getType() == g.llvm_value_type_ptr);
-                    assert(exc_traceback->getType() == g.llvm_value_type_ptr);
+                auto* builder = emitter.getBuilder();
+                llvm::Value* exc_type
+                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+                llvm::Value* exc_value
+                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+                llvm::Value* exc_traceback
+                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+                assert(exc_type->getType() == g.llvm_value_type_ptr);
+                assert(exc_value->getType() == g.llvm_value_type_ptr);
+                assert(exc_traceback->getType() == g.llvm_value_type_ptr);
 
-                    return makeTuple({ new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                       new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                       new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true) });
-                } else {
-                    // TODO This doesn't get hit, right?
-                    abort();
-
-                    // The interpreter can't really support the full C++ exception handling model since it's
-                    // itself written in C++.  Let's make it easier for the interpreter and use a simpler interface:
-                    llvm::Value* exc_obj = emitter.getBuilder()->CreateBitCast(cxaexc_pointer, g.llvm_value_type_ptr);
-                }
+                return makeTuple({ new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                   new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                   new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true) });
             }
             case AST_LangPrimitive::LOCALS: {
                 return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar(), true);
@@ -986,7 +974,7 @@ private:
         if (node->id.s() == "None")
             return getNone();
 
-        bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+        bool do_patchpoint = ENABLE_ICGETGLOBALS;
         if (do_patchpoint) {
             ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
 
@@ -1657,7 +1645,7 @@ private:
         // TODO add a CompilerVariable::setattr, which can (similar to getitem)
         // statically-resolve the function if possible, and only fall back to
         // patchpoints if it couldn't.
-        bool do_patchpoint = ENABLE_ICSETITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+        bool do_patchpoint = ENABLE_ICSETITEMS;
         if (do_patchpoint) {
             ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
@@ -1783,7 +1771,7 @@ private:
         tget->decvref(emitter);
         slice->decvref(emitter);
 
-        bool do_patchpoint = ENABLE_ICDELITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+        bool do_patchpoint = ENABLE_ICDELITEMS;
         if (do_patchpoint) {
             ICSetupInfo* pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
@@ -1955,12 +1943,6 @@ private:
 
         CompilerVariable* val;
         if (node->value == NULL) {
-            if (irstate->getReturnType() == VOID) {
-                endBlock(DEAD);
-                emitter.getBuilder()->CreateRetVoid();
-                return;
-            }
-
             val = getNone();
         } else {
             val = evalExpr(node->value, unw_info);
@@ -2051,8 +2033,8 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCurFunction(), osr_key);
-        OSRExit* exit = new OSRExit(irstate->getCurFunction(), entry);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCL(), osr_key);
+        OSRExit* exit = new OSRExit(entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedRelocatablePtr(exit, g.i8->getPointerTo()));
 
@@ -2185,10 +2167,7 @@ private:
             converted_args[i]->decvref(emitter);
         }
 
-        if (irstate->getReturnType() == VOID)
-            emitter.getBuilder()->CreateRetVoid();
-        else
-            emitter.getBuilder()->CreateRet(rtn);
+        emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
     }

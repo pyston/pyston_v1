@@ -51,11 +51,7 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
 
-struct ExecutionPoint {
-    CompiledFunction* cf;
-    AST_stmt* current_stmt;
-};
-ExecutionPoint getExecutionPoint();
+CLFunction* getTopPythonFunction();
 
 // debugging/stat helper, returns python filename:linenumber, or "unknown:-1" if it fails
 std::string getCurrentPythonLine();
@@ -73,9 +69,10 @@ private:
 
 public:
     CompiledFunction* getCF();
+    CLFunction* getCL();
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
-    std::unique_ptr<ExecutionPoint> getExecutionPoint();
+    AST_stmt* getCurrentStatement();
     Box* fastLocalsToBoxedLocals();
     Box* getGlobalsDict();
 
@@ -114,13 +111,19 @@ struct FrameStackState {
     // after the frame ends.
     FrameInfo* frame_info;
 
+    FrameStackState() {}
     FrameStackState(BoxedDict* locals, FrameInfo* frame_info) : locals(locals), frame_info(frame_info) {}
 };
 
 // Returns all the stack locals, including hidden ones.
 FrameStackState getFrameStackState();
 
-CompiledFunction* getTopCompiledFunction();
+struct DeoptState {
+    FrameStackState frame_state;
+    CompiledFunction* cf;
+    AST_stmt* current_stmt;
+};
+DeoptState getDeoptState();
 }
 
 #endif

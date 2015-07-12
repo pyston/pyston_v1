@@ -579,11 +579,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // printf("%ld\n", args.size());
                 llvm::CallInst* postcall = emitter->getBuilder()->CreateCall(bitcast_r, args);
                 postcall->setTailCall(true);
-                if (rtn_type == VOID) {
-                    emitter->getBuilder()->CreateRetVoid();
-                } else {
-                    emitter->getBuilder()->CreateRet(postcall);
-                }
+                emitter->getBuilder()->CreateRet(postcall);
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
@@ -941,16 +937,15 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     os << "_e" << (int)effort;
     if (entry) {
         os << "_osr" << entry->backedge->target->idx;
-        if (entry->cf->func)
-            os << "_from_" << entry->cf->func->getName().data();
     }
     os << '_' << num_functions;
     num_functions++;
     return os.str();
 }
 
-CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
+CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
+                            const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                            FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
     long irgen_us = 0;
@@ -1014,8 +1009,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     }
 
 
-    CompiledFunction* cf
-        = new CompiledFunction(NULL, spec, (effort == EffortLevel::INTERPRETED), NULL, effort, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
@@ -1065,7 +1059,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     else
         phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
 
-    IRGenState irstate(cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
+    IRGenState irstate(clfunc, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 

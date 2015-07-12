@@ -79,7 +79,7 @@ class ASTInterpreter : public Box {
 public:
     typedef ContiguousMap<InternedString, Box*> SymMap;
 
-    ASTInterpreter(CompiledFunction* compiled_function);
+    ASTInterpreter(CLFunction* clfunc);
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
@@ -155,7 +155,7 @@ private:
     CFGBlock* next_block, *current_block;
     AST_stmt* current_inst;
 
-    CompiledFunction* compiled_func;
+    CLFunction* clfunc;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
     PhiAnalysis* phis;
@@ -185,7 +185,7 @@ public:
         return globals;
     }
 
-    CompiledFunction* getCF() { return compiled_func; }
+    CLFunction* getCL() { return clfunc; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return passed_closure; }
     const SymMap& getSymbolTable() { return sym_table; }
@@ -263,11 +263,11 @@ void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
     interp->frame_info.gcVisit(visitor);
 }
 
-ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
+ASTInterpreter::ASTInterpreter(CLFunction* clfunc)
     : current_block(0),
       current_inst(0),
-      compiled_func(compiled_function),
-      source_info(compiled_function->clfunc->source.get()),
+      clfunc(clfunc),
+      source_info(clfunc->source.get()),
       scope_info(0),
       phis(NULL),
       last_exception(NULL, NULL, NULL),
@@ -278,10 +278,6 @@ ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
       frame_info(ExcInfo(NULL, NULL, NULL)),
       globals(0),
       frame_addr(0) {
-
-    CLFunction* f = compiled_function->clfunc;
-    if (!source_info->cfg)
-        source_info->cfg = computeCFG(f->source.get(), f->source->body);
 
     scope_info = source_info->getScopeInfo();
 
@@ -300,7 +296,7 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     for (int i = 3; i < nargs; ++i)
         argsArray.push_back(args[i - 3]);
 
-    const ParamNames& param_names = compiled_func->clfunc->param_names;
+    const ParamNames& param_names = clfunc->param_names;
 
     int i = 0;
     for (auto& name : param_names.args) {
@@ -345,7 +341,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
-    auto& code_blocks = compiled_func->code_blocks;
+    auto& code_blocks = clfunc->code_blocks;
     JitCodeBlock* code_block = NULL;
     if (!code_blocks.empty())
         code_block = code_blocks[code_blocks.size() - 1].get();
@@ -387,7 +383,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         if (stmt->type != AST_TYPE::Invoke)
             throw e;
 
-        auto source = getCF()->clfunc->source.get();
+        auto source = getCL()->source.get();
         exceptionCaughtInInterpreter(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);
 
         next_block = ((AST_Invoke*)stmt)->exc_dest;
@@ -412,7 +408,7 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
 
-        if (ENABLE_BASELINEJIT && interpreter.compiled_func->times_called >= REOPT_THRESHOLD_INTERPRETER
+        if (ENABLE_BASELINEJIT && interpreter.clfunc->times_interpreted >= REOPT_THRESHOLD_INTERPRETER
             && !start_block->code)
             should_jit = true;
     }
@@ -474,6 +470,16 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
+
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    if (!interpreter.source_info->cfg)
+        interpreter.source_info->cfg = computeCFG(interpreter.source_info, interpreter.source_info->body);
 
     RegisterHelper frame_registerer;
     return executeInner(interpreter, start_block, start_at, &frame_registerer);
@@ -640,7 +646,7 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
 }
 
 Value ASTInterpreter::visit_jump(AST_Jump* node) {
-    bool backedge = node->target->idx < current_block->idx && compiled_func;
+    bool backedge = node->target->idx < current_block->idx;
     if (backedge) {
         threading::allowGLReadPreemption();
 
@@ -681,7 +687,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     LivenessAnalysis* liveness = source_info->getLiveness();
     std::unique_ptr<PhiAnalysis> phis
-        = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg, liveness, scope_info);
+        = computeRequiredPhis(clfunc->param_names, source_info->cfg, liveness, scope_info);
 
     std::vector<InternedString> dead_symbols;
     for (auto& it : sym_table) {
@@ -696,9 +702,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         sym_table.erase(dead);
 
     const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& p : compiled_func->clfunc->osr_versions) {
-        if (p.first->cf != compiled_func)
-            continue;
+    for (auto& p : clfunc->osr_versions) {
         if (p.first->backedge != node)
             continue;
 
@@ -748,7 +752,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
 
     if (found_entry == nullptr) {
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(compiled_func, node);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(clfunc, node);
 
         for (auto& it : sorted_symbol_table) {
             if (isIsDefinedName(it.first))
@@ -768,7 +772,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         found_entry = entry;
     }
 
-    OSRExit exit(compiled_func, found_entry);
+    OSRExit exit(found_entry);
 
     std::vector<Box*, StlCompatAllocator<Box*>> arg_array;
     for (auto& it : sorted_symbol_table) {
@@ -781,13 +785,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                                 std::get<3>(arg_tuple));
 
-    // This is one of the few times that we are allowed to have an invalid value in a Box* Value.
-    // Check for it, and return as an int so that we don't trigger a potential assert when
-    // creating the Value.
-    if (compiled_func->getReturnType() != VOID)
-        assert(r);
-
-    return r ? r : None;
+    assert(r);
+    return r;
 }
 
 Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
@@ -803,7 +802,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
     } catch (ExcInfo e) {
         abortJITing();
 
-        auto source = getCF()->clfunc->source.get();
+        auto source = getCL()->source.get();
         exceptionCaughtInInterpreter(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()), &e);
 
         next_block = node->exc_dest;
@@ -1034,7 +1033,7 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     }
 
     Box* passed_globals = NULL;
-    if (!getCF()->clfunc->source->scoping->areGlobalsFromModule())
+    if (!getCL()->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
     return boxCLFunction(cl, closure, passed_globals, u.il);
 }
@@ -1083,7 +1082,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
 
     Box* passed_globals = NULL;
-    if (!getCF()->clfunc->source->scoping->areGlobalsFromModule())
+    if (!getCL()->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
     Box* attrDict = runtimeCall(boxCLFunction(cl, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
 
@@ -1661,17 +1660,45 @@ void ASTInterpreterJitInterface::setLocalHelper(void* _interpreter, InternedStri
 
 const void* interpreter_instr_addr = (void*)&ASTInterpreter::executeInner;
 
-Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
+Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
-    assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
+    SourceInfo* source_info = clfunc->source.get();
+
+    assert((!globals) == source_info->scoping->areGlobalsFromModule());
     bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
-    int num_blocks = cf->clfunc->source->cfg->blocks.size();
+
+    // If the cfg hasn't been computed yet, just conservatively say that it will be a big function.
+    // It shouldn't matter, since the cfg should only be NULL if this is the first execution of this
+    // function.
+    int num_blocks = source_info->cfg ? source_info->cfg->blocks.size() : 10000;
     int threshold = num_blocks <= 20 ? (REOPT_THRESHOLD_BASELINE / 3) : REOPT_THRESHOLD_BASELINE;
-    if (unlikely(can_reopt && cf->times_called > threshold)) {
+    if (unlikely(can_reopt && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || clfunc->times_interpreted > threshold))) {
         assert(!globals);
-        CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
+
+        clfunc->times_interpreted = 0;
+
+        EffortLevel new_effort = EffortLevel::MODERATE;
+        if (FORCE_OPTIMIZE)
+            new_effort = EffortLevel::MAXIMAL;
+
+        std::vector<ConcreteCompilerType*> arg_types;
+        for (int i = 0; i < nargs; i++) {
+            Box* arg = getArg(i, arg1, arg2, arg3, args);
+            assert(arg); // only builtin functions can pass NULL args
+
+            // TODO: reenable argument-type specialization
+            arg_types.push_back(UNKNOWN);
+            // arg_types.push_back(typeFromClass(arg->cls));
+        }
+        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
+
+        // this also pushes the new CompiledVersion to the back of the version list:
+        CompiledFunction* optimized = compileFunction(clfunc, spec, new_effort, NULL);
+
+        clfunc->dependent_interp_callsites.invalidateAll();
+
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
                                                      arg3, args);
@@ -1682,16 +1709,15 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
         return optimized->call(arg1, arg2, arg3, args);
     }
 
-    ++cf->times_called;
-    ASTInterpreter* interpreter = new ASTInterpreter(cf);
+    ++clfunc->times_interpreted;
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
 
-    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source.get();
+    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     if (unlikely(scope_info->usesNameLookup())) {
         interpreter->setBoxedLocals(new BoxedDict());
     }
 
-    assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
+    assert((!globals) == clfunc->source->scoping->areGlobalsFromModule());
     if (globals) {
         interpreter->setGlobals(globals);
     } else {
@@ -1704,17 +1730,17 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFunctionEval(CompiledFunction* cf, Box* globals, Box* boxedLocals) {
-    ++cf->times_called;
+Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals) {
+    ++clfunc->times_interpreted;
 
-    ASTInterpreter* interpreter = new ASTInterpreter(cf);
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
     interpreter->initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter->setBoxedLocals(boxedLocals);
 
-    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source.get();
+    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+    SourceInfo* source_info = clfunc->source.get();
 
-    assert(!cf->clfunc->source->scoping->areGlobalsFromModule());
+    assert(!clfunc->source->scoping->areGlobalsFromModule());
     assert(globals);
     interpreter->setGlobals(globals);
 
@@ -1723,19 +1749,19 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, Box* globals, Box* boxedLoca
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                       FrameStackState frame_state) {
-    assert(cf);
+    assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);
     assert(after_expr);
     assert(expr_val);
 
-    ASTInterpreter* interpreter = new ASTInterpreter(cf);
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
 
-    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source.get();
-    assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+    SourceInfo* source_info = clfunc->source.get();
+    assert(clfunc->source->scoping->areGlobalsFromModule());
     interpreter->setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
@@ -1748,7 +1774,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
         } else if (name == CREATED_CLOSURE_NAME) {
             interpreter->setCreatedClosure(p.second);
         } else {
-            InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+            InternedString interned = clfunc->source->getInternedStrings().get(name);
             interpreter->addSymbol(interned, p.second, false);
         }
     }
@@ -1784,7 +1810,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     if (start_block == NULL) {
         // TODO innefficient
-        for (auto block : cf->clfunc->source->cfg->blocks) {
+        for (auto block : clfunc->source->cfg->blocks) {
             int n = block->body.size();
             for (int i = 0; i < n; i++) {
                 if (block->body[i] == enclosing_stmt) {
@@ -1820,10 +1846,10 @@ Box* getGlobalsForInterpretedFrame(void* frame_ptr) {
     return interpreter->getGlobals();
 }
 
-CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {
+CLFunction* getCLForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
-    return interpreter->getCF();
+    return interpreter->getCL();
 }
 
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {

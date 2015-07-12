@@ -162,20 +162,19 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 
     RELEASE_ASSERT(0, "deopt is currently broken...");
 
-    FrameStackState frame_state = getFrameStackState();
-    auto execution_point = getExecutionPoint();
+    auto deopt_state = getDeoptState();
 
     // Should we only do this selectively?
-    execution_point.cf->speculationFailed();
+    deopt_state.cf->speculationFailed();
 
     // Except of exc.type we skip initializing the exc fields inside the JITed code path (small perf improvement) that's
     // why we have todo it now if we didn't set an exception (which sets all fields)
-    if (frame_state.frame_info->exc.type == NULL) {
-        frame_state.frame_info->exc.traceback = NULL;
-        frame_state.frame_info->exc.value = NULL;
+    if (deopt_state.frame_state.frame_info->exc.type == NULL) {
+        deopt_state.frame_state.frame_info->exc.traceback = NULL;
+        deopt_state.frame_state.frame_info->exc.value = NULL;
     }
 
-    return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, frame_state);
+    return astInterpretFrom(deopt_state.cf->clfunc, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
 extern "C" bool softspace(Box* b, bool newval) {
@@ -2662,16 +2661,12 @@ extern "C" void dumpEx(void* p, int levels) {
 
             printf("Has %ld function versions\n", cl->versions.size());
             for (CompiledFunction* cf : cl->versions) {
-                if (cf->is_interpreted) {
-                    printf("[interpreted]\n");
-                } else {
-                    bool got_name;
-                    std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
-                    if (got_name)
-                        printf("%s\n", name.c_str());
-                    else
-                        printf("%p\n", cf->code);
-                }
+                bool got_name;
+                std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
+                if (got_name)
+                    printf("%s\n", name.c_str());
+                else
+                    printf("%p\n", cf->code);
             }
         }
 
@@ -2930,26 +2925,7 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         abort();
     }
 
-    EffortLevel new_effort = initialEffort();
-    // Only the interpreter currently supports non-module-globals:
-    if (!f->source->scoping->areGlobalsFromModule())
-        new_effort = EffortLevel::INTERPRETED;
-
-    std::vector<ConcreteCompilerType*> arg_types;
-    for (int i = 0; i < num_output_args; i++) {
-        if (new_effort == EffortLevel::INTERPRETED) {
-            arg_types.push_back(UNKNOWN);
-        } else {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-            assert(arg); // only builtin functions can pass NULL args
-
-            arg_types.push_back(typeFromClass(arg->cls));
-        }
-    }
-    FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-    // this also pushes the new CompiledVersion to the back of the version list:
-    return compileFunction(f, spec, new_effort, NULL);
+    return NULL;
 }
 
 static llvm::StringRef getFunctionName(CLFunction* f) {
@@ -3500,7 +3476,7 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
 // only supports calling functions with at most 6 since it can currently only pass arguments
 // in registers.
-static Box* astInterpretHelper(CompiledFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
+static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
                                Box* globals, Box** _args) {
     Box* arg1 = _args[0];
     Box* arg2 = _args[1];
@@ -3514,16 +3490,15 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
-    assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
-    if (chosen_cf->is_interpreted) {
+    if (!chosen_cf) {
         if (rewrite_args) {
-            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
-
             RewriterVar::SmallVector arg_vec;
+
+            rewrite_args->rewriter->addDependenceOn(f->dependent_interp_callsites);
 
             // TODO this kind of embedded reference needs to be tracked by the GC somehow?
             // Or maybe it's ok, since we've guarded on the function object?
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)chosen_cf, Location::forArg(0)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)f, Location::forArg(0)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)num_output_args, Location::forArg(1)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(2)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(3)));
@@ -3531,6 +3506,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
             // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
             // to unpack some of the additional arguments:
+            // TODO if there's only one arg we could just pass it normally
             RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
             arg_vec.push_back(arg_array);
             if (num_output_args >= 1)
@@ -3546,8 +3522,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
             rewrite_args->out_success = true;
         }
 
-        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
-                                    oargs);
+        return astInterpretFunction(f, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
     }
 
     ASSERT(!globals, "need to update the calling conventions if we want to pass globals");

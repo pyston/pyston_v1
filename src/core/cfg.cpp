@@ -2472,6 +2472,8 @@ void CFG::print() {
 }
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
+    STAT_TIMER(t0, "us_timer_computecfg", 0);
+
     CFG* rtn = new CFG();
 
     ScopingAnalysis* scoping_analysis = source->scoping;
