@@ -193,6 +193,7 @@ public:
     void fillWithNops();
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
+    void skipBytes(int num);
 
     uint8_t* startAddr() const { return start_addr; }
     int bytesLeft() const { return end_addr - addr; }

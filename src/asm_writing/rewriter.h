@@ -19,6 +19,7 @@
 #include <memory>
 #include <tuple>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 
@@ -349,7 +350,7 @@ protected:
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
     llvm::SmallVector<RewriterAction, 32> actions;
-    void addAction(std::function<void()> action, std::vector<RewriterVar*> const& vars, ActionType type) {
+    void addAction(std::function<void()> action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -413,6 +414,8 @@ protected:
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
+    void _setupCall(RewriterVar* result, bool has_side_effects, const RewriterVar::SmallVector& args,
+                    const RewriterVar::SmallVector& args_xmm);
     void _call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
