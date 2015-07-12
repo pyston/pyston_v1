@@ -1122,6 +1122,7 @@ void Rewriter::commit() {
     }
 
     // Add uses for the live_outs
+    assert(live_outs.size() == 0);
     for (int i = 0; i < live_outs.size(); i++) {
         live_outs[i]->uses.push_back(actions.size());
     }
@@ -2111,6 +2112,11 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
 
     assembler::Assembler _a(start_addr, slowpath_start - start_addr);
     //_a.trap();
+
+    _a.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
+
+    uint8_t* patchpoint_start = _a.curInstPointer();
+
     if (slowpath_start - start_addr > 20)
         _a.jmp(assembler::JumpDestination::fromStart(slowpath_start - start_addr));
     _a.fillWithNops();
@@ -2118,9 +2124,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assembler::Assembler assem(slowpath_start, end_addr - slowpath_start);
     // if (regs_to_spill.size())
     // assem.trap();
-    assem.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
     uint8_t* slowpath_rtn_addr = assem.emitCall(slowpath_func, assembler::R11);
-    assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
 
     // The place we should continue if we took a fast path.
     // If we have to reload things, make sure to set it to the beginning
@@ -2130,10 +2134,12 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     // (Actually I think the calculations of the size above were exact so there should
     // always be 0 nops, but this optimization shouldn't hurt.)
     uint8_t* continue_addr;
-    if (regs_to_reload.empty())
+    if (regs_to_reload.empty() && regs_to_spill.empty())
         continue_addr = end_addr;
     else
         continue_addr = assem.curInstPointer();
+
+    assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
 
     for (assembler::Register r : regs_to_reload) {
         StackMap::Record::Location& l = remapped[r];
@@ -2146,7 +2152,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr, std::move(live_outs));
+    return PatchpointInitializationInfo(patchpoint_start, slowpath_start, slowpath_rtn_addr, continue_addr, 0);
 }
 
 void* Rewriter::RegionAllocator::alloc(size_t bytes) {
