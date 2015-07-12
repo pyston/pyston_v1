@@ -148,19 +148,13 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
     else
         RELEASE_ASSERT(!keyword_names_var, "0 args but keyword names are set");
 
-    bool use_ic = false;
-
     RewriterVar::SmallVector call_args;
     call_args.push_back(obj);
     call_args.push_back(attr_var);
     call_args.push_back(flags_var);
 
 #if ENABLE_BASELINEJIT_ICS
-    if (!keyword_names_var
-        && flags.argspec.totalPassed() < 4) { // looks like runtime ICs with 7 or more args don't work right now..
-        use_ic = true;
-        call_args.push_back(imm(new CallattrIC));
-    }
+    call_args.push_back(imm(new CallattrIC));
 #endif
 
     if (args_array)
@@ -169,8 +163,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
         call_args.push_back(keyword_names_var);
 
 #if ENABLE_BASELINEJIT_ICS
-    if (use_ic)
-        return call(false, (void*)callattrHelperIC, call_args);
+    return call(false, (void*)callattrHelperIC, call_args);
 #endif
     return call(false, (void*)callattrHelper, call_args);
 }
@@ -330,18 +323,12 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(RewriterVar* obj, ArgPassSpec ar
     } else
         RELEASE_ASSERT(!keyword_names_var, "0 args but keyword names are set");
 
-    bool use_ic = false;
-
     RewriterVar::SmallVector call_args;
     call_args.push_back(obj);
     call_args.push_back(argspec_var);
 
-
 #if ENABLE_BASELINEJIT_ICS
-    if (!keyword_names) { // looks like runtime ICs with 7 or more args don't work right now..
-        use_ic = true;
-        call_args.push_back(imm(new RuntimeCallIC));
-    }
+    call_args.push_back(imm(new RuntimeCallIC));
 #endif
 
     if (args_array)
@@ -350,8 +337,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(RewriterVar* obj, ArgPassSpec ar
         call_args.push_back(keyword_names_var);
 
 #if ENABLE_BASELINEJIT_ICS
-    if (use_ic)
-        return call(false, (void*)runtimeCallHelperIC, call_args);
+    return call(false, (void*)runtimeCallHelperIC, call_args);
 #endif
     return call(false, (void*)runtimeCallHelper, call_args);
 }
@@ -580,10 +566,11 @@ Box* JitFragmentWriter::binopICHelper(BinopIC* ic, Box* lhs, Box* rhs, int op) {
 }
 
 #if ENABLE_BASELINEJIT_ICS
-Box* JitFragmentWriter::callattrHelperIC(Box* obj, BoxedString* attr, CallattrFlags flags, CallattrIC* ic, Box** args) {
+Box* JitFragmentWriter::callattrHelperIC(Box* obj, BoxedString* attr, CallattrFlags flags, CallattrIC* ic, Box** args,
+                                         std::vector<BoxedString*>* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], flags.argspec.totalPassed());
-    return ic->call(obj, attr, flags, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple), NULL,
-                    NULL);
+    return ic->call(obj, attr, flags, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
+                    std::get<3>(arg_tuple), keyword_names);
 }
 #endif
 Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
@@ -659,10 +646,11 @@ Box* JitFragmentWriter::notHelper(Box* b) {
 }
 
 #if ENABLE_BASELINEJIT_ICS
-Box* JitFragmentWriter::runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args) {
+Box* JitFragmentWriter::runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args,
+                                            std::vector<BoxedString*>* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], argspec.totalPassed());
     return ic->call(obj, argspec, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                    std::get<3>(arg_tuple));
+                    std::get<3>(arg_tuple), keyword_names);
 }
 #endif
 Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args,

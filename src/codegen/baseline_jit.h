@@ -273,8 +273,10 @@ private:
     static Box* unaryopICHelper(UnaryopIC* ic, Box* obj, int op);
 
 #if ENABLE_BASELINEJIT_ICS
-    static Box* callattrHelperIC(Box* obj, BoxedString* attr, CallattrFlags flags, CallattrIC* ic, Box** args);
-    static Box* runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args);
+    static Box* callattrHelperIC(Box* obj, BoxedString* attr, CallattrFlags flags, CallattrIC* ic, Box** args,
+                                 std::vector<BoxedString*>* keyword_names);
+    static Box* runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args,
+                                    std::vector<BoxedString*>* keyword_names);
 #endif
 
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
