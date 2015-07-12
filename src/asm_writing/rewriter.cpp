@@ -338,16 +338,31 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 }
 
 void Rewriter::emitGuardJump(bool useJne) {
-    if (useJne) {
-        assembler->jne(assembler::JumpDestination::fromStart((1 << 31) - 2));
-    } else {
-        assembler->je(assembler::JumpDestination::fromStart((1 << 31) - 2));
+    bool allArgsInPlace = true;
+    for (int i = 0; i < args.size(); i++) {
+        if (!args[i]->isInLocation(Location::forArg(i))) {
+            allArgsInPlace = false;
+        }
     }
-    
-    guard_infos.emplace_back(assembler->curInstPointer(), VarLocations(args));
 
-    for (RewriterVar* var : args) {
-        var->bumpUse();
+    if (allArgsInPlace) {
+        if (useJne) {
+            assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+        } else {
+            assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+        }
+    } else {
+        if (useJne) {
+            assembler->jne(assembler::JumpDestination::fromStart((1 << 31) - 2));
+        } else {
+            assembler->je(assembler::JumpDestination::fromStart((1 << 31) - 2));
+        }
+        
+        guard_infos.emplace_back(assembler->curInstPointer(), VarLocations(args));
+    }
+
+    for (int i = 0; i < args.size(); i++) {
+        args[i]->bumpUse();
     }
 }
 
@@ -2183,13 +2198,14 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
         }
     }
 
-    auto getFreeReg = [&argInReg]() {
+    auto getFreeReg = [&argInReg]() -> assembler::Register {
         for (assembler::Register reg : allocatable_regs) {
             if (argInReg[reg.regnum] == -1) {
                 return reg;
             }
         }
         assert(false);
+        return assembler::RAX;
     };
 
     for (int i = vars.size() - 1; i >= 0; i--) {
@@ -2220,7 +2236,8 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
                 assembler->mov(curLoc.asRegister(), targetLoc.asRegister());
                 argInReg[curLoc.asRegister().regnum] = -1;
             } else {
-                assembler->mov(assembler::Indirect(assembler::RSP, curLoc.scratch_offset), targetLoc.asRegister());
+                assert(curLoc.type == Location::Scratch);
+                assembler->mov(assembler::Indirect(assembler::RSP, rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset), targetLoc.asRegister());
             }
             locs[i] = targetLoc;
             argInReg[targetLoc.asRegister().regnum] = i;
