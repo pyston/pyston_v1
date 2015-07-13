@@ -31,7 +31,7 @@ struct StackMap;
 
 class OSREntryDescriptor {
 private:
-    OSREntryDescriptor(CLFunction* clfunc, AST_Jump* backedge) : clfunc(clfunc), backedge(backedge) { assert(clfunc); }
+    OSREntryDescriptor(CLFunction* clfunc, AST_Jump* backedge) : clfunc(clfunc), backedge(backedge) { }
 
 public:
     CLFunction* clfunc;
