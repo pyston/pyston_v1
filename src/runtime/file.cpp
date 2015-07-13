@@ -1784,6 +1784,8 @@ void setupFile() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace), false));
     file_cls->giveAttr("name",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_name), true));
+    file_cls->giveAttr("mode",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
 
     file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, 2, false, false),
                                                     { boxString("r"), boxInt(-1) }));
