@@ -468,9 +468,9 @@ public:
 
     void reset(bool skipFirst) { skipNext = skipFirst; }
 
-    static bool shouldSkipNextFrame(PythonFrameIteratorImpl* info) {
+    static bool shouldSkipNextFrame(CompiledFunction* cf) {
         // cf->entry_descriptor will be non-null for OSR frames.
-        return (info->getId().type == PythonFrameId::COMPILED) && (info->cf->entry_descriptor);
+        return (bool)(cf && cf->entry_descriptor);
     }
 
     bool getPythonFrame(unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
@@ -498,7 +498,7 @@ public:
             // even though we're skipping this frame, we might need to
             // skip the next one e.g: we're reraising an exception
             // *from* an osr frame.
-            skipNext = shouldSkipNextFrame(info);
+            skipNext = shouldSkipNextFrame(cf);
             return false;
         }
 
@@ -523,7 +523,7 @@ public:
             }
         }
 
-        skipNext = shouldSkipNextFrame(info);
+        skipNext = shouldSkipNextFrame(cf);
         return true;
     }
 };
