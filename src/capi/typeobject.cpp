@@ -18,6 +18,7 @@
 #include "capi/types.h"
 #include "runtime/classobj.h"
 #include "runtime/objmodel.h"
+#include "runtime/rewrite_args.h"
 
 namespace pyston {
 
@@ -2997,6 +2998,45 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
     // We don't cache anything yet that would need to be invalidated:
 }
 
+static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                             Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    ParamReceiveSpec paramspec(0, 0, true, true);
+    if (!argspec.has_kwargs && argspec.num_keywords == 0) {
+        paramspec.takes_kwargs = false;
+    }
+
+    bool rewrite_success = false;
+    Box* oarg1, * oarg2 = NULL, *oarg3, ** oargs = NULL;
+    rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
+                       keyword_names, oarg1, oarg2, oarg3, oargs);
+
+    if (!rewrite_success)
+        rewrite_args = NULL;
+
+    if (rewrite_args) {
+        if (!paramspec.takes_kwargs)
+            rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0, Location::forArg(2));
+
+        // Currently, guard that the value of tp_call didn't change, and then
+        // emit a call to the current function address.
+        // It might be better to just load the current value of tp_call and call it
+        // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+        // support calling a RewriterVar (can only call fixed function addresses).
+        RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+        r_cls->addAttrGuard(offsetof(BoxedClass, tp_call), (intptr_t)self->cls->tp_call);
+
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
+                                                             rewrite_args->arg1, rewrite_args->arg2);
+        rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+        rewrite_args->out_success = true;
+    }
+
+    Box* r = self->cls->tp_call(self, oarg1, oarg2);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
@@ -3044,9 +3084,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->tp_dict = cls->getAttrWrapper();
 
     assert(cls->tp_name);
-    // tp_name
-    // tp_basicsize, tp_itemsize
-    // tp_doc
+
+    if (cls->tp_call)
+        cls->tpp_call = tppProxyToTpCall;
 
     try {
         add_operators(cls);
