@@ -683,7 +683,7 @@ BoxedDict* Box::getDict() {
 static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
 
-    if (rewrite_args)
+    if (rewrite_args && !rewrite_args->obj_cls_guarded)
         rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (intptr_t)cls);
 
 #if 0
@@ -733,7 +733,10 @@ Box* Box::getattr(llvm::StringRef attr, GetattrRewriteArgs* rewrite_args) {
                     REWRITE_ABORTED("");
                     rewrite_args = NULL;
                 } else {
-                    rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
+                    if (!(rewrite_args->obj->isConstant() && cls == type_cls
+                          && static_cast<BoxedClass*>(this)->is_constant)) {
+                        rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
+                    }
                     if (hcls->type == HiddenClass::SINGLETON)
                         hcls->addDependence(rewrite_args->rewriter);
                 }
@@ -985,6 +988,9 @@ Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewri
                 assert(rewrite_args->obj == obj_saved);
             } else {
                 rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
+                if (static_cast<BoxedClass*>(base)->is_constant) {
+                    rewrite_args->obj_cls_guarded = true;
+                }
             }
             val = base->getattr(attr, rewrite_args);
             assert(rewrite_args->out_success);
@@ -5042,6 +5048,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         if (rewriter.get()) {
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), builtins, rewriter->getReturnDestination());
+            rewrite_args.obj_cls_guarded = true; // always builtin module
             rtn = builtins_module->getattr(name->s(), &rewrite_args);
 
             if (!rtn || !rewrite_args.out_success) {

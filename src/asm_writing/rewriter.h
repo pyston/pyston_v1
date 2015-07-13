@@ -218,6 +218,8 @@ public:
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
+    bool isConstant() { return is_constant; }
+
 private:
     Rewriter* rewriter;
 
