@@ -94,7 +94,7 @@ public:
     Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
 
 #ifndef NDEBUG
-    inline void comment(std::string msg) {
+    inline void comment(const llvm::Twine& msg) {
         if (ASSEMBLY_LOGGING) {
             logger.log_comment(msg, addr - start_addr);
         }
@@ -107,7 +107,7 @@ public:
         }
     }
 #else
-    inline void comment(std::string msg) {}
+    inline void comment(const llvm::Twine& msg) {}
     inline std::string dump() { return ""; }
 #endif
 

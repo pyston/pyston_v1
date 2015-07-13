@@ -78,7 +78,7 @@ public:
 
 class ASTInterpreter {
 public:
-    typedef ContiguousMap<InternedString, Box*> SymMap;
+    typedef ContiguousMap<InternedString, Box*, llvm::SmallDenseMap<InternedString, int, 16>> SymMap;
 
     ASTInterpreter(CLFunction* clfunc);
     ~ASTInterpreter();
