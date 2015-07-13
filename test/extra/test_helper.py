@@ -78,7 +78,7 @@ def run_test(cmd, cwd, expected, env = None):
     if expected == result:
         print "Received expected output"
     else:
-        print >> sys.stderr, '\n'.join(output.split('\n')[:200])
+        print >> sys.stderr, '\n'.join(output.split('\n')[-500:])
         print >> sys.stderr, "WRONG output"
         print >> sys.stderr, "is:", result
         print >> sys.stderr, "expected:", expected
