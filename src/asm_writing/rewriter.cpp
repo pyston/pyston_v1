@@ -970,10 +970,12 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
-    assert(vars_by_location.count(assembler::RAX) == 0);
-    result->initializeInReg(assembler::RAX);
+    if (!failed) {
+        assert(vars_by_location.count(assembler::RAX) == 0);
+        result->initializeInReg(assembler::RAX);
 
-    assertConsistent();
+        assertConsistent();
+    }
 
     result->releaseIfNoUses();
 }
