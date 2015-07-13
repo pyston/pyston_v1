@@ -68,10 +68,11 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    SourceInfo* si = new SourceInfo(createModule("osr" + std::to_string((is_osr << 1) + i_maybe_undefined), fn.c_str()),
-            scoping, future_flags, func, func->body, fn);
+    std::unique_ptr<SourceInfo> si(new SourceInfo(createModule("osr" + std::to_string((is_osr << 1) + i_maybe_undefined),
+                    fn.c_str()), scoping, future_flags, func, func->body, fn));
+    CLFunction* clfunc = new CLFunction(0, 0, false, false, std::move(si));
 
-    CFG* cfg = computeCFG(si, func->body);
+    CFG* cfg = computeCFG(clfunc->source.get(), func->body);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
@@ -91,14 +92,14 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     std::unique_ptr<PhiAnalysis> phis;
 
     if (is_osr) {
-        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(NULL, backedge);
+        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge);
         entry_descriptor->args[i_str] = NULL;
         if (i_maybe_undefined)
             entry_descriptor->args[idi_str] = NULL;
         entry_descriptor->args[iter_str] = NULL;
         phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
     } else {
-        phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
+        phis = computeRequiredPhis(ParamNames(func, clfunc->source->getInternedStrings()), cfg, liveness.get(), scope_info);
     }
 
     // First, verify that we require phi nodes for the block we enter into.
