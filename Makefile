@@ -61,8 +61,9 @@ FORCE_TRUNK_BINARIES := 0
 NINJA := ninja
 
 CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
-CMAKE_DIR_DBG_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
+CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
+CMAKE_DIR_RELEASE_GCC := $(BUILD_DIR)/Release-gcc
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
@@ -896,7 +897,6 @@ pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
 
-CMAKE_DIR_GCC := $(CMAKE_DIR_DBG_GCC)
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
 	@$(MAKE) cmake_check
@@ -904,8 +904,18 @@ $(CMAKE_SETUP_GCC):
 	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(CMAKE_DIR_DBG_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(CMAKE_DIR_DBG_GCC)/pyston pyston_gcc
+	$(NINJA) -C $(CMAKE_DIR_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_GCC)/pyston pyston_gcc
+
+CMAKE_SETUP_RELEASE_GCC := $(CMAKE_DIR_RELEASE_GCC)/build.ninja
+$(CMAKE_SETUP_RELEASE_GCC):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_RELEASE_GCC)
+	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND)
+.PHONY: pyston_release_gcc
+pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_RELEASE_GCC)/pyston pyston_release_gcc
 
 .PHONY: format check_format
 format: $(CMAKE_SETUP_RELEASE)
@@ -1019,6 +1029,7 @@ $(call make_target,_release)
 # $(call make_target,_nosync)
 $(call make_target,_prof)
 $(call make_target,_gcc)
+$(call make_target,_release_gcc)
 
 nosearch_runpy_% nosearch_pyrun_%: %.py ext_python
 	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
