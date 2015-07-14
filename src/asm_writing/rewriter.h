@@ -107,12 +107,12 @@ public:
 static_assert(sizeof(Location) <= 8, "");
 
 struct VarLocations {
-    const llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> vars;
+    const llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8> vars;
 
-    VarLocations() { }
+    VarLocations() {}
     VarLocations(llvm::SmallVector<RewriterVar*, 8> const& vars);
-    static llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> _varLocationsConstruct(
-        llvm::SmallVector<RewriterVar*, 8> const& vars);
+    static llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8>
+    _varLocationsConstruct(llvm::SmallVector<RewriterVar*, 8> const& vars);
     void arrangeAsArgs(Rewriter* rewriter);
 };
 
@@ -121,10 +121,8 @@ struct GuardInfo {
     VarLocations var_locations;
 
     GuardInfo(uint8_t* guard_jmp_addr, VarLocations const& var_locations)
-        : guard_jmp_addr(guard_jmp_addr),
-          var_locations(var_locations) { }
+        : guard_jmp_addr(guard_jmp_addr), var_locations(var_locations) {}
 };
-
 }
 
 namespace std {
@@ -468,7 +466,6 @@ public:
     bool hasAddedChangingAction() { return added_changing_action; }
 
 protected:
-
     void* second_slowpath;
     int action_where_second_slowpath_starts;
     bool should_use_second_guard_destination;

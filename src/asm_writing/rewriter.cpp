@@ -352,12 +352,13 @@ void Rewriter::emitGuardJump(bool useJne) {
             assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
         }
     } else {
+        // TODO use ForwardJump here rather than emulating it
         if (useJne) {
-            assembler->jne(assembler::JumpDestination::fromStart((1 << 31) - 2));
+            assembler->jne(assembler::JumpDestination::fromStart(std::numeric_limits<int>::max() - 1));
         } else {
-            assembler->je(assembler::JumpDestination::fromStart((1 << 31) - 2));
+            assembler->je(assembler::JumpDestination::fromStart(std::numeric_limits<int>::max() - 1));
         }
-        
+
         if (should_use_second_guard_destination) {
             assert(marked_inside_ic);
         }
@@ -1787,7 +1788,7 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs)
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, LiveOutSet live_outs)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
       picked_slot(NULL),
@@ -2134,7 +2135,8 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return PatchpointInitializationInfo(patchpoint_start, slowpath_start, slowpath_rtn_addr, continue_addr, 0);
+    return PatchpointInitializationInfo(patchpoint_start, slowpath_start, slowpath_rtn_addr, continue_addr,
+                                        LiveOutSet());
 }
 
 void* Rewriter::RegionAllocator::alloc(size_t bytes) {
@@ -2149,19 +2151,19 @@ void* Rewriter::RegionAllocator::alloc(size_t bytes) {
     return rtn;
 }
 
-llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> VarLocations::_varLocationsConstruct(
-        llvm::SmallVector<RewriterVar*, 8> const& vars) {
-    llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> v;
+llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8>
+VarLocations::_varLocationsConstruct(llvm::SmallVector<RewriterVar*, 8> const& vars) {
+    llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8> v;
     for (RewriterVar* var : vars) {
         v.push_back(std::make_pair(var, var->locations));
     }
     return v;
 }
-VarLocations::VarLocations(llvm::SmallVector<RewriterVar*, 8> const& vars)
-        : vars(_varLocationsConstruct(vars)) { }
+VarLocations::VarLocations(llvm::SmallVector<RewriterVar*, 8> const& vars) : vars(_varLocationsConstruct(vars)) {
+}
 
 void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
-    assembler::Assembler *assembler = rewriter->assembler;
+    assembler::Assembler* assembler = rewriter->assembler;
 
     llvm::SmallVector<Location, 8> locs;
     int argInReg[16];
@@ -2210,7 +2212,8 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
 
         Location curLoc = locs[i];
         Location targetLoc = Location::forArg(i);
-        if (curLoc == targetLoc) continue;
+        if (curLoc == targetLoc)
+            continue;
         if (targetLoc.type == Location::Stack) {
             if (curLoc.type == Location::Register) {
                 assembler->mov(curLoc.asRegister(), assembler::Indirect(assembler::RSP, targetLoc.stack_offset));
@@ -2219,7 +2222,9 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
             } else {
                 assembler::Register r = getFreeReg();
                 assert(curLoc.type == Location::Scratch);
-                assembler->mov(assembler::Indirect(assembler::RSP, rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset), r);
+                assembler->mov(assembler::Indirect(assembler::RSP,
+                                                   rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset),
+                               r);
                 assembler->mov(r, assembler::Indirect(assembler::RSP, targetLoc.stack_offset));
                 locs[i] = targetLoc;
             }
@@ -2237,7 +2242,9 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
                 argInReg[curLoc.asRegister().regnum] = -1;
             } else {
                 assert(curLoc.type == Location::Scratch);
-                assembler->mov(assembler::Indirect(assembler::RSP, rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset), targetLoc.asRegister());
+                assembler->mov(assembler::Indirect(assembler::RSP,
+                                                   rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset),
+                               targetLoc.asRegister());
             }
 
             locs[i] = targetLoc;
@@ -2258,5 +2265,4 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
         }
     }
 }
-
 }
