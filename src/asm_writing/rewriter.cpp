@@ -1,4 +1,5 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.  //
+// Copyright (c) 2014-2015 Dropbox, Inc.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -247,18 +248,6 @@ void Rewriter::restoreArgs() {
         }
     }
 
-    for (int i = 0; i < live_outs.size(); i++) {
-        assembler::GenericRegister gr = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
-        if (gr.type == assembler::GenericRegister::GP) {
-            assembler::Register r = gr.gp;
-            if (!live_outs[i]->isInLocation(Location(r))) {
-                allocReg(r);
-                live_outs[i]->getInReg(r);
-                assert(live_outs[i]->isInLocation(r));
-            }
-        }
-    }
-
     assertArgsInPlace();
 }
 
@@ -267,10 +256,6 @@ void Rewriter::assertArgsInPlace() {
 
     for (int i = 0; i < args.size(); i++) {
         assert(args[i]->isInLocation(args[i]->arg_loc));
-    }
-    for (int i = 0; i < live_outs.size(); i++) {
-        assembler::GenericRegister r = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
-        assert(live_outs[i]->isInLocation(r));
     }
 }
 
@@ -287,6 +272,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    restoreArgs();
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -295,7 +282,6 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
-    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
@@ -318,6 +304,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    restoreArgs();
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -326,7 +314,6 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
-    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
@@ -352,6 +339,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    restoreArgs();
+
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
     //   cmp $0x10(%rax), %rdi
@@ -376,7 +365,6 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
         assembler->cmp(assembler::Indirect(var_reg, offset), assembler::Immediate(val));
     }
 
-    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
     if (negate)
         assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
@@ -604,8 +592,6 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
             if (dest.type != Location::AnyReg) {
                 assembler::Register dest_reg = dest.asRegister();
                 assert(dest_reg != reg); // should have been caught by the previous case
-
-                rewriter->allocReg(dest);
 
                 rewriter->assembler->mov(reg, dest_reg);
                 rewriter->addLocationToVar(this, dest_reg);
@@ -1071,13 +1057,6 @@ void Rewriter::commit() {
     for (int i = 0; i < live_outs.size(); i++) {
         live_outs[i]->uses.push_back(actions.size());
     }
-    for (RewriterVar* var : vars) {
-        // Add a use for every constant. This helps make constants available for the lea stuff
-        // But since "spilling" a constant has no cost, it shouldn't add register pressure.
-        if (var->is_constant) {
-            var->uses.push_back(actions.size());
-        }
-    }
 
     assertConsistent();
 
@@ -1155,17 +1134,11 @@ void Rewriter::commit() {
                 num_as_live_out++;
             }
         }
-        assert(var->next_use + num_as_live_out + (var->is_constant ? 1 : 0) == var->uses.size());
+        assert(var->next_use + num_as_live_out == var->uses.size());
     }
 #endif
 
     assert(live_out_regs.size() == live_outs.size());
-
-    for (RewriterVar* var : vars) {
-        if (var->is_constant) {
-            var->bumpUse();
-        }
-    }
 
     // Live-outs placement: sometimes a live out can be placed into the location of a different live-out,
     // so we need to reshuffle and solve those conflicts.
@@ -1983,9 +1956,9 @@ void setSlowpathFunc(uint8_t* pp_addr, void* func) {
     *(void**)&pp_addr[2] = func;
 }
 
-PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
-                                                   int scratch_offset, int scratch_size,
-                                                   const std::unordered_set<int>& live_outs, SpillMap& remapped) {
+std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
+                                                    int scratch_offset, int scratch_size,
+                                                    const std::unordered_set<int>& live_outs, SpillMap& remapped) {
     assert(start_addr < end_addr);
 
     int est_slowpath_size = INITIAL_CALL_SIZE;
@@ -1993,18 +1966,14 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     std::vector<assembler::GenericRegister> regs_to_spill;
     std::vector<assembler::Register> regs_to_reload;
 
-    std::unordered_set<int> live_outs_for_slot;
-
     for (int dwarf_regnum : live_outs) {
         assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(dwarf_regnum);
 
         assert(!(ru.type == assembler::GenericRegister::GP && ru.gp == assembler::R11) && "We assume R11 is free!");
 
         if (ru.type == assembler::GenericRegister::GP) {
-            if (ru.gp == assembler::RSP || ru.gp.isCalleeSave()) {
-                live_outs_for_slot.insert(dwarf_regnum);
+            if (ru.gp == assembler::RSP || ru.gp.isCalleeSave())
                 continue;
-            }
         }
 
         // Location(ru).dump();
@@ -2014,11 +1983,8 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
 
             regs_to_reload.push_back(ru.gp);
             est_slowpath_size += 7; // 7 bytes for a single mov
-
             continue;
         }
-
-        live_outs_for_slot.insert(dwarf_regnum);
 
         regs_to_spill.push_back(ru);
 
@@ -2048,21 +2014,8 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     // if (regs_to_spill.size())
     // assem.trap();
     assem.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
-    uint8_t* slowpath_rtn_addr = assem.emitCall(slowpath_func, assembler::R11);
+    uint8_t* rtn = assem.emitCall(slowpath_func, assembler::R11);
     assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
-
-    // The place we should continue if we took a fast path.
-    // If we have to reload things, make sure to set it to the beginning
-    // of the reloading section.
-    // If there's nothing to reload, as a small optimization, set it to the end of
-    // the patchpoint, past any nops.
-    // (Actually I think the calculations of the size above were exact so there should
-    // always be 0 nops, but this optimization shouldn't hurt.)
-    uint8_t* continue_addr;
-    if (regs_to_reload.empty())
-        continue_addr = end_addr;
-    else
-        continue_addr = assem.curInstPointer();
 
     for (assembler::Register r : regs_to_reload) {
         StackMap::Record::Location& l = remapped[r];
@@ -2075,7 +2028,6 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr,
-                                        std::move(live_outs_for_slot));
+    return std::make_pair(slowpath_start, rtn);
 }
 }
