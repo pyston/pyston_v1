@@ -74,3 +74,17 @@ try:
     0.0 ** (-1.0)
 except ZeroDivisionError as e:
     print e.message
+
+print float(1l)
+print float(0l)
+print float(-1l)
+print (1l).__float__()
+l = 1024 << 1024
+try:
+    float(l)
+except OverflowError as e:
+    print e.message
+try:
+    float(-l)
+except OverflowError as e:
+    print e.message

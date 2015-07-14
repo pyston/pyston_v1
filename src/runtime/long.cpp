@@ -688,6 +688,18 @@ Box* longInt(Box* v) {
         return new BoxedInt(n);
 }
 
+Box* longFloat(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
+    double inf = std::numeric_limits<double>::infinity();
+    double f = mpz_get_d(v->n);
+    if (f == inf || f == -inf) {
+        raiseExcHelper(OverflowError, "long int too large to convert to float");
+    }
+    return new BoxedFloat(f);
+}
+
 Box* longRepr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
@@ -1388,6 +1400,7 @@ void setupLong() {
     long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
 
     long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
+    long_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)longFloat, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
     long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
