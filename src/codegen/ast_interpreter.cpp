@@ -56,7 +56,6 @@ namespace {
 static BoxedClass* astinterpreter_cls;
 
 class ASTInterpreter;
-class ASTInterpreterGCWrapper;
 
 // Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
 // them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
@@ -76,12 +75,11 @@ public:
     static void deregister(void* frame_addr);
 };
 
-class ASTInterpreter {
+class ASTInterpreter : public Box {
 public:
     typedef ContiguousMap<InternedString, Box*, llvm::SmallDenseMap<InternedString, int, 16>> SymMap;
 
     ASTInterpreter(CLFunction* clfunc);
-    ~ASTInterpreter();
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
@@ -173,9 +171,10 @@ private:
     Box* globals;
     void* frame_addr; // used to clear entry inside the s_interpreterMap on destruction
     std::unique_ptr<JitFragmentWriter> jit;
-    ASTInterpreterGCWrapper* wrapper;
 
 public:
+    DEFAULT_CLASS_SIMPLE(astinterpreter_cls);
+
     AST_stmt* getCurrentStatement() {
         assert(current_inst);
         return current_inst;
@@ -200,42 +199,17 @@ public:
     void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
-    void gcVisit(GCVisitor* visitor);
+    static void gcHandler(GCVisitor* visitor, Box* box);
+    static void simpleDestructor(Box* box) {
+        ASTInterpreter* inter = (ASTInterpreter*)box;
+        assert(inter->cls == astinterpreter_cls);
+        if (inter->frame_addr)
+            RegisterHelper::deregister(inter->frame_addr);
+        inter->~ASTInterpreter();
+    }
 
-    friend class ASTInterpreterGCWrapper;
     friend class RegisterHelper;
     friend struct pyston::ASTInterpreterJitInterface;
-};
-
-// This class makes sure that the fields inside ASTInterpreter instances are visited by the collector and that the
-// ASTInterpreter is deregistered from the s_interpreterMap if its unreachable but did not exit. This can happen with
-// an ASTInterpreter instance inside a generator which calls yield. If all references to the generator get lost the
-// memory get freed but the ASTInterpreter will never exit and therefore not call deregister.
-// We could directly GC allocate the ASTInterpreter but this causes a slow down because of the large size and huge
-// number of ASTInterpreter instances.
-class ASTInterpreterGCWrapper : public Box {
-public:
-    ASTInterpreter* interpreter;
-
-    DEFAULT_CLASS_SIMPLE(astinterpreter_cls);
-
-    ASTInterpreterGCWrapper(ASTInterpreter* inter) : interpreter(inter) {}
-
-    static void gcHandler(GCVisitor* visitor, Box* box) {
-        ASTInterpreterGCWrapper* wrapper = (ASTInterpreterGCWrapper*)box;
-        boxGCHandler(visitor, box);
-        if (wrapper->interpreter)
-            wrapper->interpreter->gcVisit(visitor);
-    }
-
-    static void simpleDestructor(Box* box) {
-        ASTInterpreterGCWrapper* wrapper = (ASTInterpreterGCWrapper*)box;
-        ASTInterpreter* interpreter = wrapper->interpreter;
-        if (interpreter && interpreter->frame_addr) {
-            RegisterHelper::deregister(interpreter->frame_addr);
-            interpreter->~ASTInterpreter();
-        }
-    }
 };
 
 void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
@@ -275,15 +249,18 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
 }
 
-void ASTInterpreter::gcVisit(GCVisitor* visitor) {
-    auto&& vec = sym_table.vector();
-    visitor->visitRange((void* const*)&vec[0], (void* const*)&vec[sym_table.size()]);
-    visitor->visit(passed_closure);
-    visitor->visit(created_closure);
-    visitor->visit(generator);
-    visitor->visit(globals);
-    visitor->visit(source_info->parent_module);
-    frame_info.gcVisit(visitor);
+void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
+    boxGCHandler(visitor, box);
+
+    ASTInterpreter* interp = (ASTInterpreter*)box;
+    auto&& vec = interp->sym_table.vector();
+    visitor->visitRange((void* const*)&vec[0], (void* const*)&vec[interp->sym_table.size()]);
+    visitor->visit(interp->passed_closure);
+    visitor->visit(interp->created_closure);
+    visitor->visit(interp->generator);
+    visitor->visit(interp->globals);
+    visitor->visit(interp->source_info->parent_module);
+    interp->frame_info.gcVisit(visitor);
 }
 
 ASTInterpreter::ASTInterpreter(CLFunction* clfunc)
@@ -301,15 +278,10 @@ ASTInterpreter::ASTInterpreter(CLFunction* clfunc)
       frame_info(ExcInfo(NULL, NULL, NULL)),
       globals(0),
       frame_addr(0) {
-    wrapper = new ASTInterpreterGCWrapper(this);
 
     scope_info = source_info->getScopeInfo();
 
     assert(scope_info);
-}
-
-ASTInterpreter::~ASTInterpreter() {
-    wrapper->interpreter = NULL;
 }
 
 void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2,
@@ -1738,22 +1710,22 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
     }
 
     ++clfunc->times_interpreted;
-    ASTInterpreter interpreter(clfunc);
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
 
     ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     if (unlikely(scope_info->usesNameLookup())) {
-        interpreter.setBoxedLocals(new BoxedDict());
+        interpreter->setBoxedLocals(new BoxedDict());
     }
 
     assert((!globals) == clfunc->source->scoping->areGlobalsFromModule());
     if (globals) {
-        interpreter.setGlobals(globals);
+        interpreter->setGlobals(globals);
     } else {
-        interpreter.setGlobals(source_info->parent_module);
+        interpreter->setGlobals(source_info->parent_module);
     }
 
-    interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
-    Value v = ASTInterpreter::execute(interpreter);
+    interpreter->initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
+    Value v = ASTInterpreter::execute(*interpreter);
 
     return v.o ? v.o : None;
 }
@@ -1761,18 +1733,18 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
 Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals) {
     ++clfunc->times_interpreted;
 
-    ASTInterpreter interpreter(clfunc);
-    interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
-    interpreter.setBoxedLocals(boxedLocals);
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
+    interpreter->initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    interpreter->setBoxedLocals(boxedLocals);
 
     ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     SourceInfo* source_info = clfunc->source.get();
 
     assert(!clfunc->source->scoping->areGlobalsFromModule());
     assert(globals);
-    interpreter.setGlobals(globals);
+    interpreter->setGlobals(globals);
 
-    Value v = ASTInterpreter::execute(interpreter);
+    Value v = ASTInterpreter::execute(*interpreter);
 
     return v.o ? v.o : None;
 }
@@ -1785,29 +1757,29 @@ Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclos
     assert(after_expr);
     assert(expr_val);
 
-    ASTInterpreter interpreter(clfunc);
+    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
 
     ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     SourceInfo* source_info = clfunc->source.get();
     assert(clfunc->source->scoping->areGlobalsFromModule());
-    interpreter.setGlobals(source_info->parent_module);
+    interpreter->setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
         auto name = static_cast<BoxedString*>(p.first)->s();
         if (name == PASSED_GENERATOR_NAME) {
-            interpreter.setGenerator(p.second);
+            interpreter->setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {
-            interpreter.setPassedClosure(p.second);
+            interpreter->setPassedClosure(p.second);
         } else if (name == CREATED_CLOSURE_NAME) {
-            interpreter.setCreatedClosure(p.second);
+            interpreter->setCreatedClosure(p.second);
         } else {
             InternedString interned = clfunc->source->getInternedStrings().get(name);
-            interpreter.addSymbol(interned, p.second, false);
+            interpreter->addSymbol(interned, p.second, false);
         }
     }
 
-    interpreter.setFrameInfo(frame_state.frame_info);
+    interpreter->setFrameInfo(frame_state.frame_info);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;
@@ -1819,7 +1791,7 @@ Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclos
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
             assert(name->id.s()[0] == '#');
-            interpreter.addSymbol(name->id, expr_val, true);
+            interpreter->addSymbol(name->id, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
@@ -1857,7 +1829,7 @@ Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclos
         assert(starting_statement);
     }
 
-    Value v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
+    Value v = ASTInterpreter::execute(*interpreter, start_block, starting_statement);
 
     return v.o ? v.o : None;
 }
@@ -1907,9 +1879,9 @@ BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
 }
 
 void setupInterpreter() {
-    astinterpreter_cls = BoxedHeapClass::create(type_cls, object_cls, ASTInterpreterGCWrapper::gcHandler, 0, 0,
-                                                sizeof(ASTInterpreterGCWrapper), false, "astinterpreter");
-    astinterpreter_cls->simple_destructor = ASTInterpreterGCWrapper::simpleDestructor;
+    astinterpreter_cls = BoxedHeapClass::create(type_cls, object_cls, ASTInterpreter::gcHandler, 0, 0,
+                                                sizeof(ASTInterpreter), false, "astinterpreter");
+    astinterpreter_cls->simple_destructor = ASTInterpreter::simpleDestructor;
     astinterpreter_cls->freeze();
 }
 }
