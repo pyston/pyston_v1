@@ -228,15 +228,13 @@ bool GCVisitor::isValid(void* p) {
 }
 
 void GCVisitor::visit(void* p) {
-    if (!p)
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(isNonheapRoot(p), "%p", p);
         return;
-
-    if (isNonheapRoot(p)) {
-        return;
-    } else {
-        ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
-        stack->push(p);
     }
+
+    ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
+    stack->push(p);
 }
 
 void GCVisitor::visitRange(void* const* start, void* const* end) {
