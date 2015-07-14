@@ -1357,11 +1357,6 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                            getTypeName(getset_descr));
         }
 
-        // Abort because right now we can't call twice in a rewrite
-        if (for_call) {
-            rewrite_args = NULL;
-        }
-
         if (rewrite_args) {
             // hmm, maybe we should write assembly which can look up the function address and call any function
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
@@ -1669,21 +1664,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
 
                 // Call __get__(descr, obj, obj->cls)
                 if (_set_) {
-                    // Have to abort because we're about to call now, but there will be before more
-                    // guards between this call and the next...
-                    if (for_call) {
-#if STAT_CALLATTR_DESCR_ABORTS
-                        if (rewrite_args) {
-                            std::string attr_name = "num_callattr_descr_abort";
-                            Stats::log(Stats::getStatCounter(attr_name));
-                            logByCurrentPythonLine(attr_name);
-                        }
-#endif
-
-                        rewrite_args = NULL;
-                        REWRITE_ABORTED("");
-                    }
-
                     Box* res;
                     if (rewrite_args) {
                         CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
@@ -1809,20 +1789,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         // We looked up __get__ above. If we found it, call it and return
         // the result.
         if (descr_get) {
-            // this could happen for the callattr path...
-            if (for_call) {
-#if STAT_CALLATTR_DESCR_ABORTS
-                if (rewrite_args) {
-                    std::string attr_name = "num_callattr_descr_abort";
-                    Stats::log(Stats::getStatCounter(attr_name));
-                    logByCurrentPythonLine(attr_name);
-                }
-#endif
-
-                rewrite_args = NULL;
-                REWRITE_ABORTED("");
-            }
-
             Box* res;
             if (rewrite_args) {
                 assert(_get_);
@@ -2755,6 +2721,25 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
     } else {
         if (rewrite_args) {
             rewrite_args->obj = r_val;
+        }
+
+        if (rewrite_args && rewrite_args->rewriter->hasAddedChangingAction()) {
+            // It's possible that `getattrInternalEx` did some mutation operation, like a runtimeCall
+            // (Could do that if it's a descriptor). Since we would have to make guards for the runtimeCall below,
+            // we would have to abort if we don't add this new slowpath.
+            RewriterVar* r_null = rewrite_args->rewriter->loadConst(0);
+            llvm::SmallVector<RewriterVar*, 8> args;
+            args.push_back(r_val);
+            args.push_back(r_null);
+            args.push_back(rewrite_args->rewriter->loadConst(argspec.asInt()));
+            // Pass r_null because we need to pass *something* as an arg
+            // TODO let the rewriter accept NULL as an argument to mean "doesn't matter what you pass"
+            args.push_back(rewrite_args->arg1 == NULL ? r_null : rewrite_args->arg1);
+            args.push_back(rewrite_args->arg2 == NULL ? r_null : rewrite_args->arg2);
+            args.push_back(rewrite_args->arg3 == NULL ? r_null : rewrite_args->arg3);
+            args.push_back(rewrite_args->args == NULL ? r_null : rewrite_args->args);
+            args.push_back(rewrite_args->rewriter->loadConst((intptr_t)(void*)keyword_names));
+            rewrite_args->rewriter->addSecondSlowpath((void*)(runtimeCallInternal<CXX>), args);
         }
 
         Box* rtn = runtimeCallInternal<S>(val, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);

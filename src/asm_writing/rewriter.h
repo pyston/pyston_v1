@@ -267,7 +267,6 @@ private:
     bool is_constant;
 
     uint64_t constant_value;
-    Location arg_loc;
     std::pair<int /*offset*/, int /*size*/> scratch_allocation;
 
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
@@ -437,10 +436,42 @@ protected:
     LocMap<RewriterVar*> vars_by_location;
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
+    llvm::SmallVector<RewriterVar*, 8> second_slowpath_args;
 
     llvm::SmallVector<GuardInfo, 8> guard_infos;
     void emitGuardJump(bool useJne);
-    void guardCalls();
+    void guardCalls(int continue_offset);
+
+    void useSecondGuardDestination() {
+        assertPhaseEmitting();
+
+        for (RewriterVar* v : args) {
+            v->is_arg = false;
+        }
+        args = std::move(second_slowpath_args);
+        for (int i = 0; i < args.size(); i++) {
+            RewriterVar* v = args[i];
+            v->is_arg = true;
+        }
+
+        should_use_second_guard_destination = true;
+    }
+
+public:
+    void addSecondSlowpath(void* new_slowpath, const llvm::SmallVector<RewriterVar*, 8>& args) {
+        assertPhaseCollecting();
+        added_changing_action = false;
+        this->second_slowpath = new_slowpath;
+        action_where_second_slowpath_starts = actions.size();
+        second_slowpath_args = args;
+    }
+    bool hasAddedChangingAction() { return added_changing_action; }
+
+protected:
+
+    void* second_slowpath;
+    int action_where_second_slowpath_starts;
+    bool should_use_second_guard_destination;
 
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, LiveOutSet live_outs);
 
@@ -458,7 +489,7 @@ protected:
                 failed = true;
                 return;
             }
-            for (RewriterVar* arg : args) {
+            for (RewriterVar* arg : (second_slowpath ? second_slowpath_args : args)) {
                 arg->uses.push_back(actions.size());
             }
             assert(!added_changing_action);

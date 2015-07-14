@@ -345,7 +345,7 @@ void Rewriter::emitGuardJump(bool useJne) {
         }
     }
 
-    if (allArgsInPlace) {
+    if (allArgsInPlace && !should_use_second_guard_destination) {
         if (useJne) {
             assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
         } else {
@@ -358,6 +358,9 @@ void Rewriter::emitGuardJump(bool useJne) {
             assembler->je(assembler::JumpDestination::fromStart((1 << 31) - 2));
         }
         
+        if (should_use_second_guard_destination) {
+            assert(marked_inside_ic);
+        }
         guard_infos.emplace_back(assembler->curInstPointer(), VarLocations(args));
     }
 
@@ -366,15 +369,39 @@ void Rewriter::emitGuardJump(bool useJne) {
     }
 }
 
-void Rewriter::guardCalls() {
+void Rewriter::guardCalls(int continue_offset) {
     for (GuardInfo& guard_info : guard_infos) {
+        assembler->comment("path for guard fail");
+
         uint8_t* dest_addr = assembler->curInstPointer();
         int offset = dest_addr - guard_info.guard_jmp_addr;
         *((int*)(guard_info.guard_jmp_addr - 4)) = offset;
 
         guard_info.var_locations.arrangeAsArgs(this);
 
-        assembler->jmp(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+        if (!should_use_second_guard_destination) {
+            assembler->jmp(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
+        } else {
+            assembler->comment("calling second slowpath");
+
+            // TODO Inefficient way to write a call
+            assembler::Register r = allocReg(assembler::R11);
+            assembler->mov(assembler::Immediate(second_slowpath), r);
+            assembler->callq(r);
+
+            assembler->comment("mark inside ic");
+
+            uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
+            if (isLargeConstant(counter_addr)) {
+                assembler::Register reg = assembler::R11;
+                assembler->mov(assembler::Immediate(counter_addr), reg);
+                assembler->decl(assembler::Indirect(reg, 0));
+            } else {
+                assembler->decl(assembler::Immediate(counter_addr));
+            }
+
+            assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
+        }
     }
 }
 
@@ -1134,6 +1161,10 @@ void Rewriter::commit() {
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
+        if (second_slowpath && i == action_where_second_slowpath_starts) {
+            this->useSecondGuardDestination();
+        }
+
         actions[i].action();
 
         if (failed) {
@@ -1310,7 +1341,7 @@ bool Rewriter::finishAssembly(int continue_offset) {
 
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
-    guardCalls();
+    guardCalls(continue_offset);
 
     assembler->fillWithNops();
 
@@ -1763,6 +1794,9 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       const_loader(this),
       return_location(this->rewrite->returnRegister()),
       failed(false),
+      second_slowpath(NULL),
+      action_where_second_slowpath_starts(-1),
+      should_use_second_guard_destination(false),
       added_changing_action(false),
       marked_inside_ic(false) {
     initPhaseCollecting();
@@ -1775,7 +1809,6 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
         addLocationToVar(var, l);
 
         var->is_arg = true;
-        var->arg_loc = l;
 
         args.push_back(var);
     }
@@ -2138,8 +2171,7 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
 
     for (int i = 0; i < vars.size(); i++) {
         Location targetLoc = Location::forArg(i);
-        Location startLoc = Location::any();
-        assert(this->vars[i].second.size());
+        Location startLoc = Location::none();
         for (Location l : this->vars[i].second) {
             if (l == targetLoc) {
                 startLoc = l;
@@ -2147,15 +2179,18 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
             } else if (l.type == Location::Register) {
                 startLoc = l;
             } else {
-                if (startLoc == Location::any()) {
+                if (startLoc == Location::none()) {
                     startLoc = l;
                 }
             }
         }
-        assert(startLoc != Location::any());
         locs.push_back(startLoc);
-        if (startLoc.type == Location::Register) {
-            argInReg[startLoc.asRegister().regnum] = i;
+        if (startLoc != Location::none()) {
+            if (startLoc.type == Location::Register) {
+                argInReg[startLoc.asRegister().regnum] = i;
+            }
+        } else {
+            assert(this->vars[i].first->is_constant);
         }
     }
 
@@ -2170,6 +2205,9 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
     };
 
     for (int i = vars.size() - 1; i >= 0; i--) {
+        if (vars[i].first->is_constant)
+            continue;
+
         Location curLoc = locs[i];
         Location targetLoc = Location::forArg(i);
         if (curLoc == targetLoc) continue;
@@ -2182,7 +2220,7 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
                 assembler::Register r = getFreeReg();
                 assert(curLoc.type == Location::Scratch);
                 assembler->mov(assembler::Indirect(assembler::RSP, rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset), r);
-                assembler->mov(r, assembler::Indirect(assembler::RSP, curLoc.stack_offset));
+                assembler->mov(r, assembler::Indirect(assembler::RSP, targetLoc.stack_offset));
                 locs[i] = targetLoc;
             }
         } else {
@@ -2193,6 +2231,7 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
                 argInReg[targetLoc.asRegister().regnum] = -1;
                 locs[argInReg[r.regnum]] = r;
             }
+
             if (curLoc.type == Location::Register) {
                 assembler->mov(curLoc.asRegister(), targetLoc.asRegister());
                 argInReg[curLoc.asRegister().regnum] = -1;
@@ -2200,8 +2239,22 @@ void VarLocations::arrangeAsArgs(Rewriter* rewriter) {
                 assert(curLoc.type == Location::Scratch);
                 assembler->mov(assembler::Indirect(assembler::RSP, rewriter->rewrite->getScratchRspOffset() + curLoc.scratch_offset), targetLoc.asRegister());
             }
+
             locs[i] = targetLoc;
             argInReg[targetLoc.asRegister().regnum] = i;
+        }
+    }
+
+    for (int i = vars.size() - 1; i >= 0; i--) {
+        if (vars[i].first->is_constant) {
+            Location targetLoc = Location::forArg(i);
+            if (targetLoc.type == Location::Register) {
+                assembler->mov(assembler::Immediate(vars[i].first->constant_value), targetLoc.asRegister());
+            } else {
+                // TODO inefficient
+                assembler->mov(assembler::Immediate(vars[i].first->constant_value), assembler::R11);
+                assembler->mov(assembler::R11, assembler::Indirect(assembler::RSP, targetLoc.stack_offset));
+            }
         }
     }
 }

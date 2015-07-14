@@ -163,6 +163,11 @@ struct Immediate {
         uint32_t val_32bit = (uint32_t)val;
         return val_32bit == val;
     }
+
+    bool fitsInto32BitSigned() const {
+        int64_t val = (int64_t) this->val;
+        return val >= std::numeric_limits<int32_t>::min() && val <= std::numeric_limits<int32_t>::max();
+    }
 };
 
 struct JumpDestination {
