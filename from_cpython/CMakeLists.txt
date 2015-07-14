@@ -117,10 +117,10 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/bz2.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/grp.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/termios.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/_curses.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/bz2.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/grp.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/termios.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_curses.pyston.so
                    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
                    DEPENDS
                        pyston
