@@ -19,6 +19,7 @@
 
 #include "asm_writing/rewriter.h"
 #include "codegen/ast_interpreter.h"
+#include "codegen/patchpoints.h"
 #include "gc/heap.h"
 #include "runtime/ics.h"
 
@@ -31,17 +32,6 @@ class Box;
 class BoxedDict;
 class BoxedList;
 class BoxedTuple;
-
-class SetGlobalIC;
-class GetGlobalIC;
-class SetAttrIC;
-class GetAttrIC;
-class SetItemIC;
-class GetItemIC;
-class CompareIC;
-class AugBinopIC;
-class UnaryopIC;
-class RuntimeCallIC;
 
 class JitFragmentWriter;
 
@@ -100,6 +90,7 @@ class JitFragmentWriter;
 //      mov    %rsp,%rbp
 //      sub    $0x108,%rsp          ; setup scratch, 0x108 = scratch_size + 8 (=stack alignment)
 //      push   %rdi                 ; save the pointer to ASTInterpreter instance
+//      sub    $0x16,%rsp           ; space for two func args passed on the stack
 //      jmpq   *0x8(%rsi)           ; jump to block->code
 //                                      possible values: first_JitFragment, second_JitFragment,...
 //
@@ -130,10 +121,14 @@ class JitFragmentWriter;
 //
 //
 class JitCodeBlock {
-private:
+public:
     static constexpr int scratch_size = 256;
-    static constexpr int code_size = 4096 * 2;
+    static constexpr int code_size = 32768;
+    static constexpr int num_stack_args = 2;
+    static constexpr int interpreter_ptr_offset = num_stack_args * 8;
 
+
+private:
     EHFrameManager frame_manager;
     std::unique_ptr<uint8_t[]> code;
     int entry_offset;
@@ -177,6 +172,16 @@ private:
     // We can't directly mark the offset for patching because JITing the current fragment may fail. That's why we store
     // it in this field and process it only when we know we successfully generated the code.
     std::pair<CFGBlock*, int /* offset from fragment start*/> side_exit_patch_location;
+
+    struct PPInfo {
+        void* func_addr;
+        uint8_t* start_addr;
+        uint8_t* end_addr;
+        std::unique_ptr<ICSetupInfo> ic;
+        StackInfo stack_info;
+    };
+
+    llvm::SmallVector<PPInfo, 8> pp_infos;
 
 public:
     JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
@@ -250,35 +255,24 @@ private:
 #endif
     RewriterVar* getInterp();
 
-    static Box* augbinopICHelper(AugBinopIC* ic, Box* lhs, Box* rhs, int op);
-    static Box* binopICHelper(BinopIC* ic, Box* lhs, Box* rhs, int op);
+    RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size);
+
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
                                std::vector<BoxedString*>* keyword_names);
-    static Box* compareICHelper(CompareIC* ic, Box* lhs, Box* rhs, int op);
     static Box* createDictHelper(uint64_t num, Box** keys, Box** values);
     static Box* createListHelper(uint64_t num, Box** data);
     static Box* createSetHelper(uint64_t num, Box** data);
     static Box* createTupleHelper(uint64_t num, Box** data);
     static Box* exceptionMatchesHelper(Box* obj, Box* cls);
-    static Box* getAttrICHelper(GetAttrIC* ic, Box* o, BoxedString* attr);
-    static Box* getGlobalICHelper(GetGlobalIC* ic, Box* o, BoxedString* s);
-    static Box* getitemICHelper(GetItemIC* ic, Box* o, Box* attr);
     static Box* hasnextHelper(Box* b);
     static Box* nonzeroHelper(Box* b);
     static Box* notHelper(Box* b);
     static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args, std::vector<BoxedString*>* keyword_names);
-    static Box* setAttrICHelper(SetAttrIC* ic, Box* o, BoxedString* attr, Box* value);
-    static Box* setGlobalICHelper(SetGlobalIC* ic, Box* o, BoxedString* s, Box* v);
-    static Box* setitemICHelper(SetItemIC* ic, Box* o, Box* attr, Box* value);
-    static Box* unaryopICHelper(UnaryopIC* ic, Box* obj, int op);
-
-#if ENABLE_BASELINEJIT_ICS
-    static Box* callattrHelperIC(Box* obj, BoxedString* attr, CallattrFlags flags, CallattrIC* ic, Box** args);
-    static Box* runtimeCallHelperIC(Box* obj, ArgPassSpec argspec, RuntimeCallIC* ic, Box** args);
-#endif
 
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
+    void _emitPPCall(RewriterVar* result, void* func_addr, const RewriterVar::SmallVector& args, int num_slots,
+                     int slot_size);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
 };

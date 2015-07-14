@@ -1034,6 +1034,16 @@ void Assembler::emitAnnotation(int num) {
     nop();
 }
 
+void Assembler::skipBytes(int num) {
+    if (addr + num >= end_addr) {
+        addr = end_addr;
+        failed = true;
+        return;
+    }
+
+    addr += num;
+}
+
 ForwardJump::ForwardJump(Assembler& assembler, ConditionCode condition)
     : assembler(assembler), condition(condition), jmp_inst(assembler.curInstPointer()) {
     assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + max_jump_size), condition);

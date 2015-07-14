@@ -932,6 +932,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
             }
         } else {
+            rewrite_args = NULL;
+
             init_attr = processDescriptor(init_attr, made, cls);
 
             ArgPassSpec init_argspec = argspec;

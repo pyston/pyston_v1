@@ -792,10 +792,8 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     return result;
 }
 
-void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
-                     const RewriterVar::SmallVector& args_xmm) {
-    assembler->comment("_call");
-
+void Rewriter::_setupCall(RewriterVar* result, bool has_side_effects, const RewriterVar::SmallVector& args,
+                          const RewriterVar::SmallVector& args_xmm) {
     if (has_side_effects)
         assert(done_guarding);
 
@@ -827,9 +825,6 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
             marked_inside_ic = true;
         }
     }
-
-    // RewriterVarUsage scratch = createNewVar(Location::any());
-    assembler::Register r = allocReg(assembler::R11);
 
     for (int i = 0; i < args.size(); i++) {
         Location l(Location::forArg(i));
@@ -950,6 +945,19 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(!l.isClobberedByCall());
     }
 #endif
+}
+
+void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
+                     const RewriterVar::SmallVector& args_xmm) {
+    assembler->comment("_call");
+
+    // RewriterVarUsage scratch = createNewVar(Location::any());
+    assembler::Register r = allocReg(assembler::R11);
+
+    _setupCall(result, has_side_effects, args, args_xmm);
+
+    // make sure setupCall doesn't use R11
+    assert(vars_by_location.count(assembler::R11) == 0);
 
     uint64_t asm_address = (uint64_t)assembler->curInstPointer() + 5;
     uint64_t real_asm_address = asm_address + (uint64_t)rewrite->getSlotStart() - (uint64_t)assembler->startAddr();
@@ -962,10 +970,12 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
-    assert(vars_by_location.count(assembler::RAX) == 0);
-    result->initializeInReg(assembler::RAX);
+    if (!failed) {
+        assert(vars_by_location.count(assembler::RAX) == 0);
+        result->initializeInReg(assembler::RAX);
 
-    assertConsistent();
+        assertConsistent();
+    }
 
     result->releaseIfNoUses();
 }
@@ -1737,10 +1747,10 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
     // the entire scratch space.
     bool VALIDATE_SCRATCH_SPACE = false;
     if (VALIDATE_SCRATCH_SPACE) {
-        int scratch_size = rewrite->getScratchSize();
+        int scratch_size = this->rewrite->getScratchSize();
         for (int i = 0; i < scratch_size; i += 8) {
             assembler->movq(assembler::Immediate(0x12345678UL),
-                            assembler::Indirect(assembler::RSP, i + rewrite->getScratchRspOffset()));
+                            assembler::Indirect(assembler::RSP, i + this->rewrite->getScratchRspOffset()));
         }
     }
 }
