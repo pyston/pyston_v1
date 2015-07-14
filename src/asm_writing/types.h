@@ -172,7 +172,9 @@ struct JumpDestination {
 
     int offset;
 
-    constexpr JumpDestination(OffsetType type, int offset) : type(type), offset(offset) {}
+    JumpDestination(OffsetType type, int64_t offset) : type(type), offset(offset) {
+        assert((-1L << 31) <= offset && offset < (1L << 31) - 1);
+    }
     static JumpDestination fromStart(int offset) { return JumpDestination(FROM_START, offset); }
 };
 }
