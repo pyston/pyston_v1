@@ -166,6 +166,8 @@ bool PyLt::operator()(Box* lhs, Box* rhs) const {
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
+    STAT_TIMER(t0, "us_timer_deopt", 10);
+
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
