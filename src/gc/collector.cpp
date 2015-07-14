@@ -229,7 +229,7 @@ bool GCVisitor::isValid(void* p) {
 
 void GCVisitor::visit(void* p) {
     if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
-        ASSERT(isNonheapRoot(p), "%p", p);
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
         return;
     }
 
