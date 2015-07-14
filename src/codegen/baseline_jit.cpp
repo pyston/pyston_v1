@@ -512,15 +512,15 @@ int JitFragmentWriter::finishCompilation() {
         SpillMap _spill_map;
         uint8_t* start_addr = pp_info.start_addr;
         uint8_t* end_addr = pp_info.end_addr;
-        std::pair<uint8_t*, uint8_t*> p
+        PatchpointInitializationInfo initialization_info
             = initializePatchpoint3(pp_info.func_addr, start_addr, end_addr, 0 /* scratch_offset */,
                                     0 /* scratch_size */, std::unordered_set<int>(), _spill_map);
-        uint8_t* slowpath_start = p.first;
-        uint8_t* slowpath_rtn_addr = p.second;
+        uint8_t* slowpath_start = initialization_info.slowpath_start;
+        uint8_t* slowpath_rtn_addr = initialization_info.slowpath_rtn_addr;
 
-        std::unique_ptr<ICInfo> pp
-            = registerCompiledPatchpoint(start_addr, slowpath_start, end_addr, slowpath_rtn_addr, pp_info.ic.get(),
-                                         pp_info.stack_info, std::unordered_set<int>());
+        std::unique_ptr<ICInfo> pp = registerCompiledPatchpoint(
+            start_addr, slowpath_start, initialization_info.continue_addr, slowpath_rtn_addr, pp_info.ic.get(),
+            pp_info.stack_info, std::unordered_set<int>());
         pp.release();
     }
 
