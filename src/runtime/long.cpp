@@ -338,7 +338,15 @@ extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
 extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
-    return mpz_get_d(l->n);
+
+    double result = mpz_get_d(l->n);
+
+    if (std::isinf(result)) {
+        PyErr_SetString(PyExc_OverflowError, "long int too large to convert to float");
+        return -1;
+    }
+
+    return result;
 }
 
 /* Convert the long to a string object with given base,
@@ -686,6 +694,19 @@ Box* longInt(Box* v) {
         return v;
     else
         return new BoxedInt(n);
+}
+
+Box* longFloat(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
+
+    double result = PyLong_AsDouble(v);
+
+    if (result == -1)
+        checkAndThrowCAPIException();
+
+    return new BoxedFloat(result);
 }
 
 Box* longRepr(BoxedLong* v) {
@@ -1388,6 +1409,7 @@ void setupLong() {
     long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
 
     long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
+    long_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)longFloat, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
     long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
