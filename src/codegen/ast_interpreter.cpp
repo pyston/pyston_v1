@@ -711,6 +711,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     std::map<InternedString, Box*> sorted_symbol_table;
 
+    // TODO: maybe use a different placeholder?
+    static Box* const VAL_UNDEFINED = (Box*)-1;
+
     for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
         auto it = sym_table.find(name);
         if (!liveness->isLiveAtEnd(name, current_block))
@@ -722,10 +725,11 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
             if (is_defined)
                 assert(sym_table.getMapped(it->second) != NULL);
-            sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : NULL;
+            sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : VAL_UNDEFINED;
         } else {
             ASSERT(it != sym_table.end(), "%s", name.c_str());
-            sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
+            Box* v = sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
+            assert(gc::isValidGCObject(v));
         }
     }
 
