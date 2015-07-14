@@ -24,6 +24,7 @@ addons:
     - cmake
     - g++-4.8
     - gdb
+    - libbz2-dev
     - libgmp3-dev
     - liblzma-dev
     - libncurses5-dev

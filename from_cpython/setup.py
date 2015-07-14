@@ -14,6 +14,26 @@ def multiprocessing_ext():
             "Modules/_multiprocessing/semaphore.c",
             ]))
 
+def bz2_ext():
+    return Extension("bz2", sources = map(relpath, [
+            "Modules/bz2module.c",
+            ]), libraries = ['bz2'])
+
+def grp_ext():
+    return Extension("grp", sources = map(relpath, [
+            "Modules/grpmodule.c",
+            ]))
+
+def curses_ext():
+    return Extension("_curses", sources = map(relpath, [
+            "Modules/_cursesmodule.c",
+            ]), libraries = ['curses'])
+
+def termios_ext():
+    return Extension("termios", sources = map(relpath, [
+            "Modules/termios.c",
+            ]))
+
 def pyexpat_ext():
     define_macros = [('HAVE_EXPAT_CONFIG_H', '1'),]
     expat_sources = map(relpath, ['Modules/expat/xmlparse.c',
@@ -56,5 +76,5 @@ def elementtree_ext():
 setup(name="Pyston",
         version="1.0",
         description="Pyston shared modules",
-        ext_modules=[multiprocessing_ext(), pyexpat_ext(), elementtree_ext()]
+        ext_modules=[multiprocessing_ext(), pyexpat_ext(), elementtree_ext(), bz2_ext(), grp_ext(), curses_ext(), termios_ext()]
     )

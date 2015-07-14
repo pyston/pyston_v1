@@ -1127,6 +1127,21 @@ Box* fileIterHasNext(Box* s) {
     return boxBool(!fileEof(self));
 }
 
+extern "C" void PyFile_IncUseCount(PyFileObject* _f) noexcept {
+    BoxedFile* f = reinterpret_cast<BoxedFile*>(_f);
+    assert(f->cls == file_cls);
+    f->unlocked_count++;
+}
+
+extern "C" void PyFile_DecUseCount(PyFileObject* _f) noexcept {
+    BoxedFile* f = reinterpret_cast<BoxedFile*>(_f);
+    assert(f->cls == file_cls);
+    f->unlocked_count--;
+    assert(f->unlocked_count >= 0);
+}
+
+
+
 extern "C" void PyFile_SetFP(PyObject* _f, FILE* fp) noexcept {
     assert(_f->cls == file_cls);
     BoxedFile* f = static_cast<BoxedFile*>(_f);
@@ -1769,6 +1784,8 @@ void setupFile() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace), false));
     file_cls->giveAttr("name",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_name), true));
+    file_cls->giveAttr("mode",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
 
     file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, 2, false, false),
                                                     { boxString("r"), boxInt(-1) }));

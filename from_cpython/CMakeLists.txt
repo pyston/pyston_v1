@@ -117,6 +117,10 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/bz2.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/grp.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/termios.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_curses.so
                    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
                    DEPENDS
                        pyston
@@ -132,5 +136,9 @@ add_custom_command(OUTPUT
                        Modules/expat/xmltok_ns.c
                        Modules/pyexpat.c
                        Modules/_elementtree.c
+		       Modules/bz2module.c
+		       Modules/grpmodule.c
+		       Modules/termios.c
+		       Modules/_cursesmodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)

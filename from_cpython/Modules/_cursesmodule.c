@@ -1064,7 +1064,7 @@ PyCursesWindow_InCh(PyCursesWindowObject *self, PyObject *args)
     case 2:
         if (!PyArg_ParseTuple(args,"ii;y,x",&y,&x))
             return NULL;
-        rtn = mvwinch(self->win,y,x);
+        rtn = (int)mvwinch(self->win,y,x);
         break;
     default:
         PyErr_SetString(PyExc_TypeError, "inch requires 0 or 2 arguments");
@@ -2738,6 +2738,9 @@ init_curses(void)
 
     /* Initialize object type */
     Py_TYPE(&PyCursesWindow_Type) = &PyType_Type;
+
+    /* Pyston change */
+    PyType_Ready(&PyCursesWindow_Type);
 
     /* Initialize the C API pointer array */
     PyCurses_API[0] = (void *)&PyCursesWindow_Type;
