@@ -493,7 +493,10 @@ private:
         assert(ast);
 
         EffortLevel effort = irstate->getEffortLevel();
-        bool record_types = effort != EffortLevel::MAXIMAL;
+        // This is the only place we create type recorders for the llvm tier;
+        // if we are ok with never doing that there's a bunch of code that could
+        // be removed.
+        bool record_types = false;
 
         TypeRecorder* type_recorder;
         if (record_types) {
