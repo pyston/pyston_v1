@@ -133,3 +133,9 @@ for s1 in set(range(5)), frozenset(range(5)):
 f = float('nan')
 s = set([f])
 print f in s, f == list(s)[0]
+
+s1 = set([3, 5])
+s2 = set([1, 5])
+
+s1.intersection_update(s2)
+print sorted(s1)
