@@ -6,8 +6,8 @@ compiler:
 
 env:
   matrix:
-    - TRAVIS_BUILD_TYPE=Debug
-    - TRAVIS_BUILD_TYPE=Release
+    - TRAVIS_BUILD_TYPE=Debug CCACHE_DIR=$HOME/.ccache_debug
+    - TRAVIS_BUILD_TYPE=Release CCACHE_DIR=$HOME/.ccache_release
   global:
     - PYSTON_RUN_ARGS=G
 
@@ -21,7 +21,7 @@ sudo: false
 
 cache:
   directories:
-    - $HOME/.ccache
+    - ${CCACHE_DIR}
 
 addons:
   apt:
