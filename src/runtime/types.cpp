@@ -1669,6 +1669,8 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssi
 
     if ((*step < 0 && *stop >= *start) || (*step > 0 && *start >= *stop)) {
         *slicelength = 0;
+    } else if (*step == 1) { // Pyston change: added this branch to make the common step==1 case avoid the div:
+        *slicelength = (*stop - *start - 1) + 1;
     } else if (*step < 0) {
         *slicelength = (*stop - *start + 1) / (*step) + 1;
     } else {

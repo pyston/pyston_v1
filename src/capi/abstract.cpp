@@ -1441,14 +1441,55 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
     }
 }
 
-extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
-    try {
-        // Not sure if this is really the same:
-        return getitem(o, createSlice(boxInt(i1), boxInt(i2), None));
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
+PyObject* _PySlice_FromIndices(Py_ssize_t istart, Py_ssize_t istop) {
+    PyObject* start, *end, *slice;
+    start = PyInt_FromSsize_t(istart);
+    if (!start)
+        return NULL;
+    end = PyInt_FromSsize_t(istop);
+    if (!end) {
+        Py_DECREF(start);
+        return NULL;
     }
+
+    slice = PySlice_New(start, end, NULL);
+    Py_DECREF(start);
+    Py_DECREF(end);
+    return slice;
+}
+
+extern "C" PyObject* PySequence_GetSlice(PyObject* s, Py_ssize_t i1, Py_ssize_t i2) noexcept {
+    PySequenceMethods* m;
+    PyMappingMethods* mp;
+
+    if (!s)
+        return null_error();
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_slice) {
+        if (i1 < 0 || i2 < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(s);
+                if (l < 0)
+                    return NULL;
+                if (i1 < 0)
+                    i1 += l;
+                if (i2 < 0)
+                    i2 += l;
+            }
+        }
+        return m->sq_slice(s, i1, i2);
+    } else if ((mp = s->cls->tp_as_mapping) && mp->mp_subscript) {
+        PyObject* res;
+        PyObject* slice = _PySlice_FromIndices(i1, i2);
+        if (!slice)
+            return NULL;
+        res = mp->mp_subscript(s, slice);
+        Py_DECREF(slice);
+        return res;
+    }
+
+    return type_error("'%.200s' object is unsliceable", s);
 }
 
 extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexcept {

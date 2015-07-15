@@ -1591,6 +1591,28 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     return bs;
 }
 
+static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
+    BoxedString* a = static_cast<BoxedString*>(o);
+    if (i < 0)
+        i = 0;
+    if (j < 0)
+        j = 0; /* Avoid signed/unsigned bug in next line */
+    if (j > Py_SIZE(a))
+        j = Py_SIZE(a);
+    if (i == 0 && j == Py_SIZE(a) && PyString_CheckExact(a)) {
+        /* It's the same as a */
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    if (j < i)
+        j = i;
+    return PyString_FromStringAndSize(a->data() + i, j - i);
+}
+
+static Py_ssize_t str_length(Box* a) {
+    return Py_SIZE(a);
+}
+
 Box* strIsAlpha(BoxedString* self) {
     assert(PyString_Check(self));
 
@@ -2744,6 +2766,9 @@ void setupStr() {
 
     add_operators(str_cls);
     str_cls->freeze();
+
+    str_cls->tp_as_sequence->sq_slice = str_slice;
+    str_cls->tp_as_sequence->sq_length = str_length;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));
