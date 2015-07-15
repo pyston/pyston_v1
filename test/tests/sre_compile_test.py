@@ -15,4 +15,7 @@ def identity(o):
 
 charset = [(sre_constants.RANGE, (128, 65535))]
 
+# Note: _optimize_charset changed behavior + interface some time
+# between 2.7.7 (our stdlib) and 2.7.9 (current cpython latest),
+# so this test has a .expected file to avoid running cpython.
 print sre_compile._optimize_charset(charset, identity)
