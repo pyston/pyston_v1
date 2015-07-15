@@ -1768,6 +1768,9 @@ state_init(SRE_STATE* state, PatternObject* pattern, PyObject* string,
     if (!ptr)
         return NULL;
 
+    // Pyston change:
+    assert(charsize == 1 || charsize == sizeof(Py_UNICODE));
+
     /* adjust boundaries */
     if (start < 0)
         start = 0;
@@ -1813,8 +1816,15 @@ state_fini(SRE_STATE* state)
 }
 
 /* calculate offset from start of string */
+// Pyston change: this division is expensive
+/*
 #define STATE_OFFSET(state, member)\
     (((char*)(member) - (char*)(state)->beginning) / (state)->charsize)
+*/
+#define STATE_OFFSET(state, member) \
+    ((state)->charsize == 1 ? \
+     (((char*)(member) - (char*)(state)->beginning)) : \
+     (((char*)(member) - (char*)(state)->beginning) / sizeof(Py_UNICODE)))
 
 LOCAL(PyObject*)
 state_getslice(SRE_STATE* state, Py_ssize_t index, PyObject* string, int empty)
