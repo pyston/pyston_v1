@@ -1940,28 +1940,6 @@ bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst
     }
 }
 
-void* extractSlowpathFunc(uint8_t* pp_addr) {
-#ifndef NDEBUG
-    // mov $imm, %r11:
-    ASSERT(pp_addr[0] == 0x49, "%x", pp_addr[0]);
-    assert(pp_addr[1] == 0xbb);
-    // 8 bytes of the addr
-
-    // callq *%r11:
-    assert(pp_addr[10] == 0x41);
-    assert(pp_addr[11] == 0xff);
-    assert(pp_addr[12] == 0xd3);
-
-    int i = INITIAL_CALL_SIZE;
-    while (*(pp_addr + i) == 0x66 || *(pp_addr + i) == 0x0f || *(pp_addr + i) == 0x2e)
-        i++;
-    assert(*(pp_addr + i) == 0x90 || *(pp_addr + i) == 0x1f);
-#endif
-
-    void* call_addr = *(void**)&pp_addr[2];
-    return call_addr;
-}
-
 void setSlowpathFunc(uint8_t* pp_addr, void* func) {
 #ifndef NDEBUG
     // mov $imm, %r11:

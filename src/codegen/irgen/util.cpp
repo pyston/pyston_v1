@@ -20,10 +20,12 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "codegen/codegen.h"
+#include "codegen/patchpoints.h"
 #include "core/common.h"
 #include "runtime/types.h"
 
@@ -158,9 +160,14 @@ llvm::Constant* getConstantDouble(double val) {
 class PrettifyingMaterializer : public llvm::ValueMaterializer {
 private:
     llvm::Module* module;
+    llvm::ValueToValueMapTy& VMap;
+    llvm::RemapFlags flags;
+    llvm::ValueMapTypeRemapper* type_remapper;
 
 public:
-    PrettifyingMaterializer(llvm::Module* module) : module(module) {}
+    PrettifyingMaterializer(llvm::Module* module, llvm::ValueToValueMapTy& VMap, llvm::RemapFlags flags,
+                            llvm::ValueMapTypeRemapper* type_remapper)
+        : module(module), VMap(VMap), flags(flags), type_remapper(type_remapper) {}
 
     virtual llvm::Value* materializeValueFor(llvm::Value* v) {
         if (llvm::ConstantExpr* ce = llvm::dyn_cast<llvm::ConstantExpr>(v)) {
@@ -183,6 +190,46 @@ public:
                 return module->getOrInsertGlobal(name, pt->getElementType());
             }
         }
+        if (llvm::IntrinsicInst* ii = llvm::dyn_cast<llvm::IntrinsicInst>(v)) {
+            if (ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_i64
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_void
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_double) {
+                int pp_id = -1;
+                for (int i = 0; i < ii->getNumArgOperands(); i++) {
+                    llvm::Value* op = ii->getArgOperand(i);
+                    if (i != 1) {
+                        if (i == 0) {
+                            llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
+                            pp_id = l_pp_id->getSExtValue();
+                        }
+                        ii->setArgOperand(i, llvm::MapValue(op, VMap, flags, type_remapper, this));
+                        continue;
+                    } else {
+                        assert(pp_id != -1);
+                        void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
+
+                        bool lookup_success = true;
+                        std::string name;
+                        if (addr == (void*)None) {
+                            name = "None";
+                        } else {
+                            name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
+                        }
+
+                        if (!lookup_success) {
+                            llvm::Constant* int_val
+                                = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
+                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
+                            ii->setArgOperand(i, ptr_val);
+                            continue;
+                        } else {
+                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8_ptr));
+                        }
+                    }
+                }
+                return ii;
+            }
+        }
         return v;
     }
 };
@@ -194,12 +241,14 @@ void dumpPrettyIR(llvm::Function* f) {
     llvm::Function* new_f = tmp_module->begin();
 
     llvm::ValueToValueMapTy VMap;
-    PrettifyingMaterializer materializer(tmp_module.get());
+    llvm::RemapFlags flags = llvm::RF_None;
+    llvm::ValueMapTypeRemapper* type_remapper = NULL;
+    PrettifyingMaterializer materializer(tmp_module.get(), VMap, flags, type_remapper);
     for (llvm::Function::iterator I = new_f->begin(), E = new_f->end(); I != E; ++I) {
         VMap[I] = I;
     }
     for (llvm::inst_iterator it = inst_begin(new_f), end = inst_end(new_f); it != end; ++it) {
-        llvm::RemapInstruction(&*it, VMap, llvm::RF_None, NULL, &materializer);
+        llvm::RemapInstruction(&*it, VMap, flags, type_remapper, &materializer);
     }
     tmp_module->begin()->dump();
     // tmp_module->dump();

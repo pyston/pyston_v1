@@ -711,6 +711,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     std::map<InternedString, Box*> sorted_symbol_table;
 
+    // TODO: maybe use a different placeholder?
+    static Box* const VAL_UNDEFINED = (Box*)-1;
+
     for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
         auto it = sym_table.find(name);
         if (!liveness->isLiveAtEnd(name, current_block))
@@ -722,10 +725,11 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
             if (is_defined)
                 assert(sym_table.getMapped(it->second) != NULL);
-            sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : NULL;
+            sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : VAL_UNDEFINED;
         } else {
             ASSERT(it != sym_table.end(), "%s", name.c_str());
-            sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
+            Box* v = sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
+            assert(gc::isValidGCObject(v));
         }
     }
 
@@ -1363,7 +1367,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         CallattrFlags callattr_flags{.cls_only = callattr_clsonly, .null_on_nonexistent = false, .argspec = argspec };
 
         if (jit)
-            v.var = jit->emitCallattr(func, attr.getBox(), callattr_flags, args_vars, keyword_names);
+            v.var = jit->emitCallattr(node, func, attr.getBox(), callattr_flags, args_vars, keyword_names);
 
         v.o = callattr(func.o, attr.getBox(), callattr_flags, args.size() > 0 ? args[0] : 0,
                        args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0,
@@ -1373,7 +1377,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         Value v;
 
         if (jit)
-            v.var = jit->emitRuntimeCall(func, argspec, args_vars, keyword_names);
+            v.var = jit->emitRuntimeCall(node, func, argspec, args_vars, keyword_names);
 
         v.o = runtimeCall(func.o, argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
                           args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, keyword_names);
@@ -1547,7 +1551,8 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
     Value v = visit_expr(node->value);
-    return Value(pyston::getattr(v.o, node->attr.getBox()), jit ? jit->emitGetAttr(v, node->attr.getBox()) : NULL);
+    return Value(pyston::getattr(v.o, node->attr.getBox()),
+                 jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
 }
 }
 
@@ -1749,8 +1754,8 @@ Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFrom(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      FrameStackState frame_state) {
+Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                       FrameStackState frame_state) {
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);

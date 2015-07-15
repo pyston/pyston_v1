@@ -347,8 +347,9 @@ public:
         compiled->clfunc = this;
 
         if (compiled->entry_descriptor == NULL) {
-            if (versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL && compiled->spec->accepts_all_inputs
-                && compiled->spec->boxed_return_value)
+            bool could_have_speculations = (source.get() != NULL);
+            if (!could_have_speculations && versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL
+                && compiled->spec->accepts_all_inputs && compiled->spec->boxed_return_value)
                 always_use_version = compiled;
 
             assert(compiled->spec->arg_types.size() == paramspec.totalReceived());

@@ -162,7 +162,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         PatchpointInfo* pp = new_patchpoints[r->id].first;
         assert(pp);
 
-        void* dst_func = new_patchpoints[r->id].second;
+        void* slowpath_func = PatchpointInfo::getSlowpathAddr(r->id);
         if (VERBOSITY() >= 2) {
             printf("Processing pp %ld; [%d, %d)\n", reinterpret_cast<int64_t>(pp), r->offset,
                    r->offset + pp->patchpointSize());
@@ -179,10 +179,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         uint8_t* end_addr = start_addr + pp->patchpointSize();
 
         if (ENABLE_JIT_OBJECT_CACHE)
-            setSlowpathFunc(start_addr, dst_func);
-
-        // TODO shouldn't have to do it this way
-        void* slowpath_func = extractSlowpathFunc(start_addr);
+            setSlowpathFunc(start_addr, slowpath_func);
 
         //*start_addr = 0xcc;
         // start_addr++;
@@ -285,6 +282,11 @@ PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetu
     r->id = new_patchpoints.size();
     new_patchpoints.push_back(std::make_pair(r, func_addr));
     return r;
+}
+
+void* PatchpointInfo::getSlowpathAddr(unsigned int pp_id) {
+    RELEASE_ASSERT(pp_id < new_patchpoints.size(), "");
+    return new_patchpoints[pp_id].second;
 }
 
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {

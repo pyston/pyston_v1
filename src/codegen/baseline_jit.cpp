@@ -19,6 +19,7 @@
 
 #include "codegen/irgen/hooks.h"
 #include "codegen/memmgr.h"
+#include "codegen/type_recording.h"
 #include "core/cfg.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -133,9 +134,11 @@ RewriterVar* JitFragmentWriter::emitBinop(RewriterVar* lhs, RewriterVar* rhs, in
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 240);
 }
 
-RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
+RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                                              const llvm::ArrayRef<RewriterVar*> args,
                                              std::vector<BoxedString*>* keyword_names) {
+    TypeRecorder* type_recorder = getTypeRecorderForNode(node);
+
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* attr_var = imm(attr);
     RewriterVar* flags_var = imm(flags.asInt());
@@ -159,7 +162,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)callattr, call_args, 2, 640);
+    return emitPPCall((void*)callattr, call_args, 2, 640, type_recorder);
 #else
     // We could make this faster but for now: keep it simple, stupid...
     RewriterVar* attr_var = imm(attr);
@@ -176,6 +179,8 @@ RewriterVar* JitFragmentWriter::emitCallattr(RewriterVar* obj, BoxedString* attr
     call_args.push_back(obj);
     call_args.push_back(attr_var);
     call_args.push_back(flags_var);
+
+    call_args.push_back(imm(type_recorder));
 
     if (args_array)
         call_args.push_back(args_array);
@@ -247,8 +252,8 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
     return call(false, (void*)exceptionMatchesHelper, v, cls);
 }
 
-RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s) {
-    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512);
+RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
+    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, getTypeRecorderForNode(node));
 }
 
 RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s) {
@@ -311,9 +316,11 @@ RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
     return call(false, (void*)repr, v);
 }
 
-RewriterVar* JitFragmentWriter::emitRuntimeCall(RewriterVar* obj, ArgPassSpec argspec,
+RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
                                                 const llvm::ArrayRef<RewriterVar*> args,
                                                 std::vector<BoxedString*>* keyword_names) {
+    TypeRecorder* type_recorder = getTypeRecorderForNode(node);
+
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar::SmallVector call_args;
@@ -333,7 +340,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(RewriterVar* obj, ArgPassSpec ar
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)runtimeCall, call_args, 2, 640);
+    return emitPPCall((void*)runtimeCall, call_args, 2, 640, type_recorder);
 #else
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar* keyword_names_var = keyword_names ? imm(keyword_names) : nullptr;
@@ -347,6 +354,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(RewriterVar* obj, ArgPassSpec ar
     RewriterVar::SmallVector call_args;
     call_args.push_back(obj);
     call_args.push_back(argspec_var);
+    call_args.push_back(imm(type_recorder));
     if (args_array)
         call_args.push_back(args_array);
     if (keyword_names_var)
@@ -570,12 +578,14 @@ RewriterVar* JitFragmentWriter::getInterp() {
 }
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
-                                           int slot_size) {
+                                           int slot_size, TypeRecorder* type_recorder) {
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_emitPPCall(result, func_addr, args_vec, num_slots, slot_size); }, args,
               ActionType::NORMAL);
+    if (type_recorder)
+        return call(false, (void*)recordType, imm(type_recorder), result);
     return result;
 #else
     assert(args_vec.size() < 7);
@@ -583,13 +593,13 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
 #endif
 }
 
-Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
-                                       std::vector<BoxedString*>* keyword_names) {
+Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
+                                       Box** args, std::vector<BoxedString*>* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], flags.argspec.totalPassed());
     Box* r = callattr(obj, attr, flags, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                       std::get<3>(arg_tuple), keyword_names);
     assert(gc::isValidGCObject(r));
-    return r;
+    return recordType(type_recorder, r);
 }
 
 Box* JitFragmentWriter::createDictHelper(uint64_t num, Box** keys, Box** values) {
@@ -639,11 +649,12 @@ Box* JitFragmentWriter::notHelper(Box* b) {
     return boxBool(!b->nonzeroIC());
 }
 
-Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args,
+Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
                                           std::vector<BoxedString*>* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], argspec.totalPassed());
-    return runtimeCall(obj, argspec, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                       std::get<3>(arg_tuple), keyword_names);
+    Box* r = runtimeCall(obj, argspec, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
+                         std::get<3>(arg_tuple), keyword_names);
+    return recordType(type_recorder, r);
 }
 
 

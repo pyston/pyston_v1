@@ -89,7 +89,8 @@ void _allowGLReadPreemption();
 // only be accessed by the thread that holds the gil:
 extern int gil_check_count;
 extern std::atomic<int> threads_waiting_on_gil;
-inline void allowGLReadPreemption() {
+extern "C" inline void allowGLReadPreemption() __attribute__((visibility("default")));
+extern "C" inline void allowGLReadPreemption() {
 #if ENABLE_SAMPLING_PROFILER
     if (unlikely(sigprof_pending)) {
         // Output multiple stacktraces if we received multiple signals
@@ -167,7 +168,8 @@ inline void promoteGL() {
 }
 inline void demoteGL() {
 }
-inline void allowGLReadPreemption() {
+extern "C" inline void allowGLReadPreemption() __attribute__((visibility("default")));
+extern "C" inline void allowGLReadPreemption() {
 }
 #endif
 

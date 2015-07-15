@@ -426,9 +426,11 @@ static bool inGeneratorEntry(unw_word_t ip) {
     return ((unw_word_t)generatorEntry < ip && ip <= generator_entry_end);
 }
 
-static bool inDeopt(unw_word_t ip) {
-    static unw_word_t deopt_end = getFunctionEnd((unw_word_t)deopt);
-    return ((unw_word_t)deopt < ip && ip <= deopt_end);
+static bool isDeopt(unw_word_t ip) {
+    // Check for astInterpretDeopt() instead of deopt(), since deopt() will do some
+    // unwinding and we don't want it to skip things.
+    static unw_word_t deopt_end = getFunctionEnd((unw_word_t)astInterpretDeopt);
+    return ((unw_word_t)astInterpretDeopt < ip && ip <= deopt_end);
 }
 
 
@@ -626,7 +628,7 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
     unw_word_t bp = get_cursor_bp(cursor);
 
     PythonFrameIteratorImpl frame_iter;
-    if (inDeopt(ip)) {
+    if (isDeopt(ip)) {
         assert(!unwind_session->shouldSkipFrame());
         unwind_session->setShouldSkipNextFrame(true);
     } else if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
@@ -667,7 +669,7 @@ template <typename Func> void unwindPythonStack(Func func) {
         bool stop_unwinding = false;
 
         PythonFrameIteratorImpl frame_iter;
-        if (inDeopt(ip)) {
+        if (isDeopt(ip)) {
             assert(!unwind_session->shouldSkipFrame());
             unwind_session->setShouldSkipNextFrame(true);
         } else if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {

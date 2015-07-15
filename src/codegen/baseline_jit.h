@@ -33,6 +33,8 @@ class BoxedDict;
 class BoxedList;
 class BoxedTuple;
 
+class TypeRecorder;
+
 class JitFragmentWriter;
 
 // This JIT tier is designed as Pystons entry level JIT tier (executed after a only a few dozens runs of a basic block)
@@ -193,7 +195,7 @@ public:
 
     RewriterVar* emitAugbinop(RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitBinop(RewriterVar* lhs, RewriterVar* rhs, int op_type);
-    RewriterVar* emitCallattr(RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
+    RewriterVar* emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                               const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitCompare(RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys, const llvm::ArrayRef<RewriterVar*> values);
@@ -203,7 +205,7 @@ public:
     RewriterVar* emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values);
     RewriterVar* emitDeref(InternedString s);
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
-    RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s);
+    RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
     RewriterVar* emitGetBlockLocal(InternedString s);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
@@ -217,8 +219,8 @@ public:
     RewriterVar* emitNonzero(RewriterVar* v);
     RewriterVar* emitNotNonzero(RewriterVar* v);
     RewriterVar* emitRepr(RewriterVar* v);
-    RewriterVar* emitRuntimeCall(RewriterVar* obj, ArgPassSpec argspec, const llvm::ArrayRef<RewriterVar*> args,
-                                 std::vector<BoxedString*>* keyword_names);
+    RewriterVar* emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
+                                 const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitUnaryop(RewriterVar* v, int op_type);
     RewriterVar* emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
@@ -255,10 +257,11 @@ private:
 #endif
     RewriterVar* getInterp();
 
-    RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size);
+    RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size,
+                            TypeRecorder* type_recorder = NULL);
 
-    static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
-                               std::vector<BoxedString*>* keyword_names);
+    static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
+                               Box** args, std::vector<BoxedString*>* keyword_names);
     static Box* createDictHelper(uint64_t num, Box** keys, Box** values);
     static Box* createListHelper(uint64_t num, Box** data);
     static Box* createSetHelper(uint64_t num, Box** data);
@@ -267,7 +270,8 @@ private:
     static Box* hasnextHelper(Box* b);
     static Box* nonzeroHelper(Box* b);
     static Box* notHelper(Box* b);
-    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args, std::vector<BoxedString*>* keyword_names);
+    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
+                                  std::vector<BoxedString*>* keyword_names);
 
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
