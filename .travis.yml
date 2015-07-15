@@ -4,6 +4,15 @@ compiler:
   - clang
   - gcc
 
+env:
+  - TRAVIS_BUILD_TYPE=Debug
+  - TRAVIS_BUILD_TYPE=Release
+
+matrix:
+  exclude:
+    - compiler: gcc
+      env: TRAVIS_BUILD_TYPE=Debug
+
 # use travis-ci docker based infrastructure
 sudo: false
 
@@ -47,7 +56,7 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja -DTEST_THREADS=4 -DENABLE_EXTRA_TESTS=ON $TRAVIS_BUILD_DIR
+  - bash $TRAVIS_BUILD_DIR/tools/configure_travis.sh
 
 before_script:
   - mysql -e 'create database mysqldb_test charset utf8;'
@@ -56,6 +65,7 @@ script:
   - ccache -z
   - PYSTON_RUN_ARGS=G ninja -j4 pyston check-deps && ctest --output-on-failure
   - ccache -s
+  - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 
 os:
   - linux
