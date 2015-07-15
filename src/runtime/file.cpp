@@ -480,17 +480,8 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
     if (!f->writable)
         return err_mode("writing");
     if (f->f_binary) {
-        // In CPython, this branch calls PyArg_ParseTuple for all types, but we never created
-        // the "args" tuple so we have to do some of the work that ParseTuple does.
-        // Mostly it's easy since we've already unpacked the args, but there is some unicode-specific
-        // code in it that is better not to duplicate.
-        // So, if it's unicode, just make the tuple for now and send it through PyArg_ParseTuple.
-        if (PyUnicode_Check(arg)) {
-            if (!PyArg_ParseTuple(BoxedTuple::create({ arg }), "s*", &pbuf))
-                return NULL;
-        } else if (PyObject_GetBuffer(arg, &pbuf, 0))
+        if (!PyArg_ParseTuple(BoxedTuple::create({ arg }), "s*", &pbuf))
             return NULL;
-
         s = (const char*)pbuf.buf;
         n = pbuf.len;
     } else {
