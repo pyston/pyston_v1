@@ -28,3 +28,6 @@
 	path = test/integration/pyxl
 	url = https://github.com/dropbox/pyxl.git
 	ignore = untracked
+[submodule "jemalloc"]
+	path = jemalloc
+	url = git://github.com/jemalloc/jemalloc.git
