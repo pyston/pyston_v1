@@ -126,8 +126,7 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
         return 0;
     }
 
-    BoxedTuple* resized = new (newsize)
-        BoxedTuple(newsize); // we want an uninitialized tuple, but this will memset it with 0.
+    BoxedTuple* resized = new (newsize) BoxedTuple();
     memmove(resized->elts, t->elts, sizeof(Box*) * t->size());
 
     *pv = resized;

@@ -566,32 +566,36 @@ public:
 
 class BoxedTuple : public BoxVar {
 public:
-    static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t size) {
+        BoxedTuple* rtn = new (size) BoxedTuple();
+        memset(rtn->elts, 0, size * sizeof(Box*)); // TODO not all callers want this (but some do)
+        return rtn;
+    }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
-        BoxedTuple* rtn = new (nelts) BoxedTuple(nelts);
+        BoxedTuple* rtn = new (nelts) BoxedTuple();
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create1(Box* elt0) {
-        BoxedTuple* rtn = new (1) BoxedTuple(1);
+        BoxedTuple* rtn = new (1) BoxedTuple();
         rtn->elts[0] = elt0;
         return rtn;
     }
     static BoxedTuple* create2(Box* elt0, Box* elt1) {
-        BoxedTuple* rtn = new (2) BoxedTuple(2);
+        BoxedTuple* rtn = new (2) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         return rtn;
     }
     static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
-        BoxedTuple* rtn = new (3) BoxedTuple(3);
+        BoxedTuple* rtn = new (3) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
         return rtn;
     }
     static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
-        BoxedTuple* rtn = new (4) BoxedTuple(4);
+        BoxedTuple* rtn = new (4) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -599,7 +603,7 @@ public:
         return rtn;
     }
     static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
-        BoxedTuple* rtn = new (5) BoxedTuple(5);
+        BoxedTuple* rtn = new (5) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -610,17 +614,20 @@ public:
     static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
 
     static BoxedTuple* create(int64_t size, BoxedClass* cls) {
+        BoxedTuple* rtn;
         if (cls == tuple_cls)
-            return new (size) BoxedTuple(size);
+            rtn = new (size) BoxedTuple();
         else
-            return new (cls, size) BoxedTuple(size);
+            rtn = new (cls, size) BoxedTuple();
+        memset(rtn->elts, 0, size * sizeof(Box*)); // TODO not all callers want this (but some do)
+        return rtn;
     }
     static BoxedTuple* create(int64_t nelts, Box** elts, BoxedClass* cls) {
         BoxedTuple* rtn;
         if (cls == tuple_cls)
-            rtn = new (nelts) BoxedTuple(nelts);
+            rtn = new (nelts) BoxedTuple();
         else
-            rtn = new (cls, nelts) BoxedTuple(nelts);
+            rtn = new (cls, nelts) BoxedTuple();
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
@@ -666,7 +673,7 @@ public:
     }
 
 private:
-    BoxedTuple(size_t size) { memset(elts, 0, sizeof(Box*) * size); }
+    BoxedTuple() {}
 
     BoxedTuple(std::initializer_list<Box*>& members) {
         // by the time we make it here elts[] is big enough to contain members
