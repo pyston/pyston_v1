@@ -10,6 +10,11 @@ for i in xrange(1, 12):
         print i & j
         print i ^ j
 
+print (2).__int__()
+print (True).__int__()
+print (2).__trunc__()
+print (True).__trunc__()
+
 print 1 ** 0
 print 0 ** 0
 print -1 ** 0, (-1) ** 0, (-5) ** 0
@@ -93,3 +98,38 @@ for i1 in [1, I(2), 3, I(4)]:
 print int("12345", base=16)
 
 print type(2 ** 48)
+
+class I(int):
+    def __init__(self, n):
+        print "I.__init__(%r)" % n
+        self.n = n
+
+    def __int__(self):
+        return self
+
+    def __repr__(self):
+        return "<I(%r)>" % self.n
+
+def call_int(i):
+    print "calling int(%r)" % i
+    i2 = int(i)
+    print "return type:", type(i2)
+
+print
+call_int(1)
+
+print
+i = I(1)
+call_int(i)
+print "i.n is a", type(i.n) # should be 'I' now!
+
+print
+del I.__int__
+i = I(1)
+call_int(i)
+
+print
+
+# These return longs:
+print int("12938719238719827398172938712983791827938712987312")
+print int(1e100)
