@@ -208,7 +208,7 @@ public:
     pyston_call tpp_call;
 
     bool hasGenericGetattr() {
-        if (tp_getattr)
+        if (tp_getattr || tp_getattro != object_cls->tp_getattro)
             return false;
 
         // instancemethod_cls should have a custom tp_getattr but is currently implemented
