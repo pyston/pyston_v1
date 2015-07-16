@@ -24,6 +24,7 @@
 #include "codegen/parser.h"
 #include "codegen/unwinding.h"
 #include "core/ast.h"
+#include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {

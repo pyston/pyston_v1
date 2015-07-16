@@ -127,7 +127,7 @@ BoxedString* createUninitializedString(ssize_t n);
 // in theory it might work in more cases.
 char* getWriteableStringContents(BoxedString* s);
 
-extern "C" void listAppendInternal(Box* self, Box* v);
+extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
                               std::initializer_list<Box*> defaults) noexcept;
@@ -549,6 +549,9 @@ public:
 };
 
 class BoxedList : public Box {
+private:
+    void grow(int min_free);
+
 public:
     int64_t size, capacity;
     GCdArray* elts;
@@ -557,7 +560,7 @@ public:
 
     BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
 
-    void ensure(int space);
+    void ensure(int min_free);
     void shrink();
     static const int INITIAL_CAPACITY;
 

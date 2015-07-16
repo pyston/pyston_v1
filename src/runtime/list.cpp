@@ -26,6 +26,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "gc/roots.h"
+#include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -33,8 +34,9 @@
 namespace pyston {
 
 extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
+    RELEASE_ASSERT(PyList_Check(op), "");
     try {
-        listAppend(op, newitem);
+        listAppendInternal(op, newitem);
     } catch (ExcInfo e) {
         abort();
     }

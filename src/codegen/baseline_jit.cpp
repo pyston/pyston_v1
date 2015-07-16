@@ -21,6 +21,7 @@
 #include "codegen/memmgr.h"
 #include "codegen/type_recording.h"
 #include "core/cfg.h"
+#include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
