@@ -32,21 +32,35 @@
 #include "valgrind.h"
 #endif
 
-//#undef VERBOSITY
-//#define VERBOSITY(x) 2
-
-#ifndef NDEBUG
-#define DEBUG 1
-#else
-#define DEBUG 0
-#endif
-
 namespace pyston {
 namespace gc {
 
 #if TRACE_GC_MARKING
 FILE* trace_fp;
 #endif
+
+static std::unordered_set<void*> roots;
+static std::vector<std::pair<void*, void*>> potential_root_ranges;
+
+// BoxedClasses in the program that are still needed.
+static std::unordered_set<BoxedClass*> class_objects;
+
+static std::unordered_set<void*> nonheap_roots;
+// Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
+// typically all have lower addresses than the heap roots, so this can serve as a cheap
+// way to verify it's not a nonheap root (the full check requires a hashtable lookup).
+static void* max_nonheap_root = 0;
+static void* min_nonheap_root = (void*)~0;
+
+static std::unordered_set<GCRootHandle*>* getRootHandles() {
+    static std::unordered_set<GCRootHandle*> root_handles;
+    return &root_handles;
+}
+
+static int ncollections = 0;
+
+static bool gc_enabled = true;
+static bool should_not_reenter_gc = false;
 
 class TraceStack {
 private:
@@ -115,8 +129,12 @@ public:
             pop_chunk();
             assert(cur == end);
             return *--cur; // no need for any bounds checks here since we're guaranteed we're CHUNK_SIZE from the start
+        } else {
+            // We emptied the stack, but we should prepare a new chunk in case another item
+            // gets added onto the stack.
+            get_chunk();
+            return NULL;
         }
-        return NULL;
     }
 
 
@@ -129,8 +147,6 @@ public:
 };
 std::vector<void**> TraceStack::free_chunks;
 
-
-static std::unordered_set<void*> roots;
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
 
@@ -147,7 +163,6 @@ void deregisterPermanentRoot(void* obj) {
     roots.erase(obj);
 }
 
-static std::vector<std::pair<void*, void*>> potential_root_ranges;
 void registerPotentialRootRange(void* start, void* end) {
     potential_root_ranges.push_back(std::make_pair(start, end));
 }
@@ -161,12 +176,6 @@ extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     return obj;
 }
 
-static std::unordered_set<void*> nonheap_roots;
-// Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
-// typically all have lower addresses than the heap roots, so this can serve as a cheap
-// way to verify it's not a nonheap root (the full check requires a hashtable lookup).
-static void* max_nonheap_root = 0;
-static void* min_nonheap_root = (void*)~0;
 void registerNonheapRootObject(void* obj, int size) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
@@ -198,7 +207,7 @@ bool isValidGCObject(void* p) {
     return al->user_data == p && (al->kind_id == GCKind::CONSERVATIVE_PYTHON || al->kind_id == GCKind::PYTHON);
 }
 
-void setIsPythonObject(Box* b) {
+void registerPythonObject(Box* b) {
     assert(isValidGCMemory(b));
     auto al = GCAllocation::fromUserData(b);
 
@@ -207,11 +216,11 @@ void setIsPythonObject(Box* b) {
     } else {
         assert(al->kind_id == GCKind::PYTHON);
     }
-}
 
-static std::unordered_set<GCRootHandle*>* getRootHandles() {
-    static std::unordered_set<GCRootHandle*> root_handles;
-    return &root_handles;
+    assert(b->cls);
+    if (PyType_Check(b)) {
+        class_objects.insert((BoxedClass*)b);
+    }
 }
 
 GCRootHandle::GCRootHandle() {
@@ -220,8 +229,6 @@ GCRootHandle::GCRootHandle() {
 GCRootHandle::~GCRootHandle() {
     getRootHandles()->erase(this);
 }
-
-
 
 bool GCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p) != NULL;
@@ -281,9 +288,84 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-static int ncollections = 0;
+static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
+    assert(((intptr_t)p) % 8 == 0);
 
-void markPhase() {
+    GCAllocation* al = GCAllocation::fromUserData(p);
+
+    GCKind kind_id = al->kind_id;
+    if (kind_id == GCKind::UNTRACKED) {
+        // Nothing to do here.
+    } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PRECISE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
+    } else if (kind_id == GCKind::HIDDEN_CLASS) {
+        HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
+        hcls->gc_visit(&visitor);
+    } else {
+        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    }
+}
+
+static void markRoots(GCVisitor& visitor) {
+    GC_TRACE_LOG("Looking at the stack\n");
+    threading::visitAllStacks(&visitor);
+
+    GC_TRACE_LOG("Looking at root handles\n");
+    for (auto h : *getRootHandles()) {
+        visitor.visit(h->value);
+    }
+
+    GC_TRACE_LOG("Looking at potential root ranges\n");
+    for (auto& e : potential_root_ranges) {
+        visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
+    }
+}
+
+static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
+    static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
+    static StatCounter sc_marked_objs("gc_marked_object_count");
+    Timer _t("traversing", /*min_usec=*/10000);
+
+    while (void* p = stack.pop()) {
+        sc_marked_objs.log();
+
+        GCAllocation* al = GCAllocation::fromUserData(p);
+
+#if TRACE_GC_MARKING
+        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
+            GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
+        else
+            GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
+#endif
+
+        assert(isMarked(al));
+        visitByGCKind(p, visitor);
+    }
+
+    long us = _t.end();
+    sc_us.log(us);
+}
+
+static void markPhase() {
+    static StatCounter sc_us("us_gc_mark_phase");
+    Timer _t("markPhase", /*min_usec=*/10000);
+
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
     // since we'll be looking at potentially-uninitialized values:
@@ -305,74 +387,37 @@ void markPhase() {
     TraceStack stack(roots);
     GCVisitor visitor(&stack);
 
-    GC_TRACE_LOG("Looking at the stack\n");
-    threading::visitAllStacks(&visitor);
+    markRoots(visitor);
 
-    GC_TRACE_LOG("Looking at root handles\n");
-    for (auto h : *getRootHandles()) {
-        visitor.visit(h->value);
-    }
+    graphTraversalMarking(stack, visitor);
 
-    GC_TRACE_LOG("Looking at potential root ranges\n");
-    for (auto& e : potential_root_ranges) {
-        visitor.visitPotentialRange((void* const*)e.first, (void* const*)e.second);
-    }
-
-    // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
-    while (void* p = stack.pop()) {
-        assert(((intptr_t)p) % 8 == 0);
-        GCAllocation* al = GCAllocation::fromUserData(p);
-
-#if TRACE_GC_MARKING
-        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
-            GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
-        else
-            GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
-#endif
-
-        assert(isMarked(al));
-
-        // printf("Marking + scanning %p\n", p);
-
-        GCKind kind_id = al->kind_id;
-        if (kind_id == GCKind::UNTRACKED) {
-            continue;
-        } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PRECISE) {
-            uint32_t bytes = al->kind_data;
-            if (DEBUG >= 2) {
-                if (global_heap.small_arena.contains(p)) {
-                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes + sizeof(GCAllocation));
-                }
-            }
-            visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-        } else if (kind_id == GCKind::PYTHON) {
-            Box* b = reinterpret_cast<Box*>(p);
-            BoxedClass* cls = b->cls;
-
-            if (cls) {
-                // The cls can be NULL since we use 'new' to construct them.
-                // An arbitrary amount of stuff can happen between the 'new' and
-                // the call to the constructor (ie the args get evaluated), which
-                // can trigger a collection.
-                ASSERT(cls->gc_visit, "%s", getTypeName(b));
-                cls->gc_visit(&visitor, b);
-            }
-        } else if (kind_id == GCKind::HIDDEN_CLASS) {
-            HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
-            hcls->gc_visit(&visitor);
-        } else {
-            RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    // Some classes might be unreachable. Unfortunately, we have to keep them around for
+    // one more collection, because during the sweep phase, instances of unreachable
+    // classes might still end up looking at the class. So we visit those unreachable
+    // classes remove them from the list of class objects so that it can be freed
+    // in the next collection.
+    std::vector<BoxedClass*> classes_to_remove;
+    for (BoxedClass* cls : class_objects) {
+        GCAllocation* al = GCAllocation::fromUserData(cls);
+        if (!isMarked(al)) {
+            visitor.visit(cls);
+            classes_to_remove.push_back(cls);
         }
+    }
+
+    // We added new objects to the stack again from visiting classes so we nee to do
+    // another (mini) traversal.
+    graphTraversalMarking(stack, visitor);
+
+    for (BoxedClass* cls : classes_to_remove) {
+        class_objects.erase(cls);
+    }
+
+    // The above algorithm could fail if we have a class and a metaclass -- they might
+    // both have been added to the classes to remove. In case that happens, make sure
+    // that the metaclass is retained for at least another collection.
+    for (BoxedClass* cls : classes_to_remove) {
+        class_objects.insert(cls->cls);
     }
 
 #if TRACE_GC_MARKING
@@ -383,26 +428,34 @@ void markPhase() {
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
-static void sweepPhase(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+    static StatCounter sc_us("us_gc_sweep_phase");
+    Timer _t("sweepPhase", /*min_usec=*/10000);
+
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
-    global_heap.freeUnmarked(weakly_referenced, classes_to_free);
+    global_heap.freeUnmarked(weakly_referenced);
+
+    long us = _t.end();
+    sc_us.log(us);
 }
 
-static bool gc_enabled = true;
 bool gcIsEnabled() {
     return gc_enabled;
 }
+
 void enableGC() {
     gc_enabled = true;
 }
+
 void disableGC() {
     gc_enabled = false;
 }
-
-static bool should_not_reenter_gc = false;
 
 void startGCUnexpectedRegion() {
     RELEASE_ASSERT(!should_not_reenter_gc, "");
@@ -415,6 +468,7 @@ void endGCUnexpectedRegion() {
 }
 
 void runCollection() {
+    static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
     sc.log();
 
@@ -445,17 +499,7 @@ void runCollection() {
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
-
-    // Temporary solution to the "we can't free classes before their instances": the sweep phase
-    // will avoid freeing classes, and will instead put them into this list for us to free at the end.
-    // XXX there are still corner cases with it:
-    // - there is no ordering enforced between different class objects, ie if you free a class and a metaclass
-    //   in the same collection we have the same issue
-    // - if there are weakreferences to the class, it gets freed slightly earlier
-    // These could both be fixed but I think the full fix will come with rudi's larger finalization changes.
-    std::vector<BoxedClass*> classes_to_free;
-
-    sweepPhase(weakly_referenced, classes_to_free);
+    sweepPhase(weakly_referenced);
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
@@ -480,11 +524,7 @@ void runCollection() {
                     weak_references.push_back(head);
             }
         }
-        global_heap._setFree(GCAllocation::fromUserData(o));
-    }
-
-    for (auto b : classes_to_free) {
-        global_heap._setFree(GCAllocation::fromUserData(b));
+        global_heap.free(GCAllocation::fromUserData(o));
     }
 
     should_not_reenter_gc = false; // end non-reentrant section
@@ -506,7 +546,6 @@ void runCollection() {
         printf("Collection #%d done\n\n", ncollections);
 
     long us = _t.end();
-    static StatCounter sc_us("gc_collections_us");
     sc_us.log(us);
 
     // dumpHeapStatistics();

@@ -586,6 +586,9 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         assert(default_cls->is_pyston_class);                                                                          \
         assert(default_cls->attrs_offset == 0);                                                                        \
                                                                                                                        \
+        /* Don't allocate classes through this -- we need to keep track of all class objects. */                       \
+        assert(default_cls != type_cls);                                                                               \
+                                                                                                                       \
         /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
         void* mem = gc_alloc(size, gc::GCKind::PYTHON);                                                                \
         assert(mem);                                                                                                   \
