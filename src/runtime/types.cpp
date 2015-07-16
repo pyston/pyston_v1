@@ -3295,7 +3295,6 @@ void setupRuntime() {
     closure_cls->freeze();
 
     setupUnwinding();
-    setupInterpreter();
     setupCAPI();
 
     // Can't set up object methods until we set up CAPI support:

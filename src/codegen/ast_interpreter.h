@@ -71,7 +71,6 @@ struct Value {
     Value(Box* o, RewriterVar* var) : o(o), var(var) {}
 };
 
-void setupInterpreter();
 Box* astInterpretFunction(CLFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args);
 Box* astInterpretFunctionEval(CLFunction* cf, Box* globals, Box* boxedLocals);
