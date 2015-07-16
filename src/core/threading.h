@@ -32,6 +32,11 @@ namespace gc {
 class GCVisitor;
 }
 
+#if ENABLE_SAMPLING_PROFILER
+extern int sigprof_pending;
+void _printStacktrace();
+#endif
+
 namespace threading {
 
 // Whether or not a second thread was ever started:

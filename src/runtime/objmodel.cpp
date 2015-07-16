@@ -4090,7 +4090,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         }
 
         Box* contained;
-        RewriterVar* r_contained;
+        RewriterVar* r_contained = NULL;
         if (rewrite_args) {
             CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->rhs, rewrite_args->destination);
             crewrite_args.arg1 = rewrite_args->lhs;

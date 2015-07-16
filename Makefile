@@ -20,6 +20,7 @@ USE_CCACHE := 1
 USE_DISTCC := 0
 
 PYPY := pypy
+CPYTHON := python
 
 ENABLE_VALGRIND := 0
 
@@ -72,7 +73,7 @@ CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
 
 ifneq ($(SELF_HOST),1)
-	PYTHON := python
+	PYTHON := $(CPYTHON)
 	PYTHON_EXE_DEPS :=
 else
 	PYTHON := $(abspath ./pyston_dbg)
@@ -1032,7 +1033,7 @@ $(call make_target,_gcc)
 $(call make_target,_release_gcc)
 
 nosearch_runpy_% nosearch_pyrun_%: %.py ext_python
-	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
+	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time $(CPYTHON) $<'
 nosearch_pypyrun_%: %.py ext_python
 	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time $(PYPY) $<'
 $(call make_search,runpy_%)
@@ -1203,7 +1204,7 @@ $(wordlist 2,9999,$(SHAREDMODS_OBJS)): $(firstword $(SHAREDMODS_OBJS))
 
 .PHONY: ext_python ext_pythondbg
 ext_python: $(TEST_EXT_MODULE_SRCS)
-	cd $(TEST_DIR)/test_extension; python setup.py build
+	cd $(TEST_DIR)/test_extension; $(CPYTHON) setup.py build
 ext_pythondbg: $(TEST_EXT_MODULE_SRCS)
 	cd $(TEST_DIR)/test_extension; python2.7-dbg setup.py build
 
