@@ -57,13 +57,10 @@ BoxedString* EmptyString;
 BoxedString* characters[UCHAR_MAX + 1];
 
 BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+    assert(s);
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
-    if (s) {
-        memmove(data(), s, n);
-        data()[n] = 0;
-    } else {
-        memset(data(), 0, n + 1);
-    }
+    memmove(data(), s, n);
+    data()[n] = 0;
 }
 
 BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : interned_state(SSTATE_NOT_INTERNED) {
@@ -82,6 +79,13 @@ BoxedString::BoxedString(llvm::StringRef s) : interned_state(SSTATE_NOT_INTERNED
 BoxedString::BoxedString(size_t n, char c) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
+    data()[n] = 0;
+}
+
+BoxedString::BoxedString(size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+    RELEASE_ASSERT(n != llvm::StringRef::npos, "");
+    // Note: no memset.  add the null-terminator for good measure though
+    // (CPython does the same thing).
     data()[n] = 0;
 }
 
@@ -1577,11 +1581,12 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
         assert(start < s.size());
         assert(-1 <= stop);
     }
+    assert(length >= 0);
 
     if (length == 0)
         return EmptyString;
 
-    BoxedString* bs = new (length) BoxedString(nullptr, length);
+    BoxedString* bs = BoxedString::createUninitializedString(length);
     copySlice(bs->data(), s.data(), start, step, length);
     return bs;
 }
@@ -2307,17 +2312,9 @@ extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** 
     return 0;
 }
 
-BoxedString* createUninitializedString(ssize_t n) {
-    return new (n) BoxedString(n, 0);
-}
-
-char* getWriteableStringContents(BoxedString* s) {
-    return s->data();
-}
-
 extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexcept {
     if (s == NULL)
-        return createUninitializedString(n);
+        return BoxedString::createUninitializedString(n);
     return boxString(llvm::StringRef(s, n));
 }
 
@@ -2334,7 +2331,7 @@ extern "C" char* PyString_AsString(PyObject* o) noexcept {
         return string_getbuffer(o);
 
     BoxedString* s = static_cast<BoxedString*>(o);
-    return getWriteableStringContents(s);
+    return s->getWriteableStringContents();
 }
 
 extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
