@@ -766,6 +766,19 @@ private:
         assert(left);
         assert(right);
 
+        if (type == AST_TYPE::In || type == AST_TYPE::NotIn) {
+            CompilerVariable* r = right->contains(emitter, getOpInfoForNode(node, unw_info), left);
+            assert(r->getType() == BOOL);
+            if (type == AST_TYPE::NotIn) {
+                ConcreteCompilerVariable* converted = r->makeConverted(emitter, BOOL);
+                // TODO: would be faster to just do unboxBoolNegated
+                llvm::Value* raw = i1FromBool(emitter, converted);
+                raw = emitter.getBuilder()->CreateXor(raw, getConstantInt(1, g.i1));
+                r = boolFromI1(emitter, raw);
+            }
+            return r;
+        }
+
         return left->binexp(emitter, getOpInfoForNode(node, unw_info), right, type, exp_type);
     }
 

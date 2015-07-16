@@ -152,6 +152,7 @@ public:
         printf("binexp not defined for %s\n", debugName().c_str());
         abort();
     }
+    virtual CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs);
     virtual llvm::Value* makeClassCheck(IREmitter& emitter, VAR* var, BoxedClass* c) {
         printf("makeClassCheck not defined for %s\n", debugName().c_str());
         abort();
@@ -277,6 +278,7 @@ public:
     virtual CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs,
                                      AST_TYPE::AST_TYPE op_type, BinExpType exp_type) = 0;
+    virtual CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, CompilerVariable* lhs) = 0;
 
     virtual void serializeToFrame(std::vector<llvm::Value*>& stackmap_args) = 0;
 
@@ -369,6 +371,9 @@ public:
                              BinExpType exp_type) override {
         return type->binexp(emitter, info, this, rhs, op_type, exp_type);
     }
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, CompilerVariable* lhs) override {
+        return type->contains(emitter, info, this, lhs);
+    }
 
     llvm::Value* makeClassCheck(IREmitter& emitter, BoxedClass* cls) override {
         return type->makeClassCheck(emitter, this, cls);
@@ -417,6 +422,15 @@ template <typename V>
 CompilerVariable* _ValuedCompilerType<V>::getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) {
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
     auto r = UNKNOWN->getPystonIter(emitter, info, converted);
+    converted->decvref(emitter);
+    return r;
+}
+
+template <typename V>
+CompilerVariable* _ValuedCompilerType<V>::contains(IREmitter& emitter, const OpInfo& info, VAR* var,
+                                                   CompilerVariable* rhs) {
+    ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
+    auto r = UNKNOWN->contains(emitter, info, converted, rhs);
     converted->decvref(emitter);
     return r;
 }

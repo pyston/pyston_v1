@@ -219,11 +219,11 @@ public:
                         if (!lookup_success) {
                             llvm::Constant* int_val
                                 = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
+                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8);
                             ii->setArgOperand(i, ptr_val);
                             continue;
                         } else {
-                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8_ptr));
+                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8));
                         }
                     }
                 }

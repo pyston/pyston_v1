@@ -223,10 +223,8 @@ Box* tupleNonzero(BoxedTuple* self) {
 
 Box* tupleContains(BoxedTuple* self, Box* elt) {
     int size = self->size();
-    for (int i = 0; i < size; i++) {
-        Box* e = self->elts[i];
-
-        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+    for (Box* e : *self) {
+        int r = PyObject_RichCompareBool(elt, e, Py_EQ);
         if (r == -1)
             throwCAPIException();
 
