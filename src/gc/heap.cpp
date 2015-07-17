@@ -21,6 +21,7 @@
 #include "core/common.h"
 #include "core/util.h"
 #include "gc/gc_alloc.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 #ifndef NVALGRIND
@@ -124,6 +125,8 @@ void _bytesAllocatedTripped() {
 Heap global_heap;
 
 __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
+    static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
+
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -151,13 +154,10 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
             }
         }
 
-        // XXX: we are currently ignoring destructors (tp_dealloc) for extension objects, since we have
-        // historically done that (whoops) and there are too many to be worth changing for now as long
-        // as we can get real destructor support soon.
-        ASSERT(b->cls->tp_dealloc == NULL || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s", getTypeName(b));
-
-        if (b->cls->simple_destructor)
-            b->cls->simple_destructor(b);
+        if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
+            gc_safe_destructors.log();
+            b->cls->tp_dealloc(b);
+        }
     }
     return true;
 }

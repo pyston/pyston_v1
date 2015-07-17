@@ -2695,7 +2695,7 @@ static PyMemberDef pattern_members[] = {
     {NULL}  /* Sentinel */
 };
 
-statichere PyTypeObject Pattern_Type = {
+PyTypeObject Pattern_Type = {
     PyObject_HEAD_INIT(NULL)
     0, "_" SRE_MODULE ".SRE_Pattern",
     sizeof(PatternObject), sizeof(SRE_CODE),
@@ -3739,7 +3739,7 @@ static PyMemberDef match_members[] = {
 /* FIXME: implement setattr("string", None) as a special case (to
    detach the associated string, if any */
 
-static PyTypeObject Match_Type = {
+PyTypeObject Match_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     "_" SRE_MODULE ".SRE_Match",
     sizeof(MatchObject), sizeof(Py_ssize_t),
@@ -3923,7 +3923,7 @@ static PyMemberDef scanner_members[] = {
     {NULL}  /* Sentinel */
 };
 
-statichere PyTypeObject Scanner_Type = {
+PyTypeObject Scanner_Type = {
     PyObject_HEAD_INIT(NULL)
     0, "_" SRE_MODULE ".SRE_Scanner",
     sizeof(ScannerObject), 0,

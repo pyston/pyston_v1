@@ -340,6 +340,16 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
+void dealloc_null(Box* box) {
+    assert(box->cls->tp_del == NULL);
+}
+
+// We don't need CPython's version of tp_free since we have GC.
+// We still need to set tp_free to something and not a NULL pointer,
+// because C extensions might still call tp_free from tp_dealloc.
+void default_free(void*) {
+}
+
 void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
@@ -358,7 +368,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
                        int instance_size, bool is_user_defined)
     : attrs(HiddenClass::makeSingleton()),
       gc_visit(gc_visit),
-      simple_destructor(NULL),
       attrs_offset(attrs_offset),
       is_constant(false),
       is_user_defined(is_user_defined),
@@ -4960,15 +4969,16 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     else
         made->tp_alloc = PyType_GenericAlloc;
 
-    assert(!made->simple_destructor);
+    assert(!made->has_safe_tp_dealloc);
     for (auto b : *bases) {
-        if (!isSubclass(b->cls, type_cls))
+        BoxedClass* base = static_cast<BoxedClass*>(b);
+        if (!isSubclass(base->cls, type_cls))
             continue;
-        BoxedClass* b_cls = static_cast<BoxedClass*>(b);
-        RELEASE_ASSERT(made->simple_destructor == base->simple_destructor || made->simple_destructor == NULL
-                           || base->simple_destructor == NULL,
-                       "Conflicting simple destructors!");
-        made->simple_destructor = base->simple_destructor;
+        if (base->has_safe_tp_dealloc) {
+            made->tp_dealloc = base->tp_dealloc;
+            made->has_safe_tp_dealloc = true;
+            break;
+        }
     }
 
     return made;

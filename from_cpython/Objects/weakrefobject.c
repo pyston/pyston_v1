@@ -544,7 +544,9 @@ proxy_dealloc(PyWeakReference *self)
     if (self->wr_callback != NULL)
         PyObject_GC_UnTrack((PyObject *)self);
     clear_weakref(self);
-    PyObject_GC_Del(self);
+    // Pyston change: we monkey-patch this function to use the Pyston GC
+    // Shouldn't need to call tp_free either.
+    // PyObject_GC_Del(self);
 }
 
 /* sequence slots */

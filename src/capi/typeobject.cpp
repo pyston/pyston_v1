@@ -3134,6 +3134,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     // this should get automatically initialized to 0 on this path:
     assert(cls->attrs_offset == 0);
 
+    if (Py_TPFLAGS_BASE_EXC_SUBCLASS & cls->tp_flags) {
+        exception_types.push_back(cls);
+    }
+
     return 0;
 }
 
