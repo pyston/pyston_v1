@@ -455,6 +455,10 @@ public:
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        return lhs->binexp(emitter, info, var, AST_TYPE::In, Compare);
+    }
+
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
         return reinterpret_cast<Box*>(vals[0]);
@@ -1081,6 +1085,10 @@ public:
         }
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        return makeBool(false);
+    }
+
     ConcreteCompilerType* getBoxType() override { return BOXED_INT; }
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
@@ -1317,6 +1325,10 @@ public:
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
         converted->decvref(emitter);
         return rtn;
+    }
+
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        return makeBool(false);
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_FLOAT; }
@@ -1688,6 +1700,10 @@ public:
         return rtn;
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        return UNKNOWN->contains(emitter, info, var, lhs);
+    }
+
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         static BoxedString* attr = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
         bool no_attribute = false;
@@ -1914,6 +1930,13 @@ public:
         return rtn;
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
+        CompilerVariable* rtn = converted->contains(emitter, info, lhs);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) override {
         return makeBool(var->getValue()->size() != 0);
     }
@@ -2033,6 +2056,10 @@ public:
         return rtn;
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        return makeBool(false);
+    }
+
     ConcreteCompilerType* getBoxType() override { return BOXED_BOOL; }
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
@@ -2045,6 +2072,23 @@ public:
 ConcreteCompilerType* BOOL = new BoolType();
 ConcreteCompilerVariable* makeBool(bool b) {
     return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false), true);
+}
+
+ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate) {
+    // TODO: I think we can do better here and not force the types to box themselves
+
+    ConcreteCompilerVariable* converted_left = lhs->makeConverted(emitter, UNKNOWN);
+    ConcreteCompilerVariable* converted_right = rhs->makeConverted(emitter, UNKNOWN);
+    llvm::Value* cmp;
+    if (!negate)
+        cmp = emitter.getBuilder()->CreateICmpEQ(converted_left->getValue(), converted_right->getValue());
+    else
+        cmp = emitter.getBuilder()->CreateICmpNE(converted_left->getValue(), converted_right->getValue());
+
+    converted_left->decvref(emitter);
+    converted_right->decvref(emitter);
+
+    return boolFromI1(emitter, cmp);
 }
 
 ConcreteCompilerType* BOXED_TUPLE;
@@ -2196,6 +2240,58 @@ public:
         return rtn;
     }
 
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
+        llvm::SmallVector<std::pair<llvm::BasicBlock*, llvm::Value*>, 4> phi_incoming;
+
+        llvm::BasicBlock* end = emitter.createBasicBlock();
+
+        ConcreteCompilerVariable* converted_lhs = lhs->makeConverted(emitter, lhs->getConcreteType());
+
+        for (CompilerVariable* e : *var->getValue()) {
+            // TODO: we could potentially avoid the identity tests if we know that either type has
+            // an __eq__ that is reflexive (returns True for the same object).
+            {
+                ConcreteCompilerVariable* is_same = doIs(emitter, converted_lhs, e, false);
+                llvm::Value* raw = i1FromBool(emitter, is_same);
+
+                phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(1, g.i1)));
+                llvm::BasicBlock* new_bb = emitter.createBasicBlock();
+                new_bb->moveAfter(emitter.currentBasicBlock());
+                emitter.getBuilder()->CreateCondBr(raw, end, new_bb);
+                emitter.setCurrentBasicBlock(new_bb);
+            }
+
+            {
+                CompilerVariable* eq = converted_lhs->binexp(emitter, info, e, AST_TYPE::Eq, Compare);
+                ConcreteCompilerVariable* eq_nonzero = eq->nonzero(emitter, info);
+                assert(eq_nonzero->getType() == BOOL);
+                llvm::Value* raw = i1FromBool(emitter, eq_nonzero);
+
+                phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(1, g.i1)));
+                llvm::BasicBlock* new_bb = emitter.createBasicBlock();
+                new_bb->moveAfter(emitter.currentBasicBlock());
+                emitter.getBuilder()->CreateCondBr(raw, end, new_bb);
+                emitter.setCurrentBasicBlock(new_bb);
+            }
+        }
+
+        // TODO This last block is unnecessary:
+        phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(0, g.i1)));
+        emitter.getBuilder()->CreateBr(end);
+
+        end->moveAfter(emitter.currentBasicBlock());
+        emitter.setCurrentBasicBlock(end);
+
+        auto phi = emitter.getBuilder()->CreatePHI(g.i1, phi_incoming.size());
+        for (auto p : phi_incoming) {
+            phi->addIncoming(p.second, p.first);
+        }
+
+        converted_lhs->decvref(emitter);
+
+        return boolFromI1(emitter, phi);
+    }
+
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr, CallattrFlags flags,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
@@ -2317,6 +2413,10 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        return undefVariable();
+    }
+
+    CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
         return undefVariable();
     }
 

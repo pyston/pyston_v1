@@ -766,6 +766,19 @@ private:
         assert(left);
         assert(right);
 
+        if (type == AST_TYPE::In || type == AST_TYPE::NotIn) {
+            CompilerVariable* r = right->contains(emitter, getOpInfoForNode(node, unw_info), left);
+            assert(r->getType() == BOOL);
+            if (type == AST_TYPE::NotIn) {
+                ConcreteCompilerVariable* converted = r->makeConverted(emitter, BOOL);
+                // TODO: would be faster to just do unboxBoolNegated
+                llvm::Value* raw = i1FromBool(emitter, converted);
+                raw = emitter.getBuilder()->CreateXor(raw, getConstantInt(1, g.i1));
+                r = boolFromI1(emitter, raw);
+            }
+            return r;
+        }
+
         return left->binexp(emitter, getOpInfoForNode(node, unw_info), right, type, exp_type);
     }
 
@@ -803,17 +816,7 @@ private:
         assert(right);
 
         if (node->ops[0] == AST_TYPE::Is || node->ops[0] == AST_TYPE::IsNot) {
-            // TODO: I think we can do better here and not force the types to box themselves
-
-            ConcreteCompilerVariable* converted_left = left->makeConverted(emitter, UNKNOWN);
-            ConcreteCompilerVariable* converted_right = right->makeConverted(emitter, UNKNOWN);
-            llvm::Value* cmp;
-            if (node->ops[0] == AST_TYPE::Is)
-                cmp = emitter.getBuilder()->CreateICmpEQ(converted_left->getValue(), converted_right->getValue());
-            else
-                cmp = emitter.getBuilder()->CreateICmpNE(converted_left->getValue(), converted_right->getValue());
-
-            return boolFromI1(emitter, cmp);
+            return doIs(emitter, left, right, node->ops[0] == AST_TYPE::IsNot);
         }
 
         CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare, unw_info);
