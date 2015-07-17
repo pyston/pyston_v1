@@ -2074,6 +2074,23 @@ ConcreteCompilerVariable* makeBool(bool b) {
     return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false), true);
 }
 
+ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate) {
+    // TODO: I think we can do better here and not force the types to box themselves
+
+    ConcreteCompilerVariable* converted_left = lhs->makeConverted(emitter, UNKNOWN);
+    ConcreteCompilerVariable* converted_right = rhs->makeConverted(emitter, UNKNOWN);
+    llvm::Value* cmp;
+    if (!negate)
+        cmp = emitter.getBuilder()->CreateICmpEQ(converted_left->getValue(), converted_right->getValue());
+    else
+        cmp = emitter.getBuilder()->CreateICmpNE(converted_left->getValue(), converted_right->getValue());
+
+    converted_left->decvref(emitter);
+    converted_right->decvref(emitter);
+
+    return boolFromI1(emitter, cmp);
+}
+
 ConcreteCompilerType* BOXED_TUPLE;
 class TupleType : public ValuedCompilerType<const std::vector<CompilerVariable*>*> {
 private:
@@ -2228,20 +2245,34 @@ public:
 
         llvm::BasicBlock* end = emitter.createBasicBlock();
 
+        ConcreteCompilerVariable* converted_lhs = lhs->makeConverted(emitter, lhs->getConcreteType());
+
         for (CompilerVariable* e : *var->getValue()) {
-            CompilerVariable* eq = lhs->binexp(emitter, info, e, AST_TYPE::Eq, Compare);
-            ConcreteCompilerVariable* eq_nonzero = eq->nonzero(emitter, info);
-            assert(eq_nonzero->getType() == BOOL);
-            llvm::Value* raw = i1FromBool(emitter, eq_nonzero);
+            // TODO: we could potentially avoid the identity tests if we know that either type has
+            // an __eq__ that is reflexive (returns True for the same object).
+            {
+                ConcreteCompilerVariable* is_same = doIs(emitter, converted_lhs, e, false);
+                llvm::Value* raw = i1FromBool(emitter, is_same);
 
-            phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(1, g.i1)));
+                phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(1, g.i1)));
+                llvm::BasicBlock* new_bb = emitter.createBasicBlock();
+                new_bb->moveAfter(emitter.currentBasicBlock());
+                emitter.getBuilder()->CreateCondBr(raw, end, new_bb);
+                emitter.setCurrentBasicBlock(new_bb);
+            }
 
-            llvm::BasicBlock* new_bb = emitter.createBasicBlock();
-            new_bb->moveAfter(emitter.currentBasicBlock());
+            {
+                CompilerVariable* eq = converted_lhs->binexp(emitter, info, e, AST_TYPE::Eq, Compare);
+                ConcreteCompilerVariable* eq_nonzero = eq->nonzero(emitter, info);
+                assert(eq_nonzero->getType() == BOOL);
+                llvm::Value* raw = i1FromBool(emitter, eq_nonzero);
 
-            emitter.getBuilder()->CreateCondBr(raw, end, new_bb);
-
-            emitter.setCurrentBasicBlock(new_bb);
+                phi_incoming.push_back(std::make_pair(emitter.currentBasicBlock(), getConstantInt(1, g.i1)));
+                llvm::BasicBlock* new_bb = emitter.createBasicBlock();
+                new_bb->moveAfter(emitter.currentBasicBlock());
+                emitter.getBuilder()->CreateCondBr(raw, end, new_bb);
+                emitter.setCurrentBasicBlock(new_bb);
+            }
         }
 
         // TODO This last block is unnecessary:
@@ -2255,6 +2286,9 @@ public:
         for (auto p : phi_incoming) {
             phi->addIncoming(p.second, p.first);
         }
+
+        converted_lhs->decvref(emitter);
+
         return boolFromI1(emitter, phi);
     }
 

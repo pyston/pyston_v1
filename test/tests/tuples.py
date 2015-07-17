@@ -221,3 +221,6 @@ try:
     print (1, 3, 5, 3).index(2)
 except ValueError as e:
     print e
+
+n = float('nan')
+print n in (n, n)

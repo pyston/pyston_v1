@@ -396,6 +396,9 @@ public:
 // assert(value->getType() == type->llvmType());
 //}
 
+// Emit the test for whether one variable 'is' another one.
+ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate);
+
 ConcreteCompilerVariable* makeBool(bool);
 ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
