@@ -8,4 +8,4 @@ x = repr(empty_module)
 print x[0:29]
 print x[-2:]
 
-print repr(math)
+print repr(math)[:10]
