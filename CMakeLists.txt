@@ -299,3 +299,6 @@ if(DOXYGEN_FOUND)
 else()
   add_custom_target(docs COMMAND ${CMAKE_COMMAND} -E echo "Can't create docs, doxygen not installed \(try sudo apt-get install doxygen grpahviz on Ubuntu and then rerun cmake\)" VERBATIM)
 endif()
+
+# last file added (need to change this if we add a file that is added via a glob):
+# from_cpython/Lib/test/test_re.py
