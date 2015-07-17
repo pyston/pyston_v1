@@ -65,6 +65,7 @@ CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
 CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_DIR_RELEASE_GCC := $(BUILD_DIR)/Release-gcc
+CMAKE_DIR_RELEASE_GCC_PGO := $(BUILD_DIR)/Release-gcc-pgo
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
@@ -912,11 +913,28 @@ CMAKE_SETUP_RELEASE_GCC := $(CMAKE_DIR_RELEASE_GCC)/build.ninja
 $(CMAKE_SETUP_RELEASE_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC)
-	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND)
+	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=use
 .PHONY: pyston_release_gcc
-pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC)
+pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC) $(CMAKE_DIR_RELEASE_GCC)/.trained
 	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC)/pyston pyston_release_gcc
+
+
+# GCC PGO build
+CMAKE_SETUP_RELEASE_GCC_PGO := $(CMAKE_DIR_RELEASE_GCC_PGO)/build.ninja
+$(CMAKE_SETUP_RELEASE_GCC_PGO):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
+	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=generate -DPROFILE_DIR=$(CMAKE_DIR_RELEASE_GCC)
+
+.PHONY: pyston_release_gcc_pgo
+pyston_release_gcc_pgo: $(CMAKE_SETUP_RELEASE_GCC_PGO)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) -f $(CMAKE_SETUP_RELEASE_GCC_PGO) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO)/pyston $@
+
+$(CMAKE_DIR_RELEASE_GCC)/.trained: pyston_release_gcc_pgo
+	@echo "Training pgo"
+	( cd $(CMAKE_DIR_RELEASE_GCC_PGO) && ./pyston $(SRC_DIR)/minibenchmarks/combined.py && ./pyston $(SRC_DIR)/minibenchmarks/combined.py ) && touch $(CMAKE_DIR_RELEASE_GCC)/.trained
 
 .PHONY: format check_format
 format: $(CMAKE_SETUP_RELEASE)

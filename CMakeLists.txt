@@ -29,6 +29,9 @@ option(ENABLE_OPROFILE "enable oprofile support" OFF)
 option(ENABLE_SELF_HOST "use pyston to test pyston" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
 
+option(ENABLE_PGO "enable -fprofile-generate/-fprofile-use" OFF)
+option(ENABLE_LTO "enable -flto (only if ENABLE_PGO=ON as well)" OFF)
+
 # automatically use ccache if found
 if(ENABLE_CCACHE)
   find_program(CCACHE ccache)
@@ -46,7 +49,10 @@ if(ENABLE_GOLD)
     message(STATUS "found the gold linker ${GOLD_LINKER}")
     set(CMAKE_LINKER "${GOLD_LINKER}")
     set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -B${CMAKE_SOURCE_DIR}/tools/build_system")
-    set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--section-ordering-file,${CMAKE_CURRENT_SOURCE_DIR}/section_ordering.txt")
+    if(NOT ENABLE_PGO)
+      # let pgo determine the ordering
+      set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--section-ordering-file,${CMAKE_CURRENT_SOURCE_DIR}/section_ordering.txt")
+    endif()
   endif()
 endif()
 
@@ -59,12 +65,39 @@ else()
 endif()
 
 # initial clang flags (set here so they're used when building llvm)
-set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics" CACHE STRING "Clang specific C and CXX flags")
+set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics -Wno-profile-instr-unprofiled" CACHE STRING "Clang specific C and CXX flags")
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CLANG_FLAGS}")
+else()
 endif()
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
+endif()
+
+macro(ADD_PROFILE_FLAGS)
+  if(ENABLE_LTO)
+    set(LTO_FLAGS "-flto")
+  endif()
+  if(NOT "${PROFILE_DIR}" STREQUAL "")
+    set(PROFILE_STATE "${PROFILE_STATE}=${PROFILE_DIR}")
+  endif()
+  set(PROFILE_C_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS}")
+  set(PROFILE_CXX_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS}")
+  set(PROFILE_LINK_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PROFILE_CXX_FLAGS} ${LTO_FLAGS}")
+endmacro()
+
+# used in src/runtime/inline/CMakeLists.txt to remove the flags we added above
+macro(REMOVE_PROFILE_FLAGS)
+  string(REPLACE "${PROFILE_C_FLAGS}"   "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS}")
+  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+endmacro()
+
+if(${CMAKE_BUILD_TYPE} STREQUAL "Release" AND ENABLE_PGO)
+  ADD_PROFILE_FLAGS()
 endif()
 
 # llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
@@ -200,6 +233,7 @@ endif()
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-long-long -Wno-aggregate-return -Wno-inline -Wno-redundant-decls -Wno-strict-overflow")
+  set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--no-as-needed") # without this, we don't seem to get jemalloc on gcc builds
 endif()
 
 add_definitions(${LLVM_DEFINITIONS})

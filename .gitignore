@@ -24,6 +24,7 @@ pyston_grwl_dbg
 pyston_nosync
 pyston_gcc
 pyston_release_gcc
+pyston_release_gcc_pgo
 pystontmp*/
 /*_unittest
 
