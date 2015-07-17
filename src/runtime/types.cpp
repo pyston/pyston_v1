@@ -783,28 +783,30 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
-    bool type_new_special_case;
+    // For debugging, keep track of why we think we can rewrite this:
+    enum { NOT_ALLOWED, VERIFIED, NO_INIT, TYPE_NEW_SPECIAL_CASE, } why_rewrite_allowed = NOT_ALLOWED;
+
     if (rewrite_args) {
-        bool ok = false;
         for (auto b : allowable_news) {
             if (b == new_attr) {
-                ok = true;
+                why_rewrite_allowed = VERIFIED;
                 break;
             }
         }
 
-        if (!ok && (cls == int_cls || cls == float_cls || cls == long_cls)) {
-            if (npassed_args == 1)
-                ok = true;
-            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls)) {
+        if (cls == int_cls || cls == float_cls || cls == long_cls) {
+            if (npassed_args == 1) {
+                why_rewrite_allowed = VERIFIED;
+            } else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls)) {
+                why_rewrite_allowed = NO_INIT;
                 rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
-                ok = true;
             }
         }
 
-        type_new_special_case = (cls == type_cls && argspec == ArgPassSpec(2));
+        if (cls == type_cls && argspec == ArgPassSpec(2))
+            why_rewrite_allowed = TYPE_NEW_SPECIAL_CASE;
 
-        if (!ok && !type_new_special_case) {
+        if (why_rewrite_allowed == NOT_ALLOWED) {
             // Uncomment this to try to find __new__ functions that we could either white- or blacklist:
             // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
             // allowable_news, otherwise add to the blacklist in this assert", cls->tp_name);
@@ -869,7 +871,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
 
-        ASSERT(made->cls == cls || type_new_special_case,
+        ASSERT(made->cls == cls || why_rewrite_allowed == TYPE_NEW_SPECIAL_CASE
+                   || (why_rewrite_allowed == NO_INIT && cls->tp_init == object_cls->tp_init),
                "We should only have allowed the rewrite to continue if we were guaranteed that made "
                "would have class cls!");
     } else {
@@ -893,8 +896,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     // If __new__ returns a subclass, supposed to call that subclass's __init__.
     // If __new__ returns a non-subclass, not supposed to call __init__.
     if (made->cls != cls) {
-        ASSERT(rewrite_args == NULL, "We should only have allowed the rewrite to continue if we were guaranteed that "
-                                     "made would have class cls!");
+        ASSERT(rewrite_args == NULL || (why_rewrite_allowed == NO_INIT && made->cls->tp_init == object_cls->tp_init
+                                        && cls->tp_init == object_cls->tp_init),
+               "We should only have allowed the rewrite to continue if we were guaranteed that "
+               "made would have class cls!");
 
         if (!isSubclass(made->cls, cls)) {
             init_attr = NULL;

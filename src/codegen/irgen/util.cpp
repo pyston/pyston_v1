@@ -197,7 +197,7 @@ public:
                 int pp_id = -1;
                 for (int i = 0; i < ii->getNumArgOperands(); i++) {
                     llvm::Value* op = ii->getArgOperand(i);
-                    if (i != 1) {
+                    if (i != 2) {
                         if (i == 0) {
                             llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
                             pp_id = l_pp_id->getSExtValue();

@@ -55,8 +55,6 @@
 
 namespace pyston {
 
-int sigprof_pending = 0;
-
 GlobalState g;
 
 extern "C" {
@@ -358,9 +356,13 @@ static void handle_sigusr1(int signum) {
     _printStacktrace();
 }
 
+#if ENABLE_SAMPLING_PROFILER
+int sigprof_pending = 0;
+
 static void handle_sigprof(int signum) {
     sigprof_pending++;
 }
+#endif
 
 //#define INVESTIGATE_STAT_TIMER "us_timer_in_jitted_code"
 #ifdef INVESTIGATE_STAT_TIMER

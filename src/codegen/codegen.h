@@ -87,8 +87,6 @@ extern GlobalState g;
 // in runtime_hooks.cpp:
 void initGlobalFuncs(GlobalState& g);
 
-extern int sigprof_pending;
-
 DS_DECLARE_RWLOCK(codegen_rwlock);
 }
 

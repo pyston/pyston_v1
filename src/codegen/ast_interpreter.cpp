@@ -1704,6 +1704,7 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
 
         clfunc->dependent_interp_callsites.invalidateAll();
 
+        UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
                                                      arg3, args);

@@ -843,7 +843,19 @@ extern "C" Box* intTrunc(BoxedInt* self) {
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
-    return self;
+    if (self->cls == int_cls)
+        return self;
+    return boxInt(self->n);
+}
+
+extern "C" Box* intInt(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__int__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    if (self->cls == int_cls)
+        return self;
+    return boxInt(self->n);
 }
 
 extern "C" Box* intIndex(BoxedInt* v) {
@@ -853,7 +865,7 @@ extern "C" Box* intIndex(BoxedInt* v) {
 }
 
 static Box* _intNew(Box* val, Box* base) {
-    if (isSubclass(val->cls, int_cls)) {
+    if (val->cls == int_cls) {
         RELEASE_ASSERT(!base, "");
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
@@ -890,8 +902,33 @@ static Box* _intNew(Box* val, Box* base) {
         return r;
     } else if (val->cls == float_cls) {
         RELEASE_ASSERT(!base, "");
-        double d = static_cast<BoxedFloat*>(val)->d;
-        return new BoxedInt(d);
+
+        // This is tricky -- code copied from CPython:
+
+        double x = PyFloat_AsDouble(val);
+        double wholepart; /* integral portion of x, rounded toward 0 */
+
+        (void)modf(x, &wholepart);
+        /* Try to get out cheap if this fits in a Python int.  The attempt
+         * to cast to long must be protected, as C doesn't define what
+         * happens if the double is too big to fit in a long.  Some rare
+         * systems raise an exception then (RISCOS was mentioned as one,
+         * and someone using a non-default option on Sun also bumped into
+         * that).  Note that checking for <= LONG_MAX is unsafe: if a long
+         * has more bits of precision than a double, casting LONG_MAX to
+         * double may yield an approximation, and if that's rounded up,
+         * then, e.g., wholepart=LONG_MAX+1 would yield true from the C
+         * expression wholepart<=LONG_MAX, despite that wholepart is
+         * actually greater than LONG_MAX.  However, assuming a two's complement
+         * machine with no trap representation, LONG_MIN will be a power of 2 (and
+         * hence exactly representable as a double), and LONG_MAX = -1-LONG_MIN, so
+         * the comparisons with (double)LONG_MIN below should be safe.
+         */
+        if ((double)LONG_MIN <= wholepart && wholepart < -(double)LONG_MIN) {
+            const long aslong = (long)wholepart;
+            return PyInt_FromLong(aslong);
+        }
+        return PyLong_FromDouble(wholepart);
     } else {
         RELEASE_ASSERT(!base, "");
         static BoxedString* int_str = static_cast<BoxedString*>(PyString_InternFromString("__int__"));
@@ -992,7 +1029,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     int_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
-static Box* intInt(Box* b, void*) {
+static Box* intIntGetset(Box* b, void*) {
     if (b->cls == int_cls) {
         return b;
     } else {
@@ -1081,6 +1118,7 @@ void setupInt() {
 
     int_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)intTrunc, BOXED_INT, 1)));
     int_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)intIndex, BOXED_INT, 1)));
+    int_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
 
     int_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false,
                                                                  ParamNames({ "", "x", "base" }, "", "")),
@@ -1088,10 +1126,10 @@ void setupInt() {
 
     int_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)intBitLength, BOXED_INT, 1)));
 
-    int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
+    int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intIntGetset, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
-    int_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
-    int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
+    int_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)intIntGetset, BOXED_INT, 1)));
+    int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intIntGetset, NULL, NULL));
     int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
 
     add_operators(int_cls);
