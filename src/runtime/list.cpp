@@ -257,12 +257,22 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
 }
 
 extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
-    assert(isSubclass(op->cls, list_cls));
-    try {
-        listSetitemUnboxed(static_cast<BoxedList*>(op), i, newitem);
-    } catch (ExcInfo e) {
-        abort();
+    PyObject* olditem;
+    PyObject** p;
+    if (!PyList_Check(op)) {
+        Py_XDECREF(newitem);
+        PyErr_BadInternalCall();
+        return -1;
     }
+    if (i < 0 || i >= Py_SIZE(op)) {
+        Py_XDECREF(newitem);
+        PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
+        return -1;
+    }
+    p = ((PyListObject*)op)->ob_item + i;
+    olditem = *p;
+    *p = newitem;
+    Py_XDECREF(olditem);
     return 0;
 }
 

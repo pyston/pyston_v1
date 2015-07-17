@@ -602,6 +602,12 @@ public:
 
     DEFAULT_CLASS_SIMPLE(list_cls);
 };
+static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
+static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");
+static_assert(offsetof(BoxedList, size) == offsetof(PyListObject, ob_size), "");
+static_assert(offsetof(BoxedList, elts) == offsetof(PyListObject, ob_item), "");
+static_assert(offsetof(GCdArray, elts) == 0, "");
+static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated), "");
 
 class BoxedTuple : public BoxVar {
 public:

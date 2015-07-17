@@ -20,8 +20,6 @@ returned item's reference count.
 extern "C" {
 #endif
 
-// Pyston change: comment this out since this is not the format we're using
-#if 0
 typedef struct {
     PyObject_VAR_HEAD
     /* Vector of pointers to list elements.  list[0] is ob_item[0], etc. */
@@ -40,9 +38,6 @@ typedef struct {
      */
     Py_ssize_t allocated;
 } PyListObject;
-#endif
-struct _PyListObject;
-typedef struct _PyListObject PyListObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) list_cls;
@@ -69,13 +64,9 @@ PyAPI_FUNC(PyObject *) _PyList_Extend(PyListObject *, PyObject *) PYSTON_NOEXCEP
 PyAPI_FUNC(PyObject **) PyList_Items(PyObject *) PYSTON_NOEXCEPT;
 
 /* Macro, trading safety for speed */
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyList_GET_ITEM(op, i) PyList_GetItem((PyObject*)(op), (i))
-#define PyList_SET_ITEM(op, i, v) PyList_SetItem((PyObject*)(op), (i), (v))
-#define PyList_GET_SIZE(op)    PyList_Size((PyObject*)(op))
-//#define PyList_GET_ITEM(op, i) (((PyListObject *)(op))->ob_item[i])
-//#define PyList_SET_ITEM(op, i, v) (((PyListObject *)(op))->ob_item[i] = (v))
-//#define PyList_GET_SIZE(op)    Py_SIZE(op)
+#define PyList_GET_ITEM(op, i) (((PyListObject *)(op))->ob_item[i])
+#define PyList_SET_ITEM(op, i, v) (((PyListObject *)(op))->ob_item[i] = (v))
+#define PyList_GET_SIZE(op)    Py_SIZE(op)
 
 #ifdef __cplusplus
 }
