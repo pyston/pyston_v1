@@ -368,12 +368,15 @@ public:
     void gc_visit(GCVisitor* visitor) {
         // Visit children even for the dict-backed case, since children will just be empty
         visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
-        if (attrwrapper_child)
-            visitor->visit(attrwrapper_child);
-        for (auto p : children)
-            visitor->visit(p.first);
-        for (auto p : attr_offsets)
-            visitor->visit(p.first);
+        visitor->visit(attrwrapper_child);
+
+        // We don't need to visit the keys of the 'children' map, since the children should have those as entries
+        // in the attr_offssets map.
+        // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
+        // of our child's map.
+        if (!children.size())
+            for (auto p : attr_offsets)
+                visitor->visit(p.first);
     }
 
     // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
