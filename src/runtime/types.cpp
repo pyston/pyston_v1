@@ -1152,11 +1152,6 @@ static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
     b->cls->tp_traverse(b, call_gc_visit, v);
 }
 
-static void proxy_to_tp_clear(Box* b) {
-    assert(b->cls->tp_clear);
-    b->cls->tp_clear(b);
-}
-
 // This probably belongs in tuple.cpp?
 extern "C" void tupleGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
@@ -2932,15 +2927,11 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
 }
 
 // Normally we don't call the Python tp_ slots that are present to support
-// CPython's reference-counted garbage collection. However, for a few types
-// like weak references, we still rely on reference-counting to some extent.
+// CPython's reference-counted garbage collection.
 static void setTypeGCProxy(BoxedClass* cls) {
     cls->tp_alloc = PystonType_GenericAlloc;
+    cls->tp_free = default_free;
     cls->gc_visit = proxy_to_tp_traverse;
-
-    // We can't use the original tp_dealloc here, the dealloc method of some
-    // types like ProxyType explicitely frees itself without using tp_free.
-    cls->tp_dealloc = proxy_to_tp_clear;
     cls->has_safe_tp_dealloc = true;
     cls->is_pyston_class = true;
 }
