@@ -2655,7 +2655,7 @@ static PyBufferProcs string_as_buffer = {
 };
 
 static PyMethodDef string_methods[] = {
-    { "count", (PyCFunction)string_count, METH_VARARGS, NULL },
+    { "count", (PyCFunction)string_count, METH_O3 | METH_D2, NULL },
     { "join", (PyCFunction)string_join, METH_O, NULL },
     { "split", (PyCFunction)string_split, METH_VARARGS, NULL },
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },

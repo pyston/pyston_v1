@@ -83,6 +83,14 @@ PyAPI_FUNC(PyObject *) PyCFunction_NewEx(PyMethodDef *, PyObject *,
 
 #define METH_COEXIST   0x0040
 
+/* Pyston additions: */
+#define METH_O2        0x0080
+#define METH_O3        (METH_O | METH_O2)
+// The number of defaults:
+#define METH_D1        0x0200
+#define METH_D2        0x0400
+#define METH_D3        (METH_D1 | METH_D2)
+
 typedef struct PyMethodChain {
     PyMethodDef *methods;		/* Methods of this type */
     struct PyMethodChain *link;	/* NULL or base type */
