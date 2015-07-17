@@ -838,7 +838,6 @@ void Assembler::test(Register reg1, Register reg2) {
         reg1_idx -= 8;
     }
     if (reg2_idx >= 8) {
-        trap();
         rex |= REX_B;
         reg2_idx -= 8;
     }

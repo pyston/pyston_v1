@@ -70,12 +70,16 @@ class JitFragmentWriter;
 // This also means that we are allowed to store a Python variable which only lives in the current CFGBLock* inside a
 // register or stack slot but we aren't if it outlives the block - we have to store it in the interpreter instance.
 //
+// We use the following callee-save regs to speed up the generated code:
+//      r12: pointer to ASTInterpreter instance
+//      r14: pointer to the vregs array
+//
 // To execute a specific CFGBlock one has to call:
 //      CFGBlock* block;
-//      block->entry_code(ast_interpreter_instance, block)
+//      block->entry_code(ast_interpreter_instance, block, ast_interpreter_instance->vregs)
 //
 // Signature of a JitCodeBlock:
-//  std::pair<CFGBlock*, Box*>(*entry_code)(ASTInterpreter* interp, CFGBlock* block)
+//  std::pair<CFGBlock*, Box*>(*entry_code)(ASTInterpreter* interp, CFGBlock* block, Box** vregs)
 //  args:
 //      interp:  instance to the ASTInterpreter
 //      block:   block to execute
@@ -87,10 +91,12 @@ class JitFragmentWriter;
 //
 // Basic layout of generated code block is:
 // entry_code:
+//      push   %r14                 ; save r14
 //      push   %r12                 ; save r12
-//      sub    $0x110,%rsp          ; setup scratch, 0x110 = scratch_size + 16 = space for two func args passed on the
-//                                                                               stack
+//      sub    $0x118,%rsp          ; setup scratch, 0x118 = scratch_size + 16 = space for two func args passed on the
+//                                                                               stack + 8 byte for stack alignment
 //      mov    %rdi,%r12            ; copy the pointer to ASTInterpreter instance into r12
+//      mov    %rdx,%r14            ; copy the pointer to the vregs array into r14
 //      jmpq   *0x8(%rsi)           ; jump to block->code
 //                                      possible values: first_JitFragment, second_JitFragment,...
 //
@@ -101,8 +107,9 @@ class JitFragmentWriter;
 //      cmp    %rax,%rcx            ; rax == True
 //      jne    end_side_exit
 //      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
-//      add    $0x110,%rsp          ; restore stack pointer
+//      add    $0x118,%rsp          ; restore stack pointer
 //      pop    %r12                 ; restore r12
+//      pop    %r14                 ; restore r14
 //      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
 //      ....
@@ -113,8 +120,9 @@ class JitFragmentWriter;
 //      mov    $0,%rax              ; rax contains the next block to interpret.
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
-//      add    $0x110,%rsp          ; restore stack pointer
+//      add    $0x118,%rsp          ; restore stack pointer
 //      pop    %r12                 ; restore r12
+//      pop    %r14                 ; restore r14
 //      ret
 //
 // nth_JitFragment:
@@ -130,7 +138,7 @@ public:
 
     // scratch size + space for passing additional args on the stack without having to adjust the SP when calling
     // functions with more than 6 args.
-    static constexpr int sp_adjustment = scratch_size + num_stack_args * 8;
+    static constexpr int sp_adjustment = scratch_size + num_stack_args * 8 + 8 /* = alignment */;
 
 private:
     std::unique_ptr<uint8_t[]> code;
@@ -168,6 +176,7 @@ private:
     void* entry_code; // JitCodeBlock start address. Must have an offset of 0 into the code block
     JitCodeBlock& code_block;
     RewriterVar* interp;
+    RewriterVar* vregs_array;
     llvm::DenseMap<InternedString, RewriterVar*> local_syms;
     std::unique_ptr<ICInfo> ic_info;
 
@@ -208,13 +217,13 @@ public:
     RewriterVar* emitDeref(InternedString s);
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
     RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
-    RewriterVar* emitGetBlockLocal(InternedString s);
+    RewriterVar* emitGetBlockLocal(InternedString s, int vreg);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
     RewriterVar* emitGetGlobal(Box* global, BoxedString* s);
     RewriterVar* emitGetItem(RewriterVar* value, RewriterVar* slice);
-    RewriterVar* emitGetLocal(InternedString s);
+    RewriterVar* emitGetLocal(InternedString s, int vreg);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
     RewriterVar* emitHasnext(RewriterVar* v);
     RewriterVar* emitLandingpad();
@@ -241,7 +250,7 @@ public:
     void emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
-    void emitSetLocal(InternedString s, bool set_closure, RewriterVar* v);
+    void emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v);
     void emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
 
@@ -262,6 +271,7 @@ private:
     RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size,
                             TypeRecorder* type_recorder = NULL);
 
+    static void assertNameDefinedHelper(const char* id);
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
                                Box** args, std::vector<BoxedString*>* keyword_names);
     static Box* createDictHelper(uint64_t num, Box** keys, Box** values);
@@ -275,6 +285,7 @@ private:
     static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
                                   std::vector<BoxedString*>* keyword_names);
 
+    void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
     void _emitPPCall(RewriterVar* result, void* func_addr, const RewriterVar::SmallVector& args, int num_slots,
