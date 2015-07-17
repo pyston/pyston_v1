@@ -1112,12 +1112,14 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
 // Copied from CPython:
 #define SLOT0(FUNCNAME, OPSTR)                                                                                         \
     static PyObject* FUNCNAME(PyObject* self) noexcept {                                                               \
+        STAT_TIMER(t0, "us_timer_" #FUNCNAME, SLOT_AVOIDABILITY(self));                                                \
         static PyObject* cache_str;                                                                                    \
         return call_method(self, OPSTR, &cache_str, "()");                                                             \
     }
 
 #define SLOT1(FUNCNAME, OPSTR, ARG1TYPE, ARGCODES)                                                                     \
     /* Pyston change: static */ PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                           \
+        STAT_TIMER(t0, "us_timer_" #FUNCNAME, SLOT_AVOIDABILITY(self));                                                \
         static PyObject* cache_str;                                                                                    \
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }

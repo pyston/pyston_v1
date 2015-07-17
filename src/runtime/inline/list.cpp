@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/inline/list.h"
+
 #include <cstring>
 
 #include "runtime/list.h"
@@ -109,38 +111,6 @@ void BoxedList::shrink() {
             capacity = 0;
         }
     }
-}
-
-// TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
-void BoxedList::ensure(int space) {
-    if (size + space > capacity) {
-        if (capacity == 0) {
-            const int INITIAL_CAPACITY = 8;
-            int initial = std::max(INITIAL_CAPACITY, space);
-            elts = new (initial) GCdArray();
-            capacity = initial;
-        } else {
-            int new_capacity = std::max(capacity * 2, size + space);
-            elts = GCdArray::realloc(elts, new_capacity);
-            capacity = new_capacity;
-        }
-    }
-    assert(capacity >= size + space);
-}
-
-// TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
-extern "C" void listAppendInternal(Box* s, Box* v) {
-    // Lock must be held!
-
-    assert(isSubclass(s->cls, list_cls));
-    BoxedList* self = static_cast<BoxedList*>(s);
-
-    assert(self->size <= self->capacity);
-    self->ensure(1);
-
-    assert(self->size < self->capacity);
-    self->elts->elts[self->size] = v;
-    self->size++;
 }
 
 

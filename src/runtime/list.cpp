@@ -26,6 +26,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "gc/roots.h"
+#include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -33,8 +34,9 @@
 namespace pyston {
 
 extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
+    RELEASE_ASSERT(PyList_Check(op), "");
     try {
-        listAppend(op, newitem);
+        listAppendInternal(op, newitem);
     } catch (ExcInfo e) {
         abort();
     }
@@ -131,6 +133,10 @@ extern "C" Box* listLen(BoxedList* self) {
     return boxInt(self->size);
 }
 
+static Py_ssize_t list_length(Box* self) noexcept {
+    return static_cast<BoxedList*>(self)->size;
+}
+
 Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
     // printf("%ld %ld %ld\n", start, stop, step);
     assert(step != 0);
@@ -149,6 +155,38 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
         rtn->size += length;
     }
     return rtn;
+}
+
+static Box* list_slice(Box* o, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
+    BoxedList* a = static_cast<BoxedList*>(o);
+
+    PyObject** src, **dest;
+    Py_ssize_t i, len;
+    if (ilow < 0)
+        ilow = 0;
+    else if (ilow > Py_SIZE(a))
+        ilow = Py_SIZE(a);
+    if (ihigh < ilow)
+        ihigh = ilow;
+    else if (ihigh > Py_SIZE(a))
+        ihigh = Py_SIZE(a);
+    len = ihigh - ilow;
+
+    BoxedList* np = new BoxedList();
+
+    np->ensure(len);
+    if (len) {
+        src = a->elts->elts + ilow;
+        dest = np->elts->elts;
+        for (i = 0; i < len; i++) {
+            PyObject* v = src[i];
+            Py_INCREF(v);
+            dest[i] = v;
+        }
+    }
+    np->size = len;
+
+    return (PyObject*)np;
 }
 
 extern "C" Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
@@ -1140,6 +1178,9 @@ void setupList() {
 
     list_cls->giveAttr("__hash__", None);
     list_cls->freeze();
+
+    list_cls->tp_as_sequence->sq_slice = list_slice;
+    list_cls->tp_as_sequence->sq_length = list_length;
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

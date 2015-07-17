@@ -120,14 +120,7 @@ BoxedString* boxStringTwine(const llvm::Twine& s);
 
 extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 
-// creates an uninitialized string of length n; useful for directly constructing into the string and avoiding copies:
-BoxedString* createUninitializedString(ssize_t n);
-// Gets a writeable pointer to the contents of a string.
-// Is only meant to be used with something just created from createUninitializedString(), though
-// in theory it might work in more cases.
-char* getWriteableStringContents(BoxedString* s);
-
-extern "C" void listAppendInternal(Box* self, Box* v);
+extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
                               std::initializer_list<Box*> defaults) noexcept;
@@ -480,8 +473,19 @@ public:
     explicit BoxedString(llvm::StringRef s) __attribute__((visibility("default")));
     explicit BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) __attribute__((visibility("default")));
 
+    // creates an uninitialized string of length n; useful for directly constructing into the string and avoiding
+    // copies:
+    static BoxedString* createUninitializedString(ssize_t n) { return new (n) BoxedString(n); }
+
+    // Gets a writeable pointer to the contents of a string.
+    // Is only meant to be used with something just created from createUninitializedString(), though
+    // in theory it might work in more cases.
+    char* getWriteableStringContents() { return s_data; }
+
 private:
     void* operator new(size_t size) = delete;
+
+    BoxedString(size_t n); // non-initializing constructor
 
     char s_data[0];
 
@@ -549,6 +553,9 @@ public:
 };
 
 class BoxedList : public Box {
+private:
+    void grow(int min_free);
+
 public:
     int64_t size, capacity;
     GCdArray* elts;
@@ -557,7 +564,7 @@ public:
 
     BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
 
-    void ensure(int space);
+    void ensure(int min_free);
     void shrink();
     static const int INITIAL_CAPACITY;
 

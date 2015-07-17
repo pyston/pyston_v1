@@ -24,6 +24,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/inline/list.h"
 #include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

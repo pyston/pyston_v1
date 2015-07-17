@@ -57,13 +57,10 @@ BoxedString* EmptyString;
 BoxedString* characters[UCHAR_MAX + 1];
 
 BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+    assert(s);
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
-    if (s) {
-        memmove(data(), s, n);
-        data()[n] = 0;
-    } else {
-        memset(data(), 0, n + 1);
-    }
+    memmove(data(), s, n);
+    data()[n] = 0;
 }
 
 BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : interned_state(SSTATE_NOT_INTERNED) {
@@ -82,6 +79,13 @@ BoxedString::BoxedString(llvm::StringRef s) : interned_state(SSTATE_NOT_INTERNED
 BoxedString::BoxedString(size_t n, char c) : interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
+    data()[n] = 0;
+}
+
+BoxedString::BoxedString(size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+    RELEASE_ASSERT(n != llvm::StringRef::npos, "");
+    // Note: no memset.  add the null-terminator for good measure though
+    // (CPython does the same thing).
     data()[n] = 0;
 }
 
@@ -1577,13 +1581,36 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
         assert(start < s.size());
         assert(-1 <= stop);
     }
+    assert(length >= 0);
 
     if (length == 0)
         return EmptyString;
 
-    BoxedString* bs = new (length) BoxedString(nullptr, length);
+    BoxedString* bs = BoxedString::createUninitializedString(length);
     copySlice(bs->data(), s.data(), start, step, length);
     return bs;
+}
+
+static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
+    BoxedString* a = static_cast<BoxedString*>(o);
+    if (i < 0)
+        i = 0;
+    if (j < 0)
+        j = 0; /* Avoid signed/unsigned bug in next line */
+    if (j > Py_SIZE(a))
+        j = Py_SIZE(a);
+    if (i == 0 && j == Py_SIZE(a) && PyString_CheckExact(a)) {
+        /* It's the same as a */
+        Py_INCREF(a);
+        return (PyObject*)a;
+    }
+    if (j < i)
+        j = i;
+    return PyString_FromStringAndSize(a->data() + i, j - i);
+}
+
+static Py_ssize_t str_length(Box* a) {
+    return Py_SIZE(a);
 }
 
 Box* strIsAlpha(BoxedString* self) {
@@ -2307,17 +2334,9 @@ extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** 
     return 0;
 }
 
-BoxedString* createUninitializedString(ssize_t n) {
-    return new (n) BoxedString(n, 0);
-}
-
-char* getWriteableStringContents(BoxedString* s) {
-    return s->data();
-}
-
 extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexcept {
     if (s == NULL)
-        return createUninitializedString(n);
+        return BoxedString::createUninitializedString(n);
     return boxString(llvm::StringRef(s, n));
 }
 
@@ -2334,7 +2353,7 @@ extern "C" char* PyString_AsString(PyObject* o) noexcept {
         return string_getbuffer(o);
 
     BoxedString* s = static_cast<BoxedString*>(o);
-    return getWriteableStringContents(s);
+    return s->getWriteableStringContents();
 }
 
 extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
@@ -2747,6 +2766,9 @@ void setupStr() {
 
     add_operators(str_cls);
     str_cls->freeze();
+
+    str_cls->tp_as_sequence->sq_slice = str_slice;
+    str_cls->tp_as_sequence->sq_length = str_length;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));

@@ -365,11 +365,10 @@ private:
 };
 
 struct ObjLookupCache {
-    void* objptr;
     void* data;
     size_t size;
 
-    ObjLookupCache(void* objptr, void* data, size_t size) : objptr(objptr), data(data), size(size) {}
+    ObjLookupCache(void* data, size_t size) : data(data), size(size) {}
 };
 
 

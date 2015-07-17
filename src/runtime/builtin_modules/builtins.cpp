@@ -31,6 +31,7 @@
 #include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
+#include "runtime/inline/list.h"
 #include "runtime/inline/xrange.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"

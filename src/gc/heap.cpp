@@ -685,7 +685,7 @@ GCAllocation* LargeArena::allocationFrom(void* ptr) {
 
 void LargeArena::prepareForCollection() {
     for (LargeObj* lo = head; lo; lo = lo->next) {
-        lookup.push_back(ObjLookupCache(lo, &lo->data[0], lo->size));
+        lookup.push_back(ObjLookupCache(&lo->data[0], lo->size));
     }
     std::sort(lookup.begin(), lookup.end(),
               [](const ObjLookupCache& lo1, const ObjLookupCache& lo2) { return lo1.data < lo2.data; });
@@ -896,7 +896,7 @@ GCAllocation* HugeArena::allocationFrom(void* ptr) {
 
 void HugeArena::prepareForCollection() {
     for (HugeObj* lo = head; lo; lo = lo->next) {
-        lookup.push_back(ObjLookupCache(lo, &lo->data[0], lo->size));
+        lookup.push_back(ObjLookupCache(&lo->data[0], lo->size));
     }
     std::sort(lookup.begin(), lookup.end(),
               [](const ObjLookupCache& lo1, const ObjLookupCache& lo2) { return lo1.data < lo2.data; });

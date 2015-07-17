@@ -26,6 +26,7 @@
 #include "gc/collector.h"
 #include "runtime/file.h"
 #include "runtime/inline/boxing.h"
+#include "runtime/inline/list.h"
 #include "runtime/int.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
