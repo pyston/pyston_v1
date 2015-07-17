@@ -590,10 +590,9 @@ private:
     void grow(int min_free);
 
 public:
-    int64_t size, capacity;
+    Py_ssize_t size;
     GCdArray* elts;
-
-    DS_DEFINE_MUTEX(lock);
+    Py_ssize_t capacity;
 
     BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
 
