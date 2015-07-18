@@ -374,7 +374,7 @@ public:
         // in the attr_offssets map.
         // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
         // of our child's map.
-        if (!children.size())
+        if (children.empty())
             for (auto p : attr_offsets)
                 visitor->visit(p.first);
     }
