@@ -3027,6 +3027,9 @@ void setupRuntime() {
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
+    // XXX silly that we have to set this again
+    new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
+    new (&type_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 
     none_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
     None = new (none_cls) Box();
