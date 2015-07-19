@@ -95,6 +95,16 @@ struct CallRewriteArgs {
           destination(destination),
           out_success(false),
           out_rtn(NULL) {}
+
+    inline RewriterVar* getArg(int idx) {
+        if (idx == 0)
+            return this->arg1;
+        if (idx == 1)
+            return this->arg2;
+        if (idx == 2)
+            return this->arg3;
+        return this->args->getAttr(sizeof(Box*) * (idx - 3));
+    }
 };
 
 struct BinopRewriteArgs {
@@ -138,6 +148,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 // rewrite_args will get modified in place.
 ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
                             Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args);
+
+
 } // namespace pyston
 
 #endif

@@ -422,7 +422,7 @@ protected:
                const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
-    void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
+    void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n, int m);
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // The public versions of these are in RewriterVar
@@ -499,10 +499,15 @@ public:
                       RewriterVar* arg3);
     RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2,
                       RewriterVar* arg3, RewriterVar* arg4);
-    RewriterVar* add(RewriterVar* a, int64_t b, Location dest);
+    RewriterVar* add(RewriterVar* a, int64_t b, Location dest = Location::any());
     // Allocates n pointer-sized stack slots:
     RewriterVar* allocate(int n);
+
+    // copies array of length n to array of length m. Assumes m >= n.
+    // If m > n, leaves last m-n entries unitialized
+    RewriterVar* allocateAndCopy(RewriterVar* array, int n, int m);
     RewriterVar* allocateAndCopy(RewriterVar* array, int n);
+
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     void abort();

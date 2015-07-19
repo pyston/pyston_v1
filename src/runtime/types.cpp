@@ -584,11 +584,6 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                         Box** args, const std::vector<BoxedString*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
-    if (argspec.has_starargs) {
-        // This would fail in typeCallInner
-        rewrite_args = NULL;
-    }
-
     Box** new_args = NULL;
     if (npassed_args >= 3) {
         new_args = (Box**)alloca(sizeof(Box*) * (npassed_args + 1 - 3));
@@ -700,6 +695,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         return cpythonTypeCall(cls, oarg2, oarg3);
     }
 
+    if (argspec.has_starargs) {
+        rewrite_args = NULL;
+    }
+
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
@@ -712,7 +711,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // This is probably a duplicate, but it's hard to really convince myself of that.
         // Need to create a clear contract of who guards on what
         r_ccls->addGuard((intptr_t)arg1 /* = _cls */);
-
 
         if (!rewrite_args->args_guarded) {
             // TODO should know which args don't need to be guarded, ex if we're guaranteed that they

@@ -187,8 +187,18 @@ struct ParamReceiveSpec {
 
     bool operator!=(ParamReceiveSpec rhs) { return !(*this == rhs); }
 
+    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
+
     int totalReceived() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+
+    void dump() {
+        printf("(takes_varargs=%s, takes_kwargs=%s, num_defaults=%d, num_args=%d)\n", takes_varargs ? "true" : "false",
+               takes_kwargs ? "true" : "false", num_defaults, num_args);
+    }
 };
+static_assert(sizeof(ParamReceiveSpec) <= sizeof(void*),
+              "ParamReceiveSpec doesn't fit in register! (CC is probably wrong)");
+static_assert(sizeof(ParamReceiveSpec) == sizeof(uint32_t), "ParamReceiveSpec::asInt needs to be updated");
 
 class ICInvalidator {
 private:
