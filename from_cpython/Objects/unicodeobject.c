@@ -6300,16 +6300,31 @@ Unicode string S[start:end].  Optional arguments start and end are\n\
 interpreted as in slice notation.");
 
 static PyObject *
-unicode_count(PyUnicodeObject *self, PyObject *args)
+unicode_count(PyUnicodeObject *self,
+              PyObject *subobj, PyObject* obj_start, PyObject** args)
 {
     PyUnicodeObject *substring;
     Py_ssize_t start = 0;
     Py_ssize_t end = PY_SSIZE_T_MAX;
     PyObject *result;
+    PyObject* obj_end = args[0];
 
+    /*
     if (!stringlib_parse_args_finds_unicode("count", args, &substring,
                                             &start, &end))
         return NULL;
+    */
+
+    if (obj_start && obj_start != Py_None)
+        if (!_PyEval_SliceIndex(obj_start, &start))
+            return 0;
+    if (obj_end && obj_end != Py_None)
+        if (!_PyEval_SliceIndex(obj_end, &end))
+            return 0;
+
+    substring = (PyUnicodeObject*)PyUnicode_FromObject(subobj);
+    if (!substring)
+        return 0;
 
     ADJUST_INDICES(start, end, self->length);
     result = PyInt_FromSsize_t(
@@ -7656,16 +7671,26 @@ prefix can also be a tuple of strings to try.");
 
 static PyObject *
 unicode_startswith(PyUnicodeObject *self,
-                   PyObject *args)
+                   PyObject *subobj, PyObject* obj_start, PyObject** args)
 {
-    PyObject *subobj;
     PyUnicodeObject *substring;
     Py_ssize_t start = 0;
     Py_ssize_t end = PY_SSIZE_T_MAX;
     int result;
+    PyObject* obj_end = args[0];
 
+    /*
     if (!stringlib_parse_args_finds("startswith", args, &subobj, &start, &end))
         return NULL;
+    */
+
+    if (obj_start && obj_start != Py_None)
+        if (!_PyEval_SliceIndex(obj_start, &start))
+            return 0;
+    if (obj_end && obj_end != Py_None)
+        if (!_PyEval_SliceIndex(obj_end, &end))
+            return 0;
+
     if (PyTuple_Check(subobj)) {
         Py_ssize_t i;
         for (i = 0; i < PyTuple_GET_SIZE(subobj); i++) {
@@ -7814,7 +7839,7 @@ static PyMethodDef unicode_methods[] = {
     {"capitalize", (PyCFunction) unicode_capitalize, METH_NOARGS, capitalize__doc__},
     {"title", (PyCFunction) unicode_title, METH_NOARGS, title__doc__},
     {"center", (PyCFunction) unicode_center, METH_VARARGS, center__doc__},
-    {"count", (PyCFunction) unicode_count, METH_VARARGS, count__doc__},
+    {"count", (PyCFunction) unicode_count, METH_O3 | METH_D2, count__doc__},
     {"expandtabs", (PyCFunction) unicode_expandtabs, METH_VARARGS, expandtabs__doc__},
     {"find", (PyCFunction) unicode_find, METH_VARARGS, find__doc__},
     {"partition", (PyCFunction) unicode_partition, METH_O, partition__doc__},
@@ -7834,7 +7859,7 @@ static PyMethodDef unicode_methods[] = {
     {"swapcase", (PyCFunction) unicode_swapcase, METH_NOARGS, swapcase__doc__},
     {"translate", (PyCFunction) unicode_translate, METH_O, translate__doc__},
     {"upper", (PyCFunction) unicode_upper, METH_NOARGS, upper__doc__},
-    {"startswith", (PyCFunction) unicode_startswith, METH_VARARGS, startswith__doc__},
+    {"startswith", (PyCFunction) unicode_startswith, METH_O3 | METH_D2, startswith__doc__},
     {"endswith", (PyCFunction) unicode_endswith, METH_VARARGS, endswith__doc__},
     {"islower", (PyCFunction) unicode_islower, METH_NOARGS, islower__doc__},
     {"isupper", (PyCFunction) unicode_isupper, METH_NOARGS, isupper__doc__},

@@ -247,6 +247,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     }
 
     ParamReceiveSpec paramspec(0, 0, false, false);
+    Box** defaults = NULL;
     if (call_flags == METH_NOARGS) {
         paramspec = ParamReceiveSpec(1, 0, false, false);
     } else if (call_flags == METH_VARARGS) {
@@ -255,6 +256,25 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         paramspec = ParamReceiveSpec(1, 0, true, true);
     } else if (call_flags == METH_O) {
         paramspec = ParamReceiveSpec(2, 0, false, false);
+    } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
+        int num_args = 0;
+        if (call_flags & METH_O)
+            num_args++;
+        if (call_flags & METH_O2)
+            num_args += 2;
+
+        int num_defaults = 0;
+        if (call_flags & METH_D1)
+            num_defaults++;
+        if (call_flags & METH_D2)
+            num_defaults += 2;
+
+        paramspec = ParamReceiveSpec(1 + num_args, num_defaults, false, false);
+        if (num_defaults) {
+            static Box* _defaults[] = { NULL, NULL, NULL };
+            assert(num_defaults <= 3);
+            defaults = _defaults;
+        }
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
@@ -264,9 +284,15 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     Box* oarg3 = NULL;
     Box** oargs = NULL;
 
+    Box* oargs_array[1];
+    if (paramspec.totalReceived() >= 3) {
+        assert((paramspec.totalReceived() - 3) <= sizeof(oargs_array) / sizeof(oargs_array[0]));
+        oargs = oargs_array;
+    }
+
     bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1, arg2,
-                       arg3, args, keyword_names, oarg1, oarg2, oarg3, args);
+    rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
+                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -321,6 +347,25 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                                  rewrite_args->arg2);
+    } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
+        {
+            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+            rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(oarg1, oarg2, oarg3, oargs);
+        }
+        if (rewrite_args) {
+            if (paramspec.totalReceived() == 2)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth,
+                                                                     rewrite_args->arg1, rewrite_args->arg2);
+            else if (paramspec.totalReceived() == 3)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                    true, (void*)self->method->ml_meth, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+            else if (paramspec.totalReceived() > 3)
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                   rewrite_args->arg2, rewrite_args->arg3, rewrite_args->args);
+            else
+                abort();
+        }
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }

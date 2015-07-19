@@ -24,15 +24,25 @@ PyObject * _do_string_format(PyObject *self, PyObject *args, PyObject *kwargs) {
 }
 
 PyObject *
-string_count(PyStringObject *self, PyObject *args)
+string_count(PyStringObject *self,
+             PyObject *sub_obj, PyObject* obj_start, PyObject** args)
 {
-    PyObject *sub_obj;
     const char *str = PyString_AS_STRING(self), *sub;
     Py_ssize_t sub_len;
     Py_ssize_t start = 0, end = PY_SSIZE_T_MAX;
+    PyObject* obj_end = args[0];
 
+    /*
     if (!stringlib_parse_args_finds("count", args, &sub_obj, &start, &end))
         return NULL;
+    */
+
+    if (obj_start && obj_start != Py_None)
+        if (!_PyEval_SliceIndex(obj_start, &start))
+            return 0;
+    if (obj_end && obj_end != Py_None)
+        if (!_PyEval_SliceIndex(obj_end, &end))
+            return 0;
 
     if (PyString_Check(sub_obj)) {
         sub = PyString_AS_STRING(sub_obj);

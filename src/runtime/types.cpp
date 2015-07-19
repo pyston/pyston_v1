@@ -2903,6 +2903,13 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     if (!str)
         return (PyUnicodeObject*)PyErr_NoMemory();
 
+#if STAT_ALLOCATIONS
+    {
+        size_t size = sizeof(PyUnicodeObject);
+        ALLOC_STATS(unicode_cls);
+    }
+#endif
+
     // Do a bunch of inlining + constant folding of this line of CPython's:
     // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
     assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant

@@ -3,13 +3,9 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../test/integration/django"))
 
 from django.template.base import Lexer, Parser
+from django.conf import settings
+from django.apps import apps
 import time
-
-try:
-    import __pyston__
-    pyston_loaded = True
-except:
-    pyston_loaded = False
 
 template_source = u"""
 {% extends "admin/base_site.html" %}
@@ -96,8 +92,21 @@ template_source = u"""
 {% endblock %}
 """
 
+settings.configure()
+
+apps.populate((
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+))
+
 elapsed = 0
-for i in xrange(10000):
-    # print i
-    lexer = Lexer(template_source, None)
-    lexer.tokenize()
+lexer = Lexer(template_source, None)
+tokens = lexer.tokenize()
+
+for i in xrange(500):
+    parser = Parser(list(tokens))
+    parser.parse()
