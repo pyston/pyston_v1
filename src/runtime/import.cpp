@@ -184,7 +184,8 @@ struct SearchResult {
 };
 
 SearchResult findModule(const std::string& name, const std::string& full_name, BoxedList* path_list) {
-    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(internStringMortal("meta_path")));
+    static BoxedString* meta_path_str = internStringImmortal("meta_path");
+    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(meta_path_str));
     if (!meta_path || meta_path->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
 
@@ -208,12 +209,13 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
     }
 
-    BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr(internStringMortal("path_hooks")));
+    static BoxedString* path_hooks_str = internStringImmortal("path_hooks");
+    BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr(path_hooks_str));
     if (!path_hooks || path_hooks->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.path_hooks must be a list of import hooks");
 
-    BoxedDict* path_importer_cache
-        = static_cast<BoxedDict*>(sys_module->getattr(internStringMortal("path_importer_cache")));
+    static BoxedString* path_importer_cache_str = internStringImmortal("path_importer_cache");
+    BoxedDict* path_importer_cache = static_cast<BoxedDict*>(sys_module->getattr(path_importer_cache_str));
     if (!path_importer_cache || path_importer_cache->cls != dict_cls)
         raiseExcHelper(RuntimeError, "sys.path_importer_cache must be a dict");
 
@@ -865,7 +867,8 @@ Box* impIsBuiltin(Box* _name) {
     if (!PyString_Check(_name))
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_name));
 
-    BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr(internStringMortal("builtin_module_names"));
+    static BoxedString* builtin_module_names_str = internStringImmortal("builtin_module_names");
+    BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr(builtin_module_names_str);
     RELEASE_ASSERT(PyTuple_Check(builtin_modules), "");
     for (Box* m : builtin_modules->pyElements()) {
         if (compare(m, _name, AST_TYPE::Eq) == True)

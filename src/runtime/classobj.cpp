@@ -110,8 +110,10 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
-    made->setattr(internStringMortal("__name__"), name, NULL);
-    made->setattr(internStringMortal("__bases__"), bases, NULL);
+    static BoxedString* name_str = internStringImmortal("__name__");
+    static BoxedString* bases_str = internStringImmortal("__bases__");
+    made->setattr(name_str, name, NULL);
+    made->setattr(bases_str, bases, NULL);
 
     return made;
 }

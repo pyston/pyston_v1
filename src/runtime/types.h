@@ -326,11 +326,9 @@ public:
 
 private:
     HiddenClass(HCType type) : type(type) {}
-    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets(), attrwrapper_offset(parent->attrwrapper_offset) {
+    HiddenClass(HiddenClass* parent)
+        : type(NORMAL), attr_offsets(parent->attr_offsets), attrwrapper_offset(parent->attrwrapper_offset) {
         assert(parent->type == NORMAL);
-        for (auto& p : parent->attr_offsets) {
-            this->attr_offsets.insert(p);
-        }
     }
 
     // These fields only make sense for NORMAL or SINGLETON hidden classes:
