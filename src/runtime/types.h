@@ -590,10 +590,9 @@ private:
     void grow(int min_free);
 
 public:
-    int64_t size, capacity;
+    Py_ssize_t size;
     GCdArray* elts;
-
-    DS_DEFINE_MUTEX(lock);
+    Py_ssize_t capacity;
 
     BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
 
@@ -603,6 +602,12 @@ public:
 
     DEFAULT_CLASS_SIMPLE(list_cls);
 };
+static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
+static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");
+static_assert(offsetof(BoxedList, size) == offsetof(PyListObject, ob_size), "");
+static_assert(offsetof(BoxedList, elts) == offsetof(PyListObject, ob_item), "");
+static_assert(offsetof(GCdArray, elts) == 0, "");
+static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated), "");
 
 class BoxedTuple : public BoxVar {
 public:
