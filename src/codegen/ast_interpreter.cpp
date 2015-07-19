@@ -102,7 +102,7 @@ private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
-    void doStore(InternedString name, Value value);
+    void doStore(AST_Name* name, Value value);
     Box* doOSR(AST_Jump* node);
     Value getNone();
 
@@ -506,8 +506,12 @@ Value ASTInterpreter::doBinOp(Value left, Value right, int op, BinExpType exp_ty
     return Value();
 }
 
-void ASTInterpreter::doStore(InternedString name, Value value) {
-    ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
+void ASTInterpreter::doStore(AST_Name* node, Value value) {
+    if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
+        node->lookup_type = scope_info->getScopeTypeOfName(node->id);
+
+    InternedString name = node->id;
+    ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
             jit->emitSetGlobal(globals, name.getBox(), value);
@@ -541,7 +545,7 @@ void ASTInterpreter::doStore(InternedString name, Value value) {
 void ASTInterpreter::doStore(AST_expr* node, Value value) {
     if (node->type == AST_TYPE::Name) {
         AST_Name* name = (AST_Name*)node;
-        doStore(name->id, value);
+        doStore(name, value);
     } else if (node->type == AST_TYPE::Attribute) {
         AST_Attribute* attr = (AST_Attribute*)node;
         Value o = visit_expr(attr->value);
