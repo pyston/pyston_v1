@@ -548,7 +548,7 @@ static void callPendingFinalizers() {
         Box* box = pending_finalization_list.front();
         pending_finalization_list.pop_front();
 
-        assert(isValidGCObject(box));
+        RELEASE_ASSERT(isValidGCObject(box), "objects to be finalized should still be alive");
 
         if (isWeaklyReferenced(box)) {
             // Callbacks for weakly-referenced objects with finalizers (if any), followed by call to finalizers.
@@ -565,6 +565,7 @@ static void callPendingFinalizers() {
         }
 
         finalize(box);
+        RELEASE_ASSERT(isValidGCObject(box), "finalizing an object should not free the object");
     }
 
     if (!initially_empty) {
@@ -757,6 +758,12 @@ void runCollection() {
 #endif
 
     global_heap.prepareForCollection();
+
+    // Finalizers might have been called since the last GC.
+    // Normally we invalidate the list everytime we call a batch of objects with finalizers.
+    // However, there are some edge cases where that isn't sufficient, such as a GC being triggered
+    // inside a finalizer call. To be safe, it's better to invalidate the list again.
+    invalidateOrderedFinalizerList();
 
     markPhase();
 
