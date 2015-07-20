@@ -56,17 +56,15 @@ void ICSlotInfo::clear() {
     ic->clear(this);
 }
 
-ICSlotRewrite::ICSlotRewrite(ICInfo* ic, const char* debug_name) : ic(ic), debug_name(debug_name) {
-    buf = (uint8_t*)malloc(ic->getSlotSize());
-    assembler = new Assembler(buf, ic->getSlotSize());
-    assembler->nop();
+ICSlotRewrite::ICSlotRewrite(ICInfo* ic, const char* debug_name)
+    : ic(ic), debug_name(debug_name), buf((uint8_t*)malloc(ic->getSlotSize())), assembler(buf, ic->getSlotSize()) {
+    assembler.nop();
 
     if (VERBOSITY() >= 4)
         printf("starting %s icentry\n", debug_name);
 }
 
 ICSlotRewrite::~ICSlotRewrite() {
-    delete assembler;
     free(buf);
 }
 
@@ -109,7 +107,7 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     if (!do_commit)
         return;
 
-    assert(!assembler->hasFailed());
+    assert(!assembler.hasFailed());
 
     for (int i = 0; i < dependencies.size(); i++) {
         ICInvalidator* invalidator = dependencies[i].first;

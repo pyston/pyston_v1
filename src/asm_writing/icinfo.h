@@ -21,6 +21,7 @@
 
 #include "llvm/IR/CallingConv.h"
 
+#include "asm_writing/assembler.h"
 #include "asm_writing/types.h"
 
 namespace pyston {
@@ -53,12 +54,13 @@ public:
 
 private:
     ICInfo* ic;
-    assembler::Assembler* assembler;
     const char* debug_name;
 
     uint8_t* buf;
 
-    std::vector<std::pair<ICInvalidator*, int64_t>> dependencies;
+    assembler::Assembler assembler;
+
+    llvm::SmallVector<std::pair<ICInvalidator*, int64_t>, 4> dependencies;
 
     ICSlotInfo* ic_entry;
 
@@ -66,7 +68,7 @@ public:
     ICSlotRewrite(ICInfo* ic, const char* debug_name);
     ~ICSlotRewrite();
 
-    assembler::Assembler* getAssembler() { return assembler; }
+    assembler::Assembler* getAssembler() { return &assembler; }
     int getSlotSize();
     int getScratchRspOffset();
     int getScratchSize();

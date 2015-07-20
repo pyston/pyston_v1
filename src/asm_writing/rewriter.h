@@ -15,6 +15,7 @@
 #ifndef PYSTON_ASMWRITING_REWRITER_H
 #define PYSTON_ASMWRITING_REWRITER_H
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -100,6 +101,8 @@ public:
     bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
 
     bool operator!=(const Location rhs) const { return !(*this == rhs); }
+
+    bool operator<(const Location& rhs) const { return this->asInt() < rhs.asInt(); }
 
     uint64_t asInt() const { return (int)type + ((uint64_t)_data << 4); }
 
@@ -224,7 +227,7 @@ public:
 private:
     Rewriter* rewriter;
 
-    std::unordered_set<Location> locations;
+    std::set<Location> locations;
     bool isInLocation(Location l);
 
     // uses is a vector of the indices into the Rewriter::actions vector
@@ -317,7 +320,7 @@ protected:
         // Loads the constant into any register or if already in a register just return it
         assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
 
-        std::unordered_map<uint64_t, RewriterVar*> constToVar;
+        std::vector<std::pair<uint64_t, RewriterVar*>> consts;
     };
 
 
@@ -326,7 +329,7 @@ protected:
     ICSlotInfo* picked_slot;
 
     ConstLoader const_loader;
-    std::vector<RewriterVar*> vars;
+    std::deque<RewriterVar> vars;
 
     const Location return_location;
 
@@ -346,11 +349,11 @@ protected:
     void assertPhaseEmitting() {}
 #endif
 
-    std::vector<int> live_out_regs;
+    llvm::SmallVector<int, 8> live_out_regs;
 
     LocMap<RewriterVar*> vars_by_location;
-    std::vector<RewriterVar*> args;
-    std::vector<RewriterVar*> live_outs;
+    llvm::SmallVector<RewriterVar*, 8> args;
+    llvm::SmallVector<RewriterVar*, 8> live_outs;
 
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
@@ -443,15 +446,22 @@ protected:
 
     void assertConsistent() {
 #ifndef NDEBUG
-        for (RewriterVar* var : vars) {
-            for (Location l : var->locations) {
-                assert(vars_by_location[l] == var);
+        for (RewriterVar& var : vars) {
+            for (Location l : var.locations) {
+                assert(vars_by_location[l] == &var);
             }
         }
         for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
             assert(p.second != NULL);
             if (p.second != LOCATION_PLACEHOLDER) {
-                assert(std::find(vars.begin(), vars.end(), p.second) != vars.end());
+                bool found = false;
+                for (auto& v : vars) {
+                    if (&v == p.second) {
+                        found = true;
+                        break;
+                    }
+                }
+                assert(found);
                 assert(p.second->locations.count(p.first) == 1);
             }
         }
@@ -471,10 +481,6 @@ public:
         if (!finished)
             this->abort();
         assert(finished);
-
-        for (RewriterVar* var : vars) {
-            delete var;
-        }
     }
 
     Location getReturnDestination();
