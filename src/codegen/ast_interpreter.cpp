@@ -849,7 +849,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         const std::string& name = ast_str->str_data;
         assert(name.size());
         // TODO: shouldn't have to rebox here
-        v.o = importFrom(module.o, boxString(name));
+        v.o = importFrom(module.o, internStringMortal(name));
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
         abortJITing();
         assert(node->args.size() == 3);
@@ -1133,7 +1133,7 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
 #endif
 
-    static BoxedString* AssertionError_str = static_cast<BoxedString*>(PyString_InternFromString("AssertionError"));
+    static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
     Box* assertion_type = getGlobal(globals, AssertionError_str);
     assertFail(assertion_type, node->msg ? visit_expr(node->msg).o : 0);
 

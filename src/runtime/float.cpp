@@ -651,7 +651,7 @@ BoxedFloat* _floatNew(Box* a) {
             raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
         return new BoxedFloat(r);
     } else {
-        static BoxedString* float_str = static_cast<BoxedString*>(PyString_InternFromString("__float__"));
+        static BoxedString* float_str = internStringImmortal("__float__");
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         Box* r = callattr(a, float_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 
@@ -1447,7 +1447,7 @@ static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOA
 
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
-    float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
+    float_cls->giveAttr("__radd__", float_cls->getattr(internStringMortal("__add__")));
 
     _addFunc("__div__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatDiv);
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
@@ -1464,7 +1464,7 @@ void setupFloat() {
     _addFunc("__mod__", BOXED_FLOAT, (void*)floatModFloat, (void*)floatModInt, (void*)floatMod);
     _addFunc("__rmod__", BOXED_FLOAT, (void*)floatRModFloat, (void*)floatRModInt, (void*)floatRMod);
     _addFunc("__mul__", BOXED_FLOAT, (void*)floatMulFloat, (void*)floatMulInt, (void*)floatMul);
-    float_cls->giveAttr("__rmul__", float_cls->getattr("__mul__"));
+    float_cls->giveAttr("__rmul__", float_cls->getattr(internStringMortal("__mul__")));
 
     _addFuncPow("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);

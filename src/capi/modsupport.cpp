@@ -444,7 +444,7 @@ extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* valu
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    m->setattr(name, value, NULL);
+    m->setattr(internStringMortal(name), value, NULL);
     return 0;
 }
 
