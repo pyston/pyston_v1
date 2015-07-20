@@ -856,8 +856,8 @@ private:
     ContiguousMap<int64_t, BoxedInt*, std::unordered_map<int64_t, int>> int_constants;
     // I'm not sure how well it works to use doubles as hashtable keys; thankfully
     // it's not a big deal if we get misses.
-    ContiguousMap<double, BoxedFloat*, std::unordered_map<double, int>> float_constants;
-    ContiguousMap<double, Box*, std::unordered_map<double, int>> imaginary_constants;
+    ContiguousMap<int64_t, BoxedFloat*, std::unordered_map<int64_t, int>> float_constants;
+    ContiguousMap<int64_t, Box*, std::unordered_map<int64_t, int>> imaginary_constants;
     ContiguousMap<llvm::StringRef, Box*, llvm::StringMap<int>> long_constants;
 
 public:

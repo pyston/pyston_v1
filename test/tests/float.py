@@ -88,3 +88,8 @@ try:
     float(-l)
 except OverflowError as e:
     print e.message
+
+print 0.0
+print -0.0
+print -(0.0)
+print -(-0.0)
