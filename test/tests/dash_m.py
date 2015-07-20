@@ -6,7 +6,13 @@ me = sys.executable
 
 with open('/dev/null')as ignore:
     def run(args):
-        print subprocess.call([me] + args, stderr=ignore)
+        p = subprocess.Popen([me] + args, stdout = subprocess.PIPE, stderr=ignore)
+        output, err = p.communicate()
+        for num, line in enumerate(output.split('\n')):
+            if num > 5:
+                break
+            print line
+        print p.returncode
 
     # just prints out the usage
     run(["-m", "pydoc"])
