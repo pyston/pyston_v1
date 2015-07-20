@@ -480,6 +480,9 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
     if (!f->writable)
         return err_mode("writing");
     if (f->f_binary) {
+        // NOTE: this call will create a new tuple every time we write to a binary file. if/when this becomes hot or
+        // creates too much GC pressure, we can fix it by adding a Pyston specific versino of PyArg_ParseTuple that
+        // (instead of taking a tuple) takes length + Box**.  Then we'd call that directly here (passing "1, &arg").
         if (!PyArg_ParseTuple(BoxedTuple::create({ arg }), "s*", &pbuf))
             return NULL;
         s = (const char*)pbuf.buf;
