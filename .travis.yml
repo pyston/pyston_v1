@@ -5,8 +5,11 @@ compiler:
   - gcc
 
 env:
-  - TRAVIS_BUILD_TYPE=Debug
-  - TRAVIS_BUILD_TYPE=Release
+  matrix:
+    - TRAVIS_BUILD_TYPE=Debug
+    - TRAVIS_BUILD_TYPE=Release
+  global:
+    - PYSTON_RUN_ARGS=G
 
 matrix:
   exclude:
@@ -63,7 +66,7 @@ before_script:
 
 script:
   - ccache -z
-  - PYSTON_RUN_ARGS=G ninja -j4 pyston check-deps && ctest --output-on-failure
+  - ninja -j4 pyston check-deps && ctest --output-on-failure
   - ccache -s
   - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 
