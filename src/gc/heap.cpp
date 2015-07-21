@@ -108,7 +108,11 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free fr
     }
 }
 
-unsigned bytesAllocatedSinceCollection;
+size_t bytesAllocatedSinceCollection = 0;
+size_t allocBytesForNextCollection = INITIAL_ALLOCBYTES_PER_COLLECTION;
+
+struct timeval last_gc;
+
 static StatCounter gc_registered_bytes("gc_registered_bytes");
 void _bytesAllocatedTripped() {
     gc_registered_bytes.log(bytesAllocatedSinceCollection);
@@ -119,7 +123,16 @@ void _bytesAllocatedTripped() {
 
     threading::GLPromoteRegion _lock;
 
-    runCollection();
+// we want our gc's to take less than 50ms
+#define MAX_DESIRED_GC_TIME 50000
+
+    long us = runCollection();
+    if (us > MAX_DESIRED_GC_TIME) {
+        allocBytesForNextCollection *= 0.35;
+        allocBytesForNextCollection = std::max(allocBytesForNextCollection, (size_t)INITIAL_ALLOCBYTES_PER_COLLECTION);
+    } else {
+        allocBytesForNextCollection *= 1.85;
+    }
 }
 
 Heap global_heap;
