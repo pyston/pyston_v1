@@ -185,9 +185,11 @@ void Rewriter::ConstLoader::moveImmediate(uint64_t val, assembler::Register dst_
 assembler::Register Rewriter::ConstLoader::findConst(uint64_t val, bool& found_value) {
     assert(rewriter->phase_emitting);
 
-    auto it = constToVar.find(val);
-    if (it != constToVar.end()) {
-        RewriterVar* var = it->second;
+    for (auto& p : consts) {
+        if (p.first != val)
+            continue;
+
+        RewriterVar* var = p.second;
         for (Location l : var->locations) {
             if (l.type == Location::Register) {
                 found_value = true;
@@ -216,11 +218,11 @@ assembler::Register Rewriter::ConstLoader::loadConst(uint64_t val, Location othe
     assert(rewriter->phase_emitting);
 
     bool found_value = false;
-    assembler::Register reg = findConst(val, found_value);
+    assembler::Register /*reg = findConst(val, found_value);
     if (found_value)
-        return reg;
+        return reg;*/
 
-    reg = rewriter->allocReg(Location::any(), otherThan);
+        reg = rewriter->allocReg(Location::any(), otherThan);
     if (tryLea(val, reg))
         return reg;
 
@@ -711,10 +713,15 @@ void Rewriter::_trap() {
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    RewriterVar*& const_loader_var = const_loader.constToVar[val];
-    if (!const_loader_var) {
-        const_loader_var = createNewConstantVar(val);
+    for (auto& p : const_loader.consts) {
+        if (p.first != val)
+            continue;
+
+        return p.second;
     }
+
+    RewriterVar* const_loader_var = createNewConstantVar(val);
+    const_loader.consts.push_back(std::make_pair(val, const_loader_var));
     return const_loader_var;
 }
 
@@ -1099,11 +1106,11 @@ void Rewriter::commit() {
     for (int i = 0; i < live_outs.size(); i++) {
         live_outs[i]->uses.push_back(actions.size());
     }
-    for (RewriterVar* var : vars) {
+    for (RewriterVar& var : vars) {
         // Add a use for every constant. This helps make constants available for the lea stuff
         // But since "spilling" a constant has no cost, it shouldn't add register pressure.
-        if (var->is_constant) {
-            var->uses.push_back(actions.size());
+        if (var.is_constant) {
+            var.uses.push_back(actions.size());
         }
     }
 
@@ -1176,22 +1183,22 @@ void Rewriter::commit() {
 // Make sure that we have been calling bumpUse correctly.
 // All uses should have been accounted for, other than the live outs
 #ifndef NDEBUG
-    for (RewriterVar* var : vars) {
+    for (RewriterVar& var : vars) {
         int num_as_live_out = 0;
         for (RewriterVar* live_out : live_outs) {
-            if (live_out == var) {
+            if (live_out == &var) {
                 num_as_live_out++;
             }
         }
-        assert(var->next_use + num_as_live_out + (var->is_constant ? 1 : 0) == var->uses.size());
+        assert(var.next_use + num_as_live_out + (var.is_constant ? 1 : 0) == var.uses.size());
     }
 #endif
 
     assert(live_out_regs.size() == live_outs.size());
 
-    for (RewriterVar* var : vars) {
-        if (var->is_constant) {
-            var->bumpUse();
+    for (RewriterVar& var : vars) {
+        if (var.is_constant) {
+            var.bumpUse();
         }
     }
 
@@ -1686,9 +1693,8 @@ void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
 RewriterVar* Rewriter::createNewVar() {
     assertPhaseCollecting();
 
-    RewriterVar* var = new RewriterVar(this);
-    vars.push_back(var);
-    return var;
+    vars.emplace_back(this);
+    return &vars.back();
 }
 
 RewriterVar* Rewriter::createNewConstantVar(uint64_t val) {

@@ -714,7 +714,7 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
 
-        if (hcls->type == HiddenClass::DICT_BACKED) {
+        if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
             if (rewrite_args)
                 assert(!rewrite_args->out_success);
             rewrite_args = NULL;
@@ -728,7 +728,7 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
 
         assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
-        if (rewrite_args) {
+        if (unlikely(rewrite_args)) {
             if (!rewrite_args->obj_hcls_guarded) {
                 if (cls->attrs_offset < 0) {
                     REWRITE_ABORTED("");
@@ -1001,9 +1001,20 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
         return NULL;
     } else {
+        assert(attr->interned_state != SSTATE_NOT_INTERNED);
+
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
         for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
+            // object_cls will get checked very often, but it only
+            // has attributes that start with an underscore.
+            if (b == object_cls) {
+                if (attr->data()[0] != '_') {
+                    assert(!b->getattr(attr, NULL));
+                    continue;
+                }
+            }
+
             val = b->getattr(attr, NULL);
             if (val)
                 return val;
@@ -1674,7 +1685,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     }
 
     if (!cls_only) {
-        if (!isSubclass(obj->cls, type_cls)) {
+        if (!PyType_Check(obj)) {
             // Look up the val in the object's dictionary and if you find it, return it.
 
             Box* val;
