@@ -165,7 +165,8 @@ extern "C" void printFloat(double d);
 Box* objectStr(Box*);
 Box* objectRepr(Box*);
 
-
+// In Pyston, this is the same type as CPython's PyTypeObject (they are interchangeable, but we
+// use BoxedClass in Pyston wherever possible as a convention).
 class BoxedClass : public BoxVar {
 public:
     typedef void (*gcvisit_func)(GCVisitor*, Box*);

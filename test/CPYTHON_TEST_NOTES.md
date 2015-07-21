@@ -1,54 +1,20 @@
 These are rntz's notes from trying to get the CPython testing framework to run,
 for future reference.
 
-* getting regrtest to work is hard
-regrtest works by __import__()ing the tests to be run and then doing some stuff.
-This means that if even a single test causes pyston to crash or assert(), the
-whole test-runner dies.
-
-The best fix for this would be to simply run each test in a separate pyston
-process. It's not clear to accomplish this without breaking the tests, however,
-because Python's test support is a big, gnarly piece of code. In particular, it
-will skip tests based on various criteria, which we probably want to support.
-But it's not clear how to disentangle that knowledge from the way it __import__s
-the tests.
-
-So instead I ran regrtest manually, looked at what tests it ran, and imported
-those. tester.py will run them separately.
-
-** Obsolete notes: Hacking regrtest to manually change directories
-Need to run test/regrtest.py for testing harness; The standard way to do this in
-CPython is `python -m test.regrtest` from Lib/. The -m is important because
-otherwise it can't find the tests properly. Turns out implementing the -m flag
-is hard, because the machinery for imports is pretty complicated and there's no
-easy way to ask it "which file *would* I load to import this module". So I
-hacked regrtest to manually change directories.
-
-** Obsolete FIXME for regrtest.py: CFG/analysis bug with osr
-test/regrtest.py trips an assert in PropagatingTypeAnalysis::getTypeAtBlockStart
-if not run with -I, looks like malformed CFG or bug in analysis
-* tests are slow
-CPython's tests are pretty slow for us. In particular, since we're not running
-with regrtest, we have to go through the set-up time of loading
-test.test_support for each test. On my machine it's that's about a half-second
-per test.
-
-To handle this, by default we don't run tests marked "expected: fail". To
-disable this, pass --all-cpython-tests to tester.py.
-
-* bugs uncovered
+## Bugs uncovered
 The CPython tests I've included fail for various reasons. Recurring issues include:
-- use of compile()
-- missing __hash__ implementations for some builtin types
-- we don't have imp.get_magic()
+- use of `compile()`
+- missing `__hash__` implementations for some builtin types
+- we don't have `imp.get_magic()`
 - segfaults
-- missing __name__ attributes on capifuncs
-- missing sys.__stdout__ attribute
-- serialize_ast.cpp: writeColOffset: assert(v < 100000 || v == -1) gets tripped
-- pypa-parser.cpp: readName: assert(e.type == pypa::AstType::Name)
-- src/runtime/util.cpp: parseSlice: assert(isSubclass(start->cls, int_cls) || start->cls == none_cls)
+- missing `__name__` attributes on capifuncs
+- missing `sys.__stdout__` attribute
+- `serialize_ast.cpp`: `writeColOffset: assert(v < 100000 || v == -1)` gets tripped
+- `pypa-parser.cpp`: readName: `assert(e.type == pypa::AstType::Name)`
+- `src/runtime/util.cpp`: `parseSlice`: `assert(isSubclass(start->cls, int_cls) || start->cls == none_cls)`
 
-** list of files & why they're failing
+## List of files & why they're failing
+```
 FILE                    REASONS
 ------------------------------------------------------
 test_augassign          missing oldstyle-class __add__, __iadd__, etc
@@ -131,3 +97,39 @@ test_weakset            unknown issues
 test_with               weird codegen assert
 test_wsgiref            unknown issue
 test_xrange             unknown type analysis issue
+```
+
+### Getting regrtest to work is hard
+regrtest works by `__import__()ing` the tests to be run and then doing some stuff.
+This means that if even a single test causes pyston to crash or assert(), the
+whole test-runner dies.
+
+The best fix for this would be to simply run each test in a separate pyston
+process. It's not clear to accomplish this without breaking the tests, however,
+because Python's test support is a big, gnarly piece of code. In particular, it
+will skip tests based on various criteria, which we probably want to support.
+But it's not clear how to disentangle that knowledge from the way it `__import__`s
+the tests.
+
+So instead I ran regrtest manually, looked at what tests it ran, and imported
+those. tester.py will run them separately.
+
+### Obsolete notes: Hacking regrtest to manually change directories
+Need to run test/regrtest.py for testing harness; The standard way to do this in
+CPython is `python -m test.regrtest` from Lib/. The -m is important because
+otherwise it can't find the tests properly. Turns out implementing the -m flag
+is hard, because the machinery for imports is pretty complicated and there's no
+easy way to ask it "which file *would* I load to import this module". So I
+hacked regrtest to manually change directories.
+
+### Obsolete FIXME for regrtest.py: CFG/analysis bug with osr
+test/regrtest.py trips an assert in PropagatingTypeAnalysis::getTypeAtBlockStart
+if not run with -I, looks like malformed CFG or bug in analysis
+* tests are slow
+CPython's tests are pretty slow for us. In particular, since we're not running
+with regrtest, we have to go through the set-up time of loading
+test.test_support for each test. On my machine it's that's about a half-second
+per test.
+
+To handle this, by default we don't run tests marked "expected: fail". To
+disable this, pass --all-cpython-tests to tester.py.

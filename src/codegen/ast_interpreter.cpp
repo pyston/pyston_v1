@@ -76,6 +76,12 @@ public:
     static void deregister(void* frame_addr);
 };
 
+/*
+ * ASTInterpreters exist per function frame - there's no global interpreter object that executes
+ * all non-jitted code!
+ *
+ * The ASTInterpreter inherits from Box as part of garbage collection support.
+ */
 class ASTInterpreter : public Box {
 public:
     typedef ContiguousMap<InternedString, Box*, llvm::SmallDenseMap<InternedString, int, 16>> SymMap;

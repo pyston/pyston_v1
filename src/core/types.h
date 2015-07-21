@@ -471,6 +471,12 @@ public:
 class BoxedDict;
 class BoxedString;
 
+// In Pyston, this is the same type as CPython's PyObject (they are interchangeable, but we
+// use Box in Pyston wherever possible as a convention).
+//
+// Other types on Pyston inherit from Box (e.g. BoxedString is a Box). Why is this class not
+// polymorphic? Because of C extension support -- having virtual methods would change the layout
+// of the object.
 class Box {
 private:
     BoxedDict** getDictPtr();
