@@ -255,7 +255,7 @@ void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
 
     ASTInterpreter* interp = (ASTInterpreter*)box;
     auto&& vec = interp->sym_table.vector();
-    visitor->visitRange((void* const*)&vec[0], (void* const*)&vec[interp->sym_table.size()]);
+    visitor->visitRange((void* const*)&vec[0], (void* const*)&vec[vec.size()]);
     visitor->visit(interp->passed_closure);
     visitor->visit(interp->created_closure);
     visitor->visit(interp->generator);
