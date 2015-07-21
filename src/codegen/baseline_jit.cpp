@@ -712,6 +712,7 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const 
         for (int i = 6; i < args.size(); ++i) {
             assembler::Register reg = args[i]->getInReg(Location::any(), true);
             assembler->mov(reg, assembler::Indirect(assembler::RSP, sizeof(void*) * (i - 6)));
+            args[i]->bumpUse();
         }
         RewriterVar::SmallVector reg_args(args.begin(), args.begin() + 6);
         assert(reg_args.size() == 6);
@@ -745,12 +746,6 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const 
         pp_scratch_size += 8;
         pp_scratch_location -= 8;
     }
-
-    for (RewriterVar* arg : args) {
-        arg->bumpUse();
-    }
-
-    assertConsistent();
 
     StackInfo stack_info(pp_scratch_size, pp_scratch_location);
     pp_infos.emplace_back(PPInfo{ func_addr, pp_start, pp_end, std::move(setup_info), stack_info });

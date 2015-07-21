@@ -553,12 +553,6 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
     }
 
     ptr->bumpUse();
-
-    // If the value is a scratch allocated memory array we have to make sure we won't release it immediately.
-    // Because this setAttr stored a reference to it inside a field and the rewriter can't currently track this uses and
-    // will think it's unused.
-    if (val->hasScratchAllocation())
-        val->resetHasScratchAllocation();
     val->bumpUse();
 
     assertConsistent();
@@ -904,6 +898,15 @@ void Rewriter::_setupCall(RewriterVar* result, bool has_side_effects, const Rewr
     }
 #endif
 
+    for (RewriterVar* arg : args) {
+        arg->bumpUse();
+    }
+    for (RewriterVar* arg_xmm : args_xmm) {
+        arg_xmm->bumpUse();
+    }
+
+    assertConsistent();
+
     // Spill caller-saved registers:
     for (auto check_reg : caller_save_registers) {
         // check_reg.dump();
@@ -974,15 +977,6 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     _setupCall(result, has_side_effects, args, args_xmm);
 
-    for (RewriterVar* arg : args) {
-        arg->bumpUse();
-    }
-    for (RewriterVar* arg_xmm : args_xmm) {
-        arg_xmm->bumpUse();
-    }
-
-    assertConsistent();
-
     // make sure setupCall doesn't use R11
     assert(vars_by_location.count(assembler::R11) == 0);
 
@@ -1032,17 +1026,6 @@ void RewriterVar::bumpUse() {
         for (Location loc : locations) {
             rewriter->vars_by_location.erase(loc);
         }
-
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
         this->locations.clear();
     }
 }
@@ -1057,17 +1040,6 @@ void RewriterVar::releaseIfNoUses() {
         for (Location loc : locations) {
             rewriter->vars_by_location.erase(loc);
         }
-
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
         this->locations.clear();
     }
 }
@@ -1361,6 +1333,7 @@ Location Rewriter::allocScratch() {
             return l;
         }
     }
+
     failed = true;
     return Location(Location::None, 0);
 }
@@ -1427,9 +1400,6 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                     assert(vars_by_location.count(m) == 0);
                     vars_by_location[m] = LOCATION_PLACEHOLDER;
                 }
-
-                assert(result->scratch_allocation == std::make_pair(0, 0));
-                result->scratch_allocation = std::make_pair(a, n);
 
                 assembler::Register r = result->initializeInReg();
 
