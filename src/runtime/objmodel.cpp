@@ -569,8 +569,8 @@ HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
     num_hclses.log();
 
     HiddenClass* rtn = new HiddenClass(this);
-    this->children[attr] = rtn;
     rtn->attr_offsets[attr] = this->attributeArraySize();
+    this->children[attr] = rtn;
     assert(rtn->attributeArraySize() == this->attributeArraySize() + 1);
     return rtn;
 }
@@ -580,9 +580,10 @@ HiddenClass* HiddenClass::getAttrwrapperChild() {
     assert(attrwrapper_offset == -1);
 
     if (!attrwrapper_child) {
-        attrwrapper_child = new HiddenClass(this);
-        attrwrapper_child->attrwrapper_offset = this->attributeArraySize();
-        assert(attrwrapper_child->attributeArraySize() == this->attributeArraySize() + 1);
+        HiddenClass* made = new HiddenClass(this);
+        made->attrwrapper_offset = this->attributeArraySize();
+        this->attrwrapper_child = made;
+        assert(made->attributeArraySize() == this->attributeArraySize() + 1);
     }
 
     return attrwrapper_child;

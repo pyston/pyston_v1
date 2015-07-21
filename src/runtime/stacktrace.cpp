@@ -135,7 +135,16 @@ extern "C" void abort() {
     }
 
     if (PAUSE_AT_ABORT) {
-        printf("PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+        fprintf(stderr, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+
+        // Sometimes stderr isn't available (or doesn't immediately appear), so write out a file
+        // just in case:
+        FILE* f = fopen("pausing.txt", "w");
+        if (f) {
+            fprintf(f, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+            fclose(f);
+        }
+
         while (true) {
             sleep(1);
         }

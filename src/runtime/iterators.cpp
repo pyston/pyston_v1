@@ -42,9 +42,10 @@ public:
         STAT_TIMER(t0, "us_timer_iteratorgeneric_next", 0);
 
         Box* next = PyIter_Next(iterator);
-        if (next)
+        if (next) {
+            assert(gc::isValidGCObject(next));
             value = next;
-        else {
+        } else {
             checkAndThrowCAPIException();
             *this = *end();
         }
@@ -91,7 +92,11 @@ public:
         }
     }
 
-    Box* getValue() override { return getValue(obj, index); }
+    Box* getValue() override {
+        Box* r = getValue(obj, index);
+        assert(gc::isValidGCObject(r));
+        return r;
+    }
 
     bool isSame(const BoxIteratorImpl* _rhs) override {
         const auto rhs = (const BoxIteratorIndex*)_rhs;

@@ -372,15 +372,6 @@ static void markPhase() {
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
 
-#if TRACE_GC_MARKING
-#if 1 // separate log file per collection
-    char tracefn_buf[80];
-    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%03d.txt", ncollections);
-    trace_fp = fopen(tracefn_buf, "w");
-#else // overwrite previous log file with each collection
-    trace_fp = fopen("gc_trace.txt", "w");
-#endif
-#endif
     GC_TRACE_LOG("Starting collection %d\n", ncollections);
 
     GC_TRACE_LOG("Looking at roots\n");
@@ -419,11 +410,6 @@ static void markPhase() {
     for (BoxedClass* cls : classes_to_remove) {
         class_objects.insert(cls->cls);
     }
-
-#if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
-#endif
 
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
@@ -490,6 +476,16 @@ void runCollection() {
 
     Timer _t("collecting", /*min_usec=*/10000);
 
+#if TRACE_GC_MARKING
+#if 1 // separate log file per collection
+    char tracefn_buf[80];
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d.txt", getpid(), ncollections);
+    trace_fp = fopen(tracefn_buf, "w");
+#else // overwrite previous log file with each collection
+    trace_fp = fopen("gc_trace.txt", "w");
+#endif
+#endif
+
     global_heap.prepareForCollection();
 
     markPhase();
@@ -526,6 +522,11 @@ void runCollection() {
         }
         global_heap.free(GCAllocation::fromUserData(o));
     }
+
+#if TRACE_GC_MARKING
+    fclose(trace_fp);
+    trace_fp = NULL;
+#endif
 
     should_not_reenter_gc = false; // end non-reentrant section
 

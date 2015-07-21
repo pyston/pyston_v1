@@ -624,18 +624,24 @@ public:
     }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
         BoxedTuple* rtn = new (nelts) BoxedTuple();
+        for (int i = 0; i < nelts; i++)
+            assert(gc::isValidGCObject(elts[i]));
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create1(Box* elt0) {
         BoxedTuple* rtn = new (1) BoxedTuple();
         rtn->elts[0] = elt0;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create2(Box* elt0, Box* elt1) {
         BoxedTuple* rtn = new (2) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
@@ -643,6 +649,8 @@ public:
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
@@ -651,6 +659,8 @@ public:
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
@@ -660,9 +670,17 @@ public:
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
         rtn->elts[4] = elt4;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
-    static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
+    static BoxedTuple* create(std::initializer_list<Box*> members) {
+        auto rtn = new (members.size()) BoxedTuple(members);
+
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
+        return rtn;
+    }
 
     static BoxedTuple* create(int64_t size, BoxedClass* cls) {
         BoxedTuple* rtn;
@@ -731,6 +749,7 @@ private:
         Box** p = &elts[0];
         for (auto b : members) {
             *p++ = b;
+            assert(gc::isValidGCObject(b));
         }
     }
 
