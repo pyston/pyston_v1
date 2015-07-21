@@ -93,3 +93,5 @@ print 0.0
 print -0.0
 print -(0.0)
 print -(-0.0)
+
+print repr((1e100).__trunc__())
