@@ -1003,15 +1003,13 @@ Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewri
 
         return NULL;
     } else {
-        assert(attr->interned_state != SSTATE_NOT_INTERNED);
-
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
         for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
             // object_cls will get checked very often, but it only
             // has attributes that start with an underscore.
             if (b == object_cls) {
-                if (attr->data()[0] != '_') {
+                if (attr.data()[0] != '_') {
                     assert(!b->getattr(attr, NULL));
                     continue;
                 }
