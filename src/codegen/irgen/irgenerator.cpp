@@ -642,9 +642,8 @@ private:
                 const std::string& name = ast_str->str_data;
                 assert(name.size());
 
-                llvm::Value* name_arg
-                    = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(name, true),
-                                          g.llvm_boxedstring_type_ptr);
+                llvm::Value* name_arg = embedRelocatablePtr(
+                    irstate->getSourceInfo()->parent_module->getStringConstant(name), g.llvm_boxedstring_type_ptr);
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
 
@@ -895,7 +894,7 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
-            static BoxedString* setitem_str = internStringImmortal("__setitem__");
+            static BoxedString* setitem_str = static_cast<BoxedString*>(PyString_InternFromString("__setitem__"));
             CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
                 CompilerVariable* key = evalExpr(node->keys[i], unw_info);
@@ -1137,7 +1136,7 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
 
-        static BoxedString* add_str = internStringImmortal("add");
+        static BoxedString* add_str = static_cast<BoxedString*>(PyString_InternFromString("add"));
 
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
@@ -1723,7 +1722,7 @@ private:
 
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
-        static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
+        static BoxedString* AssertionError_str = static_cast<BoxedString*>(PyString_InternFromString("AssertionError"));
         llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
                                                 embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
 
@@ -1886,9 +1885,9 @@ private:
         }
         assert(dest);
 
-        static BoxedString* write_str = internStringImmortal("write");
-        static BoxedString* newline_str = internStringImmortal("\n");
-        static BoxedString* space_str = internStringImmortal(" ");
+        static BoxedString* write_str = static_cast<BoxedString*>(PyString_InternFromString("write"));
+        static BoxedString* newline_str = static_cast<BoxedString*>(PyString_InternFromString("\n"));
+        static BoxedString* space_str = static_cast<BoxedString*>(PyString_InternFromString(" "));
 
         // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
         // (=printHelper())
