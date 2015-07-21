@@ -495,15 +495,22 @@ BoxedInt* BoxedModule::getIntConstant(int64_t n) {
     return r;
 }
 
+static int64_t getDoubleBits(double d) {
+    int64_t rtn;
+    static_assert(sizeof(rtn) == sizeof(d), "");
+    memcpy(&rtn, &d, sizeof(d));
+    return rtn;
+}
+
 BoxedFloat* BoxedModule::getFloatConstant(double d) {
-    BoxedFloat*& r = float_constants[d];
+    BoxedFloat*& r = float_constants[getDoubleBits(d)];
     if (!r)
         r = static_cast<BoxedFloat*>(boxFloat(d));
     return r;
 }
 
 Box* BoxedModule::getPureImaginaryConstant(double d) {
-    Box*& r = imaginary_constants[d];
+    Box*& r = imaginary_constants[getDoubleBits(d)];
     if (!r)
         r = createPureImaginary(d);
     return r;

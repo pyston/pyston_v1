@@ -1860,7 +1860,9 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
             RELEASE_ASSERT(0, "%s", getOpName(node->op_type)->c_str());
             break;
     }
+    printf("(");
     node->operand->accept(this);
+    printf(")");
     return true;
 }
 
