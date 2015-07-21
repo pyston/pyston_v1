@@ -1490,7 +1490,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, args);
+                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;
