@@ -243,16 +243,13 @@ private:
     void bumpUse();
     void releaseIfNoUses();
     bool isDoneUsing() { return next_use == uses.size(); }
-    bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
-    void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
-    bool is_constant;
-
-    uint64_t constant_value;
     Location arg_loc;
-    std::pair<int /*offset*/, int /*size*/> scratch_allocation;
+
+    bool is_constant;
+    uint64_t constant_value;
 
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
 
