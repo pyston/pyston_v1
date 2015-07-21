@@ -31,8 +31,8 @@ extern "C" Box* boolNonzero(BoxedBool* v) {
 }
 
 extern "C" Box* boolRepr(BoxedBool* v) {
-    static BoxedString* true_str = static_cast<BoxedString*>(PyString_InternFromString("True"));
-    static BoxedString* false_str = static_cast<BoxedString*>(PyString_InternFromString("False"));
+    static BoxedString* true_str = internStringImmortal("True");
+    static BoxedString* false_str = internStringImmortal("False");
 
     if (v == True)
         return true_str;

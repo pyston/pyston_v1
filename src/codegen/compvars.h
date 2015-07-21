@@ -35,6 +35,7 @@ class IREmitter;
 class BoxedInt;
 class BoxedFloat;
 class BoxedLong;
+class BoxedString;
 
 typedef llvm::SmallVector<uint64_t, 1> FrameVals;
 
@@ -47,9 +48,9 @@ public:
     virtual ConcreteCompilerType* getConcreteType() = 0;
     virtual ConcreteCompilerType* getBoxType() = 0;
     virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
-    virtual CompilerType* getattrType(llvm::StringRef attr, bool cls_only) = 0;
+    virtual CompilerType* getattrType(BoxedString* attr, bool cls_only) = 0;
     virtual CompilerType* getPystonIterType();
-    virtual Result hasattr(llvm::StringRef attr);
+    virtual Result hasattr(BoxedString* attr);
     virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
                                    const std::vector<llvm::StringRef>* keyword_names) = 0;
 
@@ -157,7 +158,7 @@ public:
         printf("makeClassCheck not defined for %s\n", debugName().c_str());
         abort();
     }
-    CompilerType* getattrType(llvm::StringRef attr, bool cls_only) override {
+    CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         printf("getattrType not defined for %s\n", debugName().c_str());
         abort();
     }

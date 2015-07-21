@@ -87,9 +87,6 @@ extern "C" void initstrop();
 
 namespace pyston {
 
-static const std::string init_str("__init__");
-static const std::string new_str("__new__");
-
 void setupGC();
 
 bool IN_SHUTDOWN = false;
@@ -232,7 +229,7 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
         hasnext_ic.reset(ic);
     }
 
-    static BoxedString* hasnext_str = static_cast<BoxedString*>(PyString_InternFromString("__hasnext__"));
+    static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
     CallattrFlags callattr_flags
         = {.cls_only = true, .null_on_nonexistent = null_on_nonexistent, .argspec = ArgPassSpec(0) };
     return ic->call(obj, hasnext_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -276,7 +273,7 @@ Box* BoxedClass::callNextIC(Box* obj) {
         next_ic.reset(ic);
     }
 
-    static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+    static BoxedString* next_str = internStringImmortal("next");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, next_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -290,7 +287,7 @@ Box* BoxedClass::callReprIC(Box* obj) {
         repr_ic.reset(ic);
     }
 
-    static BoxedString* repr_str = static_cast<BoxedString*>(PyString_InternFromString("__repr__"));
+    static BoxedString* repr_str = internStringImmortal("__repr__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -332,14 +329,14 @@ Box* Box::hasnextOrNullIC() {
     return this->cls->callHasnextIC(this, true);
 }
 
-std::string builtinStr("__builtin__");
-
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
     if (f->source) {
         assert(f->source->scoping->areGlobalsFromModule());
         Box* globals_for_name = f->source->parent_module;
-        this->modname = globals_for_name->getattr("__name__");
+
+        static BoxedString* name_str = internStringImmortal("__name__");
+        this->modname = globals_for_name->getattr(name_str);
         this->doc = f->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
@@ -377,10 +374,10 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
             globals_for_name = f->source->parent_module;
         }
 
+        static BoxedString* name_str = internStringImmortal("__name__");
         if (globals_for_name->cls == module_cls) {
-            this->modname = globals_for_name->getattr("__name__");
+            this->modname = globals_for_name->getattr(name_str);
         } else {
-            static Box* name_str = PyString_InternFromString("__name__");
             this->modname = PyDict_GetItem(globals_for_name, name_str);
         }
         // It's ok for modname to be NULL
@@ -465,7 +462,8 @@ static void functionDtor(Box* b) {
 }
 
 std::string BoxedModule::name() {
-    Box* name = this->getattr("__name__");
+    static BoxedString* name_str = internStringImmortal("__name__");
+    Box* name = this->getattr(name_str);
     if (!name || name->cls != str_cls) {
         return "?";
     } else {
@@ -474,9 +472,11 @@ std::string BoxedModule::name() {
     }
 }
 
-BoxedString* BoxedModule::getStringConstant(llvm::StringRef ast_str) {
+BoxedString* BoxedModule::getStringConstant(llvm::StringRef ast_str, bool intern) {
     BoxedString*& r = str_constants[ast_str];
-    if (!r)
+    if (intern)
+        r = internStringMortal(ast_str);
+    else if (!r)
         r = boxString(ast_str);
     return r;
 }
@@ -740,6 +740,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
+    static BoxedString* new_str = internStringImmortal("__new__");
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
@@ -823,6 +824,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
+    static BoxedString* init_str = internStringImmortal("__init__");
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         init_attr = typeLookup(cls, init_str, &grewrite_args);
@@ -1247,7 +1249,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         assert(msg);
         // TODO this is an extra Pyston check and I don't think we should have to do it:
         if (isSubclass(e.value->cls, BaseException)) {
-            static BoxedString* message_str = static_cast<BoxedString*>(PyString_InternFromString("message"));
+            static BoxedString* message_str = internStringImmortal("message");
             msg = getattr(e.value, message_str);
         }
 
@@ -1403,7 +1405,7 @@ static Box* functionGlobals(Box* self, void*) {
     assert(func->f->source);
     assert(func->f->source->scoping->areGlobalsFromModule());
 
-    static BoxedString* dict_str = static_cast<BoxedString*>(PyString_InternFromString("__dict__"));
+    static BoxedString* dict_str = internStringImmortal("__dict__");
     return getattr(func->f->source->parent_module, dict_str);
 }
 
@@ -1528,7 +1530,7 @@ static Box* instancemethodRepr(Box* b) {
     Box* funcname = NULL, * klassname = NULL, * result = NULL;
     const char* sfuncname = "?", * sklassname = "?";
 
-    static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
+    static BoxedString* name_str = internStringImmortal("__name__");
     funcname = getattrInternal(func, name_str, NULL);
 
     if (funcname != NULL) {
@@ -1708,7 +1710,8 @@ Box* typeRepr(BoxedClass* self) {
     else
         os << "<type '";
 
-    Box* m = self->getattr("__module__");
+    static BoxedString* module_str = internStringImmortal("__module__");
+    Box* m = self->getattr(module_str);
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
         if (sm->s() != "__builtin__")
@@ -1729,7 +1732,8 @@ static PyObject* typeModule(Box* _type, void* context) {
     const char* s;
 
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
-        mod = type->getattr("__module__");
+        static BoxedString* module_str = internStringImmortal("__module__");
+        mod = type->getattr(module_str);
         if (!mod)
             raiseExcHelper(AttributeError, "__module__");
         return mod;
@@ -1753,7 +1757,8 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
 
     PyType_Modified(type);
 
-    type->setattr("__module__", value, NULL);
+    static BoxedString* module_str = internStringImmortal("__module__");
+    type->setattr(module_str, value, NULL);
 }
 
 
@@ -1849,7 +1854,7 @@ private:
     // Iterating over the an attrwrapper (~=dict) just gives the keys, which
     // just depends on the hidden class of the object.  Let's store only that:
     HiddenClass* hcls;
-    llvm::StringMap<int>::const_iterator it;
+    llvm::DenseMap<BoxedString*, int>::const_iterator it;
 
 public:
     AttrWrapperIter(AttrWrapper* aw);
@@ -1906,7 +1911,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        self->b->setattr(key->s(), value, NULL);
+        internStringMortalInplace(key);
+
+        self->b->setattr(key, value, NULL);
         return None;
     }
 
@@ -1918,10 +1925,12 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* cur = self->b->getattr(key->s());
+        internStringMortalInplace(key);
+
+        Box* cur = self->b->getattr(key);
         if (cur)
             return cur;
-        self->b->setattr(key->s(), value, NULL);
+        self->b->setattr(key, value, NULL);
         return value;
     }
 
@@ -1933,7 +1942,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s());
+        internStringMortalInplace(key);
+
+        Box* r = self->b->getattr(key);
         if (!r)
             return def;
         return r;
@@ -1947,7 +1958,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s());
+        internStringMortalInplace(key);
+
+        Box* r = self->b->getattr(key);
         if (!r)
             raiseExcHelper(KeyError, "'%s'", key->data());
         return r;
@@ -1961,9 +1974,11 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s());
+        internStringMortalInplace(key);
+
+        Box* r = self->b->getattr(key);
         if (r) {
-            self->b->delattr(key->s(), NULL);
+            self->b->delattr(key, NULL);
             return r;
         } else {
             if (default_)
@@ -1980,8 +1995,10 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        if (self->b->getattr(key->s()))
-            self->b->delattr(key->s(), NULL);
+        internStringMortalInplace(key);
+
+        if (self->b->getattr(key))
+            self->b->delattr(key, NULL);
         else
             raiseExcHelper(KeyError, "'%s'", key->data());
         return None;
@@ -2005,7 +2022,7 @@ public:
             first = false;
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first().str() << ": " << v->s();
+            os << p.first->s() << ": " << v->s();
         }
         os << "})";
         return boxString(os.str());
@@ -2019,7 +2036,9 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Box* r = self->b->getattr(key->s());
+        internStringMortalInplace(key);
+
+        Box* r = self->b->getattr(key);
         return r ? True : False;
     }
 
@@ -2032,7 +2051,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            listAppend(rtn, boxString(p.first()));
+            listAppend(rtn, p.first);
         }
         return rtn;
     }
@@ -2060,7 +2079,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            BoxedTuple* t = BoxedTuple::create({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
+            BoxedTuple* t = BoxedTuple::create({ p.first, attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
         }
         return rtn;
@@ -2090,7 +2109,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
+            rtn->d[p.first] = attrs->attr_list->attrs[p.second];
         }
         return rtn;
     }
@@ -2138,7 +2157,7 @@ public:
                 RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON,
                                "");
                 for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-                    self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
+                    self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
                 }
             } else {
                 // The update rules are too complicated to be worth duplicating here;
@@ -2180,7 +2199,7 @@ public:
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
-        static BoxedString* eq_str = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
+        static BoxedString* eq_str = internStringImmortal("__eq__");
         return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
                                 NULL);
     }
@@ -2211,7 +2230,7 @@ Box* AttrWrapperIter::next(Box* _self) {
     RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL || self->hcls->type == HiddenClass::SINGLETON, "");
 
     assert(self->it != self->hcls->getStrAttrOffsets().end());
-    Box* r = boxString(self->it->first());
+    Box* r = self->it->first;
     ++self->it;
     return r;
 }
@@ -2258,8 +2277,12 @@ void attrwrapperDel(Box* b, llvm::StringRef attr) {
 
 Box* objectNewNoArgs(BoxedClass* cls) {
     assert(isSubclass(cls->cls, type_cls));
-    assert(typeLookup(cls, "__new__", NULL) == typeLookup(object_cls, "__new__", NULL)
-           && typeLookup(cls, "__init__", NULL) != typeLookup(object_cls, "__init__", NULL));
+#ifndef NDEBUG
+    static BoxedString* new_str = internStringImmortal("__new__");
+    static BoxedString* init_str = internStringImmortal("__init__");
+    assert(typeLookup(cls, new_str, NULL) == typeLookup(object_cls, new_str, NULL)
+           && typeLookup(cls, init_str, NULL) != typeLookup(object_cls, init_str, NULL));
+#endif
     return new (cls) Box();
 }
 
@@ -3018,6 +3041,9 @@ void setupRuntime() {
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
+    // XXX silly that we have to set this again
+    new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
+    new (&type_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 
     none_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
     None = new (none_cls) Box();
@@ -3334,19 +3360,19 @@ void setupRuntime() {
                                                                    offsetof(BoxedFunction, modname), false));
     function_cls->giveAttr(
         "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
-    function_cls->giveAttr("func_doc", function_cls->getattr("__doc__"));
+    function_cls->giveAttr("func_doc", function_cls->getattr(internStringMortal("__doc__")));
     function_cls->giveAttr("__globals__", new (pyston_getset_cls) BoxedGetsetDescriptor(functionGlobals, NULL, NULL));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
-    function_cls->giveAttr("__code__", function_cls->getattr("func_code"));
-    function_cls->giveAttr("func_name", function_cls->getattr("__name__"));
+    function_cls->giveAttr("__code__", function_cls->getattr(internStringMortal("func_code")));
+    function_cls->giveAttr("func_name", function_cls->getattr(internStringMortal("__name__")));
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));
-    function_cls->giveAttr("__defaults__", function_cls->getattr("func_defaults"));
-    function_cls->giveAttr("func_globals", function_cls->getattr("__globals__"));
+    function_cls->giveAttr("__defaults__", function_cls->getattr(internStringMortal("func_defaults")));
+    function_cls->giveAttr("func_globals", function_cls->getattr(internStringMortal("__globals__")));
     function_cls->freeze();
     function_cls->tp_descr_get = function_descr_get;
 
@@ -3372,10 +3398,10 @@ void setupRuntime() {
         "__call__", new BoxedFunction(boxRTFunction((void*)instancemethodCall, UNKNOWN, 1, 0, true, true)));
     instancemethod_cls->giveAttr(
         "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
-    instancemethod_cls->giveAttr("__func__", instancemethod_cls->getattr("im_func"));
+    instancemethod_cls->giveAttr("__func__", instancemethod_cls->getattr(internStringMortal("im_func")));
     instancemethod_cls->giveAttr(
         "im_self", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, obj)));
-    instancemethod_cls->giveAttr("__self__", instancemethod_cls->getattr("im_self"));
+    instancemethod_cls->giveAttr("__self__", instancemethod_cls->getattr(internStringMortal("im_self")));
     instancemethod_cls->freeze();
 
     instancemethod_cls->giveAttr("im_class", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,

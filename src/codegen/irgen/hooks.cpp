@@ -283,9 +283,13 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn));
-        bm->setattr("__doc__", si->getDocString(), NULL);
-        if (!bm->hasattr("__builtins__"))
-            bm->giveAttr("__builtins__", PyModule_GetDict(builtins_module));
+
+        static BoxedString* doc_str = internStringImmortal("__doc__");
+        bm->setattr(doc_str, si->getDocString(), NULL);
+
+        static BoxedString* builtins_str = internStringImmortal("__builtins__");
+        if (!bm->hasattr(builtins_str))
+            bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
 
         clfunc = new CLFunction(0, 0, false, false, std::move(si));
     }
@@ -302,7 +306,7 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
 
     Box* doc_string = cl->source->getDocString();
     if (doc_string != None) {
-        static BoxedString* doc_box = static_cast<BoxedString*>(PyString_InternFromString("__doc__"));
+        static BoxedString* doc_box = internStringImmortal("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 
