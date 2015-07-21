@@ -101,7 +101,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
                 continue;
             res = PyDict_GetItem(dict, name);
 #endif
-            res = tmp->getattr(attr);
+            res = tmp->getattr(std::string(attr->s()));
 
             if (res != NULL) {
 // Pyston change:
@@ -128,7 +128,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, attr, NULL);
+    Box* r = typeLookup(s->cls, attr->s(), NULL);
     // TODO implement this
     RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
     return processDescriptor(r, s, s->cls);
@@ -166,7 +166,6 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
         return obj->cls;
     }
 
-    static BoxedString* class_str = internStringImmortal("__class__");
     Box* class_attr = obj->getattr(class_str);
     if (class_attr && isSubclass(class_attr->cls, type_cls) && class_attr != obj->cls) {
         Py_FatalError("warning: this path never tested"); // blindly copied from CPython

@@ -931,7 +931,7 @@ static Box* _intNew(Box* val, Box* base) {
         return PyLong_FromDouble(wholepart);
     } else {
         RELEASE_ASSERT(!base, "");
-        static BoxedString* int_str = internStringImmortal("__int__");
+        static BoxedString* int_str = static_cast<BoxedString*>(PyString_InternFromString("__int__"));
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         Box* r = callattr(val, int_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 

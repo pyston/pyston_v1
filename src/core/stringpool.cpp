@@ -25,8 +25,9 @@ InternedString InternedStringPool::get(llvm::StringRef arg) {
     if (it != interned.end()) {
         s = it->second;
     } else {
+        s = boxString(arg);
         // HACK: should properly track this liveness:
-        s = internStringImmortal(arg);
+        PyString_InternInPlace(reinterpret_cast<Box**>(&s));
 
         // Note: make sure the key points to the value we just created, not the
         // argument string:
