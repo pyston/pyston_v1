@@ -19,8 +19,19 @@
 namespace pyston {
 
 InternedString InternedStringPool::get(llvm::StringRef arg) {
-    // HACK: should properly track this liveness:
-    BoxedString* s = internStringImmortal(arg);
+    auto it = interned.find(arg);
+
+    BoxedString* s;
+    if (it != interned.end()) {
+        s = it->second;
+    } else {
+        // HACK: should properly track this liveness:
+        s = internStringImmortal(arg);
+
+        // Note: make sure the key points to the value we just created, not the
+        // argument string:
+        interned[s->s()] = s;
+    }
 
 #ifndef NDEBUG
     return InternedString(s, this);
