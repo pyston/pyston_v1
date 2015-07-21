@@ -81,8 +81,8 @@ else
 endif
 
 TOOLS_DIR := ./tools
-TEST_DIR := ./test
-TESTS_DIR := ./test/tests
+TEST_DIR := $(abspath ./test)
+TESTS_DIR := $(abspath ./test/tests)
 
 GPP := $(GCC_DIR)/bin/g++
 GCC := $(GCC_DIR)/bin/gcc

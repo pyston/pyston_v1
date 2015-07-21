@@ -151,6 +151,9 @@ private:
 
     struct Storage {
         PerThreadSet<T, CtorArgs...>* self;
+#ifndef NDEBUG
+        pthread_t my_tid;
+#endif
         T val;
     };
 
@@ -164,6 +167,8 @@ private:
         auto* self = s->self;
         LOCK_REGION(&self->lock);
 
+        assert(s->my_tid == pthread_self());
+
         // I assume this destructor gets called on the same thread
         // that this data is bound to:
         assert(self->map.count(pthread_self()));
@@ -173,7 +178,11 @@ private:
     }
 
     template <int... S> Storage* make(impl::seq<S...>) {
-        return new Storage{.self = this, .val = T(std::get<S>(ctor_args)...) };
+        return new Storage{.self = this,
+#ifndef NDEBUG
+                           .my_tid = pthread_self(),
+#endif
+                           .val = T(std::get<S>(ctor_args)...) };
     }
 
 public:
