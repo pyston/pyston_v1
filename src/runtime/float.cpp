@@ -1483,7 +1483,7 @@ void setupFloat() {
     float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, STR, 1)));
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
 
-    float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
+    float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, UNKNOWN, 1)));
     float_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)floatHash, BOXED_INT, 1)));
 
     float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
