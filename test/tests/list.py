@@ -205,3 +205,22 @@ print l
 """
 
 print repr(list.__hash__)
+
+# test sliceIndex
+class Index(object):
+    def __index__(self):
+        return 1
+
+l = [1, 2, 3]
+del l[1:2]
+print l
+
+l = [1, 2, 3]
+del l[1l:2l]
+print l
+
+l = [1, 2, 3]
+i = Index()
+print i.__index__
+del l[Index():2l]
+print l

@@ -30,6 +30,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+#include "runtime/long.h"
 
 namespace pyston {
 
@@ -283,8 +284,35 @@ static void sliceIndex(Box* b, int64_t* out) {
     if (b->cls == none_cls)
         return;
 
-    RELEASE_ASSERT(b->cls == int_cls, "");
-    *out = static_cast<BoxedInt*>(b)->n;
+    if (b->cls == int_cls) {
+        *out = static_cast<BoxedInt*>(b)->n;
+        return;
+    }
+
+    if (b->cls == long_cls) {
+        auto l = static_cast<BoxedLong*>(b);
+        RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
+        *out = mpz_get_si(l->n);
+        return;
+    }
+
+    static const std::string index_str("__index__");
+    Box* r = callattr(b, &index_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                      NULL, NULL, NULL, NULL, NULL);
+
+    if (!r) {
+        raiseExcHelper(TypeError, "TypeError: slice indices must be integers or None or have an __index__ method");
+    }
+
+    if (isSubclass(r->cls, int_cls)) {
+        *out = static_cast<BoxedInt*>(r)->n;
+    } else if (isSubclass(r->cls, long_cls)) {
+        auto l = static_cast<BoxedLong*>(r);
+        RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
+        *out = mpz_get_si(l->n);
+    } else {
+        raiseExcHelper(TypeError, "__index__ returned non-(int,long) (type %s)", r->cls->tp_name);
+    }
 }
 
 // Copied from CPython's list_ass_subscript
