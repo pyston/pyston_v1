@@ -532,7 +532,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     // TODO: CPython uses the attrobj as a cache.  If we want to use it, we'd have to make sure that
     // they get registered as GC roots since they are usually placed into static variables.
 
-    Box* obj = typeLookup(self->cls, attrstr, NULL);
+    Box* obj = typeLookupNoRewrite(self->cls, attrstr);
     if (obj)
         return processDescriptor(obj, self, self->cls);
     return obj;
@@ -850,7 +850,7 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
 
-    get = typeLookup(tp, "__get__", NULL);
+    get = typeLookupNoRewrite(tp, "__get__");
     if (get == NULL) {
         /* Avoid further slowdowns */
         if (tp->tp_descr_get == slot_tp_descr_get)
@@ -932,7 +932,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
          __getattr__, even when the attribute is present. So we use
          _PyType_Lookup and create the method only when needed, with
          call_attribute. */
-    getattr = typeLookup(self->cls, _getattr_str, NULL);
+    getattr = typeLookupNoRewrite(self->cls, _getattr_str);
     if (getattr == NULL) {
         /* No __getattr__ hook: use a simpler dispatcher */
         self->cls->tp_getattro = slot_tp_getattro;
@@ -943,7 +943,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
          __getattr__, even when self has the default __getattribute__
          method. So we use _PyType_Lookup and create the method only when
          needed, with call_attribute. */
-    getattribute = typeLookup(self->cls, _getattribute_str, NULL);
+    getattribute = typeLookupNoRewrite(self->cls, _getattribute_str);
     if (getattribute == NULL
         || (Py_TYPE(getattribute) == wrapperdescr_cls
             && ((BoxedWrapperDescriptor*)getattribute)->wrapped == (void*)PyObject_GenericGetAttr)) {
@@ -963,7 +963,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
 
     try {
         // TODO: runtime ICs?
-        Box* new_attr = typeLookup(self, _new_str, NULL);
+        Box* new_attr = typeLookupNoRewrite(self, _new_str);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
 
@@ -1642,7 +1642,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
     }
 
     do {
-        descr = typeLookup(type, p->name, NULL);
+        descr = typeLookupNoRewrite(type, p->name);
         if (descr == NULL) {
             if (ptr == (void**)&type->tp_iternext) {
                 specific = (void*)_PyObject_NextNotImplemented;
@@ -3009,8 +3009,12 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 
     bool rewrite_success = false;
     Box* oarg1, * oarg2 = NULL, *oarg3, ** oargs = NULL;
-    rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                       keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewrite_args)
+        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
+                           keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, NULL, "", NULL, rewrite_success, argspec, arg1, arg2, arg3, args,
+                                    keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;

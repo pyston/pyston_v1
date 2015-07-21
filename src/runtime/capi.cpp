@@ -215,7 +215,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
     try {
-        Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->data(), NULL, false, false, NULL, NULL);
+        Box* r = getattrInternalGenericNoRewrite(o, static_cast<BoxedString*>(name)->data(), false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                          PyString_AS_STRING(name));
@@ -638,7 +638,7 @@ extern "C" int PyCallable_Check(PyObject* x) noexcept {
         return 0;
 
     static const std::string call_attr("__call__");
-    return typeLookup(x->cls, call_attr, NULL) != NULL;
+    return typeLookupNoRewrite(x->cls, call_attr) != NULL;
 }
 
 extern "C" int Py_FlushLine(void) noexcept {
@@ -1485,8 +1485,12 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     Box** oargs = NULL;
 
     bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    if (rewrite_args)
+        rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec,
+                           arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    else
+        rearrangeArgumentsNoRewrite(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_success, argspec, arg1,
+                                    arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;

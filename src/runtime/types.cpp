@@ -621,8 +621,12 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
-    if (argspec.has_starargs)
-        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    if (argspec.has_starargs) {
+        if (rewrite_args)
+            return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        else
+            return callFuncNoRewrite(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    }
 
     return typeCallInner(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
@@ -691,8 +695,14 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         ParamReceiveSpec paramspec(1, false, true, true);
         bool rewrite_success = false;
         Box* oarg1, *oarg2, *oarg3, ** oargs = NULL;
-        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           keyword_names, oarg1, oarg2, oarg3, oargs);
+
+        if (rewrite_args)
+            rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3,
+                               args, keyword_names, oarg1, oarg2, oarg3, oargs);
+        else
+            rearrangeArgumentsNoRewrite(paramspec, NULL, "", NULL, rewrite_success, argspec, arg1, arg2, arg3, args,
+                                        keyword_names, oarg1, oarg2, oarg3, oargs);
+
         assert(oarg1 == cls);
 
         if (!rewrite_success)
@@ -762,7 +772,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
     } else {
-        new_attr = typeLookup(cls, new_str, NULL);
+        new_attr = typeLookupNoRewrite(cls, new_str);
         new_attr = processDescriptor(new_attr, None, cls);
     }
     assert(new_attr && "This should always resolve");
@@ -786,7 +796,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     static std::vector<Box*> allowable_news;
     if (allowable_news.empty()) {
         for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
-            auto new_obj = typeLookup(allowed_cls, new_str, NULL);
+            auto new_obj = typeLookupNoRewrite(allowed_cls, new_str);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
         }
@@ -836,7 +846,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
     } else {
-        init_attr = typeLookup(cls, init_str, NULL);
+        init_attr = typeLookupNoRewrite(cls, init_str);
     }
     // The init_attr should always resolve as well, but doesn't yet
 
@@ -888,7 +898,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init)
             made = objectNewNoArgs(cls);
         else
-            made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
+            made = runtimeCallInternalNoRewrite(new_attr, new_argspec, cls, arg2, arg3, args, keyword_names);
     }
 
     assert(made);
@@ -914,7 +924,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             init_attr = NULL;
         } else {
             // We could have skipped the initial __init__ lookup
-            init_attr = typeLookup(made->cls, init_str, NULL);
+            init_attr = typeLookupNoRewrite(made->cls, init_str);
         }
     }
 
@@ -957,10 +967,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // If we weren't passed the args array, it's not safe to index into it
             if (passed <= 2)
-                initrtn = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, NULL, NULL, keyword_names);
+                initrtn = runtimeCallInternalNoRewrite(init_attr, init_argspec, arg2, arg3, NULL, NULL, keyword_names);
             else
-                initrtn
-                    = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, args[0], &args[1], keyword_names);
+                initrtn = runtimeCallInternalNoRewrite(init_attr, init_argspec, arg2, arg3, args[0], &args[1],
+                                                       keyword_names);
         }
         assertInitNone(initrtn);
     } else {
@@ -1529,7 +1539,7 @@ static Box* instancemethodRepr(Box* b) {
     const char* sfuncname = "?", * sklassname = "?";
 
     static BoxedString* name_str = static_cast<BoxedString*>(PyString_InternFromString("__name__"));
-    funcname = getattrInternal(func, name_str, NULL);
+    funcname = getattrInternalNoRewrite(func, name_str);
 
     if (funcname != NULL) {
         if (!PyString_Check(funcname)) {
@@ -1541,7 +1551,7 @@ static Box* instancemethodRepr(Box* b) {
     if (klass == NULL) {
         klassname = NULL;
     } else {
-        klassname = getattrInternal(klass, name_str, NULL);
+        klassname = getattrInternalNoRewrite(klass, name_str);
         if (klassname != NULL) {
             if (!PyString_Check(klassname)) {
                 klassname = NULL;
@@ -2181,8 +2191,8 @@ public:
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
         static BoxedString* eq_str = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
-        return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
-                                NULL);
+        return callattrInternalNoRewrite(dict, eq_str, LookupScope::CLASS_ONLY, ArgPassSpec(1), _other, NULL, NULL,
+                                         NULL, NULL);
     }
 
     static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
@@ -2258,8 +2268,8 @@ void attrwrapperDel(Box* b, llvm::StringRef attr) {
 
 Box* objectNewNoArgs(BoxedClass* cls) {
     assert(isSubclass(cls->cls, type_cls));
-    assert(typeLookup(cls, "__new__", NULL) == typeLookup(object_cls, "__new__", NULL)
-           && typeLookup(cls, "__init__", NULL) != typeLookup(object_cls, "__init__", NULL));
+    assert(typeLookupNoRewrite(cls, "__new__") == typeLookupNoRewrite(object_cls, "__new__")
+           && typeLookupNoRewrite(cls, "__init__") != typeLookupNoRewrite(object_cls, "__init__"));
     return new (cls) Box();
 }
 
@@ -2329,7 +2339,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
     }
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
-    setattrGeneric(obj, attr_str, value, NULL);
+    setattrGenericNoRewrite(obj, attr_str, value);
     return None;
 }
 

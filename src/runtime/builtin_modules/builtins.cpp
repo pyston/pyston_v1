@@ -427,7 +427,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattrInternal(obj, str, NULL);
+        rtn = getattrInternalNoRewrite(obj, str);
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -465,7 +465,7 @@ Box* hasattr(Box* obj, Box* _str) {
     BoxedString* str = static_cast<BoxedString*>(_str);
     Box* attr;
     try {
-        attr = getattrInternal(obj, str, NULL);
+        attr = getattrInternalNoRewrite(obj, str);
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;
@@ -813,7 +813,7 @@ extern "C" PyObject* PyEval_GetBuiltins(void) noexcept {
 }
 
 Box* divmod(Box* lhs, Box* rhs) {
-    return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
+    return binopInternalNoRewrite(lhs, rhs, AST_TYPE::DivMod, false);
 }
 
 Box* powFunc(Box* x, Box* y, Box* z) {
@@ -916,7 +916,7 @@ Box* getreversed(Box* o) {
     if (r)
         return r;
 
-    if (!typeLookup(o->cls, "__getitem__", NULL)) {
+    if (!typeLookupNoRewrite(o->cls, "__getitem__")) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }
     int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there
