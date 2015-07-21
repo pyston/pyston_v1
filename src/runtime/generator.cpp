@@ -407,7 +407,7 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
 
     if (g->running) {
         v->visitPotentialRange((void**)&g->returnContext,
-                               ((void**)&g->returnContext) + sizeof(*g->returnContext) / sizeof(void*));
+                               ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
     } else {
         // g->context is always set for a running generator, but we can trigger a GC while constructing
         // a generator in which case we can see a NULL context

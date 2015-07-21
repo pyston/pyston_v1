@@ -532,7 +532,7 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, args);
 
     assert(oarg1 && oarg1->cls == tuple_cls);
     if (!paramspec.takes_kwargs)

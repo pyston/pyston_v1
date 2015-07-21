@@ -1058,7 +1058,7 @@ private:
         AST_List* rtn = new AST_List();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
-        rtn->ctx_type = node->ctx_type;
+        rtn->ctx_type == node->ctx_type;
 
         for (auto elt : node->elts) {
             rtn->elts.push_back(remapExpr(elt));
@@ -1104,7 +1104,7 @@ private:
         AST_Tuple* rtn = new AST_Tuple();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
-        rtn->ctx_type = node->ctx_type;
+        rtn->ctx_type == node->ctx_type;
 
         for (auto elt : node->elts) {
             rtn->elts.push_back(remapExpr(elt));
