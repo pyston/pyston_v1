@@ -1488,6 +1488,8 @@ static slotdef slotdefs[]
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
         TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
+        FLSLOT("__class__", has___class__, NULL, NULL, "", PyWrapperFlag_BOOL),
+        FLSLOT("__instancecheck__", has_instancecheck, NULL, NULL, "", PyWrapperFlag_BOOL),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
@@ -1668,6 +1670,22 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
 
     do {
         descr = typeLookup(type, p->name_strobj, NULL);
+
+        if (p->flags & PyWrapperFlag_BOOL) {
+            // We are supposed to iterate over each slotdef; for now just assert that
+            // there was only one:
+            assert((p + 1)->offset > p->offset);
+
+            static BoxedString* class_str = internStringImmortal("__class__");
+            if (p->name_strobj == class_str) {
+                if (descr == object_cls->getattr(class_str))
+                    descr = NULL;
+            }
+
+            *(bool*)ptr = (bool)descr;
+            return p + 1;
+        }
+
         if (descr == NULL) {
             if (ptr == (void**)&type->tp_iternext) {
                 specific = (void*)_PyObject_NextNotImplemented;

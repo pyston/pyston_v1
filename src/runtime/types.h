@@ -224,6 +224,9 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
+    bool has___class__; // Has a custom __class__ attribute (ie different from object's __class__ descriptor)
+    bool has_instancecheck;
+
     typedef bool (*pyston_inquiry)(Box*);
 
     // tpp_descr_get is currently just a cache only for the use of tp_descr_get, and shouldn't

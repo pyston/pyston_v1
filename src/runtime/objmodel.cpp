@@ -409,7 +409,9 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
       attrs_offset(attrs_offset),
       is_constant(false),
       is_user_defined(is_user_defined),
-      is_pyston_class(true) {
+      is_pyston_class(true),
+      has___class__(false),
+      has_instancecheck(false) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
