@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -1101,9 +1102,12 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn, AST_Mod
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse_file(const char* fn) {
+    std::ostringstream oss;
     if (DEBUG_PARSING) {
+        oss << "caching_parse_file() on " << fn << '\n';
         fprintf(stderr, "caching_parse_file('%s'), pypa=%d\n", fn, ENABLE_PYPA_PARSER);
     }
+
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_caching_parse_file");
     static StatCounter us_parsing("us_parsing");
     Timer _t("parsing");
@@ -1132,6 +1136,7 @@ AST_Module* caching_parse_file(const char* fn) {
     std::vector<char> file_data;
     int tries = 0;
     while (true) {
+        oss << "try number " << tries << '\n';
         FILE* fp = fopen(cache_fn.c_str(), "r");
 
         bool good = (bool)fp;
@@ -1145,6 +1150,7 @@ AST_Module* caching_parse_file(const char* fn) {
 
                 if (read == 0) {
                     if (ferror(fp)) {
+                        oss << "encountered io error reading from the file\n";
                         if (tries == MAX_TRIES)
                             fprintf(stderr, "Error reading %s: %s\n", cache_fn.c_str(), strerror(errno));
                         good = false;
@@ -1157,11 +1163,14 @@ AST_Module* caching_parse_file(const char* fn) {
             fp = NULL;
         }
 
-        if (file_data.size() < MAGIC_STRING_LENGTH + LENGTH_LENGTH + CHECKSUM_LENGTH)
+        if (file_data.size() < MAGIC_STRING_LENGTH + LENGTH_LENGTH + CHECKSUM_LENGTH) {
+            oss << "file not long enough to include header\n";
             good = false;
+        }
 
         if (good) {
             if (strncmp(&file_data[0], getMagic(), MAGIC_STRING_LENGTH) != 0) {
+                oss << "magic string did not match\n";
                 if (VERBOSITY() || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
                     fprintf(stderr, "%d %d %d %d\n", file_data[0], file_data[1], file_data[2], file_data[3]);
@@ -1179,6 +1188,7 @@ AST_Module* caching_parse_file(const char* fn) {
             int expected_total_length = MAGIC_STRING_LENGTH + LENGTH_LENGTH + CHECKSUM_LENGTH + length;
 
             if (expected_total_length != file_data.size()) {
+                oss << "length did not match\n";
                 if (VERBOSITY() || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: truncated .pyc file found; ignoring\n");
                 }
@@ -1199,6 +1209,7 @@ AST_Module* caching_parse_file(const char* fn) {
             }
 
             if (checksum != 0) {
+                oss << "checksum did not match\n";
                 if (VERBOSITY() || tries == MAX_TRIES)
                     fprintf(stderr, "pyc checksum failed!\n");
                 good = false;
@@ -1216,6 +1227,7 @@ AST_Module* caching_parse_file(const char* fn) {
                 return ast_cast<AST_Module>(rtn);
             }
 
+            oss << "returned NULL module\n";
             if (tries == MAX_TRIES)
                 fprintf(stderr, "Returned NULL module?\n");
             good = false;
@@ -1223,6 +1235,9 @@ AST_Module* caching_parse_file(const char* fn) {
 
         assert(!good);
         tries++;
+        if (tries > MAX_TRIES) {
+            fprintf(stderr, "\n%s\n", oss.str().c_str());
+        }
         RELEASE_ASSERT(tries <= MAX_TRIES, "repeatedly failing to parse file");
         if (tries == MAX_TRIES)
             DEBUG_PARSING = true;
