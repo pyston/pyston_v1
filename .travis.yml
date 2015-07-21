@@ -66,7 +66,7 @@ before_script:
 
 script:
   - ccache -z
-  - ninja -j4 pyston check-deps && ctest --output-on-failure
+  - ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G ctest --output-on-failure
   - ccache -s
   - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 
