@@ -27,6 +27,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/float.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -1191,49 +1192,93 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     return boxFloat(lhs / (double)rhs);
 }
 
-Box* longPow(BoxedLong* v1, Box* _v2, Box* _v3) {
-    if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'", getTypeName(v1));
+static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* long_func) {
+    std::vector<ConcreteCompilerType*> v_lfu{ UNKNOWN, BOXED_FLOAT, UNKNOWN };
+    std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    BoxedLong* mod = nullptr;
-    if (_v3 != None) {
-        if (isSubclass(_v3->cls, int_cls))
-            mod = boxLong(((BoxedInt*)_v3)->n);
-        else {
-            RELEASE_ASSERT(_v3->cls == long_cls, "");
-            mod = (BoxedLong*)_v3;
+    CLFunction* cl = createRTFunction(3, 1, false, false);
+    addRTFunction(cl, float_func, UNKNOWN, v_lfu);
+    addRTFunction(cl, long_func, UNKNOWN, v_uuu);
+    long_cls->giveAttr(name, new BoxedFunction(cl, { None }));
+}
+
+extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {
+    assert(isSubclass(lhs->cls, long_cls));
+    assert(isSubclass(rhs->cls, float_cls));
+    double lhs_float = static_cast<BoxedFloat*>(longFloat(lhs))->d;
+    return boxFloat(pow_float_float(lhs_float, rhs->d));
+}
+
+Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
+    if (!isSubclass(lhs->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    BoxedLong* mod_long = nullptr;
+    if (mod != None) {
+        if (isSubclass(mod->cls, long_cls)) {
+            mod_long = static_cast<BoxedLong*>(mod);
+        } else if (isSubclass(mod->cls, int_cls)) {
+            mod_long = boxLong(static_cast<BoxedInt*>(mod)->n);
+        } else {
+            return NotImplemented;
         }
-        RELEASE_ASSERT(mpz_sgn(mod->n) >= 0, "");
     }
 
-    if (isSubclass(_v2->cls, long_cls)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-        BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-
-        RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
-
-        if (mod) {
-            mpz_powm(r->n, v1->n, v2->n, mod->n);
-        } else {
-            RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
-            uint64_t n2 = mpz_get_ui(v2->n);
-            mpz_pow_ui(r->n, v1->n, n2);
-        }
-        return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-        RELEASE_ASSERT(v2->n >= 0, "");
-        BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-        if (mod)
-            mpz_powm_ui(r->n, v1->n, v2->n, mod->n);
-        else
-            mpz_pow_ui(r->n, v1->n, v2->n);
-        return r;
+    BoxedLong* rhs_long = nullptr;
+    if (isSubclass(rhs->cls, long_cls)) {
+        rhs_long = static_cast<BoxedLong*>(rhs);
+    } else if (isSubclass(rhs->cls, int_cls)) {
+        rhs_long = boxLong(static_cast<BoxedInt*>(rhs)->n);
     } else {
         return NotImplemented;
     }
+
+    if (mod != None) {
+        if (isSubclass(mod->cls, float_cls)) {
+            raiseExcHelper(TypeError, "pow() 3rd argument not "
+                                      "allowed unless all arguments are integers");
+        } else {
+            if (mpz_sgn(rhs_long->n) < 0)
+                raiseExcHelper(TypeError, "pow() 2nd argument "
+                                          "cannot be negative when 3rd argument specified");
+            else if (mpz_sgn(mod_long->n) == 0)
+                raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
+        }
+    }
+
+    BoxedLong* r = new BoxedLong();
+    mpz_init(r->n);
+
+    if (mpz_sgn(rhs_long->n) == -1) {
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(longFloat(rhs_long));
+        BoxedFloat* lhs_float = static_cast<BoxedFloat*>(longFloat(lhs));
+        return boxFloat(pow_float_float(lhs_float->d, rhs_float->d));
+    }
+
+    if (mod != None) {
+        mpz_powm(r->n, lhs->n, rhs_long->n, mod_long->n);
+        if (mpz_sgn(r->n) == 0)
+            return r;
+        if (mpz_sgn(mod_long->n) < 0)
+            return longAdd(r, mod_long);
+    } else {
+        if (mpz_fits_ulong_p(rhs_long->n)) {
+            uint64_t n2 = mpz_get_ui(rhs_long->n);
+            mpz_pow_ui(r->n, lhs->n, n2);
+        } else {
+            if (mpz_cmp_si(lhs->n, 1l) == 0) {
+                mpz_set_ui(r->n, 1l);
+            } else if (mpz_sgn(lhs->n) == 0) {
+                mpz_set_ui(r->n, 0l);
+            } else if (mpz_cmp_si(lhs->n, -1l) == 0) {
+                mpz_set_si(r->n, -1l);
+            } else {
+                raiseExcHelper(OverflowError, "the result is too large to convert to long");
+            }
+        }
+    }
+    return r;
 }
 
 extern "C" Box* longInvert(BoxedLong* v) {
@@ -1343,7 +1388,8 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
         CONVERT_BINOP(v, w, &a, &b);
         return longPow((BoxedLong*)a, (BoxedLong*)b, x);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -1369,6 +1415,7 @@ static Box* long1(Box* b, void*) {
 void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
+    _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
     long_cls->giveAttr(
         "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
@@ -1391,10 +1438,6 @@ void setupLong() {
 
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr(internStringMortal("__add__")));
-
-    long_cls->giveAttr("__pow__",
-                       new BoxedFunction(boxRTFunction((void*)longPow, UNKNOWN, 3, 1, false, false), { None }));
-
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr(internStringMortal("__and__")));
     long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
