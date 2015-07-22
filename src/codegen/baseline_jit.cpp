@@ -31,10 +31,27 @@ namespace pyston {
 static llvm::DenseSet<CFGBlock*> blocks_aborted;
 static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 
+// The EH table is copied from the one clang++ generated for:
+//
+// long foo(char* c);
+// void bjit() {
+//   asm volatile ("" ::: "r12");
+//   char scratch[256+16];
+//   foo(scratch);
+// }
+//
+// It omits the frame pointer but saves R12
+const unsigned char eh_info[]
+    = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10,
+        0x01, 0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x47,
+        0x0e, 0xa0, 0x02, 0x8c, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
+static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
 JitCodeBlock::JitCodeBlock(llvm::StringRef name)
-    : frame_manager(false /* don't omit frame pointers */),
-      code(new uint8_t[code_size]),
+    : code(new uint8_t[code_size]),
+      eh_frame(new uint8_t[sizeof(eh_info)]),
       entry_offset(0),
       a(code.get(), code_size),
       is_currently_writing(false),
@@ -45,24 +62,28 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     num_jit_total_bytes.log(code_size);
 
     // emit prolog
-    a.push(assembler::RBP);
-    a.mov(assembler::RSP, assembler::RBP);
-
-    static_assert(scratch_size % 16 == 0, "stack aligment code depends on this");
-    // subtract scratch size + 8bytes to align stack after the push.
-    a.sub(assembler::Immediate(scratch_size + 8), assembler::RSP);
-    a.push(assembler::RDI); // push interpreter pointer
-
-    // subtract space in order to be able to pass additional args on the stack without having to adjusting the SP when
-    // calling functions with more than 6 args.
-    a.sub(assembler::Immediate(num_stack_args * sizeof(void*)), assembler::RSP);
-
+    a.push(assembler::R12);
+    static_assert(sp_adjustment % 16 == 0, "stack isn't aligned");
+    a.sub(assembler::Immediate(sp_adjustment), assembler::RSP);
+    a.mov(assembler::RDI, assembler::R12);                                // interpreter pointer
     a.jmp(assembler::Indirect(assembler::RSI, offsetof(CFGBlock, code))); // jump to block
 
     entry_offset = a.bytesWritten();
 
-    // generate eh frame...
-    frame_manager.writeAndRegister(code.get(), code_size);
+    // generate the eh frame...
+    const int size = sizeof(eh_info);
+    void* eh_frame_addr = eh_frame.get();
+    memcpy(eh_frame_addr, eh_info, size);
+
+    int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
+    int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
+    int64_t offset = (int8_t*)code.get() - (int8_t*)offset_ptr;
+    assert(offset >= INT_MIN && offset <= INT_MAX);
+    *offset_ptr = offset;
+    *size_ptr = code_size;
+
+    registerDynamicEhFrame((uint64_t)code.get(), code_size, (uint64_t)eh_frame_addr, size - 4);
+    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 
     g.func_addr_registry.registerFunction(("bjit_" + name).str(), code.get(), code_size, NULL);
 }
@@ -73,7 +94,7 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
 
     is_currently_writing = true;
 
-    int scratch_offset = num_stack_args * 8 + 8 /* ASTInterpreter* */ + 8 /* alignment */;
+    int scratch_offset = num_stack_args * 8;
     StackInfo stack_info(scratch_size, scratch_offset);
     std::unordered_set<int> live_outs;
 
@@ -115,7 +136,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       interp(0),
       ic_info(std::move(ic_info)) {
     interp = createNewVar();
-    addLocationToVar(interp, Location(Location::Stack, JitCodeBlock::interpreter_ptr_offset));
+    addLocationToVar(interp, assembler::R12);
     interp->setAttr(ASTInterpreterJitInterface::getCurrentBlockOffset(), imm(block));
 }
 
@@ -671,7 +692,8 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
     } else {
         int num_bytes = assembler->bytesWritten();
         block_next->getInReg(assembler::RAX, true);
-        assembler->leave();
+        assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::R12);
         assembler->retq();
 
         // make sure we have at least 'min_patch_size' of bytes available.
@@ -696,7 +718,8 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
     {
         assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
         assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
-        assembler->leave();
+        assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::R12);
         assembler->retq();
     }
 
@@ -765,7 +788,8 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const 
 void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
     assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
-    assembler->leave();
+    assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+    assembler->pop(assembler::R12);
     assembler->retq();
     return_val->bumpUse();
 }

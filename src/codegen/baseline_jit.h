@@ -21,7 +21,6 @@
 #include "codegen/ast_interpreter.h"
 #include "codegen/patchpoints.h"
 #include "gc/heap.h"
-#include "runtime/ics.h"
 
 namespace pyston {
 
@@ -88,11 +87,10 @@ class JitFragmentWriter;
 //
 // Basic layout of generated code block is:
 // entry_code:
-//      push   %rbp                 ; setup frame pointer
-//      mov    %rsp,%rbp
-//      sub    $0x108,%rsp          ; setup scratch, 0x108 = scratch_size + 8 (=stack alignment)
-//      push   %rdi                 ; save the pointer to ASTInterpreter instance
-//      sub    $0x16,%rsp           ; space for two func args passed on the stack
+//      push   %r12                 ; save r12
+//      sub    $0x110,%rsp          ; setup scratch, 0x110 = scratch_size + 16 = space for two func args passed on the
+//                                                                               stack
+//      mov    %rdi,%r12            ; copy the pointer to ASTInterpreter instance into r12
 //      jmpq   *0x8(%rsi)           ; jump to block->code
 //                                      possible values: first_JitFragment, second_JitFragment,...
 //
@@ -103,7 +101,8 @@ class JitFragmentWriter;
 //      cmp    %rax,%rcx            ; rax == True
 //      jne    end_side_exit
 //      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
-//      leave
+//      add    $0x110,%rsp          ; restore stack pointer
+//      pop    %r12                 ; restore r12
 //      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
 //      ....
@@ -114,7 +113,8 @@ class JitFragmentWriter;
 //      mov    $0,%rax              ; rax contains the next block to interpret.
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
-//      leave
+//      add    $0x110,%rsp          ; restore stack pointer
+//      pop    %r12                 ; restore r12
 //      ret
 //
 // nth_JitFragment:
@@ -127,12 +127,14 @@ public:
     static constexpr int scratch_size = 256;
     static constexpr int code_size = 32768;
     static constexpr int num_stack_args = 2;
-    static constexpr int interpreter_ptr_offset = num_stack_args * 8;
 
+    // scratch size + space for passing additional args on the stack without having to adjust the SP when calling
+    // functions with more than 6 args.
+    static constexpr int sp_adjustment = scratch_size + num_stack_args * 8;
 
 private:
-    EHFrameManager frame_manager;
     std::unique_ptr<uint8_t[]> code;
+    std::unique_ptr<uint8_t[]> eh_frame;
     int entry_offset;
     assembler::Assembler a;
     bool is_currently_writing;
