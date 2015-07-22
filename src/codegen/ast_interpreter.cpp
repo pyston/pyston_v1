@@ -35,6 +35,7 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
+#include "gc/roots.h"
 #include "runtime/generator.h"
 #include "runtime/import.h"
 #include "runtime/inline/boxing.h"
@@ -102,7 +103,7 @@ private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
-    void doStore(InternedString name, Value value);
+    void doStore(AST_Name* name, Value value);
     Box* doOSR(AST_Jump* node);
     Value getNone();
 
@@ -299,24 +300,25 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     if (scope_info->createsClosure())
         created_closure = createClosure(passed_closure, scope_info->getClosureSize());
 
-    std::vector<Box*, StlCompatAllocator<Box*>> argsArray{ arg1, arg2, arg3 };
-    for (int i = 3; i < nargs; ++i)
-        argsArray.push_back(args[i - 3]);
-
     const ParamNames& param_names = clfunc->param_names;
 
+    // make sure the AST_Name nodes are set
+    assert(param_names.args.size() == param_names.arg_names.size());
+    assert(param_names.vararg.empty() == (param_names.vararg_name == NULL));
+    assert(param_names.kwarg.empty() == (param_names.kwarg_name == NULL));
+
     int i = 0;
-    for (auto& name : param_names.args) {
-        doStore(source_info->getInternedStrings().get(name), Value(argsArray[i++], 0));
+    for (auto& name : param_names.arg_names) {
+        doStore(name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
     }
 
-    if (!param_names.vararg.str().empty()) {
-        doStore(source_info->getInternedStrings().get(param_names.vararg), Value(argsArray[i++], 0));
-    }
+    if (param_names.vararg_name)
+        doStore(param_names.vararg_name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
 
-    if (!param_names.kwarg.str().empty()) {
-        doStore(source_info->getInternedStrings().get(param_names.kwarg), Value(argsArray[i++], 0));
-    }
+    if (param_names.kwarg_name)
+        doStore(param_names.kwarg_name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
+
+    assert(nargs == i);
 }
 
 RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) {
@@ -506,8 +508,12 @@ Value ASTInterpreter::doBinOp(Value left, Value right, int op, BinExpType exp_ty
     return Value();
 }
 
-void ASTInterpreter::doStore(InternedString name, Value value) {
-    ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
+void ASTInterpreter::doStore(AST_Name* node, Value value) {
+    if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
+        node->lookup_type = scope_info->getScopeTypeOfName(node->id);
+
+    InternedString name = node->id;
+    ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
             jit->emitSetGlobal(globals, name.getBox(), value);
@@ -541,7 +547,7 @@ void ASTInterpreter::doStore(InternedString name, Value value) {
 void ASTInterpreter::doStore(AST_expr* node, Value value) {
     if (node->type == AST_TYPE::Name) {
         AST_Name* name = (AST_Name*)node;
-        doStore(name->id, value);
+        doStore(name, value);
     } else if (node->type == AST_TYPE::Attribute) {
         AST_Attribute* attr = (AST_Attribute*)node;
         Value o = visit_expr(attr->value);

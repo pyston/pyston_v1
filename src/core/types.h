@@ -95,6 +95,7 @@ class AST;
 class AST_FunctionDef;
 class AST_arguments;
 class AST_expr;
+class AST_Name;
 class AST_stmt;
 
 class PhiAnalysis;
@@ -147,6 +148,12 @@ struct ParamNames {
     std::vector<llvm::StringRef> args;
     llvm::StringRef vararg, kwarg;
 
+    // This members are only set if the InternedStringPool& constructor is used (aka. source is available)!
+    // They are used as an optimization while interpreting because the AST_Names nodes cache important stuff
+    // (InternedString, lookup_type) which would otherwise have to get recomputed all the time.
+    std::vector<AST_Name*> arg_names;
+    AST_Name* vararg_name, *kwarg_name;
+
     explicit ParamNames(AST* ast, InternedStringPool& pool);
     ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
     static ParamNames empty() { return ParamNames(); }
@@ -156,7 +163,7 @@ struct ParamNames {
     }
 
 private:
-    ParamNames() : takes_param_names(false) {}
+    ParamNames() : takes_param_names(false), vararg_name(NULL), kwarg_name(NULL) {}
 };
 
 // Probably overkill to copy this from ArgPassSpec
