@@ -114,14 +114,10 @@ public:
 
     void accept(gc::GCVisitor* v) {
         auto pub_state = public_thread_state;
-        if (pub_state->curexc_type)
-            v->visit(pub_state->curexc_type);
-        if (pub_state->curexc_value)
-            v->visit(pub_state->curexc_value);
-        if (pub_state->curexc_traceback)
-            v->visit(pub_state->curexc_traceback);
-        if (pub_state->dict)
-            v->visit(pub_state->dict);
+        v->visit(pub_state->curexc_type);
+        v->visit(pub_state->curexc_value);
+        v->visit(pub_state->curexc_traceback);
+        v->visit(pub_state->dict);
 
         for (auto& stack_info : previous_stacks) {
             v->visit(stack_info.next_generator);

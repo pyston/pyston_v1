@@ -388,7 +388,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
     } catch (ExcInfo e) {
         AST_stmt* stmt = getCurrentStatement();
         if (stmt->type != AST_TYPE::Invoke)
-            throw e;
+            throwReraise(e);
 
         auto source = getCL()->source.get();
         exceptionCaughtInInterpreter(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);

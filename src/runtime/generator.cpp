@@ -396,14 +396,10 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     if (num_args > 3)
         v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
                                reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
-    if (g->returnValue)
-        v->visit(g->returnValue);
-    if (g->exception.type)
-        v->visit(g->exception.type);
-    if (g->exception.value)
-        v->visit(g->exception.value);
-    if (g->exception.traceback)
-        v->visit(g->exception.traceback);
+    v->visit(g->returnValue);
+    v->visit(g->exception.type);
+    v->visit(g->exception.value);
+    v->visit(g->exception.traceback);
 
     if (g->running) {
         v->visitPotentialRange((void**)&g->returnContext,

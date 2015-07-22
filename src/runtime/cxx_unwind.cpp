@@ -491,7 +491,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
 
-    auto unwind_session = getActivePythonUnwindSession();
+    auto python_unwind = getActivePythonException();
 
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
@@ -506,10 +506,10 @@ static inline void unwind_loop(ExcInfo* exc_data) {
             print_frame(&cursor, &pip);
         }
 
-        // let the PythonUnwindSession know that we're in a new frame,
-        // giving it a chance to possibly add a traceback entry for
-        // it.
-        unwindingThroughFrame(unwind_session, &cursor);
+        // let the PythonExceptionUnwinder know that we're in a new
+        // frame, giving it a chance to possibly add a traceback entry
+        // for it.
+        pyston::unwindingThroughFrame(python_unwind, &cursor);
 
         // Skip frames without handlers
         if (pip.handler == 0) {
@@ -560,12 +560,12 @@ static inline void unwind_loop(ExcInfo* exc_data) {
         if (switch_value != CLEANUP_ACTION) {
             // we're transfering control to a non-cleanup landing pad.
             // i.e. a catch block.  thus ends our unwind session.
-            endPythonUnwindSession(unwind_session);
+            pyston::endPythonException(python_unwind);
 #if STAT_TIMERS
             pyston::StatTimer::finishOverride();
 #endif
         }
-        static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
+        static_assert(THREADING_USE_GIL, "have to make the python unwind usage in this file thread safe!");
         // there is a python unwinding implementation detail leaked
         // here - that the unwind session can be ended but its
         // exception storage is still around.
@@ -576,8 +576,8 @@ static inline void unwind_loop(ExcInfo* exc_data) {
         // unwind session) to resume().
         //
         // the only way this could bite us is if we somehow clobber
-        // the PythonUnwindSession's storage, or cause a GC to occur, before
-        // transfering control to the landing pad in resume().
+        // the python exception storage, or cause a GC to occur,
+        // before transfering control to the landing pad in resume().
         //
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
@@ -633,10 +633,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
     // we should only ever be throwing ExcInfos
     RELEASE_ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
 
-    // we begin the unwind session here rather than in __cxa_throw
-    // because we need to return the session's exception storage
-    // from this method.
-    return pyston::getPythonUnwindSessionExceptionStorage(pyston::beginPythonUnwindSession());
+    return pyston::allocatePythonExceptionStorage();
 }
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our
@@ -682,7 +679,7 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     pyston::StatTimer::overrideCounter(unwinding_stattimer);
 #endif
     // let unwinding.cpp know we've started unwinding
-    pyston::throwingException(pyston::getActivePythonUnwindSession());
+    pyston::beginPythonException();
     pyston::unwind(exc_data);
 }
 

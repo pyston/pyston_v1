@@ -42,12 +42,9 @@ public:
         BoxedSuper* o = static_cast<BoxedSuper*>(_o);
 
         boxGCHandler(v, o);
-        if (o->type)
-            v->visit(o->type);
-        if (o->obj)
-            v->visit(o->obj);
-        if (o->obj_type)
-            v->visit(o->obj_type);
+        v->visit(o->type);
+        v->visit(o->obj);
+        v->visit(o->obj_type);
     }
 };
 

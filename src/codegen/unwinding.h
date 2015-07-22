@@ -33,7 +33,6 @@ struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 
-void setupUnwinding();
 BoxedModule* getCurrentModule();
 Box* getGlobals();     // returns either the module or a globals dict
 Box* getGlobalsDict(); // always returns a dict-like object
@@ -41,17 +40,32 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 
 Box* getTraceback();
 
-class PythonUnwindSession;
-PythonUnwindSession* beginPythonUnwindSession();
-PythonUnwindSession* getActivePythonUnwindSession();
-void throwingException(PythonUnwindSession* unwind_session);
-void endPythonUnwindSession(PythonUnwindSession* unwind_session);
-void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind_session);
-void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor);
+// the API the C++ unwinder uses to interface with our python
+// traceback generation code.
+class PythonExceptionUnwinder;
+
+// called by __cxa_throw before starting the unwind
+PythonExceptionUnwinder* beginPythonException();
+// called just before we branch to a handler (either a cleanup or catch block)
+void endPythonException(PythonExceptionUnwinder* unwind_session);
+// called from __cxa_allocate_exception
+void* allocatePythonExceptionStorage();
+
+PythonExceptionUnwinder* getActivePythonException();
+// called every time the C++ unwinder unwinders to a new frame.
+void unwindingThroughFrame(PythonExceptionUnwinder* unwind_session, unw_cursor_t* cursor);
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
 
+void throwReraise(ExcInfo e) __attribute__((__noreturn__));
+
 CLFunction* getTopPythonFunction();
+
+struct ExecutionPoint {
+    CompiledFunction* cf;
+    AST_stmt* current_stmt;
+};
+ExecutionPoint getExecutionPoint();
 
 // debugging/stat helper, returns python filename:linenumber, or "unknown:-1" if it fails
 std::string getCurrentPythonLine();
