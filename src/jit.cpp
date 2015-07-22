@@ -155,8 +155,16 @@ static void enableGdbSegfaultWatcher() {
                 int rtncode = 0;
                 if (WIFEXITED(status))
                     rtncode = WEXITSTATUS(status);
-                else
-                    rtncode = 128 + WTERMSIG(status);
+                else {
+                    int from_signal = WTERMSIG(status);
+
+                    // Try to die in the same way that the child did:
+                    signal(from_signal, SIG_DFL);
+                    raise(from_signal);
+
+                    // If somehow that didn't work, fall back to this:
+                    exit(128 + from_signal);
+                }
 
                 exit(rtncode);
             }
