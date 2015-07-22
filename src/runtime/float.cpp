@@ -1501,6 +1501,8 @@ void setupFloat() {
     float_cls->freeze();
 
     floatFormatInit();
+
+    float_cls->tp_as_number->nb_power = float_pow;
 }
 
 void teardownFloat() {
