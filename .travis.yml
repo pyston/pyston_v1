@@ -21,7 +21,8 @@ sudo: false
 
 cache:
   directories:
-    - ${CCACHE_DIR}
+    - $HOME/.ccache_debug
+    - $HOME/.ccache_release
 
 addons:
   apt:
