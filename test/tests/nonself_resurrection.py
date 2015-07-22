@@ -1,7 +1,5 @@
-# expected: fail
-#  - finalization (let alone resurrection) not implemented yet
-
 # Objects are allowed to resurrect other objects too, I guess
+from testing_helpers import test_gc
 
 class C(object):
     def __init__(self, x):
@@ -12,10 +10,10 @@ class C(object):
         x = self.x
 
 x = None
-c = C([])
-del c
 
-import gc
-gc.collect()
+def test():
+    c = C([])
+
+test_gc(test)
 
 print x

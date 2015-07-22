@@ -2650,13 +2650,9 @@ public:
     }
 
     void doSafePoint(AST_stmt* next_statement) override {
-// If the sampling profiler is turned on (and eventually, destructors), we need frame-introspection
-// support while in allowGLReadPreemption:
-#if ENABLE_SAMPLING_PROFILER
+        // Unwind info is always needed in allowGLReadPreemption if it has any chance of
+        // running arbitrary code like finalizers.
         emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
-#else
-        emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption);
-#endif
     }
 };
 

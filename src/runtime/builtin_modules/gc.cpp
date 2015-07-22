@@ -20,6 +20,11 @@ namespace pyston {
 
 static Box* gcCollect() {
     gc::runCollection();
+
+    // I think it's natural that the user would expect the finalizers to get run here if we're forcing
+    // a GC pass. It should be safe to do, and makes testing easier also.
+    gc::callPendingDestructionLogic();
+
     return None;
 }
 

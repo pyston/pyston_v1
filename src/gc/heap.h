@@ -113,6 +113,20 @@ static_assert(sizeof(GCAllocation) <= sizeof(void*),
               "we should try to make sure the gc header is word-sized or smaller");
 
 #define MARK_BIT 0x1
+// reserved bit - along with MARK_BIT, encodes the states of finalization order
+#define ORDERING_EXTRA_BIT 0x2
+#define FINALIZER_HAS_RUN_BIT 0x4
+
+#define ORDERING_BITS (MARK_BIT | ORDERING_EXTRA_BIT)
+
+enum FinalizationState {
+    UNREACHABLE = 0x0,
+    TEMPORARY = ORDERING_EXTRA_BIT,
+
+    // Note that these two states have MARK_BIT set.
+    ALIVE = MARK_BIT,
+    REACHABLE_FROM_FINALIZER = ORDERING_BITS,
+};
 
 inline bool isMarked(GCAllocation* header) {
     return (header->gc_flags & MARK_BIT) != 0;
@@ -128,7 +142,37 @@ inline void clearMark(GCAllocation* header) {
     header->gc_flags &= ~MARK_BIT;
 }
 
+inline bool hasFinalized(GCAllocation* header) {
+    return (header->gc_flags & FINALIZER_HAS_RUN_BIT) != 0;
+}
+
+inline void setFinalized(GCAllocation* header) {
+    assert(!hasFinalized(header));
+    header->gc_flags |= FINALIZER_HAS_RUN_BIT;
+}
+
+inline FinalizationState orderingState(GCAllocation* header) {
+    int state = header->gc_flags & ORDERING_BITS;
+    assert(state <= static_cast<int>(FinalizationState::REACHABLE_FROM_FINALIZER));
+    return static_cast<FinalizationState>(state);
+}
+
+inline void setOrderingState(GCAllocation* header, FinalizationState state) {
+    header->gc_flags = (header->gc_flags & ~ORDERING_BITS) | static_cast<int>(state);
+}
+
+inline void clearOrderingState(GCAllocation* header) {
+    header->gc_flags &= ~ORDERING_EXTRA_BIT;
+}
+
 #undef MARK_BIT
+#undef ORDERING_EXTRA_BIT
+#undef FINALIZER_HAS_RUN_BIT
+#undef ORDERING_BITS
+
+bool hasOrderedFinalizer(BoxedClass* cls);
+void finalize(Box* b);
+bool isWeaklyReferenced(Box* b);
 
 #define PAGE_SIZE 4096
 

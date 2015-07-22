@@ -15,5 +15,5 @@ def doStuff():
 
 l = [doStuff() for i in xrange(5)]
 gc.collect()
-
+gc.collect()
 assert num_destroyed >= 1

@@ -45,11 +45,6 @@ extern "C" void* gc_compat_realloc(void* ptr, size_t sz) noexcept {
     return gc_realloc(ptr, sz);
 }
 
-extern "C" void gc_compat_free(void* ptr) noexcept {
-    if (ptr)
-        gc_free(ptr);
-}
-
 // We may need to hook malloc as well.  For now, these definitions serve
 // as a reference on how to do that, and also can help with debugging malloc
 // usage issues.
