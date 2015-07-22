@@ -474,9 +474,19 @@ std::string BoxedModule::name() {
 
 BoxedString* BoxedModule::getStringConstant(llvm::StringRef ast_str, bool intern) {
     BoxedString*& r = str_constants[ast_str];
-    if (intern)
-        r = internStringMortal(ast_str);
-    else if (!r)
+    if (intern) {
+        // If we had previously created a box for this string, we have to create a new
+        // string (or at least, be prepared to return a different value that we had already
+        // interned).  This is fine, except we have to be careful because we promised
+        // that we would keep the previously-created string alive.
+        // So, make sure to put it onto the keep_alive list.
+        if (r && !PyString_CHECK_INTERNED(r)) {
+            keep_alive.push_back(r);
+            r = NULL;
+        }
+        if (!r)
+            r = internStringMortal(ast_str);
+    } else if (!r)
         r = boxString(ast_str);
     return r;
 }
@@ -538,6 +548,8 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
     visitContiguousMap(v, d->float_constants);
     visitContiguousMap(v, d->imaginary_constants);
     visitContiguousMap(v, d->long_constants);
+    if (!d->keep_alive.empty())
+        v->visitRange((void**)&d->keep_alive[0], (void**)((&d->keep_alive[0]) + d->keep_alive.size()));
 }
 
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /

@@ -879,6 +879,8 @@ private:
     ContiguousMap<int64_t, BoxedFloat*, std::unordered_map<int64_t, int>> float_constants;
     ContiguousMap<int64_t, Box*, std::unordered_map<int64_t, int>> imaginary_constants;
     ContiguousMap<llvm::StringRef, Box*, llvm::StringMap<int>> long_constants;
+    // Other objects that this module needs to keep alive; see getStringConstant.
+    llvm::SmallVector<Box*, 8> keep_alive;
 
 public:
     DEFAULT_CLASS(module_cls);
