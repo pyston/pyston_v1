@@ -57,6 +57,10 @@ print ~(-10L)
 print -(1L)
 print 1L**2L
 print 1L**2
+print 0 ** (1 << 100)
+print pow(1 << 30, 1 << 30, 127)
+print pow(1L << 30, 1L << 30, 127)
+print pow(1 << 100, 1 << 100, 1000)
 print (11L).__pow__(32, 50L)
 print (11L).__index__()
 
