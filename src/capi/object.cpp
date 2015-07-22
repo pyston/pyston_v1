@@ -419,11 +419,13 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
     RELEASE_ASSERT(PyString_Check(name), "");
+    BoxedString* str = static_cast<BoxedString*>(name);
+    internStringMortalInplace(str);
     try {
         if (value == NULL)
-            delattrGeneric(obj, static_cast<BoxedString*>(name), NULL);
+            delattrGeneric(obj, str, NULL);
         else
-            setattrGeneric(obj, static_cast<BoxedString*>(name), value, NULL);
+            setattrGeneric(obj, str, value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -458,7 +460,7 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
     try {
-        setattr(v, boxString(name), w);
+        setattr(v, internStringMortal(name), w);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -468,7 +470,7 @@ extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     try {
-        return getattr(o, boxString(attr));
+        return getattr(o, internStringMortal(attr));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;

@@ -222,7 +222,7 @@ private:
 
         // TODO this isn't the exact behavior
         BoxedString* name = getInplaceOpName(node->op_type);
-        CompilerType* attr_type = left->getattrType(name->s(), true);
+        CompilerType* attr_type = left->getattrType(name, true);
 
         if (attr_type == UNDEF)
             attr_type = UNKNOWN;
@@ -251,7 +251,7 @@ private:
 
         // TODO this isn't the exact behavior
         BoxedString* name = getOpName(node->op_type);
-        CompilerType* attr_type = left->getattrType(name->s(), true);
+        CompilerType* attr_type = left->getattrType(name, true);
 
         if (attr_type == UNDEF)
             attr_type = UNKNOWN;
@@ -336,7 +336,7 @@ private:
             }
 
             BoxedString* name = getOpName(node->ops[0]);
-            CompilerType* attr_type = left->getattrType(name->s(), true);
+            CompilerType* attr_type = left->getattrType(name, true);
 
             if (attr_type == UNDEF)
                 attr_type = UNKNOWN;
@@ -474,7 +474,7 @@ private:
     void* visit_subscript(AST_Subscript* node) override {
         CompilerType* val = getType(node->value);
         CompilerType* slice = getType(node->slice);
-        static std::string name("__getitem__");
+        static BoxedString* name = internStringImmortal("__getitem__");
         CompilerType* getitem_type = val->getattrType(name, true);
         std::vector<CompilerType*> args;
         args.push_back(slice);
@@ -494,7 +494,7 @@ private:
 
         // TODO this isn't the exact behavior
         BoxedString* name = getOpName(node->op_type);
-        CompilerType* attr_type = operand->getattrType(name->s(), true);
+        CompilerType* attr_type = operand->getattrType(name, true);
         std::vector<CompilerType*> arg_types;
         return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
     }

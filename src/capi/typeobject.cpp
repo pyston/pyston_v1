@@ -22,10 +22,6 @@
 
 namespace pyston {
 
-// FIXME duplicated with objmodel.cpp
-static const std::string _new_str("__new__");
-static const std::string _getattr_str("__getattr__");
-static const std::string _getattribute_str("__getattribute__");
 typedef int (*update_callback)(PyTypeObject*, void*);
 
 static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
@@ -529,10 +525,13 @@ static PyObject* wrap_init(PyObject* self, PyObject* args, void* wrapped, PyObje
 static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     PyObject* res;
 
-    // TODO: CPython uses the attrobj as a cache.  If we want to use it, we'd have to make sure that
-    // they get registered as GC roots since they are usually placed into static variables.
+    if (*attrobj == NULL) {
+        *attrobj = PyString_InternFromString(attrstr);
+        if (*attrobj == NULL)
+            return NULL;
+    }
 
-    Box* obj = typeLookup(self->cls, attrstr, NULL);
+    Box* obj = typeLookup(self->cls, (BoxedString*)*attrobj, NULL);
     if (obj)
         return processDescriptor(obj, self, self->cls);
     return obj;
@@ -850,7 +849,8 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
 
-    get = typeLookup(tp, "__get__", NULL);
+    static BoxedString* get_str = internStringImmortal("__get__");
+    get = typeLookup(tp, get_str, NULL);
     if (get == NULL) {
         /* Avoid further slowdowns */
         if (tp->tp_descr_get == slot_tp_descr_get)
@@ -932,6 +932,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
          __getattr__, even when the attribute is present. So we use
          _PyType_Lookup and create the method only when needed, with
          call_attribute. */
+    static BoxedString* _getattr_str = internStringImmortal("__getattr__");
     getattr = typeLookup(self->cls, _getattr_str, NULL);
     if (getattr == NULL) {
         /* No __getattr__ hook: use a simpler dispatcher */
@@ -943,6 +944,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
          __getattr__, even when self has the default __getattribute__
          method. So we use _PyType_Lookup and create the method only when
          needed, with call_attribute. */
+    static BoxedString* _getattribute_str = internStringImmortal("__getattribute__");
     getattribute = typeLookup(self->cls, _getattribute_str, NULL);
     if (getattribute == NULL
         || (Py_TYPE(getattribute) == wrapperdescr_cls
@@ -963,6 +965,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
 
     try {
         // TODO: runtime ICs?
+        static BoxedString* _new_str = internStringImmortal("__new__");
         Box* new_attr = typeLookup(self, _new_str, NULL);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
@@ -1406,13 +1409,13 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
 
 // Copied from CPython:
 #define TPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                     \
-    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0 }
+    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0, NULL }
 #define TPPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                    \
-    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), PyWrapperFlag_PYSTON }
+    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), PyWrapperFlag_PYSTON, NULL }
 #define FLSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC, FLAGS)                                                              \
-    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), FLAGS }
+    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), FLAGS, NULL }
 #define ETSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                     \
-    { NAME, offsetof(PyHeapTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0 }
+    { NAME, offsetof(PyHeapTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0, NULL }
 #define SQSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) ETSLOT(NAME, as_sequence.SLOT, FUNCTION, WRAPPER, DOC)
 #define MPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) ETSLOT(NAME, as_mapping.SLOT, FUNCTION, WRAPPER, DOC)
 #define NBSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) ETSLOT(NAME, as_number.SLOT, FUNCTION, WRAPPER, DOC)
@@ -1551,7 +1554,7 @@ static slotdef slotdefs[]
         SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
         SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
         SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
-        { "", 0, NULL, NULL, "", 0 } };
+        { "", 0, NULL, NULL, "", 0, NULL } };
 
 static void init_slotdefs() noexcept {
     static bool initialized = false;
@@ -1559,6 +1562,8 @@ static void init_slotdefs() noexcept {
         return;
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
+        slotdefs[i].name_strobj = internStringImmortal(slotdefs[i].name.data());
+
         if (i > 0) {
             if (!slotdefs[i].name.size())
                 continue;
@@ -1575,7 +1580,6 @@ static void init_slotdefs() noexcept {
             }
 #endif
             ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name.data());
-            // CPython interns the name here
         }
     }
 
@@ -1642,7 +1646,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
     }
 
     do {
-        descr = typeLookup(type, p->name, NULL);
+        descr = typeLookup(type, p->name_strobj, NULL);
         if (descr == NULL) {
             if (ptr == (void**)&type->tp_iternext) {
                 specific = (void*)_PyObject_NextNotImplemented;
@@ -1819,10 +1823,11 @@ static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_ne
                                                  { 0, 0, 0, 0 } };
 
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
-    if (type->getattr("__new__"))
+    static BoxedString* new_str = internStringImmortal("__new__");
+    if (type->getattr(new_str))
         return;
 
-    type->giveAttr("__new__", new BoxedCApiFunction(tp_new_methoddef, type));
+    type->giveAttr(new_str, new BoxedCApiFunction(tp_new_methoddef, type));
 }
 
 void add_operators(BoxedClass* cls) noexcept {
@@ -1836,13 +1841,13 @@ void add_operators(BoxedClass* cls) noexcept {
 
         if (!ptr || !*ptr)
             continue;
-        if (cls->getattr(p.name))
+        if (cls->getattr(p.name_strobj))
             continue;
 
         if (*ptr == PyObject_HashNotImplemented) {
-            cls->giveAttr(p.name, None);
+            cls->giveAttr(p.name_strobj, None);
         } else {
-            cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
+            cls->giveAttr(p.name_strobj, new BoxedWrapperDescriptor(&p, cls, *ptr));
         }
     }
 
@@ -3097,17 +3102,18 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     }
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
-        cls->setattr(method->ml_name, new BoxedMethodDescriptor(method, cls), NULL);
+        cls->setattr(internStringMortal(method->ml_name), new BoxedMethodDescriptor(method, cls), NULL);
     }
 
     for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {
-        cls->giveAttr(member->name, new BoxedMemberDescriptor(member));
+        cls->giveAttr(internStringMortal(member->name), new BoxedMemberDescriptor(member));
     }
 
     for (PyGetSetDef* getset = cls->tp_getset; getset && getset->name; ++getset) {
         // TODO do something with __doc__
-        cls->giveAttr(getset->name, new (capi_getset_cls) BoxedGetsetDescriptor(
-                                        getset->get, (void (*)(Box*, Box*, void*))getset->set, getset->closure));
+        cls->giveAttr(internStringMortal(getset->name),
+                      new (capi_getset_cls) BoxedGetsetDescriptor(getset->get, (void (*)(Box*, Box*, void*))getset->set,
+                                                                  getset->closure));
     }
 
     try {
@@ -3117,11 +3123,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         return -1;
     }
 
-    if (!cls->hasattr("__doc__")) {
+    static BoxedString* doc_str = internStringImmortal("__doc__");
+    if (!cls->hasattr(doc_str)) {
         if (cls->tp_doc) {
-            cls->giveAttr("__doc__", boxString(cls->tp_doc));
+            cls->giveAttr(doc_str, boxString(cls->tp_doc));
         } else {
-            cls->giveAttr("__doc__", None);
+            cls->giveAttr(doc_str, None);
         }
     }
 
