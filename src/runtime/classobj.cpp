@@ -28,7 +28,7 @@ extern "C" {
 BoxedClass* classobj_cls, *instance_cls;
 }
 
-static Box* classLookup(BoxedClassobj* cls, llvm::StringRef attr) {
+static Box* classLookup(BoxedClassobj* cls, BoxedString* attr) {
     Box* r = cls->getattr(attr);
     if (r)
         return r;
@@ -104,12 +104,16 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
 
     for (auto& p : dict->d) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
-        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s()), p.second, NULL);
+        BoxedString* s = (BoxedString*)p.first;
+        internStringMortalInplace(s);
+        made->setattr(s, p.second, NULL);
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
-    made->setattr("__name__", name, NULL);
-    made->setattr("__bases__", bases, NULL);
+    static BoxedString* name_str = internStringImmortal("__name__");
+    static BoxedString* bases_str = internStringImmortal("__bases__");
+    made->setattr(name_str, name, NULL);
+    made->setattr(bases_str, bases, NULL);
 
     return made;
 }
@@ -126,7 +130,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
 
     BoxedInstance* made = new BoxedInstance(cls);
 
-    static const std::string init_str("__init__");
+    static BoxedString* init_str = internStringImmortal("__init__");
     Box* init_func = classLookup(cls, init_str);
 
     if (init_func) {
@@ -162,7 +166,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
         }
     }
 
-    Box* r = classLookup(cls, attr->s());
+    Box* r = classLookup(cls, attr);
     if (!r)
         raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
@@ -210,7 +214,8 @@ static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
         const char* error_str = set_bases((PyClassObject*)cls, _value);
         if (error_str && error_str[0] != '\0')
             raiseExcHelper(TypeError, "%s", error_str);
-        cls->setattr("__bases__", _value, NULL);
+        static BoxedString* bases_str = internStringImmortal("__bases__");
+        cls->setattr(bases_str, _value, NULL);
         return;
     }
     PyObject_GenericSetAttr(cls, _attr, _value);
@@ -239,7 +244,8 @@ Box* classobjStr(Box* _obj) {
 
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_obj);
 
-    Box* _mod = cls->getattr("__module__");
+    static BoxedString* module_str = internStringImmortal("__module__");
+    Box* _mod = cls->getattr(module_str);
     RELEASE_ASSERT(_mod, "");
     RELEASE_ASSERT(_mod->cls == str_cls, "");
     return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s()) + "." + cls->name->s());
@@ -263,17 +269,17 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
             return inst->inst_cls;
     }
 
-    Box* r = inst->getattr(attr->s());
+    Box* r = inst->getattr(attr);
     if (r)
         return r;
 
-    r = classLookup(inst->inst_cls, attr->s());
+    r = classLookup(inst->inst_cls, attr);
     if (r) {
         return processDescriptor(r, inst, inst->inst_cls);
     }
     RELEASE_ASSERT(!r, "");
 
-    static const std::string getattr_str("__getattr__");
+    static BoxedString* getattr_str = internStringImmortal("__getattr__");
     Box* getattr = classLookup(inst->inst_cls, getattr_str);
 
     if (getattr) {
@@ -323,7 +329,7 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
         }
     }
 
-    static const std::string setattr_str("__setattr__");
+    static BoxedString* setattr_str = internStringImmortal("__setattr__");
     Box* setattr = classLookup(inst->inst_cls, setattr_str);
 
     if (setattr) {
@@ -331,7 +337,7 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
         return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
     }
 
-    _inst->setattr(attr->s(), value, NULL);
+    _inst->setattr(attr, value, NULL);
     return None;
 }
 
@@ -351,7 +357,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
             raiseExcHelper(TypeError, "__class__ must be set to a class");
     }
 
-    static const std::string delattr_str("__delattr__");
+    static BoxedString* delattr_str = internStringImmortal("__delattr__");
     Box* delattr = classLookup(inst->inst_cls, delattr_str);
 
     if (delattr) {
@@ -359,7 +365,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
     }
 
-    _inst->delattr(attr->s(), NULL);
+    _inst->delattr(attr, NULL);
     return None;
 }
 
@@ -381,7 +387,7 @@ Box* instanceRepr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* repr_str = static_cast<BoxedString*>(PyString_InternFromString("__repr__"));
+    static BoxedString* repr_str = internStringImmortal("__repr__");
     Box* repr_func = _instanceGetattribute(inst, repr_str, false);
 
     if (repr_func) {
@@ -400,7 +406,7 @@ Box* instanceStr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* str_str = static_cast<BoxedString*>(PyString_InternFromString("__str__"));
+    static BoxedString* str_str = internStringImmortal("__str__");
     Box* str_func = _instanceGetattribute(inst, str_str, false);
 
     if (str_func) {
@@ -415,7 +421,7 @@ Box* instanceNonzero(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* nonzero_str = static_cast<BoxedString*>(PyString_InternFromString("__nonzero__"));
+    static BoxedString* nonzero_str = internStringImmortal("__nonzero__");
 
     Box* nonzero_func = NULL;
     try {
@@ -426,7 +432,7 @@ Box* instanceNonzero(Box* _inst) {
     }
 
     if (nonzero_func == NULL) {
-        static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+        static BoxedString* len_str = internStringImmortal("__len__");
         try {
             nonzero_func = _instanceGetattribute(inst, len_str, false);
         } catch (ExcInfo e) {
@@ -446,7 +452,7 @@ Box* instanceLen(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* len_str = static_cast<BoxedString*>(PyString_InternFromString("__len__"));
+    static BoxedString* len_str = internStringImmortal("__len__");
     Box* len_func = _instanceGetattribute(inst, len_str, true);
     return runtimeCall(len_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
@@ -455,7 +461,7 @@ Box* instanceGetitem(Box* _inst, Box* key) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* getitem_str = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
+    static BoxedString* getitem_str = internStringImmortal("__getitem__");
     Box* getitem_func = _instanceGetattribute(inst, getitem_str, true);
     return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
@@ -464,7 +470,7 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* setitem_str = static_cast<BoxedString*>(PyString_InternFromString("__setitem__"));
+    static BoxedString* setitem_str = internStringImmortal("__setitem__");
     Box* setitem_func = _instanceGetattribute(inst, setitem_str, true);
     return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
 }
@@ -473,7 +479,7 @@ Box* instanceDelitem(Box* _inst, Box* key) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* delitem_str = static_cast<BoxedString*>(PyString_InternFromString("__delitem__"));
+    static BoxedString* delitem_str = internStringImmortal("__delitem__");
     Box* delitem_func = _instanceGetattribute(inst, delitem_str, true);
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
@@ -494,7 +500,7 @@ static int half_cmp(PyObject* v, PyObject* w) noexcept {
 
     assert(PyInstance_Check(v));
 
-    static BoxedString* cmp_str = static_cast<BoxedString*>(PyString_InternFromString("__cmp__"));
+    static BoxedString* cmp_str = internStringImmortal("__cmp__");
 // Pyston change:
 #if 0
         if (cmp_obj == NULL) {
@@ -617,7 +623,7 @@ Box* instanceContains(Box* _inst, Box* key) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* contains_str = static_cast<BoxedString*>(PyString_InternFromString("__contains__"));
+    static BoxedString* contains_str = internStringImmortal("__contains__");
     Box* contains_func = _instanceGetattribute(inst, contains_str, false);
 
     if (!contains_func) {
@@ -638,9 +644,9 @@ static Box* instanceHash(BoxedInstance* inst) {
     PyObject* func;
     PyObject* res;
 
-    static BoxedString* hash_str = static_cast<BoxedString*>(PyString_InternFromString("__hash__"));
-    static BoxedString* eq_str = static_cast<BoxedString*>(PyString_InternFromString("__eq__"));
-    static BoxedString* cmp_str = static_cast<BoxedString*>(PyString_InternFromString("__cmp__"));
+    static BoxedString* hash_str = internStringImmortal("__hash__");
+    static BoxedString* eq_str = internStringImmortal("__eq__");
+    static BoxedString* cmp_str = internStringImmortal("__cmp__");
 
     func = _instanceGetattribute(inst, hash_str, false);
     if (func == NULL) {
@@ -671,8 +677,8 @@ static Box* instanceIter(BoxedInstance* self) {
 
     PyObject* func;
 
-    static BoxedString* iter_str = static_cast<BoxedString*>(PyString_InternFromString("__iter__"));
-    static BoxedString* getitem_str = static_cast<BoxedString*>(PyString_InternFromString("__getitem__"));
+    static BoxedString* iter_str = internStringImmortal("__iter__");
+    static BoxedString* getitem_str = internStringImmortal("__getitem__");
     if ((func = _instanceGetattribute(self, iter_str, false)) != NULL) {
         PyObject* res = PyEval_CallObject(func, (PyObject*)NULL);
         if (!res)
@@ -696,7 +702,7 @@ static Box* instanceIter(BoxedInstance* self) {
 static Box* instanceNext(BoxedInstance* inst) {
     assert(inst->cls == instance_cls);
 
-    static BoxedString* next_str = static_cast<BoxedString*>(PyString_InternFromString("next"));
+    static BoxedString* next_str = internStringImmortal("next");
     Box* next_func = _instanceGetattribute(inst, next_str, false);
 
     if (!next_func) {
@@ -731,45 +737,51 @@ static PyObject* instance_index(PyObject* self) noexcept {
     return res;
 }
 
-Box* _instanceBinary(Box* _inst, Box* other, const char* attr) {
+static Box* _instanceBinary(Box* _inst, Box* other, BoxedString* attr) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    Box* func = _instanceGetattribute(inst, boxString(attr), false);
+    Box* func = _instanceGetattribute(inst, attr, false);
     if (!func)
         return NotImplemented;
     return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 
 Box* instanceGt(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__gt__");
+    static BoxedString* attr_str = internStringImmortal("__gt__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceGe(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__ge__");
+    static BoxedString* attr_str = internStringImmortal("__ge__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceLt(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__lt__");
+    static BoxedString* attr_str = internStringImmortal("__lt__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceLe(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__le__");
+    static BoxedString* attr_str = internStringImmortal("__le__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceEq(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__eq__");
+    static BoxedString* attr_str = internStringImmortal("__eq__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceNe(Box* _inst, Box* other) {
-    return _instanceBinary(_inst, other, "__ne__");
+    static BoxedString* attr_str = internStringImmortal("__ne__");
+    return _instanceBinary(_inst, other, attr_str);
 }
 
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     assert(_inst->cls == instance_cls);
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* call_str = static_cast<BoxedString*>(PyString_InternFromString("__call__"));
+    static BoxedString* call_str = internStringImmortal("__call__");
     Box* call_func = _instanceGetattribute(inst, call_str, false);
     if (!call_func)
         raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->data());

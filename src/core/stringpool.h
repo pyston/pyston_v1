@@ -80,6 +80,7 @@ public:
 
     llvm::StringRef s() const;
     operator llvm::StringRef() const { return s(); }
+    operator BoxedString*() const { return getBox(); }
 
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
@@ -88,12 +89,6 @@ public:
 };
 
 class InternedStringPool {
-private:
-    // We probably don't need to pull in llvm::StringRef as the key, but it's better than std::string
-    // which I assume forces extra allocations.
-    // (We could define a custom string-pointer container but is it worth it?)
-    std::unordered_map<llvm::StringRef, BoxedString*> interned;
-
 public:
     void gcHandler(gc::GCVisitor* v);
     InternedString get(llvm::StringRef s);

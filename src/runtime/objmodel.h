@@ -128,7 +128,7 @@ enum LookupScope {
 extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<BoxedString*>* keyword_names);
-extern "C" void delattr_internal(Box* obj, llvm::StringRef attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
+extern "C" void delattr_internal(Box* obj, BoxedString* attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 
@@ -139,12 +139,12 @@ Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_ar
 // This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
 // data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
 // __getattribute__.
-Box* getattrInternalGeneric(Box* obj, llvm::StringRef attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
-                            bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
+Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
+                            Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 // This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
 // appropriate order. It does not do any descriptor logic.
-Box* typeLookup(BoxedClass* cls, llvm::StringRef attr, GetattrRewriteArgs* rewrite_args);
+Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, llvm::StringRef attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) __attribute__((__noreturn__));

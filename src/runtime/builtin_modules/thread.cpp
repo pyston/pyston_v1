@@ -201,9 +201,9 @@ void setupThread() {
         "acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, 1, false, false),
                                      { boxInt(1) }));
     thread_lock_cls->giveAttr("release", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::release, NONE, 1)));
-    thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr("acquire"));
-    thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr("release"));
-    thread_lock_cls->giveAttr("__enter__", thread_lock_cls->getattr("acquire"));
+    thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr(internStringMortal("acquire")));
+    thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr(internStringMortal("release")));
+    thread_lock_cls->giveAttr("__enter__", thread_lock_cls->getattr(internStringMortal("acquire")));
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
 

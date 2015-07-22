@@ -456,6 +456,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
                 clearMark(al);
             } else {
                 if (_doFree(al, &weakly_referenced)) {
+                    GC_TRACE_LOG("freeing %p\n", al->user_data);
                     b->isfree.set(atom_idx);
 #ifndef NDEBUG
                     memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));

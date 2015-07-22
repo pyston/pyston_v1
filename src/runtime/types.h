@@ -327,20 +327,18 @@ public:
 
 private:
     HiddenClass(HCType type) : type(type) {}
-    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets(), attrwrapper_offset(parent->attrwrapper_offset) {
+    HiddenClass(HiddenClass* parent)
+        : type(NORMAL), attr_offsets(parent->attr_offsets), attrwrapper_offset(parent->attrwrapper_offset) {
         assert(parent->type == NORMAL);
-        for (auto& p : parent->attr_offsets) {
-            this->attr_offsets.insert(&p);
-        }
     }
 
     // These fields only make sense for NORMAL or SINGLETON hidden classes:
-    llvm::StringMap<int> attr_offsets;
+    llvm::DenseMap<BoxedString*, int> attr_offsets;
     // If >= 0, is the offset where we stored an attrwrapper object
     int attrwrapper_offset = -1;
 
     // These are only for NORMAL hidden classes:
-    ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
+    ContiguousMap<BoxedString*, HiddenClass*, llvm::DenseMap<BoxedString*, int>> children;
     HiddenClass* attrwrapper_child = NULL;
 
     // Only for SINGLETON hidden classes:
@@ -369,8 +367,15 @@ public:
     void gc_visit(GCVisitor* visitor) {
         // Visit children even for the dict-backed case, since children will just be empty
         visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
-        if (attrwrapper_child)
-            visitor->visit(attrwrapper_child);
+        visitor->visit(attrwrapper_child);
+
+        // We don't need to visit the keys of the 'children' map, since the children should have those as entries
+        // in the attr_offssets map.
+        // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
+        // of our child's map.
+        if (children.empty())
+            for (auto p : attr_offsets)
+                visitor->visit(p.first);
     }
 
     // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
@@ -389,16 +394,16 @@ public:
     // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
     // array.
     // Only valid for NORMAL or SINGLETON hidden classes
-    const llvm::StringMap<int>& getStrAttrOffsets() {
+    const llvm::DenseMap<BoxedString*, int>& getStrAttrOffsets() {
         assert(type == NORMAL || type == SINGLETON);
         return attr_offsets;
     }
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* getOrMakeChild(llvm::StringRef attr);
+    HiddenClass* getOrMakeChild(BoxedString* attr);
 
     // Only valid for NORMAL or SINGLETON hidden classes:
-    int getOffset(llvm::StringRef attr) {
+    int getOffset(BoxedString* attr) {
         assert(type == NORMAL || type == SINGLETON);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
@@ -412,16 +417,16 @@ public:
     }
 
     // Only valid for SINGLETON hidden classes:
-    void appendAttribute(llvm::StringRef attr);
+    void appendAttribute(BoxedString* attr);
     void appendAttrwrapper();
-    void delAttribute(llvm::StringRef attr);
+    void delAttribute(BoxedString* attr);
     void addDependence(Rewriter* rewriter);
 
     // Only valid for NORMAL hidden classes:
     HiddenClass* getAttrwrapperChild();
 
     // Only valid for NORMAL hidden classes:
-    HiddenClass* delAttrToMakeHC(llvm::StringRef attr);
+    HiddenClass* delAttrToMakeHC(BoxedString* attr);
 };
 
 class BoxedInt : public Box {
@@ -619,18 +624,24 @@ public:
     }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
         BoxedTuple* rtn = new (nelts) BoxedTuple();
+        for (int i = 0; i < nelts; i++)
+            assert(gc::isValidGCObject(elts[i]));
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create1(Box* elt0) {
         BoxedTuple* rtn = new (1) BoxedTuple();
         rtn->elts[0] = elt0;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create2(Box* elt0, Box* elt1) {
         BoxedTuple* rtn = new (2) BoxedTuple();
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
@@ -638,6 +649,8 @@ public:
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
@@ -646,6 +659,8 @@ public:
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
@@ -655,9 +670,17 @@ public:
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
         rtn->elts[4] = elt4;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
-    static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
+    static BoxedTuple* create(std::initializer_list<Box*> members) {
+        auto rtn = new (members.size()) BoxedTuple(members);
+
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
+        return rtn;
+    }
 
     static BoxedTuple* create(int64_t size, BoxedClass* cls) {
         BoxedTuple* rtn;
@@ -726,6 +749,7 @@ private:
         Box** p = &elts[0];
         for (auto b : members) {
             *p++ = b;
+            assert(gc::isValidGCObject(b));
         }
     }
 
@@ -835,7 +859,7 @@ public:
     BoxedModule() {} // noop constructor to disable zero-initialization of cls
     std::string name();
 
-    BoxedString* getStringConstant(llvm::StringRef ast_str);
+    BoxedString* getStringConstant(llvm::StringRef ast_str, bool intern = false);
     Box* getUnicodeConstant(llvm::StringRef ast_str);
     BoxedInt* getIntConstant(int64_t n);
     BoxedFloat* getFloatConstant(double d);
@@ -855,6 +879,8 @@ private:
     ContiguousMap<int64_t, BoxedFloat*, std::unordered_map<int64_t, int>> float_constants;
     ContiguousMap<int64_t, Box*, std::unordered_map<int64_t, int>> imaginary_constants;
     ContiguousMap<llvm::StringRef, Box*, llvm::StringMap<int>> long_constants;
+    // Other objects that this module needs to keep alive; see getStringConstant.
+    llvm::SmallVector<Box*, 8> keep_alive;
 
 public:
     DEFAULT_CLASS(module_cls);
@@ -1008,7 +1034,7 @@ struct wrapper_def {
     wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
     const llvm::StringRef doc;
     int flags;
-    // exists in CPython: PyObject *name_strobj
+    BoxedString* name_strobj;
 };
 
 class BoxedWrapperDescriptor : public Box {
