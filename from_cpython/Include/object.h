@@ -457,7 +457,7 @@ struct _typeobject {
     char _ics[32];
     void* _gcvisit_func;
     int _attrs_offset;
-    bool _flags[4];
+    bool _flags[6];
     void* _tpp_descr_get;
     void* _tpp_hasnext;
     void* _tpp_call;

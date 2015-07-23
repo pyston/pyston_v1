@@ -361,11 +361,9 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
-    STAT_TIMER(t0, "us_timer_isinstance_func", 10);
-
     int rtn = PyObject_IsInstance(obj, cls);
     if (rtn < 0)
-        checkAndThrowCAPIException();
+        throwCAPIException();
     return boxBool(rtn);
 }
 

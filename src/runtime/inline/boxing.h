@@ -31,18 +31,6 @@ extern "C" inline Box* boxComplex(double r, double i) {
     return new BoxedComplex(r, i);
 }
 
-extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));
-extern "C" inline Box* boxBool(bool b) {
-    Box* rtn = b ? True : False;
-    return rtn;
-}
-
-extern "C" inline Box* boxBoolNegated(bool b) __attribute__((visibility("default")));
-extern "C" inline Box* boxBoolNegated(bool b) {
-    Box* rtn = b ? False : True;
-    return rtn;
-}
-
 extern "C" inline bool unboxBool(Box* b) __attribute__((visibility("default")));
 extern "C" inline bool unboxBool(Box* b) {
     assert(b->cls == bool_cls);

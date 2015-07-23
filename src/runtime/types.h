@@ -134,8 +134,14 @@ extern "C" {
 extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *thread_module;
 }
 
-extern "C" Box* boxBool(bool);
-extern "C" Box* boxBoolNegated(bool);
+extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));
+extern "C" inline Box* boxBool(bool b) {
+    return b ? True : False;
+}
+extern "C" inline Box* boxBoolNegated(bool b) __attribute__((visibility("default")));
+extern "C" inline Box* boxBoolNegated(bool b) {
+    return b ? False : True;
+}
 extern "C" Box* boxInt(i64) __attribute__((visibility("default")));
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
@@ -223,6 +229,9 @@ public:
     // We can ensure certain behavior about our Pyston classes (in particular around GC support)
     // that we can't rely on for extension classes.
     bool is_pyston_class;
+
+    bool has___class__; // Has a custom __class__ attribute (ie different from object's __class__ descriptor)
+    bool has_instancecheck;
 
     typedef bool (*pyston_inquiry)(Box*);
 

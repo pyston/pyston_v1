@@ -404,10 +404,14 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
     } else if (PyType_Check(cls)) {
         retval = PyObject_TypeCheck(inst, (PyTypeObject*)cls);
         if (retval == 0) {
-            PyObject* c = PyObject_GetAttr(inst, __class__);
-            if (c == NULL) {
-                PyErr_Clear();
-            } else {
+            PyObject* c = NULL;
+            if (inst->cls->has___class__ || inst->cls->tp_getattr != object_cls->tp_getattr
+                || inst->cls->tp_getattro != object_cls->tp_getattro) {
+                c = PyObject_GetAttr(inst, __class__);
+                if (!c)
+                    PyErr_Clear();
+            }
+            if (c) {
                 if (c != (PyObject*)(inst->cls) && PyType_Check(c))
                     retval = PyType_IsSubtype((PyTypeObject*)c, (PyTypeObject*)cls);
                 Py_DECREF(c);
@@ -435,6 +439,8 @@ extern "C" int _PyObject_RealIsInstance(PyObject* inst, PyObject* cls) noexcept 
 }
 
 extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
+    STAT_TIMER(t0, "us_timer_pyobject_isinstance", 20);
+
     static PyObject* name = NULL;
 
     /* Quick test for an exact match */
@@ -461,8 +467,15 @@ extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
     }
 
     if (!(PyClass_Check(cls) || PyInstance_Check(cls))) {
-        PyObject* checker;
-        checker = _PyObject_LookupSpecial(cls, "__instancecheck__", &name);
+        PyObject* checker = NULL;
+        if (cls->cls->has_instancecheck) {
+            checker = _PyObject_LookupSpecial(cls, "__instancecheck__", &name);
+            if (!checker && PyErr_Occurred())
+                return -1;
+
+            assert(checker);
+        }
+
         if (checker != NULL) {
             PyObject* res;
             int ok = -1;
@@ -478,8 +491,7 @@ extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
                 Py_DECREF(res);
             }
             return ok;
-        } else if (PyErr_Occurred())
-            return -1;
+        }
     }
     return recursive_isinstance(inst, cls);
 }
