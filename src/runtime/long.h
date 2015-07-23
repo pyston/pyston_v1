@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_LONG_H
 #define PYSTON_RUNTIME_LONG_H
 
+#include <cstddef>
 #include <gmp.h>
 
 #include "core/types.h"
