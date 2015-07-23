@@ -555,7 +555,7 @@ static void callPendingFinalizers() {
         Box* box = pending_finalization_list.front();
         pending_finalization_list.pop_front();
 
-        RELEASE_ASSERT(isValidGCObject(box), "objects to be finalized should still be alive");
+        ASSERT(isValidGCObject(box), "objects to be finalized should still be alive");
 
         if (isWeaklyReferenced(box)) {
             // Callbacks for weakly-referenced objects with finalizers (if any), followed by call to finalizers.
@@ -572,7 +572,7 @@ static void callPendingFinalizers() {
         }
 
         finalize(box);
-        RELEASE_ASSERT(isValidGCObject(box), "finalizing an object should not free the object");
+        ASSERT(isValidGCObject(box), "finalizing an object should not free the object");
     }
 
     if (!initially_empty) {
