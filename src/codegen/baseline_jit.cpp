@@ -21,6 +21,7 @@
 #include "codegen/memmgr.h"
 #include "codegen/type_recording.h"
 #include "core/cfg.h"
+#include "runtime/generator.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -286,11 +287,13 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s) {
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
-    return call(false, (void*)ASTInterpreterJitInterface::getBoxedLocalHelper, getInterp(), imm(s));
+    RewriterVar* boxed_locals = emitGetBoxedLocals();
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    return call(false, (void*)boxedLocalsGet, boxed_locals, imm(s), globals);
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocals() {
-    return call(false, (void*)ASTInterpreterJitInterface::getBoxedLocalsHelper, getInterp());
+    return getInterp()->getAttr(ASTInterpreterJitInterface::getBoxedLocalsOffset());
 }
 
 RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s) {
@@ -396,7 +399,8 @@ RewriterVar* JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v, uint64_t num
 }
 
 RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
-    return call(false, (void*)ASTInterpreterJitInterface::yieldHelper, getInterp(), v);
+    RewriterVar* generator = getInterp()->getAttr(ASTInterpreterJitInterface::getGeneratorOffset());
+    return call(false, (void*)yield, generator, v);
 }
 
 
@@ -464,7 +468,7 @@ void JitFragmentWriter::emitSetItem(RewriterVar* target, RewriterVar* slice, Rew
 }
 
 void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
-    call(false, (void*)ASTInterpreterJitInterface::setItemNameHelper, getInterp(), imm(s), v);
+    emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
 void JitFragmentWriter::emitSetLocal(InternedString s, bool set_closure, RewriterVar* v) {
