@@ -120,6 +120,13 @@ public:
             push(p);
         }
     }
+    ~TraceStack() {
+        RELEASE_ASSERT(end - cur == CHUNK_SIZE, "destroying non-empty TraceStack");
+
+        // We always have a block available in case we want to push items onto the TraceStack,
+        // but that chunk needs to be released after use to avoid a memory leak.
+        release_chunk(start);
+    }
 
     void push(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
