@@ -1472,6 +1472,10 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
+            if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
+                return slotTpGetattrHookInternal(obj, attr, rewrite_args);
+            }
+
             Box* r = obj->cls->tp_getattro(obj, attr);
             if (!r)
                 throwCAPIException();

@@ -13,13 +13,13 @@ class C(object):
     __metaclass__ = M
 
     def __getattribute__(self, attr):
-        print "C.__getattribute__"
+        print "C.__getattribute__", attr
         if attr == "n":
             return 1
         return object.__getattribute__(self, attr)
 
     def __getattr__(self, attr):
-        print "C.__getattr__"
+        print "C.__getattr__", attr
         if attr == "m":
             return 2
         return object.__getattr__(self, attr)
