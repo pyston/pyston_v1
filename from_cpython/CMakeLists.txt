@@ -118,6 +118,7 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/bz2.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/_ctypes.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/grp.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/termios.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_curses.pyston.so
@@ -129,6 +130,11 @@ add_custom_command(OUTPUT
                        Modules/_multiprocessing/multiprocessing.c
                        Modules/_multiprocessing/semaphore.c
                        Modules/_multiprocessing/socket_connection.c
+                       Modules/_ctypes/_ctypes.c
+                       Modules/_ctypes/callbacks.c
+                       Modules/_ctypes/callproc.c
+                       Modules/_ctypes/stgdict.c
+                       Modules/_ctypes/cfield.c
                        Modules/expat/xmlparse.c
                        Modules/expat/xmlrole.c
                        Modules/expat/xmltok.c
