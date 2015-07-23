@@ -922,7 +922,17 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
     return res;
 }
 
-static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
+/* Pyston change: static */ PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
+    try {
+        assert(name->cls == str_cls);
+        return slotTpGetattrHookInternal(self, (BoxedString*)name, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) {
     STAT_TIMER(t0, "us_timer_slot_tpgetattrhook", SLOT_AVOIDABILITY(self));
 
     PyObject* getattr, *getattribute, * res = NULL;
@@ -933,30 +943,145 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
          _PyType_Lookup and create the method only when needed, with
          call_attribute. */
     static BoxedString* _getattr_str = internStringImmortal("__getattr__");
+
+    // Don't need to do this in the rewritten version; if a __getattr__ later gets removed:
+    // - if we ever get to the "call __getattr__" portion of the rewrite, the guards will
+    //   fail and we will end up back here
+    // - if we never get to the "call __getattr__" portion and the "calling __getattribute__"
+    //   portion still has its guards pass, then that section is still behaviorally correct, and
+    //   I think should be close to as fast as the normal rewritten version we would generate.
     getattr = typeLookup(self->cls, _getattr_str, NULL);
+
     if (getattr == NULL) {
+        assert(!rewrite_args || !rewrite_args->out_success);
+
         /* No __getattr__ hook: use a simpler dispatcher */
         self->cls->tp_getattro = slot_tp_getattro;
         return slot_tp_getattro(self, name);
     }
+
     /* speed hack: we could use lookup_maybe, but that would resolve the
          method fully for each attribute lookup for classes with
          __getattr__, even when self has the default __getattribute__
          method. So we use _PyType_Lookup and create the method only when
          needed, with call_attribute. */
     static BoxedString* _getattribute_str = internStringImmortal("__getattribute__");
-    getattribute = typeLookup(self->cls, _getattribute_str, NULL);
+
+    RewriterVar* r_getattribute = NULL;
+    if (rewrite_args) {
+        RewriterVar* r_obj_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, Location::any());
+
+        getattribute = typeLookup(self->cls, _getattribute_str, &grewrite_args);
+        if (!grewrite_args.out_success)
+            rewrite_args = NULL;
+        else if (getattribute)
+            r_getattribute = grewrite_args.out_rtn;
+    } else {
+        getattribute = typeLookup(self->cls, _getattribute_str, NULL);
+    }
+    // Not sure why CPython checks if getattribute is NULL since I don't think that should happen.
+    // Is there some legacy way of creating types that don't inherit from object?  Anyway, I think we
+    // have the right behavior even if getattribute was somehow NULL, but add an assert because that
+    // case would still be very surprising to me:
+    assert(getattribute);
+
     if (getattribute == NULL
         || (Py_TYPE(getattribute) == wrapperdescr_cls
             && ((BoxedWrapperDescriptor*)getattribute)->wrapped == (void*)PyObject_GenericGetAttr)) {
-        res = PyObject_GenericGetAttr(self, name);
+
+        assert(PyString_CHECK_INTERNED(name));
+        if (rewrite_args) {
+            // Fetching getattribute should have done the appropriate guarding on whether or not
+            // getattribute exists.
+            if (getattribute)
+                r_getattribute->addGuard((intptr_t)getattribute);
+
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+            try {
+                res = getattrInternalGeneric(self, name, &grewrite_args, false, false, NULL, NULL);
+            } catch (ExcInfo e) {
+                if (!e.matches(AttributeError))
+                    throw e;
+
+                grewrite_args.out_success = false;
+                res = NULL;
+            }
+
+            if (!grewrite_args.out_success)
+                rewrite_args = NULL;
+            else if (res)
+                rewrite_args->out_rtn = grewrite_args.out_rtn;
+        } else {
+            try {
+                res = getattrInternalGeneric(self, name, NULL, false, false, NULL, NULL);
+            } catch (ExcInfo e) {
+                if (!e.matches(AttributeError))
+                    throw e;
+                res = NULL;
+            }
+        }
     } else {
+        rewrite_args = NULL;
+
         res = call_attribute(self, getattribute, name);
+        if (res == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                PyErr_Clear();
+            else
+                throwCAPIException();
+        }
     }
-    if (res == NULL && PyErr_ExceptionMatches(PyExc_AttributeError)) {
-        PyErr_Clear();
-        res = call_attribute(self, getattr, name);
+
+    // At this point, CPython would have three cases: res is non-NULL and no exception was thrown,
+    // or res is NULL and an exception was thrown and either it was an AttributeError (in which case
+    // we call __getattr__) or it wan't (in which case it propagates).
+    //
+    // We handled it differently: if a non-AttributeError was thrown, we already would have propagated
+    // it.  So there are only two cases: res is non-NULL if the attribute exists, or it is NULL if it
+    // doesn't exist.
+
+    if (res) {
+        if (rewrite_args)
+            rewrite_args->out_success = true;
+        return res;
     }
+
+    assert(!PyErr_Occurred());
+
+    CallattrFlags callattr_flags = {.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
+    if (rewrite_args) {
+        // I was thinking at first that we could try to catch any AttributeErrors here and still
+        // write out valid rewrite, but
+        // - we need to let the original AttributeError propagate and not generate a new, potentially-different one
+        // - we have no way of signalling that "we didn't get an attribute this time but that may be different
+        //   in future executions through the IC".
+        // I think this should only end up mattering anyway if the getattr site throws every single time.
+        CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+        assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
+        crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
+
+        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name, NULL,
+                               NULL, NULL, NULL);
+        assert(res);
+
+        if (!crewrite_args.out_success)
+            rewrite_args = NULL;
+        else
+            rewrite_args->out_rtn = crewrite_args.out_rtn;
+    } else {
+        // TODO: we already fetched the getattr attribute, it would be faster to call it rather than do
+        // a second callattr.  My guess though is that the gains would be small, so I would prefer to keep
+        // the rewrite_args and non-rewrite_args case the same.
+        // Actually, we might have gotten to the point that doing a runtimeCall on an instancemethod is as
+        // fast as a callattr, but that hasn't typically been the case.
+        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
+                               NULL, NULL);
+        assert(res);
+    }
+
+    if (rewrite_args)
+        rewrite_args->out_success = true;
     return res;
 }
 
@@ -1490,6 +1615,7 @@ static slotdef slotdefs[]
         TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         FLSLOT("__class__", has___class__, NULL, NULL, "", PyWrapperFlag_BOOL),
         FLSLOT("__instancecheck__", has_instancecheck, NULL, NULL, "", PyWrapperFlag_BOOL),
+        FLSLOT("__getattribute__", has_getattribute, NULL, NULL, "", PyWrapperFlag_BOOL),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
@@ -1679,6 +1805,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             static BoxedString* class_str = internStringImmortal("__class__");
             if (p->name_strobj == class_str) {
                 if (descr == object_cls->getattr(class_str))
+                    descr = NULL;
+            }
+
+            static BoxedString* getattribute_str = internStringImmortal("__getattribute__");
+            if (p->name_strobj == getattribute_str) {
+                if (descr && descr->cls == wrapperdescr_cls
+                    && ((BoxedWrapperDescriptor*)descr)->wrapped == PyObject_GenericGetAttr)
                     descr = NULL;
             }
 

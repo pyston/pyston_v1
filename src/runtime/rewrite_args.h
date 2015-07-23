@@ -28,7 +28,7 @@ struct GetattrRewriteArgs {
     RewriterVar* out_rtn;
 
     bool obj_hcls_guarded;
-    bool obj_cls_guarded;
+    bool obj_shape_guarded; // "shape" as in whether there are hcls attrs and where they live
 
     GetattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
         : rewriter(rewriter),
@@ -37,7 +37,7 @@ struct GetattrRewriteArgs {
           out_success(false),
           out_rtn(NULL),
           obj_hcls_guarded(false),
-          obj_cls_guarded(false) {}
+          obj_shape_guarded(false) {}
 };
 
 struct SetattrRewriteArgs {

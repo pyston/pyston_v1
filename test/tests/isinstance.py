@@ -91,3 +91,35 @@ print "checking superclass instancecheck:"
 print isinstance(1, C)
 M.__instancecheck__ =  m_instancecheck
 print isinstance(1, C)
+print
+
+class C(object):
+    @property
+    def __class__(self):
+        print "C.__class__ descriptor"
+        raise AttributeError()
+
+    def __getattr__(self, attr):
+        print "C.__getattr__", attr
+        return int
+
+print "Testing __class__ from __getattr__"
+c = C()
+print c.__class__
+print isinstance(c, int)
+print
+
+class C(object):
+    def __getattribute__(self, attr):
+        print "C.__getattribute__", attr
+        raise AttributeError()
+
+    def __getattr__(self, attr):
+        print "C.__getattr__", attr
+        return int
+
+print "Testing __class__ from __getattr__+__getattribute__"
+c = C()
+print c.__class__
+print isinstance(c, int)
+print
