@@ -14,6 +14,7 @@
 
 #include <cfloat>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <gmp.h>
 
