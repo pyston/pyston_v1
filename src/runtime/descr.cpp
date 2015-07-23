@@ -480,7 +480,7 @@ Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds
 
     assert(self->cls == wrapperobject_cls);
     assert(args->cls == tuple_cls);
-    assert(kwds->cls == dict_cls);
+    assert(!kwds || kwds->cls == dict_cls);
 
     int flags = self->descr->wrapper->flags;
     wrapperfunc wrapper = self->descr->wrapper->wrapper;

@@ -2614,7 +2614,24 @@ public:
         }
 
         if (param_names.kwarg.size()) {
-            loadArgument(internString(param_names.kwarg), arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+            llvm::BasicBlock* starting_block = emitter.currentBasicBlock();
+            llvm::BasicBlock* isnull_bb = emitter.createBasicBlock("isnull");
+            llvm::BasicBlock* continue_bb = emitter.createBasicBlock("kwargs_join");
+
+            llvm::Value* kwargs_null
+                = emitter.getBuilder()->CreateICmpEQ(python_parameters[i], getNullPtr(g.llvm_value_type_ptr));
+            llvm::BranchInst* null_check = emitter.getBuilder()->CreateCondBr(kwargs_null, isnull_bb, continue_bb);
+
+            emitter.setCurrentBasicBlock(isnull_bb);
+            llvm::Value* created_dict = emitter.getBuilder()->CreateCall(g.funcs.createDict);
+            emitter.getBuilder()->CreateBr(continue_bb);
+
+            emitter.setCurrentBasicBlock(continue_bb);
+            llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2);
+            phi->addIncoming(python_parameters[i], starting_block);
+            phi->addIncoming(created_dict, isnull_bb);
+
+            loadArgument(internString(param_names.kwarg), arg_types[i], phi, UnwindInfo::cantUnwind());
             i++;
         }
 

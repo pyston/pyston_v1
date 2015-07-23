@@ -1448,7 +1448,7 @@ Box* BoxedCApiFunction::__call__(BoxedCApiFunction* self, BoxedTuple* varargs, B
     STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", (self->cls->is_user_defined ? 10 : 20));
     assert(self->cls == capifunc_cls);
     assert(varargs->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
+    assert(!kwargs || kwargs->cls == dict_cls);
 
     // Kind of silly to have asked callFunc to rearrange the arguments for us, just to pass things
     // off to tppCall, but this case should be very uncommon (people explicitly asking for __call__)

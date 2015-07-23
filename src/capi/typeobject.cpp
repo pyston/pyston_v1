@@ -1977,7 +1977,7 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
 
     RELEASE_ASSERT(args->cls == tuple_cls, "");
-    RELEASE_ASSERT(kwds->cls == dict_cls, "");
+    RELEASE_ASSERT(!kwds || kwds->cls == dict_cls, "");
     RELEASE_ASSERT(args->size() >= 1, "");
 
     BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
