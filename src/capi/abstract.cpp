@@ -17,6 +17,7 @@
 
 #include "Python.h"
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/ast.h"
 #include "core/threading.h"
@@ -405,12 +406,22 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
         retval = PyObject_TypeCheck(inst, (PyTypeObject*)cls);
         if (retval == 0) {
             PyObject* c = NULL;
-            if (inst->cls->has___class__ || inst->cls->tp_getattr != object_cls->tp_getattr
-                || inst->cls->tp_getattro != object_cls->tp_getattro) {
+
+            if (!inst->cls->has_getattribute) {
+                assert(inst->cls->tp_getattr == object_cls->tp_getattr);
+                assert(inst->cls->tp_getattro == object_cls->tp_getattro
+                       || inst->cls->tp_getattro == slot_tp_getattr_hook);
+            }
+            // We don't need to worry about __getattr__, since the default __class__ will always resolve.
+            bool has_custom_class = inst->cls->has___class__ || inst->cls->has_getattribute;
+            if (!has_custom_class) {
+                assert(PyObject_GetAttr(inst, __class__) == inst->cls);
+            } else {
                 c = PyObject_GetAttr(inst, __class__);
                 if (!c)
                     PyErr_Clear();
             }
+
             if (c) {
                 if (c != (PyObject*)(inst->cls) && PyType_Check(c))
                     retval = PyType_IsSubtype((PyTypeObject*)c, (PyTypeObject*)cls);

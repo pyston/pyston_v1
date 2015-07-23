@@ -1615,6 +1615,7 @@ static slotdef slotdefs[]
         TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         FLSLOT("__class__", has___class__, NULL, NULL, "", PyWrapperFlag_BOOL),
         FLSLOT("__instancecheck__", has_instancecheck, NULL, NULL, "", PyWrapperFlag_BOOL),
+        FLSLOT("__getattribute__", has_getattribute, NULL, NULL, "", PyWrapperFlag_BOOL),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
@@ -1804,6 +1805,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             static BoxedString* class_str = internStringImmortal("__class__");
             if (p->name_strobj == class_str) {
                 if (descr == object_cls->getattr(class_str))
+                    descr = NULL;
+            }
+
+            static BoxedString* getattribute_str = internStringImmortal("__getattribute__");
+            if (p->name_strobj == getattribute_str) {
+                if (descr && descr->cls == wrapperdescr_cls
+                    && ((BoxedWrapperDescriptor*)descr)->wrapped == PyObject_GenericGetAttr)
                     descr = NULL;
             }
 
