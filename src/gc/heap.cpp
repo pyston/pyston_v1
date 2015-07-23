@@ -128,7 +128,7 @@ void _bytesAllocatedTripped() {
 
 bool hasOrderedFinalizer(BoxedClass* cls) {
     if (cls->has_safe_tp_dealloc) {
-        assert(!cls->tp_del);
+        RELEASE_ASSERT(!cls->tp_del, "class \"%s\" with safe tp_dealloc also has tp_del?", cls->tp_name);
         return false;
     } else if (cls->hasNonDefaultTpDealloc()) {
         return true;
