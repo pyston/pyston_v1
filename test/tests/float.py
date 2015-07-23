@@ -95,3 +95,13 @@ print -(0.0)
 print -(-0.0)
 
 print repr((1e100).__trunc__())
+
+all_args = [None, 1, 1L, -1, -1L, 2.0, 0.5, 0, "",
+            0.0, -0.0, -0.5, float('nan'), float('inf')]
+for lhs in all_args:
+    for rhs in all_args:
+        for mod in all_args:
+            try:
+                print pow(lhs, rhs, mod)
+            except Exception as e:
+                print type(e), e

@@ -55,6 +55,7 @@ Box* longRshift(BoxedLong* lhs, Box* rhs);
 Box* longHex(BoxedLong* v);
 Box* longOct(BoxedLong* v);
 Box* longStr(BoxedLong* v);
+Box* longInt(Box* v);
 
 bool longNonzeroUnboxed(BoxedLong* n);
 }
