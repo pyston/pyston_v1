@@ -1570,12 +1570,24 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 }
 
 
+int ASTInterpreterJitInterface::getBoxedLocalsOffset() {
+    return offsetof(ASTInterpreter, frame_info.boxedLocals);
+}
+
 int ASTInterpreterJitInterface::getCurrentBlockOffset() {
     return offsetof(ASTInterpreter, current_block);
 }
 
 int ASTInterpreterJitInterface::getCurrentInstOffset() {
     return offsetof(ASTInterpreter, current_inst);
+}
+
+int ASTInterpreterJitInterface::getGeneratorOffset() {
+    return offsetof(ASTInterpreter, generator);
+}
+
+int ASTInterpreterJitInterface::getGlobalsOffset() {
+    return offsetof(ASTInterpreter, globals);
 }
 
 Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString s) {
@@ -1599,16 +1611,6 @@ Box* ASTInterpreterJitInterface::doOSRHelper(void* _interpreter, AST_Jump* node)
     if (interpreter->edgecount >= OSR_THRESHOLD_BASELINE)
         return interpreter->doOSR(node);
     return NULL;
-}
-
-Box* ASTInterpreterJitInterface::getBoxedLocalHelper(void* _interpreter, BoxedString* s) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    return boxedLocalsGet(interpreter->frame_info.boxedLocals, s, interpreter->globals);
-}
-
-Box* ASTInterpreterJitInterface::getBoxedLocalsHelper(void* _interpreter) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    return interpreter->frame_info.boxedLocals;
 }
 
 Box* ASTInterpreterJitInterface::getLocalHelper(void* _interpreter, InternedString id) {
@@ -1646,17 +1648,6 @@ Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
     return None;
-}
-
-Box* ASTInterpreterJitInterface::yieldHelper(void* _interpreter, Box* val) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    return yield(interpreter->generator, val);
-}
-
-void ASTInterpreterJitInterface::setItemNameHelper(void* _interpreter, Box* str, Box* val) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    assert(interpreter->frame_info.boxedLocals != NULL);
-    setitem(interpreter->frame_info.boxedLocals, str, val);
 }
 
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, InternedString id, Box* v) {
