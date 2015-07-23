@@ -1235,16 +1235,11 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
     }
 
     if (mod != None) {
-        if (isSubclass(mod->cls, float_cls)) {
-            raiseExcHelper(TypeError, "pow() 3rd argument not "
-                                      "allowed unless all arguments are integers");
-        } else {
-            if (mpz_sgn(rhs_long->n) < 0)
-                raiseExcHelper(TypeError, "pow() 2nd argument "
-                                          "cannot be negative when 3rd argument specified");
-            else if (mpz_sgn(mod_long->n) == 0)
-                raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
-        }
+        if (mpz_sgn(rhs_long->n) < 0)
+            raiseExcHelper(TypeError, "pow() 2nd argument "
+                                      "cannot be negative when 3rd argument specified");
+        else if (mpz_sgn(mod_long->n) == 0)
+            raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
     }
 
     BoxedLong* r = new BoxedLong();
@@ -1272,7 +1267,8 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
             } else if (mpz_sgn(lhs->n) == 0) {
                 mpz_set_ui(r->n, 0l);
             } else if (mpz_cmp_si(lhs->n, -1l) == 0) {
-                mpz_set_si(r->n, -1l);
+                long rl = mpz_even_p(rhs_long->n) ? 1l : -1l;
+                mpz_set_si(r->n, rl);
             } else {
                 raiseExcHelper(OverflowError, "the result is too large to convert to long");
             }
