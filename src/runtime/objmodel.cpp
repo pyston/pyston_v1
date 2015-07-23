@@ -748,7 +748,14 @@ static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
 
-    if (rewrite_args && !rewrite_args->obj_cls_guarded)
+    // We have to guard on the class in order to know the object's layout,
+    // ie to know which kinds of attributes the object has and where they
+    // live in the object's layout.
+    // TODO we could try guarding on those fields directly rather than on
+    // the class itself (which implies all of them).  That might require
+    // creating a single field that encompasses the relevant other fields
+    // so that it can still be a single guard rather than multiple.
+    if (rewrite_args && !rewrite_args->obj_shape_guarded)
         rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (intptr_t)cls);
 
 #if 0
@@ -1053,9 +1060,9 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 assert(rewrite_args->obj == obj_saved);
             } else {
                 rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
-                if (static_cast<BoxedClass*>(base)->is_constant) {
-                    rewrite_args->obj_cls_guarded = true;
-                }
+                // We are passing a constant object, and objects are not allowed to change shape
+                // (at least the kind of "shape" that Box::getattr is referring to)
+                rewrite_args->obj_shape_guarded = true;
             }
             val = base->getattr(attr, rewrite_args);
             assert(rewrite_args->out_success);
@@ -1469,6 +1476,12 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
+
+        // We could also use the old invalidation-based approach here:
+        if (rewrite_args)
+            rewrite_args->obj->getAttr(offsetof(Box, cls))
+                ->addAttrGuard(offsetof(BoxedClass, tp_getattro), (uint64_t)obj->cls->tp_getattro);
+
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
@@ -1485,10 +1498,6 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             // around the fact that we don't currently scan ICs for GC references, but eventually
             // we should just add that.
             if (rewrite_args && attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
-                // In theory we could also just guard that the tp_getattro slot is non-null and then call
-                // into it, instead of guarding that it is the same as it is here.
-                rewrite_args->obj->getAttr(offsetof(Box, cls))
-                    ->addAttrGuard(offsetof(BoxedClass, tp_getattro), (uint64_t)obj->cls->tp_getattro);
                 auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
                 rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
@@ -1499,6 +1508,11 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             return r;
         }
 
+        // We could also use the old invalidation-based approach here:
+        if (rewrite_args)
+            rewrite_args->obj->getAttr(offsetof(Box, cls))
+                ->addAttrGuard(offsetof(BoxedClass, tp_getattr), (uint64_t)obj->cls->tp_getattr);
+
         if (obj->cls->tp_getattr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattr", 10);
 
@@ -1507,13 +1521,6 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             if (!r)
                 throwCAPIException();
             return r;
-        }
-
-        // We could also use the old invalidation-based approach here:
-        if (rewrite_args) {
-            auto r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
-            r_cls->addAttrGuard(offsetof(BoxedClass, tp_getattr), (uint64_t)obj->cls->tp_getattr);
-            r_cls->addAttrGuard(offsetof(BoxedClass, tp_getattro), (uint64_t)obj->cls->tp_getattro);
         }
     }
 
@@ -3784,7 +3791,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         RewriterVar* r_im_func;
         if (rewrite_args) {
-            r_im_func = rewrite_args->obj->getAttr(offsetof(BoxedInstanceMethod, obj), Location::any());
+            r_im_func = rewrite_args->obj->getAttr(offsetof(BoxedInstanceMethod, func), Location::any());
         }
 
         if (rewrite_args && !rewrite_args->func_guarded) {
@@ -5287,7 +5294,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         if (rewriter.get()) {
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), builtins, rewriter->getReturnDestination());
-            rewrite_args.obj_cls_guarded = true; // always builtin module
+            rewrite_args.obj_shape_guarded = true; // always builtin module
             rtn = builtins_module->getattr(name, &rewrite_args);
 
             if (!rtn || !rewrite_args.out_success) {
