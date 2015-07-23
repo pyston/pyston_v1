@@ -15,8 +15,8 @@
 #include "runtime/util.h"
 
 #include "core/options.h"
+#include "core/types.h"
 #include "runtime/objmodel.h"
-#include "runtime/types.h"
 
 namespace pyston {
 
@@ -24,5 +24,51 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
     int ret = PySlice_GetIndicesEx((PySliceObject*)slice, size, out_start, out_stop, out_step, out_length);
     if (ret == -1)
         throwCAPIException();
+}
+
+bool isSliceIndex(Box* b) {
+    return b->cls == none_cls || b->cls == int_cls || PyIndex_Check(b);
+}
+
+void adjustNegativeIndicesOnObject(Box* obj, i64* start_out, i64* stop_out) {
+    i64 start = *start_out;
+    i64 stop = *stop_out;
+    PySequenceMethods* m;
+
+    // Logic from PySequence_GetSlice:
+    m = obj->cls->tp_as_sequence;
+    if (m && m->sq_slice) {
+        if (start < 0 || stop < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(obj);
+                if (l >= 0) {
+                    if (start < 0)
+                        start += l;
+                    if (stop < 0)
+                        stop += l;
+                }
+            }
+        }
+    }
+
+    *start_out = start;
+    *stop_out = stop;
+}
+
+void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size) {
+    if (start < 0)
+        start = 0;
+    else if (start > size)
+        start = size;
+
+    if (stop < start)
+        stop = start;
+    else if (stop > size)
+        stop = size;
+
+    assert(0 <= start && start <= stop && stop <= size);
+
+    *start_out = start;
+    *stop_out = stop;
 }
 }

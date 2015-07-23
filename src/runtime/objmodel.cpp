@@ -2396,7 +2396,8 @@ extern "C" bool nonzero(Box* obj) {
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                    || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
                    || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
-                   || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls,
+                   || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
+                   || obj->cls == wrapperdescr_cls,
                "%s.__nonzero__", getTypeName(obj)); // TODO
 
         // TODO should rewrite these?
@@ -4426,7 +4427,105 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     return rtn;
 }
 
-extern "C" Box* getitem(Box* value, Box* slice) {
+Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* value, CallRewriteArgs* rewrite_args) {
+    if (value) {
+        return callattrInternal2(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), item, value);
+    } else {
+        return callattrInternal1(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), item);
+    }
+}
+
+// This function decides whether to call the slice operator (e.g. __getslice__)
+// or the item operator (__getitem__).
+Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_str, Box* slice, Box* value,
+                         CallRewriteArgs* rewrite_args) {
+
+    // This function contains a lot of logic for deciding between whether to call
+    // the slice operator or the item operator, so we can match CPython's behavior
+    // on custom classes that define those operators. However, for builtin types,
+    // we know we can call either and the behavior will be the same. Adding all those
+    // guards are unnecessary and bad for performance.
+    //
+    // Also, for special slicing logic (e.g. open slice ranges [:]), the builtin types
+    // have C-implemented functions that already handle all the edge cases, so we don't
+    // need to have a slowpath for them here.
+    if (target->cls == list_cls || target->cls == str_cls || target->cls == unicode_cls) {
+        if (rewrite_args) {
+            rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (uint64_t)target->cls);
+        }
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
+    }
+
+    // Guard on the type of the object (need to have the slice operator attribute to call it).
+    Box* slice_attr = NULL;
+    if (rewrite_args) {
+        RewriterVar* target_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, target_cls, Location::any());
+        slice_attr = typeLookup(target->cls, slice_str, &grewrite_args);
+        if (!grewrite_args.out_success) {
+            rewrite_args = NULL;
+        }
+    } else {
+        slice_attr = typeLookup(target->cls, slice_str, NULL);
+    }
+
+    if (!slice_attr) {
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
+    }
+
+    // Need a slice object to use the slice operators.
+    if (rewrite_args) {
+        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (uint64_t)slice->cls);
+    }
+    if (slice->cls != slice_cls) {
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
+    }
+
+    BoxedSlice* bslice = (BoxedSlice*)slice;
+
+    // If we use slice notation with a step parameter (e.g. o[1:10:2]), the slice operator
+    // functions don't support that, so fallback to the item operator functions.
+    if (bslice->step->cls != none_cls) {
+        if (rewrite_args) {
+            rewrite_args->arg1->getAttr(offsetof(BoxedSlice, step))
+                ->addAttrGuard(offsetof(Box, cls), (uint64_t)none_cls, /*negate=*/true);
+        }
+
+        return callItemAttr(target, item_str, slice, value, rewrite_args);
+    } else {
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
+
+        // If the slice cannot be used as integer slices, also fall back to the get operator.
+        // We could optimize further here by having a version of isSliceIndex that
+        // creates guards, but it would only affect some rare edge cases.
+        if (!isSliceIndex(bslice->start) || !isSliceIndex(bslice->stop)) {
+            return callItemAttr(target, item_str, slice, value, rewrite_args);
+        }
+
+        // If we don't specify the start/stop (e.g. o[:]), the slice operator functions
+        // CPython seems to use 0 and sys.maxint as the default values.
+        int64_t start = 0, stop = PyInt_GetMax();
+        sliceIndex(bslice->start, &start);
+        sliceIndex(bslice->stop, &stop);
+
+        adjustNegativeIndicesOnObject(target, &start, &stop);
+
+        Box* boxedStart = boxInt(start);
+        Box* boxedStop = boxInt(stop);
+
+        if (value) {
+            return callattrInternal3(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(3), boxedStart, boxedStop,
+                                     value);
+        } else {
+            return callattrInternal2(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), boxedStart,
+                                     boxedStop);
+        }
+    }
+}
+
+// target[slice]
+extern "C" Box* getitem(Box* target, Box* slice) {
     STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
 
     // This possibly could just be represented as a single callattr; the only tricky part
@@ -4447,7 +4546,7 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     // For now, just use the first clause: call mp_subscript if it exists.
     // And only if we think it's better than calling __getitem__, which should
     // exist if mp_subscript exists.
-    PyMappingMethods* m = value->cls->tp_as_mapping;
+    PyMappingMethods* m = target->cls->tp_as_mapping;
     if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
         if (rewriter.get()) {
             RewriterVar* r_obj = rewriter->getArg(0);
@@ -4466,38 +4565,41 @@ extern "C" Box* getitem(Box* value, Box* slice) {
             rewriter->call(true, (void*)checkAndThrowCAPIException);
             rewriter->commitReturning(r_rtn);
         }
-        Box* r = m->mp_subscript(value, slice);
+        Box* r = m->mp_subscript(target, slice);
         if (!r)
             throwCAPIException();
         return r;
     }
 
     static BoxedString* getitem_str = internStringImmortal("__getitem__");
+    static BoxedString* getslice_str = internStringImmortal("__getslice__");
+
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rewrite_args.arg1 = rewriter->getArg(1);
 
-        rtn = callattrInternal1(value, getitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
+        rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else if (rtn)
+        } else if (rtn) {
             rewriter->commitReturning(rewrite_args.out_rtn);
+        }
     } else {
-        rtn = callattrInternal1(value, getitem_str, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
+        rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, NULL);
     }
 
     if (rtn == NULL) {
         // different versions of python give different error messages for this:
         if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
-            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)); // tested on 2.6.6
+            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
         } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
-            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(value)); // tested on 2.7.1
+            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(target)); // tested on 2.7.1
         } else {
             // Changed to this in 2.7.3:
             raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'",
-                           getTypeName(value)); // tested on 2.7.3
+                           getTypeName(target)); // tested on 2.7.3
         }
     }
 
@@ -4515,6 +4617,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
 
     static BoxedString* setitem_str = internStringImmortal("__setitem__");
+    static BoxedString* setslice_str = internStringImmortal("__setslice__");
 
     Box* rtn;
     if (rewriter.get()) {
@@ -4522,25 +4625,24 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
         rewrite_args.arg1 = rewriter->getArg(1);
         rewrite_args.arg2 = rewriter->getArg(2);
 
-        rtn = callattrInternal2(target, setitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(2), slice, value);
+        rtn = callItemOrSliceAttr(target, setitem_str, setslice_str, slice, value, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
     } else {
-        rtn = callattrInternal2(target, setitem_str, CLASS_ONLY, NULL, ArgPassSpec(2), slice, value);
+        rtn = callItemOrSliceAttr(target, setitem_str, setslice_str, slice, value, NULL);
     }
 
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target));
     }
 
-    if (rewriter.get()) {
+    if (rewriter.get())
         rewriter->commit();
-    }
 }
 
-// del target[start:end:step]
+// del target[slice]
 extern "C" void delitem(Box* target, Box* slice) {
     STAT_TIMER(t0, "us_timer_slowpath_delitem", 10);
 
@@ -4551,29 +4653,28 @@ extern "C" void delitem(Box* target, Box* slice) {
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
 
     static BoxedString* delitem_str = internStringImmortal("__delitem__");
+    static BoxedString* delslice_str = internStringImmortal("__delslice__");
 
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rewrite_args.arg1 = rewriter->getArg(1);
 
-        rtn = callattrInternal1(target, delitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
+        rtn = callItemOrSliceAttr(target, delitem_str, delslice_str, slice, NULL, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
-
     } else {
-        rtn = callattrInternal1(target, delitem_str, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
+        rtn = callItemOrSliceAttr(target, delitem_str, delslice_str, slice, NULL, NULL);
     }
 
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "'%s' object does not support item deletion", getTypeName(target));
     }
 
-    if (rewriter.get()) {
+    if (rewriter.get())
         rewriter->commit();
-    }
 }
 
 void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {

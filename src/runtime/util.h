@@ -16,12 +16,33 @@
 #define PYSTON_RUNTIME_UTIL_H
 
 #include "core/types.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
 class BoxedSlice;
 
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end, i64* out_length = nullptr);
+
+// Analogue of _PyEval_SliceIndex
+inline void sliceIndex(Box* b, int64_t* out) {
+    if (b->cls == none_cls) {
+        // Leave default value in case of None (useful for slices like [2:])
+        return;
+    }
+
+    int ret = _PyEval_SliceIndex(b, out);
+    if (ret <= 0)
+        throwCAPIException();
+}
+
+bool isSliceIndex(Box* b);
+
+void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop);
+
+// Adjust the start and stop bounds of the sequence we are slicing to its size.
+// Ensure stop >= start and remain within bounds.
+void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size);
 
 template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
     assert(dst != src);
