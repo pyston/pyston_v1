@@ -513,6 +513,8 @@ void initCodegen() {
 // llvm_args.push_back("--debug-only=stackmaps");
 #endif
 
+    // llvm_args.push_back("--time-passes");
+
     // llvm_args.push_back("--print-after-all");
     // llvm_args.push_back("--print-machineinstrs");
     if (USE_REGALLOC_BASIC)

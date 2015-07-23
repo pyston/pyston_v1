@@ -108,20 +108,27 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
     if (ENABLE_PYSTON_PASSES)
         fpm.add(createMallocsNonNullPass());
 
-    // TODO Find the right place for this pass (and ideally not duplicate it)
-    if (ENABLE_PYSTON_PASSES) {
-        fpm.add(llvm::createGVNPass());
-        fpm.add(createConstClassesPass());
-    }
-
     // TODO: find the right set of passes
-    if (0) {
-        // My original set of passes, that seem to get about 90% of the benefit:
+    if (1) {
+        // Small set of passes:
         fpm.add(llvm::createInstructionCombiningPass());
         fpm.add(llvm::createReassociatePass());
         fpm.add(llvm::createGVNPass());
         fpm.add(llvm::createCFGSimplificationPass());
+
+        if (ENABLE_PYSTON_PASSES) {
+            fpm.add(createConstClassesPass());
+            fpm.add(createDeadAllocsPass());
+            fpm.add(llvm::createInstructionCombiningPass());
+            fpm.add(llvm::createCFGSimplificationPass());
+        }
     } else {
+        // TODO Find the right place for this pass (and ideally not duplicate it)
+        if (ENABLE_PYSTON_PASSES) {
+            fpm.add(llvm::createGVNPass());
+            fpm.add(createConstClassesPass());
+        }
+
         // copied + slightly modified from llvm/lib/Transforms/IPO/PassManagerBuilder.cpp::populateModulePassManager
         fpm.add(llvm::createEarlyCSEPass());                   // Catch trivial redundancies
         fpm.add(llvm::createJumpThreadingPass());              // Thread jumps.
@@ -165,19 +172,19 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
         // fpm.add(llvm::createLoopVectorizePass(DisableUnrollLoops, LoopVectorize));
         fpm.add(llvm::createInstructionCombiningPass());
         fpm.add(llvm::createCFGSimplificationPass());
-    }
 
-    // TODO Find the right place for this pass (and ideally not duplicate it)
-    if (ENABLE_PYSTON_PASSES) {
-        fpm.add(createConstClassesPass());
-        fpm.add(llvm::createInstructionCombiningPass());
-        fpm.add(llvm::createCFGSimplificationPass());
-        fpm.add(createConstClassesPass());
-        fpm.add(createDeadAllocsPass());
-        // fpm.add(llvm::createSCCPPass());                  // Constant prop with SCCP
-        // fpm.add(llvm::createEarlyCSEPass());              // Catch trivial redundancies
-        // fpm.add(llvm::createInstructionCombiningPass());
-        // fpm.add(llvm::createCFGSimplificationPass());
+        // TODO Find the right place for this pass (and ideally not duplicate it)
+        if (ENABLE_PYSTON_PASSES) {
+            fpm.add(createConstClassesPass());
+            fpm.add(llvm::createInstructionCombiningPass());
+            fpm.add(llvm::createCFGSimplificationPass());
+            fpm.add(createConstClassesPass());
+            fpm.add(createDeadAllocsPass());
+            // fpm.add(llvm::createSCCPPass());                  // Constant prop with SCCP
+            // fpm.add(llvm::createEarlyCSEPass());              // Catch trivial redundancies
+            // fpm.add(llvm::createInstructionCombiningPass());
+            // fpm.add(llvm::createCFGSimplificationPass());
+        }
     }
 
     fpm.doInitialization();
