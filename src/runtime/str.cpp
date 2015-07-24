@@ -1827,7 +1827,7 @@ extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject*
 
 Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
+    assert(!kwargs || kwargs->cls == dict_cls);
 
     Box* rtn = _do_string_format(self, args, kwargs);
     checkAndThrowCAPIException();

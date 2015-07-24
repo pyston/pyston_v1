@@ -1358,7 +1358,7 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     // disallow it but it's good to know.
 
     assert(args->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
+    assert(!kwargs || kwargs->cls == dict_cls);
     return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
 }
 
@@ -2156,8 +2156,7 @@ public:
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
         assert(args->cls == tuple_cls);
-        assert(kwargs);
-        assert(kwargs->cls == dict_cls);
+        assert(!kwargs || kwargs->cls == dict_cls);
 
         RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
 
@@ -2192,7 +2191,8 @@ public:
         for (auto e : *args) {
             handle(e);
         }
-        handle(kwargs);
+        if (kwargs)
+            handle(kwargs);
 
         return None;
     }

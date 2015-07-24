@@ -133,6 +133,11 @@ struct ArgPassSpec {
 
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
+    int kwargsIndex() const {
+        assert(has_kwargs);
+        return num_args + num_keywords + (has_starargs ? 1 : 0);
+    }
+
     uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
 
     void dump() {
@@ -160,6 +165,11 @@ struct ParamNames {
 
     int totalParameters() const {
         return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
+    }
+
+    int kwargsIndex() const {
+        assert(kwarg.str().size());
+        return args.size() + (vararg.str().size() == 0 ? 0 : 1);
     }
 
 private:

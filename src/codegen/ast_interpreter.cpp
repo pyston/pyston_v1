@@ -315,8 +315,12 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     if (param_names.vararg_name)
         doStore(param_names.vararg_name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
 
-    if (param_names.kwarg_name)
-        doStore(param_names.kwarg_name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
+    if (param_names.kwarg_name) {
+        Box* val = getArg(i++, arg1, arg2, arg3, args);
+        if (!val)
+            val = createDict();
+        doStore(param_names.kwarg_name, Value(val, 0));
+    }
 
     assert(nargs == i);
 }
@@ -1695,7 +1699,8 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
         std::vector<ConcreteCompilerType*> arg_types;
         for (int i = 0; i < nargs; i++) {
             Box* arg = getArg(i, arg1, arg2, arg3, args);
-            assert(arg); // only builtin functions can pass NULL args
+
+            assert(arg || i == clfunc->param_names.kwargsIndex()); // only builtin functions can pass NULL args
 
             // TODO: reenable argument-type specialization
             arg_types.push_back(UNKNOWN);

@@ -125,7 +125,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     assert(_args->cls == tuple_cls);
     BoxedTuple* args = static_cast<BoxedTuple*>(_args);
 
-    assert(_kwargs->cls == dict_cls);
+    assert(!_kwargs || _kwargs->cls == dict_cls);
     BoxedDict* kwargs = static_cast<BoxedDict*>(_kwargs);
 
     BoxedInstance* made = new BoxedInstance(cls);
@@ -138,7 +138,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
         if (init_rtn != None)
             raiseExcHelper(TypeError, "__init__() should return None");
     } else {
-        if (args->size() || kwargs->d.size())
+        if (args->size() || (kwargs && kwargs->d.size()))
             raiseExcHelper(TypeError, "this constructor takes no arguments");
     }
     return made;

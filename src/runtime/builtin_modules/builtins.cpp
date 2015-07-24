@@ -865,7 +865,7 @@ Box* execfile(Box* _fn) {
 
 Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
-    assert(kwargs->cls == dict_cls);
+    assert(!kwargs || kwargs->cls == dict_cls);
 
     Box* dest, *end;
 
@@ -873,23 +873,22 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     static BoxedString* end_str = internStringImmortal("end");
     static BoxedString* space_str = internStringImmortal(" ");
 
-    auto it = kwargs->d.find(file_str);
-    if (it != kwargs->d.end()) {
+    BoxedDict::DictMap::iterator it;
+    if (kwargs && ((it = kwargs->d.find(file_str)) != kwargs->d.end())) {
         dest = it->second;
         kwargs->d.erase(it);
     } else {
         dest = getSysStdout();
     }
 
-    it = kwargs->d.find(end_str);
-    if (it != kwargs->d.end()) {
+    if (kwargs && ((it = kwargs->d.find(end_str)) != kwargs->d.end())) {
         end = it->second;
         kwargs->d.erase(it);
     } else {
         end = boxString("\n");
     }
 
-    RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
+    RELEASE_ASSERT(!kwargs || kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
     static BoxedString* write_str = internStringImmortal("write");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };

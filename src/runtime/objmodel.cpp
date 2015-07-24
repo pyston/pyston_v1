@@ -3361,7 +3361,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     if (paramspec.takes_kwargs) {
         int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
         if (rewrite_args) {
-            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
+            RewriterVar* r_kwargs = rewrite_args->rewriter->loadConst(0);
 
             if (kwargs_idx == 0)
                 rewrite_args->arg1 = r_kwargs;
@@ -3408,7 +3408,10 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* kwargs
             = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
 
-        if (!isSubclass(kwargs->cls, dict_cls)) {
+        if (!kwargs) {
+            // TODO could try to avoid creating this
+            kwargs = new BoxedDict();
+        } else if (!isSubclass(kwargs->cls, dict_cls)) {
             BoxedDict* d = new BoxedDict();
             dictMerge(d, kwargs);
             kwargs = d;
@@ -3755,15 +3758,26 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             // already fit, either since the type inferencer could determine that,
             // or because they only need to fit into an UNKNOWN slot.
 
-            if (npassed_args >= 1)
-                rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
-            if (npassed_args >= 2)
-                rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
-            if (npassed_args >= 3)
-                rewrite_args->arg3->addAttrGuard(offsetof(Box, cls), (intptr_t)arg3->cls);
-            for (int i = 3; i < npassed_args; i++) {
-                RewriterVar* v = rewrite_args->args->getAttr((i - 3) * sizeof(Box*), Location::any());
-                v->addAttrGuard(offsetof(Box, cls), (intptr_t)args[i - 3]->cls);
+            int kwargs_index = -1;
+            if (argspec.has_kwargs)
+                kwargs_index = argspec.kwargsIndex();
+
+            for (int i = 0; i < npassed_args; i++) {
+                Box* v = getArg(i, arg1, arg2, arg3, args);
+
+                if (i == kwargs_index) {
+                    if (v == NULL) {
+                        // I don't think this case should ever get hit currently -- the only places
+                        // we offer rewriting are places that don't have the ability to pass a NULL
+                        // kwargs.
+                        getArg(i, rewrite_args)->addGuard(0);
+                    } else {
+                        getArg(i, rewrite_args)->addAttrGuard(offsetof(Box, cls), (intptr_t)v->cls);
+                    }
+                } else {
+                    assert(v);
+                    getArg(i, rewrite_args)->addAttrGuard(offsetof(Box, cls), (intptr_t)v->cls);
+                }
             }
             rewrite_args->args_guarded = true;
         }

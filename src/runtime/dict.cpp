@@ -582,8 +582,7 @@ extern "C" int PyDict_Merge(PyObject* a, PyObject* b, int override_) noexcept {
 
 Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
-    assert(kwargs);
-    assert(kwargs->cls == dict_cls);
+    assert(!kwargs || kwargs->cls == dict_cls);
 
     RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
     if (args->size()) {
@@ -596,7 +595,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
         }
     }
 
-    if (kwargs->d.size())
+    if (kwargs && kwargs->d.size())
         dictMerge(self, kwargs);
 
     return None;
@@ -604,7 +603,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
 
 extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     int args_sz = args->size();
-    int kwargs_sz = kwargs->d.size();
+    int kwargs_sz = kwargs ? kwargs->d.size() : 0;
 
     // CPython accepts a single positional and keyword arguments, in any combination
     if (args_sz > 1)
@@ -612,11 +611,13 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
 
     dictUpdate(self, args, kwargs);
 
-    // handle keyword arguments by merging (possibly over positional entries per CPy)
-    assert(kwargs->cls == dict_cls);
+    if (kwargs) {
+        // handle keyword arguments by merging (possibly over positional entries per CPy)
+        assert(kwargs->cls == dict_cls);
 
-    for (const auto& p : kwargs->d)
-        self->d[p.first] = p.second;
+        for (const auto& p : kwargs->d)
+            self->d[p.first] = p.second;
+    }
 
     return None;
 }

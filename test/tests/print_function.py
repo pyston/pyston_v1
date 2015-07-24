@@ -50,3 +50,5 @@ try:
 except TypeError:
     pass
 
+for i in xrange(10):
+    print()
