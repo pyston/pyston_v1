@@ -107,13 +107,14 @@ static int fix_status(int status) {
     return (status == -1) ? errno : status;
 }
 
+static BoxedClass* ThreadError;
 static BoxedClass* thread_lock_cls;
 class BoxedThreadLock : public Box {
 private:
-    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    PyThread_type_lock lock_lock;
 
 public:
-    BoxedThreadLock() {}
+    BoxedThreadLock() { lock_lock = PyThread_allocate_lock(); }
 
     DEFAULT_CLASS(thread_lock_cls);
 
@@ -124,44 +125,46 @@ public:
         RELEASE_ASSERT(isSubclass(_waitflag->cls, int_cls), "");
         int waitflag = static_cast<BoxedInt*>(_waitflag)->n;
 
-        // Copied + adapted from CPython:
-        int success;
-        auto thelock = &self->lock;
-        int status, error = 0;
-
+        int rtn;
         {
             threading::GLAllowThreadsReadRegion _allow_threads;
 
-            do {
-                if (waitflag)
-                    status = fix_status(pthread_mutex_lock(thelock));
-                else
-                    status = fix_status(pthread_mutex_trylock(thelock));
-            } while (status == EINTR); /* Retry if interrupted by a signal */
+            rtn = PyThread_acquire_lock(self->lock_lock, waitflag);
         }
 
-        if (waitflag) {
-            CHECK_STATUS("mutex_lock");
-        } else if (status != EBUSY) {
-            CHECK_STATUS("mutex_trylock");
-        }
-
-        success = (status == 0) ? 1 : 0;
-
-        RELEASE_ASSERT(status == 0 || !waitflag, "could not lock mutex! error %d", status);
-        return boxBool(status == 0);
+        return boxBool(rtn);
     }
 
     static Box* release(Box* _self) {
         RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
         BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
 
-        pthread_mutex_unlock(&self->lock);
+        if (PyThread_acquire_lock(self->lock_lock, 0)) {
+            PyThread_release_lock(self->lock_lock);
+            raiseExcHelper(ThreadError, "release unlocked lock");
+            return None;
+        }
+
+        PyThread_release_lock(self->lock_lock);
         return None;
     }
 
     static Box* exit(Box* _self, Box* arg1, Box* arg2, Box** args) { return release(_self); }
+
+    static void threadLockDestructor(Box* _self) {
+        RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
+        BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
+
+        if (self->lock_lock != NULL) {
+            /* Unlock the lock so it's safe to free it */
+            PyThread_acquire_lock(self->lock_lock, 0);
+            PyThread_release_lock(self->lock_lock);
+
+            PyThread_free_lock(self->lock_lock);
+        }
+    }
 };
+
 
 Box* allocateLock() {
     return new BoxedThreadLock();
@@ -196,6 +199,9 @@ void setupThread() {
         "stack_size", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)stackSize, BOXED_INT, 0), "stack_size"));
 
     thread_lock_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLock), false, "lock");
+    thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
+    thread_lock_cls->has_safe_tp_dealloc = true;
+
     thread_lock_cls->giveAttr("__module__", boxString("thread"));
     thread_lock_cls->giveAttr(
         "acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, 1, false, false),
@@ -207,9 +213,8 @@ void setupThread() {
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
 
-    BoxedClass* ThreadError
-        = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,
-                                 Exception->tp_basicsize, false, "error");
+    ThreadError = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset,
+                                         Exception->tp_weaklistoffset, Exception->tp_basicsize, false, "error");
     ThreadError->giveAttr("__module__", boxString("thread"));
     ThreadError->freeze();
 
