@@ -8745,6 +8745,15 @@ static PyBufferProcs unicode_as_buffer = {
 static PyObject *
 unicode_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds);
 
+PyObject* unicode_new_inner(PyObject* x, char* encoding, char* errors) {
+    if (x == NULL)
+        return (PyObject *)_PyUnicode_New(0);
+    if (encoding == NULL && errors == NULL)
+        return PyObject_Unicode(x);
+    else
+        return PyUnicode_FromEncodedObject(x, encoding, errors);
+}
+
 static PyObject *
 unicode_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -8758,12 +8767,7 @@ unicode_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oss:unicode",
                                      kwlist, &x, &encoding, &errors))
         return NULL;
-    if (x == NULL)
-        return (PyObject *)_PyUnicode_New(0);
-    if (encoding == NULL && errors == NULL)
-        return PyObject_Unicode(x);
-    else
-        return PyUnicode_FromEncodedObject(x, encoding, errors);
+    return unicode_new_inner(x, encoding, errors);
 }
 
 static PyObject *

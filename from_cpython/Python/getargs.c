@@ -569,6 +569,35 @@ float_argument_error(PyObject *arg)
         return 0;
 }
 
+int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, const char* format, ...) {
+    va_list va;
+    char* msg;
+    char msgbuf[256];
+
+    assert(format[0] != '\0');
+    assert(format[0] != '(');
+    assert(format[0] != '|');
+    assert(format[0] != '|');
+
+    assert(format[1] != '*'); // would need to pass a non-null freelist
+    assert(format[0] != 'e'); // would need to pass a non-null freelist
+
+    va_start(va, format);
+    msg = convertsimple(obj, &format, &va, FLAG_SIZE_T, msgbuf, sizeof(msgbuf), NULL);
+    va_end(va);
+
+    if (msg) {
+        int levels[1];
+        levels[0] = 0;
+        seterror(arg_idx + 1, msg, levels, fname, NULL);
+        return 0;
+    }
+
+    // Should have consumed the entire format string:
+    assert(format[0] == '\0');
+    return 1;
+}
+
 /* Convert a non-tuple argument.  Return NULL if conversion went OK,
    or a string with a message describing the failure.  The message is
    formatted as "must be <desired type>, not <actual type>".

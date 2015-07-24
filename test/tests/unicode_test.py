@@ -155,3 +155,13 @@ print "".join([u"\xB2", u"\xB3"])
 
 import sys
 print type(sys.maxunicode)
+
+class MyUnicode(unicode):
+    def __init__(*args):
+        print "MyUnicode.__init__", map(type, args)
+
+class C(object):
+    def __unicode__(self):
+        return MyUnicode("hello world")
+
+print type(unicode(C()))

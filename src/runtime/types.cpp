@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#define PY_SSIZE_T_CLEAN
+
 #include "runtime/types.h"
 
 #include <cassert>
@@ -603,7 +605,7 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                         Box** args, const std::vector<BoxedString*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
-    if (argspec.has_starargs) {
+    if (argspec.has_starargs || argspec.has_kwargs) {
         // This would fail in typeCallInner
         rewrite_args = NULL;
     }
@@ -633,8 +635,11 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
-    if (argspec.has_starargs)
+    if (argspec.has_starargs || argspec.num_args == 0) {
+        // Get callFunc to expand the arguments.
+        // TODO: update this to use rearrangeArguments instead.
         return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    }
 
     return typeCallInner(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
@@ -682,10 +687,33 @@ static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwd
     return r;
 }
 
+static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, Box** _args) {
+    Box* errors_obj = _args[0];
+
+    assert(type == unicode_cls);
+
+    char* encoding = NULL;
+    char* errors = NULL;
+    if (encoding_obj)
+        if (!PyArg_ParseSingle(encoding_obj, 1, "unicode", "s", &encoding))
+            throwCAPIException();
+    if (errors_obj)
+        if (!PyArg_ParseSingle(errors_obj, 1, "unicode", "s", &errors))
+            throwCAPIException();
+
+    Box* r = unicode_new_inner(string, encoding, errors);
+    if (!r)
+        throwCAPIException();
+    assert(r->cls == unicode_cls); // otherwise we'd need to call this object's init
+    return r;
+}
+
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                           Box** args, const std::vector<BoxedString*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
+    int npositional = argspec.num_args;
 
+    // We need to know what the class is.  We could potentially call rearrangeArguments here
     assert(argspec.num_args >= 1);
     Box* _cls = arg1;
 
@@ -695,6 +723,42 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+
+    if (cls == unicode_cls && !argspec.has_kwargs && !argspec.has_starargs
+        && (argspec.num_args == 1 || (argspec.num_args == 2 && arg2->cls == str_cls))) {
+        // unicode() takes an "encoding" parameter which can cause the constructor to return unicode subclasses.
+
+        if (rewrite_args) {
+            rewrite_args->arg1->addGuard((intptr_t)cls);
+            if (argspec.num_args >= 2)
+                rewrite_args->arg2->addGuard((intptr_t)arg2->cls);
+        }
+
+        // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
+        ParamReceiveSpec paramspec(4, 3, false, false);
+        bool rewrite_success = false;
+        Box* oarg1, *oarg2, *oarg3;
+        static ParamNames param_names({ "string", "encoding", "errors" }, "", "");
+        static Box* defaults[3] = { NULL, NULL, NULL };
+        Box* oargs[1];
+
+        rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
+                           arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+        assert(oarg1 == cls);
+
+        if (!rewrite_success)
+            rewrite_args = NULL;
+
+        if (rewrite_args) {
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)unicodeNewHelper, rewrite_args->arg1, rewrite_args->arg2,
+                                               rewrite_args->arg3, rewrite_args->args);
+            rewrite_args->out_success = true;
+        }
+
+        // TODO other encodings could return non-unicode?
+        return unicodeNewHelper(cls, oarg2, oarg3, oargs);
+    }
 
     if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new) {
         // Looks like we're calling an extension class and we're not going to be able to
@@ -719,12 +783,16 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         return cpythonTypeCall(cls, oarg2, oarg3);
     }
 
+    if (argspec.has_starargs || argspec.has_kwargs)
+        rewrite_args = NULL;
+
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
     Box* new_attr, *init_attr;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
+        assert(!argspec.has_kwargs);
         assert(argspec.num_args > 0);
 
         r_ccls = rewrite_args->arg1;
@@ -782,20 +850,35 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     // typeCall is tricky to rewrite since it has complicated behavior: we are supposed to
     // call the __init__ method of the *result of the __new__ call*, not of the original
-    // class.  (And only if the result is an instance of the original class, but that's not
-    // even the tricky part here.)
+    // class.  (And only if the result is an instance of the original class (or a subclass),
+    // but that's not even the tricky part here.)
     //
     // By the time we know the type of the result of __new__(), it's too late to add traditional
     // guards.  So, instead of doing that, we're going to add a guard that makes sure that __new__
-    // has the property that __new__(kls) always returns an instance of kls.
+    // has the property that it will always return an instance where we know what __init__ has to be
+    // called on it.  There are a couple cases:
+    // - Some __new__ functions, such as object.__new__, always return an instance of the requested class.
+    //   We can whitelist these __new__ functions.
+    // - There are cls+arg pairs such that cls(arg) always returns an instance of cls.  For example,
+    //   str() of an int is always a str, but str of arbitrary types does not necessarily return a str
+    //   (could return a subtype of str)
+    // - There are cls+arg pairs where we know that we don't have to call an __init__, despite the return
+    //   value having variable type.  For instance, int(float) can return a long on overflow, but in either
+    //   case no __init__ should be called.
+    // - There's a final special case that type(obj) does not call __init__ even if type.__new__(type, obj)
+    //   happens to return a subclass of type.  This is a special case in cpython's code that we have as well.
     //
-    // Whitelist a set of __new__ methods that we know work like this.  Most importantly: object.__new__.
-    //
-    // Most builtin classes behave this way, but not all!
-    // Notably, "type" itself does not.  For instance, assuming M is a subclass of
-    // type, type.__new__(M, 1) will return the int class, which is not an instance of M.
 
-    // this is ok with not using StlCompatAllocator since we will manually register these objects with the GC
+    // For debugging, keep track of why we think we can rewrite this:
+    enum { NOT_ALLOWED, VERIFIED, NO_INIT, TYPE_NEW_SPECIAL_CASE, } why_rewrite_allowed = NOT_ALLOWED;
+
+    // These are __new__ functions that have the property that __new__(kls) always returns an instance of kls.
+    // These are ok to call regardless of what type was requested.
+    //
+    // TODO what if an extension type defines a tp_alloc that returns something that's not an instance of that
+    // type?  then object.__new__ would not be able to be here:
+    //
+    // this array is ok with not using StlCompatAllocator since we will manually register these objects with the GC
     static std::vector<Box*> allowable_news;
     if (allowable_news.empty()) {
         for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
@@ -805,9 +888,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
-    // For debugging, keep track of why we think we can rewrite this:
-    enum { NOT_ALLOWED, VERIFIED, NO_INIT, TYPE_NEW_SPECIAL_CASE, } why_rewrite_allowed = NOT_ALLOWED;
-
     if (rewrite_args) {
         for (auto b : allowable_news) {
             if (b == new_attr) {
@@ -816,13 +896,44 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
 
-        if (cls == int_cls || cls == float_cls || cls == long_cls) {
-            if (npassed_args == 1) {
+        bool know_first_arg = !argspec.has_starargs && !argspec.has_kwargs && argspec.num_keywords == 0;
+
+        if (know_first_arg) {
+            if (argspec.num_args == 1
+                && (cls == int_cls || cls == float_cls || cls == long_cls || cls == str_cls || cls == unicode_cls))
                 why_rewrite_allowed = VERIFIED;
-            } else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls)) {
+
+            if (argspec.num_args == 2 && (cls == int_cls || cls == float_cls || cls == long_cls)
+                && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls
+                    || arg2->cls == unicode_cls)) {
                 why_rewrite_allowed = NO_INIT;
                 rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
             }
+
+            // str(obj) can return str-subtypes, but for builtin types it won't:
+            if (argspec.num_args == 2 && cls == str_cls && (arg2->cls == int_cls || arg2->cls == float_cls)) {
+                why_rewrite_allowed = VERIFIED;
+                rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
+            }
+
+            // int(str, base) can only return int/long
+            if (argspec.num_args == 3 && cls == int_cls) {
+                why_rewrite_allowed = NO_INIT;
+            }
+
+#if 0
+            if (why_rewrite_allowed == NOT_ALLOWED) {
+                std::string per_name_stat_name = "zzz_norewrite_" + std::string(cls->tp_name);
+                if (argspec.num_args == 1)
+                    per_name_stat_name += "_1arg";
+                else if (argspec.num_args == 2)
+                    per_name_stat_name += "_" + std::string(arg2->cls->tp_name);
+                else
+                    per_name_stat_name += "_narg";
+                uint64_t* counter = Stats::getStatCounter(per_name_stat_name);
+                Stats::log(counter);
+            }
+#endif
         }
 
         if (cls == type_cls && argspec == ArgPassSpec(2))

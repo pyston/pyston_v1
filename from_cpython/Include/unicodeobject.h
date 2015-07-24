@@ -1408,6 +1408,9 @@ PyAPI_FUNC(int) _PyUnicode_IsAlpha(
     Py_UNICODE ch       /* Unicode character */
     ) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+PyAPI_FUNC(PyObject*) unicode_new_inner(PyObject* x, char* encoding, char* errors) PYSTON_NOEXCEPT;
+
 #ifdef __cplusplus
 }
 #endif
