@@ -803,6 +803,197 @@ Box* instanceNe(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, attr_str);
 }
 
+Box* instanceAdd(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__add__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceSub(Box* _inst, Box* other) {
+
+    static BoxedString* attr_str = internStringImmortal("__sub__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceMul(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__mul__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceFloordiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__floordiv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceMod(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__mod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceDivMod(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__divmod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceLshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__lshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceAnd(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__and__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceXor(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__xor__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceOr(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__or__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceDiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__div__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceTruediv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__truediv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRadd(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__radd__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRsub(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rsub__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRmul(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rmul__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRdiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rdiv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRtruediv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rtruediv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRfloordiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rfloordiv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRmod(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rmod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRdivmod(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rdivmod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRlshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rlshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRrshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rrshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRand(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rand__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRxor(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rxor__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceRor(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ror__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIadd(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__iadd__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIsub(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__isub__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceImul(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__imul__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIdiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__idiv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceItruediv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__itruediv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIfloordiv(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ifloordiv__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceImod(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__imod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIlshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ilshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIrshift(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__irshift__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIand(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__iand__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIxor(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ixor__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIor(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ior__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     assert(_inst->cls == instance_cls);
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -914,6 +1105,46 @@ void setupClassobj() {
     instance_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)instanceLe, UNKNOWN, 2)));
     instance_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)instanceGt, UNKNOWN, 2)));
     instance_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)instanceGe, UNKNOWN, 2)));
+    instance_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)instanceAdd, UNKNOWN, 2)));
+    instance_cls->giveAttr("__sub__", new BoxedFunction(boxRTFunction((void*)instanceSub, UNKNOWN, 2)));
+    instance_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)instanceMul, UNKNOWN, 2)));
+    instance_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)instanceFloordiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)instanceMod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)instanceDivMod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)instanceLshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)instanceRshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)instanceAnd, UNKNOWN, 2)));
+    instance_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)instanceXor, UNKNOWN, 2)));
+    instance_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)instanceOr, UNKNOWN, 2)));
+    instance_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)instanceDiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__truediv__", new BoxedFunction(boxRTFunction((void*)instanceTruediv, UNKNOWN, 2)));
+
+    instance_cls->giveAttr("__radd__", new BoxedFunction(boxRTFunction((void*)instanceRadd, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)instanceRsub, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)instanceRmul, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)instanceRdiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rtruediv__", new BoxedFunction(boxRTFunction((void*)instanceRtruediv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rfloordiv__", new BoxedFunction(boxRTFunction((void*)instanceRfloordiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rmod__", new BoxedFunction(boxRTFunction((void*)instanceRmod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rdivmod__", new BoxedFunction(boxRTFunction((void*)instanceRdivmod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rlshift__", new BoxedFunction(boxRTFunction((void*)instanceRlshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rrshift__", new BoxedFunction(boxRTFunction((void*)instanceRrshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rand__", new BoxedFunction(boxRTFunction((void*)instanceRand, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rxor__", new BoxedFunction(boxRTFunction((void*)instanceRxor, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ror__", new BoxedFunction(boxRTFunction((void*)instanceRor, UNKNOWN, 2)));
+
+    instance_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)instanceIadd, UNKNOWN, 2)));
+    instance_cls->giveAttr("__isub__", new BoxedFunction(boxRTFunction((void*)instanceIsub, UNKNOWN, 2)));
+    instance_cls->giveAttr("__imul__", new BoxedFunction(boxRTFunction((void*)instanceImul, UNKNOWN, 2)));
+    instance_cls->giveAttr("__idiv__", new BoxedFunction(boxRTFunction((void*)instanceIdiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__itruediv__", new BoxedFunction(boxRTFunction((void*)instanceItruediv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ifloordiv__", new BoxedFunction(boxRTFunction((void*)instanceIfloordiv, UNKNOWN, 2)));
+    instance_cls->giveAttr("__imod__", new BoxedFunction(boxRTFunction((void*)instanceImod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ilshift__", new BoxedFunction(boxRTFunction((void*)instanceIlshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__irshift__", new BoxedFunction(boxRTFunction((void*)instanceIrshift, UNKNOWN, 2)));
+    instance_cls->giveAttr("__iand__", new BoxedFunction(boxRTFunction((void*)instanceIand, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ixor__", new BoxedFunction(boxRTFunction((void*)instanceIxor, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ior__", new BoxedFunction(boxRTFunction((void*)instanceIor, UNKNOWN, 2)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
