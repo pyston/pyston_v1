@@ -3450,8 +3450,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        // TODO not right error message
-        raiseExcHelper(TypeError, "%s() did not get a value for positional argument %d", func_name, i);
+        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%d given)", func_name, paramspec.num_args,
+                       argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
     for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {

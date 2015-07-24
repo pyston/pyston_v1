@@ -145,30 +145,77 @@ extern "C" Box* any(Box* container) {
     return boxBool(false);
 }
 
-extern "C" Box* min(Box* arg0, BoxedTuple* args) {
+Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
     assert(args->cls == tuple_cls);
+    if (kwargs)
+        assert(kwargs->cls == dict_cls);
 
-    Box* minElement;
+    Box* key_func = nullptr;
+    Box* extremElement;
     Box* container;
+    Box* extremVal;
+
+    if (kwargs && kwargs->d.size()) {
+        static BoxedString* key_str = static_cast<BoxedString*>(PyString_InternFromString("key"));
+        auto it = kwargs->d.find(key_str);
+        if (it != kwargs->d.end() && kwargs->d.size() == 1) {
+            key_func = it->second;
+        } else {
+            if (opid == Py_LT)
+                raiseExcHelper(TypeError, "min() got an unexpected keyword argument");
+            else
+                raiseExcHelper(TypeError, "max() got an unexpected keyword argument");
+        }
+    }
+
     if (args->size() == 0) {
-        minElement = nullptr;
+        extremElement = nullptr;
+        extremVal = nullptr;
         container = arg0;
     } else {
-        minElement = arg0;
+        extremElement = arg0;
+        if (key_func != NULL) {
+            extremVal = runtimeCall(key_func, ArgPassSpec(1), extremElement, NULL, NULL, NULL, NULL);
+        } else {
+            extremVal = extremElement;
+        }
         container = args;
     }
 
+    Box* curVal = nullptr;
     for (Box* e : container->pyElements()) {
-        if (!minElement) {
-            minElement = e;
+        if (key_func != NULL) {
+            if (!extremElement) {
+                extremVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+                extremElement = e;
+                continue;
+            }
+            curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
         } else {
-            int r = PyObject_RichCompareBool(minElement, e, Py_GT);
-            if (r == -1)
-                throwCAPIException();
-            if (r)
-                minElement = e;
+            if (!extremElement) {
+                extremVal = e;
+                extremElement = e;
+                continue;
+            }
+            curVal = e;
+        }
+        int r = PyObject_RichCompareBool(curVal, extremVal, opid);
+        if (r == -1)
+            throwCAPIException();
+        if (r) {
+            extremElement = e;
+            extremVal = curVal;
         }
     }
+    return extremElement;
+}
+
+extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
+    if (arg0 == None && args->size() == 0) {
+        raiseExcHelper(TypeError, "min expected 1 arguments, got 0");
+    }
+
+    Box* minElement = min_max(arg0, args, kwargs, Py_LT);
 
     if (!minElement) {
         raiseExcHelper(ValueError, "min() arg is an empty sequence");
@@ -176,30 +223,12 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args) {
     return minElement;
 }
 
-extern "C" Box* max(Box* arg0, BoxedTuple* args) {
-    assert(args->cls == tuple_cls);
-
-    Box* maxElement;
-    Box* container;
-    if (args->size() == 0) {
-        maxElement = nullptr;
-        container = arg0;
-    } else {
-        maxElement = arg0;
-        container = args;
+extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
+    if (arg0 == None && args->size() == 0) {
+        raiseExcHelper(TypeError, "max expected 1 arguments, got 0");
     }
 
-    for (Box* e : container->pyElements()) {
-        if (!maxElement) {
-            maxElement = e;
-        } else {
-            int r = PyObject_RichCompareBool(maxElement, e, Py_LT);
-            if (r == -1)
-                throwCAPIException();
-            if (r)
-                maxElement = e;
-        }
-    }
+    Box* maxElement = min_max(arg0, args, kwargs, Py_GT);
 
     if (!maxElement) {
         raiseExcHelper(ValueError, "max() arg is an empty sequence");
@@ -1170,10 +1199,10 @@ void setupBuiltins() {
     builtins_module->giveAttr("oct",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)octFunc, UNKNOWN, 1), "oct"));
 
-    min_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false), "min");
+    min_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)min, UNKNOWN, 1, 1, true, true), "min", { None });
     builtins_module->giveAttr("min", min_obj);
 
-    max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false), "max");
+    max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 1, true, true), "max", { None });
     builtins_module->giveAttr("max", max_obj);
 
     builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(
