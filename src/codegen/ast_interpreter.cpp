@@ -788,7 +788,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value val = visit_expr(node->args[0]);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
-        abortJITing();
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
         assert(node->args[1]->type == AST_TYPE::Str);
@@ -798,10 +797,11 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
-        // TODO: shouldn't have to rebox here
-        v.o = importFrom(module.o, internStringMortal(name));
+        BoxedString* name_boxed = source_info->parent_module->getStringConstant(name, true);
+        if (jit)
+            v.var = jit->emitImportFrom(module, name_boxed);
+        v.o = importFrom(module.o, name_boxed);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
-        abortJITing();
         assert(node->args.size() == 3);
         assert(node->args[0]->type == AST_TYPE::Num);
         assert(static_cast<AST_Num*>(node->args[0])->num_type == AST_Num::INT);
@@ -812,9 +812,10 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         auto ast_str = ast_cast<AST_Str>(node->args[2]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
+        if (jit)
+            v.var = jit->emitImportName(level, froms, module_name);
         v.o = import(level, froms.o, module_name);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
-        abortJITing();
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
@@ -822,8 +823,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
-
-        v.o = importStar(module.o, globals);
+        v = Value(importStar(module.o, globals), jit ? jit->emitImportStar(module) : NULL);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {

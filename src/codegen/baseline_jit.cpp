@@ -22,6 +22,7 @@
 #include "codegen/type_recording.h"
 #include "core/cfg.h"
 #include "runtime/generator.h"
+#include "runtime/import.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -328,6 +329,20 @@ RewriterVar* JitFragmentWriter::emitGetPystonIter(RewriterVar* v) {
 
 RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
     return call(false, (void*)hasnextHelper, v);
+}
+
+RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
+    return call(false, (void*)importFrom, module, imm(name));
+}
+
+RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, llvm::StringRef module_name) {
+    return call(false, (void*)import, imm(level), from_imports, imm(const_cast<char*>(module_name.data())),
+                imm(module_name.size()));
+}
+
+RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    return call(false, (void*)importStar, module, globals);
 }
 
 RewriterVar* JitFragmentWriter::emitLandingpad() {
