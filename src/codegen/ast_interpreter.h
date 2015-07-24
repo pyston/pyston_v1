@@ -43,12 +43,10 @@ struct ASTInterpreterJitInterface {
 
     static Box* derefHelper(void* interp, InternedString s);
     static Box* doOSRHelper(void* interp, AST_Jump* node);
-    static Box* getLocalHelper(void* interp, InternedString id);
     static Box* landingpadHelper(void* interp);
     static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
     static Box* uncacheExcInfoHelper(void* interp);
-    static void setLocalClosureHelper(void* interp, InternedString id, Box* v);
-    static void setLocalHelper(void* interp, InternedString id, Box* v);
+    static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
 };
 
 class RewriterVar;
@@ -70,7 +68,6 @@ struct Value {
     Value(Box* o, RewriterVar* var) : o(o), var(var) {}
 };
 
-void setupInterpreter();
 Box* astInterpretFunction(CLFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args);
 Box* astInterpretFunctionEval(CLFunction* cf, Box* globals, Box* boxedLocals);

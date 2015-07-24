@@ -55,49 +55,24 @@ namespace pyston {
 
 namespace {
 
-static BoxedClass* astinterpreter_cls;
-
 class ASTInterpreter;
-
-// Map from stack frame pointers for frames corresponding to ASTInterpreter::execute() to the ASTInterpreter handling
-// them. Used to look up information about that frame. This is used for getting tracebacks, for CPython introspection
-// (sys._getframe & co), and for GC scanning.
-static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
-static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
-
-class RegisterHelper {
-private:
-    void* frame_addr;
-    ASTInterpreter* interpreter;
-
-public:
-    RegisterHelper();
-    ~RegisterHelper();
-    void doRegister(void* frame_addr, ASTInterpreter* interpreter);
-    static void deregister(void* frame_addr);
-};
+extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 /*
  * ASTInterpreters exist per function frame - there's no global interpreter object that executes
  * all non-jitted code!
  *
- * The ASTInterpreter inherits from Box as part of garbage collection support.
+ * All ASTInterpreter instances have to live on the stack because otherwise the GC won't scan the fields.
  */
-class ASTInterpreter : public Box {
+class ASTInterpreter {
 public:
-    typedef ContiguousMap<InternedString, Box*, llvm::SmallDenseMap<InternedString, int, 16>> SymMap;
-
-    ASTInterpreter(CLFunction* clfunc);
+    ASTInterpreter(CLFunction* clfunc, Box** vregs);
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
 
-    static Value execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
-    // This must not be inlined, because we rely on being able to detect when we're inside of it (by checking whether
-    // %rip is inside its instruction range) during a stack-trace in order to produce tracebacks inside interpreted
-    // code.
-    __attribute__((__no_inline__)) __attribute__((noinline)) static Value
-        executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at, RegisterHelper* reg);
+    static Box* execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
+    static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -155,8 +130,7 @@ private:
     void startJITing(CFGBlock* block, int exit_offset = 0);
     void abortJITing();
     void finishJITing(CFGBlock* continue_block = NULL);
-    // This method is not allowed to get inlined into 'executeInner' otherwise tracebacks are wrong.
-    __attribute__((__no_inline__)) __attribute__((noinline)) Box* execJITedBlock(CFGBlock* b);
+    Box* execJITedBlock(CFGBlock* b);
 
     // this variables are used by the baseline JIT, make sure they have an offset < 0x80 so we can use shorter
     // instructions
@@ -168,20 +142,23 @@ private:
     ScopeInfo* scope_info;
     PhiAnalysis* phis;
 
-    SymMap sym_table;
+    Box** vregs;
     ExcInfo last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
     FrameInfo frame_info;
+    BoxedModule* parent_module;
 
     // This is either a module or a dict
     Box* globals;
-    void* frame_addr; // used to clear entry inside the s_interpreterMap on destruction
     std::unique_ptr<JitFragmentWriter> jit;
 
 public:
-    DEFAULT_CLASS_SIMPLE(astinterpreter_cls);
+    llvm::DenseMap<InternedString, int>& getSymVRegMap() {
+        assert(source_info->cfg);
+        return source_info->cfg->sym_vreg_map;
+    }
 
     AST_stmt* getCurrentStatement() {
         assert(current_inst);
@@ -196,7 +173,7 @@ public:
     CLFunction* getCL() { return clfunc; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return passed_closure; }
-    const SymMap& getSymbolTable() { return sym_table; }
+    Box** getVRegs() { return vregs; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
     void addSymbol(InternedString name, Box* value, bool allow_duplicates);
@@ -207,23 +184,14 @@ public:
     void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
-    static void gcHandler(GCVisitor* visitor, Box* box);
-    static void simpleDestructor(Box* box) {
-        ASTInterpreter* inter = (ASTInterpreter*)box;
-        assert(inter->cls == astinterpreter_cls);
-        if (inter->frame_addr)
-            RegisterHelper::deregister(inter->frame_addr);
-        inter->~ASTInterpreter();
-    }
-
-    friend class RegisterHelper;
     friend struct pyston::ASTInterpreterJitInterface;
 };
 
 void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
+    assert(getSymVRegMap().count(name));
     if (!allow_duplicates)
-        assert(sym_table.count(name) == 0);
-    sym_table[name] = value;
+        assert(vregs[getSymVRegMap()[name]] == NULL);
+    vregs[getSymVRegMap()[name]] = value;
 }
 
 void ASTInterpreter::setGenerator(Box* gen) {
@@ -257,35 +225,22 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
 }
 
-void ASTInterpreter::gcHandler(GCVisitor* visitor, Box* box) {
-    boxGCHandler(visitor, box);
-
-    ASTInterpreter* interp = (ASTInterpreter*)box;
-    auto&& vec = interp->sym_table.vector();
-    visitor->visitRange((void* const*)&vec[0], (void* const*)&vec[vec.size()]);
-    visitor->visit(interp->passed_closure);
-    visitor->visit(interp->created_closure);
-    visitor->visit(interp->generator);
-    visitor->visit(interp->globals);
-    visitor->visit(interp->source_info->parent_module);
-    interp->frame_info.gcVisit(visitor);
-}
-
-ASTInterpreter::ASTInterpreter(CLFunction* clfunc)
+ASTInterpreter::ASTInterpreter(CLFunction* clfunc, Box** vregs)
     : current_block(0),
       current_inst(0),
       clfunc(clfunc),
       source_info(clfunc->source.get()),
       scope_info(0),
       phis(NULL),
+      vregs(vregs),
       last_exception(NULL, NULL, NULL),
       passed_closure(0),
       created_closure(0),
       generator(0),
       edgecount(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
-      globals(0),
-      frame_addr(0) {
+      parent_module(source_info->parent_module),
+      globals(0) {
 
     scope_info = source_info->getScopeInfo();
 
@@ -325,31 +280,6 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     assert(nargs == i);
 }
 
-RegisterHelper::RegisterHelper() : frame_addr(NULL), interpreter(NULL) {
-}
-
-RegisterHelper::~RegisterHelper() {
-    assert(interpreter);
-    assert(interpreter->frame_addr == frame_addr);
-    interpreter->frame_addr = nullptr;
-    deregister(frame_addr);
-}
-
-void RegisterHelper::doRegister(void* frame_addr, ASTInterpreter* interpreter) {
-    assert(!this->interpreter);
-    assert(!this->frame_addr);
-    this->frame_addr = frame_addr;
-    this->interpreter = interpreter;
-    interpreter->frame_addr = frame_addr;
-    s_interpreterMap[frame_addr] = interpreter;
-}
-
-void RegisterHelper::deregister(void* frame_addr) {
-    assert(frame_addr);
-    assert(s_interpreterMap.count(frame_addr));
-    s_interpreterMap.erase(frame_addr);
-}
-
 void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
@@ -387,7 +317,7 @@ void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
 Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
     try {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
-        std::pair<CFGBlock*, Box*> rtn = b->entry_code(this, b);
+        std::pair<CFGBlock*, Box*> rtn = b->entry_code(this, b, vregs);
         next_block = rtn.first;
         if (!next_block)
             return rtn.second;
@@ -405,12 +335,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
     return nullptr;
 }
 
-Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at,
-                                   RegisterHelper* reg) {
-
-    void* frame_addr = __builtin_frame_address(0);
-    reg->doRegister(frame_addr, &interpreter);
-
+Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     Value v;
 
     bool should_jit = false;
@@ -462,7 +387,7 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
                 Box* rtn = interpreter.execJITedBlock(b);
                 if (interpreter.next_block)
                     continue;
-                return Value(rtn, nullptr);
+                return rtn;
             }
         }
 
@@ -478,10 +403,10 @@ Value ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_
             v = interpreter.visit_stmt(s);
         }
     }
-    return v;
+    return v.o;
 }
 
-Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
     // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
@@ -494,8 +419,7 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
     if (!interpreter.source_info->cfg)
         interpreter.source_info->cfg = computeCFG(interpreter.source_info, interpreter.source_info->body);
 
-    RegisterHelper frame_registerer;
-    return executeInner(interpreter, start_block, start_at, &frame_registerer);
+    return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 
 Value ASTInterpreter::doBinOp(Value left, Value right, int op, BinExpType exp_type) {
@@ -527,6 +451,7 @@ void ASTInterpreter::doStore(AST_Name* node, Value value) {
             jit->emitSetItemName(name.getBox(), value);
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
+        assert(gc::isValidGCObject(value.o));
         setitem(frame_info.boxedLocals, name.getBox(), value.o);
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
@@ -534,14 +459,17 @@ void ASTInterpreter::doStore(AST_Name* node, Value value) {
             if (!closure) {
                 bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
                 if (is_live)
-                    jit->emitSetLocal(name, closure, value);
+                    jit->emitSetLocal(name, node->vreg, closure, value);
                 else
                     jit->emitSetBlockLocal(name, value);
             } else
-                jit->emitSetLocal(name, closure, value);
+                jit->emitSetLocal(name, node->vreg, closure, value);
         }
 
-        sym_table[name] = value.o;
+        assert(getSymVRegMap().count(name));
+        assert(getSymVRegMap()[name] == node->vreg);
+        vregs[node->vreg] = value.o;
+
         if (closure) {
             created_closure->elts[scope_info->getClosureOffset(name)] = value.o;
         }
@@ -706,17 +634,24 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     std::unique_ptr<PhiAnalysis> phis
         = computeRequiredPhis(clfunc->param_names, source_info->cfg, liveness, scope_info);
 
+    llvm::DenseMap<int, InternedString> offset_name_map;
+    for (auto&& v : getSymVRegMap()) {
+        offset_name_map[v.second] = v.first;
+    }
+
     std::vector<InternedString> dead_symbols;
-    for (auto& it : sym_table) {
-        if (!liveness->isLiveAtEnd(it.first, current_block)) {
-            dead_symbols.push_back(it.first);
-        } else if (phis->isRequiredAfter(it.first, current_block)) {
-            assert(scope_info->getScopeTypeOfName(it.first) != ScopeInfo::VarScopeType::GLOBAL);
+    for (int i = 0; i < getSymVRegMap().size(); ++i) {
+        if (!liveness->isLiveAtEnd(offset_name_map[i], current_block)) {
+            dead_symbols.push_back(offset_name_map[i]);
+        } else if (phis->isRequiredAfter(offset_name_map[i], current_block)) {
+            assert(scope_info->getScopeTypeOfName(offset_name_map[i]) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
     }
-    for (auto&& dead : dead_symbols)
-        sym_table.erase(dead);
+    for (auto&& dead : dead_symbols) {
+        assert(getSymVRegMap().count(dead));
+        vregs[getSymVRegMap()[dead]] = NULL;
+    }
 
     const OSREntryDescriptor* found_entry = nullptr;
     for (auto& p : clfunc->osr_versions) {
@@ -732,20 +667,19 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     static Box* const VAL_UNDEFINED = (Box*)-1;
 
     for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
-        auto it = sym_table.find(name);
+        assert(getSymVRegMap().count(name));
+        Box* val = vregs[getSymVRegMap()[name]];
         if (!liveness->isLiveAtEnd(name, current_block))
             continue;
 
         if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
-            bool is_defined = it != sym_table.end();
+            bool is_defined = val != NULL;
             // TODO only mangle once
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            if (is_defined)
-                assert(sym_table.getMapped(it->second) != NULL);
-            sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : VAL_UNDEFINED;
+            sorted_symbol_table[name] = is_defined ? val : VAL_UNDEFINED;
         } else {
-            ASSERT(it != sym_table.end(), "%s", name.c_str());
-            Box* v = sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
+            ASSERT(val != NULL, "%s", name.c_str());
+            Box* v = sorted_symbol_table[name] = val;
             assert(gc::isValidGCObject(v));
         }
     }
@@ -1158,8 +1092,10 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
 
 Value ASTInterpreter::visit_global(AST_Global* node) {
     abortJITing();
-    for (auto name : node->names)
-        sym_table.erase(name);
+    for (auto name : node->names) {
+        if (getSymVRegMap().count(name))
+            vregs[getSymVRegMap()[name]] = NULL;
+    }
     return Value();
 }
 
@@ -1203,12 +1139,14 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 } else {
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 
-                    if (sym_table.count(target->id) == 0) {
+                    assert(getSymVRegMap().count(target->id));
+                    assert(getSymVRegMap()[target->id] == target->vreg);
+                    if (vregs[target->vreg] == 0) {
                         assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
                         return Value();
                     }
 
-                    sym_table.erase(target->id);
+                    vregs[target->vreg] = NULL;
                 }
                 break;
             }
@@ -1410,13 +1348,13 @@ Value ASTInterpreter::visit_expr(AST_Expr* node) {
 Value ASTInterpreter::visit_num(AST_Num* node) {
     Box* o = NULL;
     if (node->num_type == AST_Num::INT) {
-        o = source_info->parent_module->getIntConstant(node->n_int);
+        o = parent_module->getIntConstant(node->n_int);
     } else if (node->num_type == AST_Num::FLOAT) {
-        o = source_info->parent_module->getFloatConstant(node->n_float);
+        o = parent_module->getFloatConstant(node->n_float);
     } else if (node->num_type == AST_Num::LONG) {
-        o = source_info->parent_module->getLongConstant(node->n_long);
+        o = parent_module->getLongConstant(node->n_long);
     } else if (node->num_type == AST_Num::COMPLEX) {
-        o = source_info->parent_module->getPureImaginaryConstant(node->n_float);
+        o = parent_module->getPureImaginaryConstant(node->n_float);
     } else
         RELEASE_ASSERT(0, "not implemented");
     return Value(o, jit ? jit->imm(o) : NULL);
@@ -1475,9 +1413,9 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 Value ASTInterpreter::visit_str(AST_Str* node) {
     Box* o = NULL;
     if (node->str_type == AST_Str::STR) {
-        o = source_info->parent_module->getStringConstant(node->str_data);
+        o = parent_module->getStringConstant(node->str_data);
     } else if (node->str_type == AST_Str::UNICODE) {
-        o = source_info->parent_module->getUnicodeConstant(node->str_data);
+        o = parent_module->getUnicodeConstant(node->str_data);
     } else {
         RELEASE_ASSERT(0, "%d", node->str_type);
     }
@@ -1511,19 +1449,30 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
 
                 if (is_live)
-                    v.var = jit->emitGetLocal(node->id);
+                    v.var = jit->emitGetLocal(node->id, node->vreg);
                 else
-                    v.var = jit->emitGetBlockLocal(node->id);
+                    v.var = jit->emitGetBlockLocal(node->id, node->vreg);
             }
 
-            v.o = ASTInterpreterJitInterface::getLocalHelper(this, node->id);
-            return v;
+            assert(node->vreg >= 0);
+            assert(getSymVRegMap().count(node->id));
+            assert(getSymVRegMap()[node->id] == node->vreg);
+            Box* val = vregs[node->vreg];
+            if (val) {
+                assert(gc::isValidGCObject(val));
+                v.o = val;
+                return v;
+            }
+
+            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
             Value v;
             if (jit)
                 v.var = jit->emitGetBoxedLocal(node->id.getBox());
             v.o = boxedLocalsGet(frame_info.boxedLocals, node->id.getBox(), globals);
+            assert(gc::isValidGCObject(v.o));
             return v;
         }
         default:
@@ -1617,20 +1566,6 @@ Box* ASTInterpreterJitInterface::doOSRHelper(void* _interpreter, AST_Jump* node)
     return NULL;
 }
 
-Box* ASTInterpreterJitInterface::getLocalHelper(void* _interpreter, InternedString id) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-
-    auto it = interpreter->sym_table.find(id);
-    if (it != interpreter->sym_table.end()) {
-        Box* v = interpreter->sym_table.getMapped(it->second);
-        assert(gc::isValidGCObject(v));
-        return v;
-    }
-
-    assertNameDefined(0, id.c_str(), UnboundLocalError, true);
-    return 0;
-}
-
 Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     ExcInfo& last_exception = interpreter->last_exception;
@@ -1654,24 +1589,40 @@ Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     return None;
 }
 
-void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, InternedString id, Box* v) {
+void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
 
     assert(gc::isValidGCObject(v));
-    interpreter->sym_table[id] = v;
-
+    assert(interpreter->getSymVRegMap().count(id));
+    assert(interpreter->getSymVRegMap()[id] == vreg);
+    interpreter->vregs[vreg] = v;
     interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = v;
 }
 
-void ASTInterpreterJitInterface::setLocalHelper(void* _interpreter, InternedString id, Box* v) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 
-    assert(gc::isValidGCObject(v));
-    interpreter->sym_table[id] = v;
+// small wrapper around executeInner because we can not directly call the member function from asm.
+extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+    return ASTInterpreter::executeInner(interpreter, start_block, start_at);
 }
 
+static int calculateNumVRegs(CLFunction* clfunc) {
+    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+    SourceInfo* source_info = clfunc->source.get();
 
-const void* interpreter_instr_addr = (void*)&ASTInterpreter::executeInner;
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    if (!source_info->cfg)
+        source_info->cfg = computeCFG(source_info, source_info->body);
+
+    source_info->cfg->assignVRegs(clfunc->param_names, scope_info);
+    return source_info->cfg->sym_vreg_map.size();
+}
 
 Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {
@@ -1724,77 +1675,95 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
         return optimized->call(arg1, arg2, arg3, args);
     }
 
+    Box** vregs = NULL;
+    int num_vregs = calculateNumVRegs(clfunc);
+    if (num_vregs > 0) {
+        vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
+        memset(vregs, 0, sizeof(Box*) * num_vregs);
+    }
+
     ++clfunc->times_interpreted;
-    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
+    ASTInterpreter interpreter(clfunc, vregs);
 
     ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+
     if (unlikely(scope_info->usesNameLookup())) {
-        interpreter->setBoxedLocals(new BoxedDict());
+        interpreter.setBoxedLocals(new BoxedDict());
     }
 
     assert((!globals) == clfunc->source->scoping->areGlobalsFromModule());
     if (globals) {
-        interpreter->setGlobals(globals);
+        interpreter.setGlobals(globals);
     } else {
-        interpreter->setGlobals(source_info->parent_module);
+        interpreter.setGlobals(source_info->parent_module);
     }
 
-    interpreter->initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
-    Value v = ASTInterpreter::execute(*interpreter);
-
-    return v.o ? v.o : None;
+    interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
+    Box* v = ASTInterpreter::execute(interpreter);
+    return v ? v : None;
 }
 
 Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals) {
     ++clfunc->times_interpreted;
 
-    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
-    interpreter->initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
-    interpreter->setBoxedLocals(boxedLocals);
+    Box** vregs = NULL;
+    int num_vregs = calculateNumVRegs(clfunc);
+    if (num_vregs > 0) {
+        vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
+        memset(vregs, 0, sizeof(Box*) * num_vregs);
+    }
 
-    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
-    SourceInfo* source_info = clfunc->source.get();
+    ASTInterpreter interpreter(clfunc, vregs);
+    interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    interpreter.setBoxedLocals(boxedLocals);
 
     assert(!clfunc->source->scoping->areGlobalsFromModule());
     assert(globals);
-    interpreter->setGlobals(globals);
+    interpreter.setGlobals(globals);
 
-    Value v = ASTInterpreter::execute(*interpreter);
-
-    return v.o ? v.o : None;
+    Box* v = ASTInterpreter::execute(interpreter);
+    return v ? v : None;
 }
 
 Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state) {
+    RELEASE_ASSERT(0, "didn't check if this still works");
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);
     assert(after_expr);
     assert(expr_val);
 
-    ASTInterpreter* interpreter = new ASTInterpreter(clfunc);
-
-    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     SourceInfo* source_info = clfunc->source.get();
+
+    Box** vregs = NULL;
+    int num_vregs = calculateNumVRegs(clfunc);
+    if (num_vregs > 0) {
+        vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
+        memset(vregs, 0, sizeof(Box*) * num_vregs);
+    }
+
+    ASTInterpreter interpreter(clfunc, vregs);
+
     assert(clfunc->source->scoping->areGlobalsFromModule());
-    interpreter->setGlobals(source_info->parent_module);
+    interpreter.setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
         auto name = static_cast<BoxedString*>(p.first)->s();
         if (name == PASSED_GENERATOR_NAME) {
-            interpreter->setGenerator(p.second);
+            interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {
-            interpreter->setPassedClosure(p.second);
+            interpreter.setPassedClosure(p.second);
         } else if (name == CREATED_CLOSURE_NAME) {
-            interpreter->setCreatedClosure(p.second);
+            interpreter.setCreatedClosure(p.second);
         } else {
             InternedString interned = clfunc->source->getInternedStrings().get(name);
-            interpreter->addSymbol(interned, p.second, false);
+            interpreter.addSymbol(interned, p.second, false);
         }
     }
 
-    interpreter->setFrameInfo(frame_state.frame_info);
+    interpreter.setFrameInfo(frame_state.frame_info);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;
@@ -1806,7 +1775,7 @@ Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclo
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
             assert(name->id.s()[0] == '#');
-            interpreter->addSymbol(name->id, expr_val, true);
+            interpreter.addSymbol(name->id, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
@@ -1844,60 +1813,61 @@ Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclo
         assert(starting_statement);
     }
 
-    Value v = ASTInterpreter::execute(*interpreter, start_block, starting_statement);
+    Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
+    return v ? v : None;
+}
 
-    return v.o ? v.o : None;
+static ASTInterpreter* getInterpreterFromFramePtr(void* frame_ptr) {
+    // This offsets have to match the layout inside executeInnerAndSetupFrame
+    ASTInterpreter** ptr = (ASTInterpreter**)(((uint8_t*)frame_ptr) - 8);
+    return *ptr;
 }
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getCurrentStatement();
 }
 
 Box* getGlobalsForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getGlobals();
 }
 
 CLFunction* getCLForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getCL();
 }
 
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getFrameInfo();
 }
 
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     BoxedDict* rtn = new BoxedDict();
-    for (auto& l : interpreter->getSymbolTable()) {
+    for (auto& l : interpreter->getSymVRegMap()) {
         if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
             continue;
 
-        rtn->d[l.first.getBox()] = interpreter->getSymbolTable().getMapped(l.second);
+        Box* val = interpreter->getVRegs()[l.second];
+        if (val) {
+            assert(gc::isValidGCObject(val));
+            rtn->d[l.first.getBox()] = val;
+        }
     }
 
     return rtn;
 }
 
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getPassedClosure();
-}
-
-void setupInterpreter() {
-    astinterpreter_cls = BoxedHeapClass::create(type_cls, object_cls, ASTInterpreter::gcHandler, 0, 0,
-                                                sizeof(ASTInterpreter), false, "astinterpreter");
-    astinterpreter_cls->tp_dealloc = ASTInterpreter::simpleDestructor;
-    astinterpreter_cls->has_safe_tp_dealloc = true;
-    astinterpreter_cls->freeze();
 }
 }

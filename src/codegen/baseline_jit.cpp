@@ -36,17 +36,18 @@ static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 //
 // long foo(char* c);
 // void bjit() {
+//   asm volatile ("" ::: "r14");
 //   asm volatile ("" ::: "r12");
 //   char scratch[256+16];
 //   foo(scratch);
 // }
 //
-// It omits the frame pointer but saves R12
+// It omits the frame pointer but saves R12 and R14
 const unsigned char eh_info[]
     = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10,
         0x01, 0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x47,
-        0x0e, 0xa0, 0x02, 0x8c, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x42,
+        0x0e, 0x18, 0x47, 0x0e, 0xb0, 0x02, 0x8c, 0x03, 0x8e, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
 static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
@@ -63,10 +64,12 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     num_jit_total_bytes.log(code_size);
 
     // emit prolog
+    a.push(assembler::R14);
     a.push(assembler::R12);
-    static_assert(sp_adjustment % 16 == 0, "stack isn't aligned");
+    static_assert(sp_adjustment % 16 == 8, "stack isn't aligned");
     a.sub(assembler::Immediate(sp_adjustment), assembler::RSP);
     a.mov(assembler::RDI, assembler::R12);                                // interpreter pointer
+    a.mov(assembler::RDX, assembler::R14);                                // vreg array
     a.jmp(assembler::Indirect(assembler::RSI, offsetof(CFGBlock, code))); // jump to block
 
     entry_offset = a.bytesWritten();
@@ -139,6 +142,10 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     interp = createNewVar();
     addLocationToVar(interp, assembler::R12);
     interp->setAttr(ASTInterpreterJitInterface::getCurrentBlockOffset(), imm(block));
+
+    vregs_array = createNewVar();
+    addLocationToVar(vregs_array, assembler::R14);
+    addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
 }
 
 RewriterVar* JitFragmentWriter::imm(uint64_t val) {
@@ -279,10 +286,10 @@ RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AS
     return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, getTypeRecorderForNode(node));
 }
 
-RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s) {
+RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end())
-        return emitGetLocal(s);
+        return emitGetLocal(s, vreg);
     return it->second;
 }
 
@@ -308,13 +315,11 @@ RewriterVar* JitFragmentWriter::emitGetItem(RewriterVar* value, RewriterVar* sli
     return emitPPCall((void*)getitem, { value, slice }, 2, 512);
 }
 
-RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s) {
-    return call(false, (void*)ASTInterpreterJitInterface::getLocalHelper, getInterp(),
-#ifndef NDEBUG
-                imm(asUInt(s).first), imm(asUInt(s).second));
-#else
-                imm(asUInt(s)));
-#endif
+RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
+    assert(vreg >= 0);
+    RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
+    addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+    return val_var;
 }
 
 RewriterVar* JitFragmentWriter::emitGetPystonIter(RewriterVar* v) {
@@ -471,17 +476,19 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
     emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
-void JitFragmentWriter::emitSetLocal(InternedString s, bool set_closure, RewriterVar* v) {
-    void* func = set_closure ? (void*)ASTInterpreterJitInterface::setLocalClosureHelper
-                             : (void*)ASTInterpreterJitInterface::setLocalHelper;
-
-    call(false, func, getInterp(),
+void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v) {
+    assert(vreg >= 0);
+    if (set_closure) {
+        call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
 #ifndef NDEBUG
-         imm(asUInt(s).first), imm(asUInt(s).second),
+             imm(asUInt(s).first), imm(asUInt(s).second),
 #else
-         imm(asUInt(s)),
+             imm(asUInt(s)),
 #endif
-         v);
+             v);
+    } else {
+        vregs_array->setAttr(8 * vreg, v);
+    }
 }
 
 void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
@@ -619,6 +626,10 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
 #endif
 }
 
+void JitFragmentWriter::assertNameDefinedHelper(const char* id) {
+    assertNameDefined(0, id, UnboundLocalError, true);
+}
+
 Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
                                        Box** args, std::vector<BoxedString*>* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], flags.argspec.totalPassed());
@@ -683,6 +694,18 @@ Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRec
     return recordType(type_recorder, r);
 }
 
+void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
+    assembler::Register var_reg = val_var->getInReg();
+    assembler->test(var_reg, var_reg);
+    val_var->bumpUse();
+
+    {
+        assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
+        assembler->mov(assembler::Immediate((uint64_t)name), assembler::RDI);
+        assembler->mov(assembler::Immediate((void*)assertNameDefinedHelper), assembler::R11);
+        assembler->callq(assembler::R11);
+    }
+}
 
 void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp) {
     size_of_exit_to_interp = 0;
@@ -698,6 +721,7 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
         block_next->getInReg(assembler::RAX, true);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
         assembler->pop(assembler::R12);
+        assembler->pop(assembler::R14);
         assembler->retq();
 
         // make sure we have at least 'min_patch_size' of bytes available.
@@ -724,6 +748,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
         assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
         assembler->pop(assembler::R12);
+        assembler->pop(assembler::R14);
         assembler->retq();
     }
 
@@ -794,6 +819,7 @@ void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
     assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
     assembler->pop(assembler::R12);
+    assembler->pop(assembler::R14);
     assembler->retq();
     return_val->bumpUse();
 }

@@ -703,6 +703,10 @@ public:
     // different bytecodes.
     ScopeInfo::VarScopeType lookup_type;
 
+    // The interpreter and baseline JIT store variables with FAST and CLOSURE scopes in an array (vregs) this specifies
+    // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
+    int vreg;
+
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
@@ -710,7 +714,8 @@ public:
         : AST_expr(AST_TYPE::Name, lineno, col_offset),
           ctx_type(ctx_type),
           id(id),
-          lookup_type(ScopeInfo::VarScopeType::UNKNOWN) {}
+          lookup_type(ScopeInfo::VarScopeType::UNKNOWN),
+          vreg(-1) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
