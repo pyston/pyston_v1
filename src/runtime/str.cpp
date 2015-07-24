@@ -1557,15 +1557,19 @@ extern "C" Box* strNonzero(BoxedString* self) {
 extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     assert(isSubclass(cls, str_cls));
 
-    Box* rtn = str(obj);
-    assert(PyString_Check(rtn));
+    if (cls != str_cls) {
+        Box* tmp = strNew(str_cls, obj);
+        assert(isSubclass(tmp->cls, str_cls));
+        BoxedString* tmp_s = static_cast<BoxedString*>(tmp);
 
-    if (cls == str_cls)
-        return rtn;
+        return new (cls, tmp_s->size()) BoxedString(tmp_s->s());
+    }
 
-    BoxedString* _rtn = static_cast<BoxedString*>(rtn);
-
-    return new (cls, _rtn->size()) BoxedString(_rtn->s());
+    Box* r = PyObject_Str(obj);
+    if (!r)
+        throwCAPIException();
+    assert(PyString_Check(r));
+    return r;
 }
 
 extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {

@@ -1142,6 +1142,8 @@ void setupInt() {
 
     add_operators(int_cls);
     int_cls->freeze();
+
+    int_cls->tp_repr = (reprfunc)int_to_decimal_string;
 }
 
 void teardownInt() {

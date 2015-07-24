@@ -20,3 +20,5 @@ class C(object):
         return MyStr("hello world")
 
 print type(str(C()))
+m = MyStr(C())
+print type(m), repr(m)
