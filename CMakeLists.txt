@@ -30,7 +30,7 @@ option(ENABLE_SELF_HOST "use pyston to test pyston" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
 
 option(ENABLE_PGO "enable -fprofile-generate/-fprofile-use" OFF)
-option(ENABLE_LTO "enable -flto (only if ENABLE_PGO=ON as well)" OFF)
+option(ENABLE_LTO "enable -flto" OFF)
 
 # automatically use ccache if found
 if(ENABLE_CCACHE AND NOT ENABLE_PGO)
@@ -74,26 +74,29 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
 endif()
 
-macro(ADD_PROFILE_FLAGS)
-  if(ENABLE_LTO)
-    set(LTO_FLAGS "-flto")
-  endif()
+if(ENABLE_LTO)
+  set(LTO_FLAGS "-flto")
+endif()
+
+if(ENABLE_PGO)
   if(NOT "${PROFILE_DIR}" STREQUAL "")
     set(PROFILE_STATE "${PROFILE_STATE}=${PROFILE_DIR}")
   endif()
-  set(PROFILE_C_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS} -fprofile-correction")
-  set(PROFILE_CXX_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS} -fprofile-correction")
-  set(PROFILE_LINK_FLAGS "-fprofile-${PROFILE_STATE} ${LTO_FLAGS} -fprofile-correction")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PROFILE_CXX_FLAGS} ${LTO_FLAGS}")
+  set(PGO_FLAGS "-fprofile-${PROFILE_STATE} -fprofile-correction")
+endif()
+
+macro(ADD_PROFILE_FLAGS)
+  set(PROFILE_FLAGS "${PGO_FLAGS} ${LTO_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PROFILE_FLAGS}")
 endmacro()
 
 # used in src/runtime/inline/CMakeLists.txt to remove the flags we added above
 macro(REMOVE_PROFILE_FLAGS)
-  string(REPLACE "${PROFILE_C_FLAGS}"   "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS}")
-  string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  string(REPLACE "${PROFILE_FLAGS}" " " CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  string(REPLACE "${PROFILE_FLAGS}" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REPLACE "${PROFILE_FLAGS}" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+  string(REPLACE "${PROFILE_FLAGS}" " " CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS}")
+  string(REPLACE "${PROFILE_FLAGS}" " " CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
 endmacro()
 
 # llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
@@ -243,9 +246,7 @@ find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
-if(${CMAKE_BUILD_TYPE} STREQUAL "Release" AND ENABLE_PGO)
-  ADD_PROFILE_FLAGS()
-endif()
+ADD_PROFILE_FLAGS()
 
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
