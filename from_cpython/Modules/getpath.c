@@ -545,7 +545,7 @@ calculate_path(void)
     }
     else
         strncpy(zip_path, PREFIX, MAXPATHLEN);
-    joinpath(zip_path, "lib/python00.zip");
+    joinpath(zip_path, "lib/pyston00.zip");
     bufsz = strlen(zip_path);   /* Replace "00" with version */
     zip_path[bufsz - 6] = VERSION[0];
     zip_path[bufsz - 5] = VERSION[2];
