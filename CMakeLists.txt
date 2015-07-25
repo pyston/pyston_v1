@@ -96,10 +96,6 @@ macro(REMOVE_PROFILE_FLAGS)
   string(REPLACE "${PROFILE_CXX_FLAGS}" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
 endmacro()
 
-if(${CMAKE_BUILD_TYPE} STREQUAL "Release" AND ENABLE_PGO)
-  ADD_PROFILE_FLAGS()
-endif()
-
 # llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
   set(CMAKE_CXX_FLAGS_DEBUG "-O3" CACHE STRING "" FORCE)
@@ -246,6 +242,10 @@ include_directories(${LLVM_INCLUDE_DIRS})
 find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
+
+if(${CMAKE_BUILD_TYPE} STREQUAL "Release" AND ENABLE_PGO)
+  ADD_PROFILE_FLAGS()
+endif()
 
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
