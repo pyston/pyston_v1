@@ -66,6 +66,7 @@ CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_DIR_RELEASE_GCC := $(BUILD_DIR)/Release-gcc
 CMAKE_DIR_RELEASE_GCC_PGO := $(BUILD_DIR)/Release-gcc-pgo
+CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED := $(BUILD_DIR)/Release-gcc-pgo-instrumented
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 
@@ -894,10 +895,10 @@ CMAKE_SHAREDMODS := sharedmods ext_pyston
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
 	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(CMAKE_DIR_DBG)/pyston pyston_dbg
+	ln -sf $(CMAKE_DIR_DBG)/pyston $@
 pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(CMAKE_DIR_RELEASE)/pyston pyston_release
+	ln -sf $(CMAKE_DIR_RELEASE)/pyston $@
 
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
@@ -907,17 +908,17 @@ $(CMAKE_SETUP_GCC):
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
 	$(NINJA) -C $(CMAKE_DIR_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(CMAKE_DIR_GCC)/pyston pyston_gcc
+	ln -sf $(CMAKE_DIR_GCC)/pyston $@
 
 CMAKE_SETUP_RELEASE_GCC := $(CMAKE_DIR_RELEASE_GCC)/build.ninja
 $(CMAKE_SETUP_RELEASE_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC)
-	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=use
+	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND)
 .PHONY: pyston_release_gcc
-pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC) $(CMAKE_DIR_RELEASE_GCC)/.trained
+pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
-	ln -sf $(CMAKE_DIR_RELEASE_GCC)/pyston pyston_release_gcc
+	ln -sf $(CMAKE_DIR_RELEASE_GCC)/pyston $@
 
 
 # GCC PGO build
@@ -925,16 +926,27 @@ CMAKE_SETUP_RELEASE_GCC_PGO := $(CMAKE_DIR_RELEASE_GCC_PGO)/build.ninja
 $(CMAKE_SETUP_RELEASE_GCC_PGO):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
-	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=generate -DPROFILE_DIR=$(CMAKE_DIR_RELEASE_GCC)
-
+	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=use
 .PHONY: pyston_release_gcc_pgo
-pyston_release_gcc_pgo: $(CMAKE_SETUP_RELEASE_GCC_PGO)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) -f $(CMAKE_SETUP_RELEASE_GCC_PGO) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+pyston_release_gcc_pgo: $(CMAKE_SETUP_RELEASE_GCC_PGO) $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO)/pyston $@
 
-$(CMAKE_DIR_RELEASE_GCC)/.trained: pyston_release_gcc_pgo
+CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED := $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)/build.ninja
+$(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)
+	cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=generate -DPROFILE_DIR=$(CMAKE_DIR_RELEASE_GCC_PGO)
+
+.PHONY: pyston_release_gcc_pgo_instrumented
+pyston_release_gcc_pgo_instrumented: $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) -f $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)/pyston $@
+
+$(CMAKE_DIR_RELEASE_GCC_PGO)/.trained: pyston_release_gcc_pgo_instrumented
 	@echo "Training pgo"
-	( cd $(CMAKE_DIR_RELEASE_GCC_PGO) && ./pyston $(SRC_DIR)/minibenchmarks/combined.py && ./pyston $(SRC_DIR)/minibenchmarks/combined.py ) && touch $(CMAKE_DIR_RELEASE_GCC)/.trained
+	mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
+	(cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) && ./pyston $(SRC_DIR)/minibenchmarks/combined.py && ./pyston $(SRC_DIR)/minibenchmarks/combined.py ) && touch $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
 
 .PHONY: format check_format
 format: $(CMAKE_SETUP_RELEASE)
