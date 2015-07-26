@@ -2008,6 +2008,13 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     if (o->cls == int_cls)
         return PyLong_FromLong(((BoxedInt*)o)->n);
 
+    PyObject* long_func = PyObject_GetAttrString(o, "__long__");
+    if (long_func) {
+        PyObject* long_obj = PyEval_CallObject(long_func, NULL);
+        Py_DECREF(long_func);
+        return long_obj;
+    }
+
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
     return nullptr;
 }
