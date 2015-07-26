@@ -604,6 +604,9 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
 }
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+    static StatCounter frames_unwound("num_frames_unwound_python");
+    frames_unwound.log();
+
     // basically the same as PythonUnwindSession::addTraceback, but needs to
     // be callable after an PythonUnwindSession has ended.  The interpreter
     // will call this from catch blocks if it needs to ensure that a
@@ -632,6 +635,9 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
         assert(!unwind_session->shouldSkipFrame());
         unwind_session->setShouldSkipNextFrame(true);
     } else if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
+        static StatCounter frames_unwound("num_frames_unwound_python");
+        frames_unwound.log();
+
         if (!unwind_session->shouldSkipFrame())
             unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
 

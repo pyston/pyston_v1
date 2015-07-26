@@ -496,6 +496,9 @@ static inline void unwind_loop(ExcInfo* exc_data) {
     while (unw_step(&cursor) > 0) {
         unw_proc_info_t pip;
 
+        static StatCounter frames_unwound("num_frames_unwound_cxx");
+        frames_unwound.log();
+
         // NB. unw_get_proc_info is slow; a significant chunk of all time spent unwinding is spent here.
         check(unw_get_proc_info(&cursor, &pip));
 
@@ -668,6 +671,9 @@ static uint64_t* unwinding_stattimer = pyston::Stats::getStatCounter("us_timer_u
 #endif
 
 extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
+    static pyston::StatCounter num_cxa_throw("num_cxa_throw");
+    num_cxa_throw.log();
+
     assert(!pyston::in_cleanup_code);
     assert(exc_obj);
     RELEASE_ASSERT(tinfo == &EXCINFO_TYPE_INFO, "can't throw a non-ExcInfo value! type info: %p", tinfo);
