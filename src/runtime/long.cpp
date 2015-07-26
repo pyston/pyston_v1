@@ -373,9 +373,11 @@ extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL
 
     if (base == 2)
         os << "0b";
-    else if (base == 8)
-        os << (newstyle ? "0o" : "0");
-    else if (base == 16)
+    else if (base == 8) {
+        if (!(mpz_sgn(v->n) == 0)) {
+            os << (newstyle ? "0o" : "0");
+        }
+    } else if (base == 16)
         os << "0x";
 
     if (is_negative)
