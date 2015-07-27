@@ -735,6 +735,182 @@ static Box* instanceNext(BoxedInstance* inst) {
     return r;
 }
 
+static PyObject* generic_binary_op(PyObject* v, PyObject* w, char* opname) {
+    PyObject* result;
+    PyObject* args;
+    PyObject* func = PyObject_GetAttrString(v, opname);
+    if (func == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+            return NULL;
+        PyErr_Clear();
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    args = PyTuple_Pack(1, w);
+    if (args == NULL) {
+        Py_DECREF(func);
+        return NULL;
+    }
+    result = PyEval_CallObject(func, args);
+    Py_DECREF(args);
+    Py_DECREF(func);
+    return result;
+}
+
+static PyObject* coerce_obj;
+
+/* Try one half of a binary operator involving a class instance. */
+static PyObject* half_binop(PyObject* v, PyObject* w, char* opname, binaryfunc thisfunc, int swapped) noexcept {
+    PyObject* args;
+    PyObject* coercefunc;
+    PyObject* coerced = NULL;
+    PyObject* v1;
+    PyObject* result;
+
+    if (!PyInstance_Check(v)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+
+    if (coerce_obj == NULL) {
+        coerce_obj = PyString_InternFromString("__coerce__");
+        if (coerce_obj == NULL)
+            return NULL;
+    }
+    coercefunc = PyObject_GetAttr(v, coerce_obj);
+    if (coercefunc == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+            return NULL;
+        PyErr_Clear();
+        return generic_binary_op(v, w, opname);
+    }
+
+    args = PyTuple_Pack(1, w);
+    if (args == NULL) {
+        Py_DECREF(coercefunc);
+        return NULL;
+    }
+    coerced = PyEval_CallObject(coercefunc, args);
+    Py_DECREF(args);
+    Py_DECREF(coercefunc);
+    if (coerced == NULL) {
+        return NULL;
+    }
+    if (coerced == Py_None || coerced == Py_NotImplemented) {
+        Py_DECREF(coerced);
+        return generic_binary_op(v, w, opname);
+    }
+    if (!PyTuple_Check(coerced) || PyTuple_Size(coerced) != 2) {
+        Py_DECREF(coerced);
+        PyErr_SetString(PyExc_TypeError, "coercion should return None or 2-tuple");
+        return NULL;
+    }
+    v1 = PyTuple_GetItem(coerced, 0);
+    w = PyTuple_GetItem(coerced, 1);
+    if (v1->cls == v->cls && PyInstance_Check(v)) {
+        /* prevent recursion if __coerce__ returns self as the first
+         * argument */
+        result = generic_binary_op(v1, w, opname);
+    } else {
+        if (Py_EnterRecursiveCall(" after coercion"))
+            return NULL;
+        if (swapped)
+            result = (thisfunc)(w, v1);
+        else
+            result = (thisfunc)(v1, w);
+        Py_LeaveRecursiveCall();
+    }
+    Py_DECREF(coerced);
+    return result;
+}
+
+/* Implement a binary operator involving at least one class instance. */
+static PyObject* do_binop(PyObject* v, PyObject* w, char* opname, char* ropname, binaryfunc thisfunc) noexcept {
+    PyObject* result = half_binop(v, w, opname, thisfunc, 0);
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        result = half_binop(w, v, ropname, thisfunc, 1);
+    }
+    return result;
+}
+
+static PyObject* do_binop_inplace(PyObject* v, PyObject* w, char* iopname, char* opname, char* ropname,
+                                  binaryfunc thisfunc) noexcept {
+    PyObject* result = half_binop(v, w, iopname, thisfunc, 0);
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        result = do_binop(v, w, opname, ropname, thisfunc);
+    }
+    return result;
+}
+
+static PyObject* bin_power(PyObject* v, PyObject* w) noexcept {
+    return PyNumber_Power(v, w, Py_None);
+}
+
+/* This version is for ternary calls only (z != None) */
+static PyObject* instance_pow(PyObject* v, PyObject* w, PyObject* z) noexcept {
+    static BoxedString* pow_str = internStringImmortal("__pow__");
+    static BoxedString* ipow_str = internStringImmortal("__ipow__");
+    static BoxedString* rpow_str = internStringImmortal("__rpow__");
+    if (z == Py_None) {
+        return do_binop(v, w, pow_str->data(), rpow_str->data(), bin_power);
+    } else {
+        PyObject* func;
+        PyObject* args;
+        PyObject* result;
+
+        /* XXX Doesn't do coercions... */
+        func = PyObject_GetAttrString(v, pow_str->data());
+        if (func == NULL)
+            return NULL;
+        args = PyTuple_Pack(2, w, z);
+        if (args == NULL) {
+            Py_DECREF(func);
+            return NULL;
+        }
+        result = PyEval_CallObject(func, args);
+        Py_DECREF(func);
+        Py_DECREF(args);
+        return result;
+    }
+}
+
+static PyObject* bin_inplace_power(PyObject* v, PyObject* w) noexcept {
+    return PyNumber_InPlacePower(v, w, Py_None);
+}
+
+static PyObject* instance_ipow(PyObject* v, PyObject* w, PyObject* z) noexcept {
+    static BoxedString* pow_str = internStringImmortal("__pow__");
+    static BoxedString* ipow_str = internStringImmortal("__ipow__");
+    static BoxedString* rpow_str = internStringImmortal("__rpow__");
+    if (z == Py_None) {
+        return do_binop_inplace(v, w, ipow_str->data(), pow_str->data(), rpow_str->data(), bin_inplace_power);
+    } else {
+        /* XXX Doesn't do coercions... */
+        PyObject* func;
+        PyObject* args;
+        PyObject* result;
+
+        func = PyObject_GetAttrString(v, ipow_str->data());
+        if (func == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+                return NULL;
+            PyErr_Clear();
+            return instance_pow(v, w, z);
+        }
+        args = PyTuple_Pack(2, w, z);
+        if (args == NULL) {
+            Py_DECREF(func);
+            return NULL;
+        }
+        result = PyEval_CallObject(func, args);
+        Py_DECREF(func);
+        Py_DECREF(args);
+        return result;
+    }
+}
+
 static PyObject* instance_index(PyObject* self) noexcept {
     PyObject* func, *res;
 
@@ -834,6 +1010,11 @@ Box* instanceDivMod(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, attr_str);
 }
 
+Box* instancePow(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__pow__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
 Box* instanceLshift(Box* _inst, Box* other) {
     static BoxedString* attr_str = internStringImmortal("__lshift__");
     return _instanceBinary(_inst, other, attr_str);
@@ -909,6 +1090,11 @@ Box* instanceRdivmod(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, attr_str);
 }
 
+Box* instanceRpow(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__rpow__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
 Box* instanceRlshift(Box* _inst, Box* other) {
     static BoxedString* attr_str = internStringImmortal("__rlshift__");
     return _instanceBinary(_inst, other, attr_str);
@@ -966,6 +1152,11 @@ Box* instanceIfloordiv(Box* _inst, Box* other) {
 
 Box* instanceImod(Box* _inst, Box* other) {
     static BoxedString* attr_str = internStringImmortal("__imod__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceIpow(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__ipow__");
     return _instanceBinary(_inst, other, attr_str);
 }
 
@@ -1111,6 +1302,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)instanceFloordiv, UNKNOWN, 2)));
     instance_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)instanceMod, UNKNOWN, 2)));
     instance_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)instanceDivMod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__pow__", new BoxedFunction(boxRTFunction((void*)instancePow, UNKNOWN, 2)));
     instance_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)instanceLshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)instanceRshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)instanceAnd, UNKNOWN, 2)));
@@ -1127,6 +1319,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__rfloordiv__", new BoxedFunction(boxRTFunction((void*)instanceRfloordiv, UNKNOWN, 2)));
     instance_cls->giveAttr("__rmod__", new BoxedFunction(boxRTFunction((void*)instanceRmod, UNKNOWN, 2)));
     instance_cls->giveAttr("__rdivmod__", new BoxedFunction(boxRTFunction((void*)instanceRdivmod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__rpow__", new BoxedFunction(boxRTFunction((void*)instanceRpow, UNKNOWN, 2)));
     instance_cls->giveAttr("__rlshift__", new BoxedFunction(boxRTFunction((void*)instanceRlshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__rrshift__", new BoxedFunction(boxRTFunction((void*)instanceRrshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__rand__", new BoxedFunction(boxRTFunction((void*)instanceRand, UNKNOWN, 2)));
@@ -1140,6 +1333,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__itruediv__", new BoxedFunction(boxRTFunction((void*)instanceItruediv, UNKNOWN, 2)));
     instance_cls->giveAttr("__ifloordiv__", new BoxedFunction(boxRTFunction((void*)instanceIfloordiv, UNKNOWN, 2)));
     instance_cls->giveAttr("__imod__", new BoxedFunction(boxRTFunction((void*)instanceImod, UNKNOWN, 2)));
+    instance_cls->giveAttr("__ipow__", new BoxedFunction(boxRTFunction((void*)instanceIpow, UNKNOWN, 2)));
     instance_cls->giveAttr("__ilshift__", new BoxedFunction(boxRTFunction((void*)instanceIlshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__irshift__", new BoxedFunction(boxRTFunction((void*)instanceIrshift, UNKNOWN, 2)));
     instance_cls->giveAttr("__iand__", new BoxedFunction(boxRTFunction((void*)instanceIand, UNKNOWN, 2)));
@@ -1150,6 +1344,8 @@ void setupClassobj() {
     instance_cls->tp_getattro = instance_getattro;
     instance_cls->tp_setattro = instance_setattro;
     instance_cls->tp_as_number->nb_index = instance_index;
+    instance_cls->tp_as_number->nb_power = instance_pow;
+    instance_cls->tp_as_number->nb_inplace_power = instance_ipow;
     instance_cls->tp_dealloc = instance_dealloc;
     instance_cls->has_safe_tp_dealloc = false;
 }
