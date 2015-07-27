@@ -114,6 +114,10 @@ struct CallRewriteArgs;
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                          Box** args, const std::vector<BoxedString*>* keyword_names);
 
+struct GetitemRewriteArgs;
+template <ExceptionStyle::ExceptionStyle S>
+Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args);
+
 struct LenRewriteArgs;
 template <ExceptionStyle::ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args);
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,

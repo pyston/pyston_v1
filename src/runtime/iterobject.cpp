@@ -49,42 +49,24 @@ bool seqiterHasnextUnboxed(Box* s) {
         return false;
     }
 
-    Box* next;
-    try {
-        next = getitem(self->b, boxInt(self->idx));
-    } catch (ExcInfo e) {
-        if (e.matches(IndexError) || e.matches(StopIteration)) {
+    Box* next = getitemInternal<ExceptionStyle::CAPI>(self->b, boxInt(self->idx), NULL);
+    if (!next) {
+        if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
+            PyErr_Clear();
             self->b = NULL;
             return false;
-        } else
-            throw e;
+        } else {
+            throwCAPIException();
+        }
     }
+
     self->idx++;
     self->next = next;
     return true;
 }
 
 Box* seqiterHasnext(Box* s) {
-    RELEASE_ASSERT(s->cls == seqiter_cls || s->cls == seqreviter_cls, "");
-    BoxedSeqIter* self = static_cast<BoxedSeqIter*>(s);
-
-    if (!self->b) {
-        return False;
-    }
-
-    Box* next;
-    try {
-        next = getitem(self->b, boxInt(self->idx));
-    } catch (ExcInfo e) {
-        if (e.matches(IndexError) || e.matches(StopIteration)) {
-            self->b = NULL;
-            return False;
-        } else
-            throw e;
-    }
-    self->idx++;
-    self->next = next;
-    return True;
+    return boxBool(seqiterHasnextUnboxed(s));
 }
 
 Box* seqreviterHasnext(Box* s) {

@@ -4625,6 +4625,106 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
     }
 }
 
+template <enum ExceptionStyle S> Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) {
+    if (S == CAPI) {
+        assert(!rewrite_args && "implement me");
+        rewrite_args = NULL;
+    }
+
+    // The PyObject_GetItem logic is:
+    // - call mp_subscript if it exists
+    // - if tp_as_sequence exists, try using that (with a number of conditions)
+    // - else throw an exception.
+    //
+    // For now, just use the first clause: call mp_subscript if it exists.
+    // And only if we think it's better than calling __getitem__, which should
+    // exist if mp_subscript exists.
+    PyMappingMethods* m = target->cls->tp_as_mapping;
+    if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
+        if (rewrite_args) {
+            assert(S == CXX);
+            RewriterVar* r_obj = rewrite_args->target;
+            RewriterVar* r_slice = rewrite_args->slice;
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
+            r_m->addGuardNotEq(0);
+
+            // Currently, guard that the value of mp_subscript didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of mp_subscript and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
+            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_rtn;
+        }
+        Box* r = m->mp_subscript(target, slice);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    }
+
+    static BoxedString* getitem_str = internStringImmortal("__getitem__");
+    static BoxedString* getslice_str = internStringImmortal("__getslice__");
+
+    Box* rtn;
+    if (S == CAPI) {
+        assert(!rewrite_args);
+        try {
+            rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, NULL);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    } else {
+        if (rewrite_args) {
+            CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->target, rewrite_args->destination);
+            crewrite_args.arg1 = rewrite_args->slice;
+
+            rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, &crewrite_args);
+
+            if (!crewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else if (rtn) {
+                rewrite_args->out_rtn = crewrite_args.out_rtn;
+            }
+        } else {
+            rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, NULL);
+        }
+    }
+
+    if (rtn == NULL) {
+        // different versions of python give different error messages for this:
+        if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
+            if (S == CAPI)
+                PyErr_Format(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
+            else
+                raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
+        } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
+            if (S == CAPI)
+                PyErr_Format(TypeError, "'%s' object is not subscriptable", getTypeName(target)); // tested on 2.7.1
+            else
+                raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(target)); // tested on 2.7.1
+        } else {
+            // Changed to this in 2.7.3:
+            if (S == CAPI)
+                PyErr_Format(TypeError, "'%s' object has no attribute '__getitem__'", getTypeName(target));
+            else
+                raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'", getTypeName(target));
+        }
+    }
+
+    if (rewrite_args)
+        rewrite_args->out_success = true;
+
+    return rtn;
+}
+// Force instantiation of the template
+template Box* getitemInternal<CAPI>(Box*, Box*, GetitemRewriteArgs*);
+template Box* getitemInternal<CXX>(Box*, Box*, GetitemRewriteArgs*);
+
 // target[slice]
 extern "C" Box* getitem(Box* target, Box* slice) {
     STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
@@ -4639,70 +4739,22 @@ extern "C" Box* getitem(Box* target, Box* slice) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
-    // The PyObject_GetItem logic is:
-    // - call mp_subscript if it exists
-    // - if tp_as_sequence exists, try using that (with a number of conditions)
-    // - else throw an exception.
-    //
-    // For now, just use the first clause: call mp_subscript if it exists.
-    // And only if we think it's better than calling __getitem__, which should
-    // exist if mp_subscript exists.
-    PyMappingMethods* m = target->cls->tp_as_mapping;
-    if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
-        if (rewriter.get()) {
-            RewriterVar* r_obj = rewriter->getArg(0);
-            RewriterVar* r_slice = rewriter->getArg(1);
-            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
-            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
-            r_m->addGuardNotEq(0);
-
-            // Currently, guard that the value of mp_subscript didn't change, and then
-            // emit a call to the current function address.
-            // It might be better to just load the current value of mp_subscript and call it
-            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
-            // support calling a RewriterVar (can only call fixed function addresses).
-            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
-            RewriterVar* r_rtn = rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
-            rewriter->call(true, (void*)checkAndThrowCAPIException);
-            rewriter->commitReturning(r_rtn);
-        }
-        Box* r = m->mp_subscript(target, slice);
-        if (!r)
-            throwCAPIException();
-        return r;
-    }
-
-    static BoxedString* getitem_str = internStringImmortal("__getitem__");
-    static BoxedString* getslice_str = internStringImmortal("__getslice__");
-
     Box* rtn;
     if (rewriter.get()) {
-        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-        rewrite_args.arg1 = rewriter->getArg(1);
+        GetitemRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
+                                        rewriter->getReturnDestination());
 
-        rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, &rewrite_args);
+        rtn = getitemInternal<CXX>(target, slice, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else if (rtn) {
+        } else {
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {
-        rtn = callItemOrSliceAttr(target, getitem_str, getslice_str, slice, NULL, NULL);
+        rtn = getitemInternal<CXX>(target, slice, NULL);
     }
-
-    if (rtn == NULL) {
-        // different versions of python give different error messages for this:
-        if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
-            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
-        } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
-            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(target)); // tested on 2.7.1
-        } else {
-            // Changed to this in 2.7.3:
-            raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'",
-                           getTypeName(target)); // tested on 2.7.3
-        }
-    }
+    assert(rtn);
 
     return rtn;
 }

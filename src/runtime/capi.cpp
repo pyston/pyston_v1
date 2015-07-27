@@ -457,12 +457,7 @@ done:
 
 
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
-    try {
-        return getitem(o, key);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    return getitemInternal<ExceptionStyle::CAPI>(o, key, NULL);
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
