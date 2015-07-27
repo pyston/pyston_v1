@@ -30,6 +30,7 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+#define AST_VERSION "82160"
 namespace pyston {
 
 static BoxedClass* AST_cls;
@@ -69,7 +70,7 @@ void setupAST() {
     BoxedModule* ast_module = createModule("_ast", "__builtin__");
 
     ast_module->giveAttr("PyCF_ONLY_AST", boxInt(PyCF_ONLY_AST));
-
+    ast_module->giveAttr("__version__", boxString(AST_VERSION));
 // ::create takes care of registering the class as a GC root.
 #define MAKE_CLS(name, base_cls)                                                                                       \
     BoxedClass* name##_cls = BoxedHeapClass::create(type_cls, base_cls, /* gchandler = */ NULL, 0, 0,                  \
