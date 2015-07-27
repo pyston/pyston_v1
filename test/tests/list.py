@@ -15,6 +15,10 @@ l = range(7, -1, -2)
 print sorted(l)
 print l
 
+l = range(5)
+l[0] = l
+print l
+
 for i in xrange(-10, 10):
     l2 = range(5)
     l2.insert(i, 99)
