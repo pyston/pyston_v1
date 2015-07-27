@@ -1,4 +1,3 @@
-# expected: fail
 from test import test_support, seq_tests
 
 import gc
