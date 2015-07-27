@@ -532,8 +532,14 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     }
 
     Box* obj = typeLookup(self->cls, (BoxedString*)*attrobj, NULL);
-    if (obj)
-        return processDescriptor(obj, self, self->cls);
+    if (obj) {
+        try {
+            return processDescriptor(obj, self, self->cls);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
     return obj;
 }
 
