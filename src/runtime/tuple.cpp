@@ -203,11 +203,27 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
 Box* tupleRepr(BoxedTuple* t) {
     assert(isSubclass(t->cls, tuple_cls));
 
+    int n;
     std::string O("");
     llvm::raw_string_ostream os(O);
+
+    n = t->size();
+    if (n == 0) {
+        os << "()";
+        return boxString(os.str());
+    }
+
+    int status = Py_ReprEnter((PyObject*)t);
+    if (status != 0) {
+        if (status < 0)
+            return boxString(os.str());
+
+        os << "(...)";
+        return boxString(os.str());
+    }
+
     os << "(";
 
-    int n = t->size();
     for (int i = 0; i < n; i++) {
         if (i)
             os << ", ";
@@ -219,6 +235,7 @@ Box* tupleRepr(BoxedTuple* t) {
         os << ",";
     os << ")";
 
+    Py_ReprLeave((PyObject*)t);
     return boxString(os.str());
 }
 

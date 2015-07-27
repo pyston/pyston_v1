@@ -99,6 +99,14 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
     std::string O("");
     llvm::raw_string_ostream os(O);
 
+    int status = Py_ReprEnter((PyObject*)self);
+    if (status != 0) {
+        if (status < 0)
+            return boxString(os.str());
+
+        os << type_name << "(...)";
+        return boxString(os.str());
+    }
     os << type_name << "([";
     bool first = true;
     for (Box* elt : self->s) {
@@ -109,6 +117,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         first = false;
     }
     os << "])";
+    Py_ReprLeave((PyObject*)self);
     return boxString(os.str());
 }
 
