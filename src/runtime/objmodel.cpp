@@ -2592,13 +2592,20 @@ extern "C" BoxedInt* hash(Box* obj) {
     return new BoxedInt(r);
 }
 
-extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
+template <enum ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     static BoxedString* len_str = internStringImmortal("__len__");
+
+    if (S == CAPI) {
+        assert(!rewrite_args && "implement me");
+        rewrite_args = NULL;
+    }
 
     // Corresponds to the first part of PyObject_Size:
     PySequenceMethods* m = obj->cls->tp_as_sequence;
     if (m != NULL && m->sq_length != NULL && m->sq_length != slot_sq_length) {
         if (rewrite_args) {
+            assert(S == CXX);
+
             RewriterVar* r_obj = rewrite_args->obj;
             RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
             RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
@@ -2619,35 +2626,60 @@ extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
         }
 
         int r = (*m->sq_length)(obj);
-        if (r == -1)
-            throwCAPIException();
+        if (r == -1) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
         return (BoxedInt*)boxInt(r);
     }
 
     Box* rtn;
-    if (rewrite_args) {
-        CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
-        rtn = callattrInternal0(obj, len_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
-        if (!crewrite_args.out_success)
-            rewrite_args = NULL;
-        else if (rtn)
-            rewrite_args->out_rtn = crewrite_args.out_rtn;
-    } else {
-        rtn = callattrInternal0(obj, len_str, CLASS_ONLY, NULL, ArgPassSpec(0));
+    try {
+        if (rewrite_args) {
+            CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+            rtn = callattrInternal0(obj, len_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
+            if (!crewrite_args.out_success)
+                rewrite_args = NULL;
+            else if (rtn)
+                rewrite_args->out_rtn = crewrite_args.out_rtn;
+        } else {
+            rtn = callattrInternal0(obj, len_str, CLASS_ONLY, NULL, ArgPassSpec(0));
+        }
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else {
+            throw e;
+        }
     }
 
     if (rtn == NULL) {
-        raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj));
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "object of type '%s' has no len()", getTypeName(obj));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj));
     }
 
     if (rtn->cls != int_cls) {
-        raiseExcHelper(TypeError, "an integer is required");
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "an integer is required");
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "an integer is required");
     }
 
     if (rewrite_args)
         rewrite_args->out_success = true;
     return static_cast<BoxedInt*>(rtn);
 }
+
+// force template instantiation:
+template BoxedInt* lenInternal<CAPI>(Box*, LenRewriteArgs*);
+template BoxedInt* lenInternal<CXX>(Box*, LenRewriteArgs*);
 
 Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
@@ -2656,7 +2688,7 @@ Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, Arg
 
     if (rewrite_args) {
         LenRewriteArgs lrewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
-        Box* rtn = lenInternal(arg1, &lrewrite_args);
+        Box* rtn = lenInternal<CXX>(arg1, &lrewrite_args);
         if (!lrewrite_args.out_success) {
             rewrite_args = 0;
         } else {
@@ -2665,7 +2697,7 @@ Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, Arg
         }
         return rtn;
     }
-    return lenInternal(arg1, NULL);
+    return lenInternal<CXX>(arg1, NULL);
 }
 
 extern "C" BoxedInt* len(Box* obj) {
@@ -2674,7 +2706,7 @@ extern "C" BoxedInt* len(Box* obj) {
     static StatCounter slowpath_len("slowpath_len");
     slowpath_len.log();
 
-    return lenInternal(obj, NULL);
+    return lenInternal<CXX>(obj, NULL);
 }
 
 extern "C" i64 unboxedLen(Box* obj) {
@@ -2691,14 +2723,14 @@ extern "C" i64 unboxedLen(Box* obj) {
     if (rewriter.get()) {
         // rewriter->trap();
         LenRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-        lobj = lenInternal(obj, &rewrite_args);
+        lobj = lenInternal<CXX>(obj, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else
             r_boxed = rewrite_args.out_rtn;
     } else {
-        lobj = lenInternal(obj, NULL);
+        lobj = lenInternal<CXX>(obj, NULL);
     }
 
     assert(lobj->cls == int_cls);
