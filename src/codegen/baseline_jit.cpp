@@ -423,6 +423,27 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
     return call(false, (void*)yield, generator, v);
 }
 
+void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {
+    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelGlobal(BoxedString* name) {
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelItem(RewriterVar* target, RewriterVar* slice) {
+    emitPPCall((void*)delitem, { target, slice }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelName(InternedString name) {
+    call(false, (void*)ASTInterpreterJitInterface::delNameHelper, getInterp(),
+#ifndef NDEBUG
+         imm(asUInt(name).first), imm(asUInt(name).second));
+#else
+         imm(asUInt(name)));
+#endif
+}
 
 void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, RewriterVar* locals, FutureFlags flags) {
     if (!globals)

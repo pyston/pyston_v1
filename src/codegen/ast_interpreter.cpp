@@ -1100,43 +1100,42 @@ Value ASTInterpreter::visit_global(AST_Global* node) {
 }
 
 Value ASTInterpreter::visit_delete(AST_Delete* node) {
-    abortJITing();
     for (AST_expr* target_ : node->targets) {
         switch (target_->type) {
             case AST_TYPE::Subscript: {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
                 Value slice = visit_expr(sub->slice);
+                if (jit)
+                    jit->emitDelItem(value, slice);
                 delitem(value.o, slice.o);
                 break;
             }
             case AST_TYPE::Attribute: {
                 AST_Attribute* attr = (AST_Attribute*)target_;
-                pyston::delattr(visit_expr(attr->value).o, attr->attr.getBox());
+                Value target = visit_expr(attr->value);
+                BoxedString* str = attr->attr.getBox();
+                if (jit)
+                    jit->emitDelAttr(target, str);
+                delattr(target.o, str);
                 break;
             }
             case AST_TYPE::Name: {
                 AST_Name* target = (AST_Name*)target_;
-
-                ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
+                if (target->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
+                    target->lookup_type = scope_info->getScopeTypeOfName(target->id);
+                ScopeInfo::VarScopeType vst = target->lookup_type;
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+                    if (jit)
+                        jit->emitDelGlobal(target->id.getBox());
                     delGlobal(globals, target->id.getBox());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
-                    assert(frame_info.boxedLocals != NULL);
-                    if (frame_info.boxedLocals->cls == dict_cls) {
-                        auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-                        auto it = d.find(target->id.getBox());
-                        if (it == d.end()) {
-                            assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
-                        }
-                        d.erase(it);
-                    } else if (frame_info.boxedLocals->cls == attrwrapper_cls) {
-                        attrwrapperDel(frame_info.boxedLocals, target->id);
-                    } else {
-                        RELEASE_ASSERT(0, "%s", frame_info.boxedLocals->cls->tp_name);
-                    }
+                    if (jit)
+                        jit->emitDelName(target->id);
+                    ASTInterpreterJitInterface::delNameHelper(this, target->id);
                 } else {
+                    abortJITing();
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 
                     assert(getSymVRegMap().count(target->id));
@@ -1543,6 +1542,24 @@ int ASTInterpreterJitInterface::getGlobalsOffset() {
     return offsetof(ASTInterpreter, globals);
 }
 
+void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedString name) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    Box* boxed_locals = interpreter->frame_info.boxedLocals;
+    assert(boxed_locals != NULL);
+    if (boxed_locals->cls == dict_cls) {
+        auto& d = static_cast<BoxedDict*>(boxed_locals)->d;
+        auto it = d.find(name.getBox());
+        if (it == d.end()) {
+            assertNameDefined(0, name.c_str(), NameError, false /* local_var_msg */);
+        }
+        d.erase(it);
+    } else if (boxed_locals->cls == attrwrapper_cls) {
+        attrwrapperDel(boxed_locals, name);
+    } else {
+        RELEASE_ASSERT(0, "%s", boxed_locals->cls->tp_name);
+    }
+}
+
 Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString s) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     DerefInfo deref_info = interpreter->scope_info->getDerefInfo(s);
@@ -1583,12 +1600,6 @@ Box* ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type,
     return None;
 }
 
-Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
-    return None;
-}
-
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
 
@@ -1597,6 +1608,12 @@ void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long 
     assert(interpreter->getSymVRegMap()[id] == vreg);
     interpreter->vregs[vreg] = v;
     interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = v;
+}
+
+Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
+    return None;
 }
 
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;

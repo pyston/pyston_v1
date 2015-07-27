@@ -239,6 +239,10 @@ public:
     RewriterVar* emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
 
+    void emitDelAttr(RewriterVar* target, BoxedString* attr);
+    void emitDelGlobal(BoxedString* name);
+    void emitDelItem(RewriterVar* target, RewriterVar* slice);
+    void emitDelName(InternedString name);
     void emitExec(RewriterVar* code, RewriterVar* globals, RewriterVar* locals, FutureFlags flags);
     void emitJump(CFGBlock* b);
     void emitOSRPoint(AST_Jump* node);
