@@ -128,6 +128,88 @@ print issubclass(OldStyleClass, object)
 print isinstance(OldStyleClass(), OldStyleClass)
 print issubclass(OldStyleClass, OldStyleClass)
 
+
+class G:
+    def __init__(self, n):
+        self._n = n
+
+    def __pow__(self, other, modulo=None):
+        print "pow in instance"
+
+    def __rpow__(self, other):
+        print "rpow in instance"
+
+    def __ipow__(self, other, modulo=None):
+        print "ipow in instance"
+
+p1 = G(3)
+p2 = G(4)
+
+p1 ** p2
+4 ** p2
+None ** p2
+p2 ** None
+
+pow(p1, p2)
+pow(p1, None)
+pow(None, p1)
+
+pow(p1, p2, p2)
+pow(p1, p2, None)
+
+p1.__ipow__(p1, p2)
+p1 **= p2
+
+
+class H:
+    def __init__(self, n):
+        self._n = n
+
+p3 = H(3)
+p4 = H(4)
+p5 = G(5)
+
+pow(p5, p3)
+pow(p3, p5)
+
+try:
+    pow(p3, p4)
+except Exception as e:
+    print type(e), e.message
+
+try:
+    pow(p3, p4, p4)
+except Exception as e:
+    assert type(e) in (AttributeError, TypeError)
+
+
+# mixed calling
+class I(object):
+    def __init__(self, n):
+        self._n = n
+
+    def __pow__(self, other, modulo=None):
+        print "pow in object"
+
+    def __rpow__(self, n):
+        print "rpow in object"
+
+    def __ipow__(self, other, modulo=None):
+        print "ipow in object"
+
+p5 = I(3)
+
+try:
+    pow(p3, p5)
+except Exception as e:
+    print type(e), e.message
+
+try:
+    p3 ** p5
+except Exception as e:
+    print type(e), e.message
+
+
 class LessEqualTest:
     def __init__(self, a):
         self._a = a
