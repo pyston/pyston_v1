@@ -68,6 +68,13 @@ enum class EffortLevel {
     MAXIMAL = 3,
 };
 
+namespace ExceptionStyle {
+enum ExceptionStyle {
+    CAPI,
+    CXX,
+};
+};
+
 class CompilerType;
 template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;

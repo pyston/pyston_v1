@@ -59,6 +59,9 @@
 
 namespace pyston {
 
+using namespace pyston::ExceptionStyle;
+using pyston::ExceptionStyle::ExceptionStyle;
+
 static const std::string delitem_str("__delitem__");
 static const std::string getattribute_str("__getattribute__");
 static const std::string getattr_str("__getattr__");
@@ -196,7 +199,7 @@ extern "C" bool softspace(Box* b, bool newval) {
     bool r;
     Box* gotten = NULL;
     try {
-        Box* gotten = getattrInternal(b, softspace_str, NULL);
+        Box* gotten = getattrInternal<CXX>(b, softspace_str, NULL);
         if (!gotten) {
             r = 0;
         } else {
@@ -1470,9 +1473,15 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     return NULL;
 }
 
+template <enum ExceptionStyle S>
 Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
                        Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     assert(gc::isValidGCObject(attr));
+
+    if (S == CAPI) {
+        assert(!rewrite_args && "implement me");
+        rewrite_args = NULL;
+    }
 
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
@@ -1486,10 +1495,20 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
             if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
-                return slotTpGetattrHookInternal(obj, attr, rewrite_args);
+                if (S == CAPI) {
+                    assert(!rewrite_args && "implement me");
+                    return obj->cls->tp_getattro(obj, attr);
+                } else {
+                    return slotTpGetattrHookInternal(obj, attr, rewrite_args);
+                }
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
+            if (S == CAPI) {
+                assert(!rewrite_args && "implement me");
+                return r;
+            }
+
             if (!r)
                 throwCAPIException();
 
@@ -1517,20 +1536,35 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattr", 10);
 
             assert(attr->data()[attr->size()] == '\0');
+
             Box* r = obj->cls->tp_getattr(obj, const_cast<char*>(attr->data()));
-            if (!r)
-                throwCAPIException();
-            return r;
+
+            if (S == CAPI) {
+                return r;
+            } else {
+                if (!r)
+                    throwCAPIException();
+                return r;
+            }
         }
     }
 
-    return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+    if (S == CAPI) {
+        try {
+            return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    } else {
+        return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+    }
 }
 
 inline Box* getclsattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
-    return getattrInternalEx(obj, attr, rewrite_args,
-                             /* cls_only */ true,
-                             /* for_call */ false, NULL, NULL);
+    return getattrInternalEx<CXX>(obj, attr, rewrite_args,
+                                  /* cls_only */ true,
+                                  /* for_call */ false, NULL, NULL);
 }
 
 extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
@@ -1935,8 +1969,8 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     // TODO this shouldn't go here; it should be in instancemethod_cls->tp_getattr[o]
     if (obj->cls == instancemethod_cls) {
         assert(!rewrite_args || !rewrite_args->out_success);
-        return getattrInternalEx(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
-                                 bind_obj_out, NULL);
+        return getattrInternalEx<CXX>(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
+                                      bind_obj_out, NULL);
     }
 
     if (rewrite_args) {
@@ -1945,11 +1979,15 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     return NULL;
 }
 
-Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
-    return getattrInternalEx(obj, attr, rewrite_args,
-                             /* cls_only */ false,
-                             /* for_call */ false, NULL, NULL);
+template <enum ExceptionStyle S> Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+    return getattrInternalEx<S>(obj, attr, rewrite_args,
+                                /* cls_only */ false,
+                                /* for_call */ false, NULL, NULL);
 }
+
+// Force instantiation of the template
+template Box* getattrInternal<CAPI>(Box*, BoxedString*, GetattrRewriteArgs*);
+template Box* getattrInternal<CXX>(Box*, BoxedString*, GetattrRewriteArgs*);
 
 Box* getattrMaybeNonstring(Box* obj, Box* attr) {
     if (!PyString_Check(attr)) {
@@ -1964,7 +2002,11 @@ Box* getattrMaybeNonstring(Box* obj, Box* attr) {
 
     BoxedString* s = static_cast<BoxedString*>(attr);
     internStringMortalInplace(s);
-    return getattr(obj, s);
+
+    Box* r = getattrInternal<CXX>(obj, s, NULL);
+    if (!r)
+        raiseAttributeError(obj, s->s());
+    return r;
 }
 
 extern "C" Box* getattr(Box* obj, BoxedString* attr) {
@@ -2018,7 +2060,7 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
         else
             dest = rewriter->getReturnDestination();
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
-        val = getattrInternal(obj, attr, &rewrite_args);
+        val = getattrInternal<CXX>(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success) {
             if (!val) {
@@ -2040,7 +2082,7 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
             }
         }
     } else {
-        val = getattrInternal(obj, attr, NULL);
+        val = getattrInternal<CXX>(obj, attr, NULL);
     }
 
     if (val) {
@@ -2885,14 +2927,14 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
     RewriterVar* r_val = NULL;
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
-        val = getattrInternalEx(obj, attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
+        val = getattrInternalEx<CXX>(obj, attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
         } else if (val) {
             r_val = grewrite_args.out_rtn;
         }
     } else {
-        val = getattrInternalEx(obj, attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
+        val = getattrInternalEx<CXX>(obj, attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
     }
 
     if (val == NULL) {
@@ -5370,7 +5412,7 @@ void setGlobal(Box* globals, BoxedString* name, Box* value) {
 extern "C" Box* importFrom(Box* _m, BoxedString* name) {
     STAT_TIMER(t0, "us_timer_importFrom", 10);
 
-    Box* r = getattrInternal(_m, name, NULL);
+    Box* r = getattrInternal<CXX>(_m, name, NULL);
     if (r)
         return r;
 

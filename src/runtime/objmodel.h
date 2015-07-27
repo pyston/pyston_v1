@@ -134,6 +134,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
 // This is the equivalent of PyObject_GetAttr. Unlike getattrInternalGeneric, it checks for custom __getattr__ or
 // __getattribute__ methods.
+template <ExceptionStyle::ExceptionStyle S>
 Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args);
 
 // This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for

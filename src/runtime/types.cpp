@@ -1654,7 +1654,7 @@ static Box* instancemethodRepr(Box* b) {
     const char* sfuncname = "?", * sklassname = "?";
 
     static BoxedString* name_str = internStringImmortal("__name__");
-    funcname = getattrInternal(func, name_str, NULL);
+    funcname = getattrInternal<ExceptionStyle::CXX>(func, name_str, NULL);
 
     if (funcname != NULL) {
         if (!PyString_Check(funcname)) {
@@ -1666,7 +1666,7 @@ static Box* instancemethodRepr(Box* b) {
     if (klass == NULL) {
         klassname = NULL;
     } else {
-        klassname = getattrInternal(klass, name_str, NULL);
+        klassname = getattrInternal<ExceptionStyle::CXX>(klass, name_str, NULL);
         if (klassname != NULL) {
             if (!PyString_Check(klassname)) {
                 klassname = NULL;

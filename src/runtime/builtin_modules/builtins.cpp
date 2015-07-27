@@ -452,24 +452,14 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 
-    BoxedString* str = static_cast<BoxedString*>(_str);
-    internStringMortalInplace(str);
-
-    Box* rtn = NULL;
-    try {
-        rtn = getattrInternal(obj, str, NULL);
-    } catch (ExcInfo e) {
-        if (!e.matches(AttributeError))
-            throw e;
+    Box* rtn = PyObject_GetAttr(obj, _str);
+    if (rtn == NULL && default_value != NULL && PyErr_ExceptionMatches(AttributeError)) {
+        PyErr_Clear();
+        return default_value;
     }
 
-    if (!rtn) {
-        if (default_value)
-            return default_value;
-        else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->data());
-    }
-
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -499,7 +489,7 @@ Box* hasattr(Box* obj, Box* _str) {
 
     Box* attr;
     try {
-        attr = getattrInternal(obj, str, NULL);
+        attr = getattrInternal<ExceptionStyle::CXX>(obj, str, NULL);
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;

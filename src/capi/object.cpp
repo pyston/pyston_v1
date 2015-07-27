@@ -534,7 +534,7 @@ extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     try {
-        Box* r = getattrInternal(o, internStringMortal(attr), NULL);
+        Box* r = getattrInternal<ExceptionStyle::CXX>(o, internStringMortal(attr), NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, attr);
         return r;
