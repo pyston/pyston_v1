@@ -1086,7 +1086,10 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        return makeBool(false);
+        llvm::CallSite call
+            = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr));
+        call.setDoesNotReturn();
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_INT; }
@@ -1330,7 +1333,10 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        return makeBool(false);
+        llvm::CallSite call
+            = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("float", g.i8_ptr));
+        call.setDoesNotReturn();
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_FLOAT; }
@@ -2059,7 +2065,10 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        return makeBool(false);
+        llvm::CallSite call
+            = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("bool", g.i8_ptr));
+        call.setDoesNotReturn();
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_BOOL; }

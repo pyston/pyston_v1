@@ -598,6 +598,192 @@ Box* reduce(Box* f, Box* container, Box* initial) {
     return current;
 }
 
+// from cpython, bltinmodule.c
+PyObject* filterstring(PyObject* func, BoxedString* strobj) {
+    PyObject* result;
+    Py_ssize_t i, j;
+    Py_ssize_t len = PyString_Size(strobj);
+    Py_ssize_t outlen = len;
+
+    if (func == Py_None) {
+        /* If it's a real string we can return the original,
+         * as no character is ever false and __getitem__
+         * does return this character. If it's a subclass
+         * we must go through the __getitem__ loop */
+        if (PyString_CheckExact(strobj)) {
+            Py_INCREF(strobj);
+            return strobj;
+        }
+    }
+    if ((result = PyString_FromStringAndSize(NULL, len)) == NULL)
+        return NULL;
+
+    for (i = j = 0; i < len; ++i) {
+        PyObject* item;
+        int ok;
+
+        item = (*strobj->cls->tp_as_sequence->sq_item)(strobj, i);
+        if (item == NULL)
+            goto Fail_1;
+        if (func == Py_None) {
+            ok = 1;
+        } else {
+            PyObject* arg, *good;
+            arg = PyTuple_Pack(1, item);
+            if (arg == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            good = PyEval_CallObject(func, arg);
+            Py_DECREF(arg);
+            if (good == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            ok = PyObject_IsTrue(good);
+            Py_DECREF(good);
+        }
+        if (ok > 0) {
+            Py_ssize_t reslen;
+            if (!PyString_Check(item)) {
+                PyErr_SetString(PyExc_TypeError, "can't filter str to str:"
+                                                 " __getitem__ returned different type");
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            reslen = PyString_GET_SIZE(item);
+            if (reslen == 1) {
+                PyString_AS_STRING(result)[j++] = PyString_AS_STRING(item)[0];
+            } else {
+                /* do we need more space? */
+                Py_ssize_t need = j;
+
+                /* calculate space requirements while checking for overflow */
+                if (need > PY_SSIZE_T_MAX - reslen) {
+                    Py_DECREF(item);
+                    goto Fail_1;
+                }
+
+                need += reslen;
+
+                if (need > PY_SSIZE_T_MAX - len) {
+                    Py_DECREF(item);
+                    goto Fail_1;
+                }
+
+                need += len;
+
+                if (need <= i) {
+                    Py_DECREF(item);
+                    goto Fail_1;
+                }
+
+                need = need - i - 1;
+
+                assert(need >= 0);
+                assert(outlen >= 0);
+
+                if (need > outlen) {
+                    /* overallocate, to avoid reallocations */
+                    if (outlen > PY_SSIZE_T_MAX / 2) {
+                        Py_DECREF(item);
+                        return NULL;
+                    }
+
+                    if (need < 2 * outlen) {
+                        need = 2 * outlen;
+                    }
+                    if (_PyString_Resize(&result, need)) {
+                        Py_DECREF(item);
+                        return NULL;
+                    }
+                    outlen = need;
+                }
+                memcpy(PyString_AS_STRING(result) + j, PyString_AS_STRING(item), reslen);
+                j += reslen;
+            }
+        }
+        Py_DECREF(item);
+        if (ok < 0)
+            goto Fail_1;
+    }
+
+    if (j < outlen)
+        _PyString_Resize(&result, j);
+
+    return result;
+
+Fail_1:
+    Py_DECREF(result);
+    return NULL;
+}
+
+static PyObject* filtertuple(PyObject* func, PyObject* tuple) {
+    PyObject* result;
+    Py_ssize_t i, j;
+    Py_ssize_t len = PyTuple_Size(tuple);
+
+    if (len == 0) {
+        if (PyTuple_CheckExact(tuple))
+            Py_INCREF(tuple);
+        else
+            tuple = PyTuple_New(0);
+        return tuple;
+    }
+
+    if ((result = PyTuple_New(len)) == NULL)
+        return NULL;
+
+    for (i = j = 0; i < len; ++i) {
+        PyObject* item, *good;
+        int ok;
+
+        if (tuple->cls->tp_as_sequence && tuple->cls->tp_as_sequence->sq_item) {
+            item = tuple->cls->tp_as_sequence->sq_item(tuple, i);
+            if (item == NULL)
+                goto Fail_1;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "filter(): unsubscriptable tuple");
+            goto Fail_1;
+        }
+        if (func == Py_None) {
+            Py_INCREF(item);
+            good = item;
+        } else {
+            PyObject* arg = PyTuple_Pack(1, item);
+            if (arg == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            good = PyEval_CallObject(func, arg);
+            Py_DECREF(arg);
+            if (good == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+        }
+        ok = PyObject_IsTrue(good);
+        Py_DECREF(good);
+        if (ok > 0) {
+            if (PyTuple_SetItem(result, j++, item) < 0)
+                goto Fail_1;
+        } else {
+            Py_DECREF(item);
+            if (ok < 0)
+                goto Fail_1;
+        }
+    }
+
+    if (_PyTuple_Resize(&result, j) < 0)
+        return NULL;
+
+    return result;
+
+Fail_1:
+    Py_DECREF(result);
+    return NULL;
+}
+
 Box* filter2(Box* f, Box* container) {
     // If the filter-function argument is None, filter() works by only returning
     // the elements that are truthy.  This is equivalent to using the bool() constructor.
@@ -606,6 +792,24 @@ Box* filter2(Box* f, Box* container) {
     // If this is a common case we could speed it up with special handling.
     if (f == None)
         f = bool_cls;
+
+    // Special cases depending on the type of container influences the return type
+    // TODO There are other special cases like this
+    if (PyTuple_Check(container)) {
+        Box* rtn = filtertuple(f, static_cast<BoxedTuple*>(container));
+        if (!rtn) {
+            throwCAPIException();
+        }
+        return rtn;
+    }
+
+    if (PyString_Check(container)) {
+        Box* rtn = filterstring(f, static_cast<BoxedString*>(container));
+        if (!rtn) {
+            throwCAPIException();
+        }
+        return rtn;
+    }
 
     Box* rtn = new BoxedList();
     for (Box* e : container->pyElements()) {
@@ -977,6 +1181,10 @@ Box* builtinIter(Box* obj, Box* sentinel) {
     if (sentinel == NULL)
         return getiter(obj);
 
+    if (!PyCallable_Check(obj)) {
+        raiseExcHelper(TypeError, "iter(v, w): v must be callable");
+    }
+
     Box* r = PyCallIter_New(obj, sentinel);
     if (!r)
         throwCAPIException();
@@ -1326,7 +1534,7 @@ void setupBuiltins() {
         "reduce", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), "reduce",
                                                    { NULL }));
     builtins_module->giveAttr("filter",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, LIST, 2), "filter"));
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, UNKNOWN, 2), "filter"));
     builtins_module->giveAttr(
         "zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip, LIST, 0, 0, true, false), "zip"));
     builtins_module->giveAttr(

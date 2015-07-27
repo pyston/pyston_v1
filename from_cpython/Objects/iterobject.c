@@ -4,15 +4,6 @@
 
 #include "Python.h"
 
-extern PyTypeObject PyCallIter_Type;
-typedef struct {
-    PyObject_HEAD
-    PyObject *it_callable; /* Set to NULL when iterator is exhausted */
-    PyObject *it_sentinel; /* Set to NULL when iterator is exhausted */
-    // Pyston changes:
-    PyObject *it_nextvalue; /* Set to non-null when iterator is advanced in __hasnext__ */
-} calliterobject;
-
 PyObject *
 PyCallIter_New(PyObject *callable, PyObject *sentinel)
 {
@@ -52,7 +43,7 @@ calliter_traverse(calliterobject *it, visitproc visit, void *arg)
 
 // Pyston change: extract most of the body of calliter_iternext here
 // so we can use it from both calliter_iternext and calliter_hasnext
-static PyObject *
+PyObject *
 calliter_next(calliterobject *it)
 {
     if (it->it_callable != NULL) {
@@ -97,24 +88,6 @@ calliter_iternext(calliterobject *it)
 
     return calliter_next(it);
 }
-
-// Pyston addition: __hasnext__ based iteration
-static int
-calliter_hasnext(calliterobject *it)
-{
-    if (!it->it_nextvalue) {
-        it->it_nextvalue = calliter_next(it);
-    }
-    return it->it_nextvalue != NULL;
-}
-
-// Pyston change: give iter objects a __hasnext__ method
-void
-PyCallIter_AddHasNext()
-{
-    PyCallIter_Type._tpp_hasnext = calliter_hasnext;
-}
-
 
 PyTypeObject PyCallIter_Type = {
     // Pyston change:

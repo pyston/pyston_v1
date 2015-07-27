@@ -1542,13 +1542,11 @@ extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) no
 }
 
 extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    return _PySequence_IterSearch(o, value, PY_ITERSEARCH_COUNT);
 }
 
 extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    return _PySequence_IterSearch(o, value, PY_ITERSEARCH_INDEX);
 }
 
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {

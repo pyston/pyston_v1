@@ -4230,7 +4230,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             if (result < 0)
                 throwCAPIException();
             assert(result == 0 || result == 1);
-            return boxBool(result);
+            return boxBool(op_type == AST_TYPE::NotIn ? !result : result);
         }
 
         if (rewrite_args) {
@@ -4893,8 +4893,12 @@ Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
     static BoxedString* iter_str = internStringImmortal("__iter__");
     Box* r = callattrInternal0(o, iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
-    if (r)
+    if (r) {
+        if (!PyIter_Check(r)) {
+            raiseExcHelper(TypeError, "iter() returned non-iterator of type '%s'", r->cls->tp_name);
+        }
         return r;
+    }
     return getiterHelper(o);
 }
 

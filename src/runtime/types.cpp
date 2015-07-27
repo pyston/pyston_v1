@@ -2793,8 +2793,6 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
     }
 }
 
-extern "C" void PyCallIter_AddHasNext();
-
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
     assert(op);
     assert(tp);
@@ -3476,8 +3474,10 @@ void setupRuntime() {
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
-    PyCallIter_AddHasNext();
+
+    PyCallIter_Type.tpp_hasnext = calliter_hasnext;
     PyType_Ready(&PyCallIter_Type);
+
     PyType_Ready(&PyCObject_Type);
     PyType_Ready(&PyDictProxy_Type);
 
