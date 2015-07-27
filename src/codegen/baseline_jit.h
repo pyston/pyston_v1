@@ -200,9 +200,9 @@ public:
     JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
                       int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block);
 
+    RewriterVar* getInterp();
     RewriterVar* imm(uint64_t val);
     RewriterVar* imm(void* val);
-
 
     RewriterVar* emitAugbinop(RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitBinop(RewriterVar* lhs, RewriterVar* rhs, int op_type);
@@ -273,7 +273,6 @@ private:
 #else
     uint64_t asUInt(InternedString s);
 #endif
-    RewriterVar* getInterp();
 
     RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size,
                             TypeRecorder* type_recorder = NULL);

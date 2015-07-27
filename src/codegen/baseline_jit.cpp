@@ -149,6 +149,10 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
 }
 
+RewriterVar* JitFragmentWriter::getInterp() {
+    return interp;
+}
+
 RewriterVar* JitFragmentWriter::imm(uint64_t val) {
     return loadConst(val);
 }
@@ -641,10 +645,6 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
     return u.u;
 }
 #endif
-
-RewriterVar* JitFragmentWriter::getInterp() {
-    return interp;
-}
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                                            int slot_size, TypeRecorder* type_recorder) {

@@ -75,7 +75,7 @@ public:
     static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 private:
-    Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
+    Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
     void doStore(AST_Name* name, Value value);
@@ -943,13 +943,21 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     return s;
 }
 
-Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-    abortJITing();
+Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
     CLFunction* cl = wrapFunction(node, args, body, source_info);
 
     std::vector<Box*, StlCompatAllocator<Box*>> defaults;
-    for (AST_expr* d : args->defaults)
-        defaults.push_back(visit_expr(d).o);
+
+    RewriterVar* defaults_var = NULL;
+    if (jit)
+        defaults_var = args->defaults.size() ? jit->allocate(args->defaults.size()) : jit->imm(0ul);
+    int i = 0;
+    for (AST_expr* d : args->defaults) {
+        Value v = visit_expr(d);
+        defaults.push_back(v.o);
+        if (jit)
+            defaults_var->setAttr(i++ * sizeof(void*), v);
+    }
     defaults.push_back(0);
 
     // FIXME: Using initializer_list is pretty annoying since you're not supposed to create them:
@@ -977,37 +985,60 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     }
 
     BoxedClosure* closure = 0;
+    RewriterVar* closure_var = NULL;
     if (takes_closure) {
         if (scope_info->createsClosure()) {
             closure = created_closure;
+            if (jit)
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, created_closure));
         } else {
             assert(scope_info->passesThroughClosure());
             closure = passed_closure;
+            if (jit)
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, passed_closure));
         }
         assert(closure);
     }
 
     Box* passed_globals = NULL;
-    if (!getCL()->source->scoping->areGlobalsFromModule())
+    RewriterVar* passed_globals_var = NULL;
+    if (!getCL()->source->scoping->areGlobalsFromModule()) {
         passed_globals = globals;
-    return boxCLFunction(cl, closure, passed_globals, u.il);
+        if (jit)
+            passed_globals_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, globals));
+    }
+
+    Value rtn;
+    if (jit) {
+        if (!closure_var)
+            closure_var = jit->imm(0ul);
+        if (!passed_globals_var)
+            passed_globals_var = jit->imm(0ul);
+        rtn.var = jit->call(false, (void*)boxCLFunction, jit->imm(cl), closure_var, passed_globals_var, defaults_var,
+                            jit->imm(args->defaults.size()));
+    }
+
+    rtn.o = boxCLFunction(cl, closure, passed_globals, u.il);
+
+    return rtn;
 }
 
 Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
-    abortJITing();
     AST_FunctionDef* node = mkfn->function_def;
     AST_arguments* args = node->args;
 
-    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
+    std::vector<Value, StlCompatAllocator<Value>> decorators;
     for (AST_expr* d : node->decorator_list)
-        decorators.push_back(visit_expr(d).o);
+        decorators.push_back(visit_expr(d));
 
-    Box* func = createFunction(node, args, node->body);
+    Value func = createFunction(node, args, node->body);
 
-    for (int i = decorators.size() - 1; i >= 0; i--)
-        func = runtimeCall(decorators[i], ArgPassSpec(1), func, 0, 0, 0, 0);
-
-    return Value(func, NULL);
+    for (int i = decorators.size() - 1; i >= 0; i--) {
+        if (jit)
+            func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
+        func.o = runtimeCall(decorators[i].o, ArgPassSpec(1), func.o, 0, 0, 0, 0);
+    }
+    return func;
 }
 
 Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
@@ -1369,12 +1400,11 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
 }
 
 Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
-    abortJITing();
     AST_Return* expr = new AST_Return();
     expr->value = node->body;
 
     std::vector<AST_stmt*> body = { expr };
-    return Value(createFunction(node, node->args, body), NULL);
+    return createFunction(node, node->args, body);
 }
 
 Value ASTInterpreter::visit_dict(AST_Dict* node) {
