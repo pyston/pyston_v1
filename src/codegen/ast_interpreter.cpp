@@ -153,6 +153,7 @@ private:
     // This is either a module or a dict
     Box* globals;
     std::unique_ptr<JitFragmentWriter> jit;
+    bool should_jit;
 
 public:
     llvm::DenseMap<InternedString, int>& getSymVRegMap() {
@@ -240,7 +241,8 @@ ASTInterpreter::ASTInterpreter(CLFunction* clfunc, Box** vregs)
       edgecount(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       parent_module(source_info->parent_module),
-      globals(0) {
+      globals(0),
+      should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
 
@@ -300,6 +302,8 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
 
 void ASTInterpreter::abortJITing() {
     if (jit) {
+        static StatCounter bjit_aborts("num_baselinejit_aborts");
+        bjit_aborts.log();
         jit->abortCompilation();
         jit.reset();
     }
@@ -338,17 +342,12 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     Value v;
 
-    bool should_jit = false;
     bool from_start = start_block == NULL && start_at == NULL;
 
     assert((start_block == NULL) == (start_at == NULL));
     if (start_block == NULL) {
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
-
-        if (ENABLE_BASELINEJIT && interpreter.clfunc->times_interpreted >= REOPT_THRESHOLD_INTERPRETER
-            && !start_block->code)
-            should_jit = true;
     }
 
     // Important that this happens after RegisterHelper:
@@ -370,11 +369,11 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             v = interpreter.visit_stmt(s);
         }
     } else {
-        if (should_jit)
-            interpreter.startJITing(start_block);
-
         interpreter.next_block = start_block;
     }
+
+    if (ENABLE_BASELINEJIT && interpreter.clfunc->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
+        interpreter.should_jit = true;
 
     while (interpreter.next_block) {
         interpreter.current_block = interpreter.next_block;
@@ -383,7 +382,6 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
         if (ENABLE_BASELINEJIT && !interpreter.jit) {
             CFGBlock* b = interpreter.current_block;
             if (b->entry_code) {
-                should_jit = true;
                 Box* rtn = interpreter.execJITedBlock(b);
                 if (interpreter.next_block)
                     continue;
@@ -391,7 +389,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             }
         }
 
-        if (ENABLE_BASELINEJIT && should_jit && !interpreter.jit) {
+        if (ENABLE_BASELINEJIT && interpreter.should_jit && !interpreter.jit) {
             assert(!interpreter.current_block->code);
             interpreter.startJITing(interpreter.current_block);
         }
@@ -604,13 +602,20 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             jit->emitOSRPoint(node);
         jit->emitJump(node->target);
         finishJITing(node->target);
+
+        // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
+        // additional blocks ouside of the loop if the function is cold.
+        if (clfunc->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+            should_jit = false;
     }
 
     if (backedge)
         ++edgecount;
 
-    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code)
+    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
+        should_jit = true;
         startJITing(node->target);
+    }
 
     if (backedge && edgecount == OSR_THRESHOLD_BASELINE) {
         Box* rtn = doOSR(node);
@@ -1122,11 +1127,11 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
 }
 
 Value ASTInterpreter::visit_global(AST_Global* node) {
-    abortJITing();
+#ifndef NDEBUG
     for (auto name : node->names) {
-        if (getSymVRegMap().count(name))
-            vregs[getSymVRegMap()[name]] = NULL;
+        assert(!getSymVRegMap().count(name));
     }
+#endif
     return Value();
 }
 
