@@ -67,6 +67,17 @@ extern "C" Box* listRepr(BoxedList* self) {
 
     std::string O("");
     llvm::raw_string_ostream os(O);
+
+    // Implementing Recursive Print of list in same way from  Cpython
+    int recursive = Py_ReprEnter((PyObject*)self);
+    if (recursive != 0) {
+        if (recursive < 0)
+            return boxString(os.str());
+
+        os << "[...]";
+        return boxString(os.str());
+    }
+
     os << '[';
     for (int i = 0; i < self->size; i++) {
         if (i > 0)
@@ -79,6 +90,8 @@ extern "C" Box* listRepr(BoxedList* self) {
         os << s->s();
     }
     os << ']';
+
+    Py_ReprLeave((PyObject*)self);
     return boxString(os.str());
 }
 
