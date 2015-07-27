@@ -406,6 +406,24 @@ extern "C" PyObject* PyLong_FromLong(long ival) noexcept {
     return rtn;
 }
 
+#ifdef Py_USING_UNICODE
+extern "C" PyObject* PyLong_FromUnicode(Py_UNICODE* u, Py_ssize_t length, int base) noexcept {
+    PyObject* result;
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
+
+    if (buffer == NULL)
+        return PyErr_NoMemory();
+
+    if (PyUnicode_EncodeDecimal(u, length, buffer, NULL)) {
+        PyMem_FREE(buffer);
+        return NULL;
+    }
+    result = PyLong_FromString(buffer, NULL, base);
+    PyMem_FREE(buffer);
+    return result;
+}
+#endif
+
 extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) noexcept {
     BoxedLong* rtn = new BoxedLong();
     mpz_init_set_ui(rtn->n, ival);
