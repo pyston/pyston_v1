@@ -21,3 +21,8 @@ except TypeError as e:
 # are being passed, but really they are not.
 type.__call__(*[C2])
 type.__call__(C2, **{})
+
+try:
+    type.__call__(*[])
+except TypeError as e:
+    print "caught typeerror"

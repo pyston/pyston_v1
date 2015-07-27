@@ -854,9 +854,7 @@ Box* zip(BoxedTuple* containers) {
 }
 
 static Box* callable(Box* obj) {
-    Box* r = PyBool_FromLong((long)PyCallable_Check(obj));
-    checkAndThrowCAPIException();
-    return r;
+    return PyBool_FromLong((long)PyCallable_Check(obj));
 }
 
 BoxedClass* notimplemented_cls;

@@ -638,9 +638,19 @@ extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
 extern "C" int PyCallable_Check(PyObject* x) noexcept {
     if (x == NULL)
         return 0;
-
-    static BoxedString* call_attr = internStringImmortal("__call__");
-    return typeLookup(x->cls, call_attr, NULL) != NULL;
+    if (PyInstance_Check(x)) {
+        PyObject* call = PyObject_GetAttrString(x, "__call__");
+        if (call == NULL) {
+            PyErr_Clear();
+            return 0;
+        }
+        /* Could test recursively but don't, for fear of endless
+           recursion if some joker sets self.__call__ = self */
+        Py_DECREF(call);
+        return 1;
+    } else {
+        return x->cls->tp_call != NULL;
+    }
 }
 
 extern "C" int Py_FlushLine(void) noexcept {

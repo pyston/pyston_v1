@@ -749,15 +749,6 @@ extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
     }
 }
 
-extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
-    try {
-        return repr(obj);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
 static int recursive_issubclass(PyObject* derived, PyObject* cls) noexcept {
     int retval;
 
@@ -1454,14 +1445,26 @@ extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noe
     return nullptr;
 }
 
-extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
-    try {
-        // Not sure if this is really the same:
-        return getitem(o, boxInt(i));
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
+extern "C" PyObject* PySequence_GetItem(PyObject* s, Py_ssize_t i) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL)
+        return null_error();
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_item) {
+        if (i < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(s);
+                if (l < 0)
+                    return NULL;
+                i += l;
+            }
+        }
+        return m->sq_item(s, i);
     }
+
+    return type_error("'%.200s' object does not support indexing", s);
 }
 
 PyObject* _PySlice_FromIndices(Py_ssize_t istart, Py_ssize_t istop) {

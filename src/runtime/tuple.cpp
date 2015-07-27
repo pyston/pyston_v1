@@ -517,6 +517,19 @@ static PyObject* tupleslice(PyTupleObject* a, Py_ssize_t ilow, Py_ssize_t ihigh)
     return (PyObject*)np;
 }
 
+static PyObject* tupleitem(register PyTupleObject* a, register Py_ssize_t i) {
+    if (i < 0 || i >= Py_SIZE(a)) {
+        PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+        return NULL;
+    }
+    Py_INCREF(a->ob_item[i]);
+    return a->ob_item[i];
+}
+
+static Py_ssize_t tuplelength(PyTupleObject* a) {
+    return Py_SIZE(a);
+}
+
 void setupTuple() {
     tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
                                                 sizeof(BoxedTupleIterator), false, "tuple");
@@ -527,8 +540,6 @@ void setupTuple() {
     addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, SLICE });
     addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
-
-    tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;
 
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
     tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 4, 2, false, false),
@@ -550,9 +561,13 @@ void setupTuple() {
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
 
     tuple_cls->tp_hash = (hashfunc)tuple_hash;
+    tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;
     add_operators(tuple_cls);
 
     tuple_cls->freeze();
+
+    tuple_cls->tp_as_sequence->sq_item = (ssizeargfunc)tupleitem;
+    tuple_cls->tp_as_sequence->sq_length = (lenfunc)tuplelength;
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);
