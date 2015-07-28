@@ -22,6 +22,7 @@
 #include "codegen/type_recording.h"
 #include "core/cfg.h"
 #include "runtime/generator.h"
+#include "runtime/import.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -146,6 +147,10 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     vregs_array = createNewVar();
     addLocationToVar(vregs_array, assembler::R14);
     addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
+}
+
+RewriterVar* JitFragmentWriter::getInterp() {
+    return interp;
 }
 
 RewriterVar* JitFragmentWriter::imm(uint64_t val) {
@@ -330,6 +335,20 @@ RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
     return call(false, (void*)hasnextHelper, v);
 }
 
+RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
+    return call(false, (void*)importFrom, module, imm(name));
+}
+
+RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, llvm::StringRef module_name) {
+    return call(false, (void*)import, imm(level), from_imports, imm(const_cast<char*>(module_name.data())),
+                imm(module_name.size()));
+}
+
+RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    return call(false, (void*)importStar, module, globals);
+}
+
 RewriterVar* JitFragmentWriter::emitLandingpad() {
     return call(false, (void*)ASTInterpreterJitInterface::landingpadHelper, getInterp());
 }
@@ -408,6 +427,27 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
     return call(false, (void*)yield, generator, v);
 }
 
+void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {
+    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelGlobal(BoxedString* name) {
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelItem(RewriterVar* target, RewriterVar* slice) {
+    emitPPCall((void*)delitem, { target, slice }, 1, 512);
+}
+
+void JitFragmentWriter::emitDelName(InternedString name) {
+    call(false, (void*)ASTInterpreterJitInterface::delNameHelper, getInterp(),
+#ifndef NDEBUG
+         imm(asUInt(name).first), imm(asUInt(name).second));
+#else
+         imm(asUInt(name)));
+#endif
+}
 
 void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, RewriterVar* locals, FutureFlags flags) {
     if (!globals)
@@ -605,10 +645,6 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
     return u.u;
 }
 #endif
-
-RewriterVar* JitFragmentWriter::getInterp() {
-    return interp;
-}
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                                            int slot_size, TypeRecorder* type_recorder) {

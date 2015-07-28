@@ -75,7 +75,7 @@ public:
     static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 private:
-    Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
+    Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
     void doStore(AST_Name* name, Value value);
@@ -153,6 +153,7 @@ private:
     // This is either a module or a dict
     Box* globals;
     std::unique_ptr<JitFragmentWriter> jit;
+    bool should_jit;
 
 public:
     llvm::DenseMap<InternedString, int>& getSymVRegMap() {
@@ -240,7 +241,8 @@ ASTInterpreter::ASTInterpreter(CLFunction* clfunc, Box** vregs)
       edgecount(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       parent_module(source_info->parent_module),
-      globals(0) {
+      globals(0),
+      should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
 
@@ -300,6 +302,8 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
 
 void ASTInterpreter::abortJITing() {
     if (jit) {
+        static StatCounter bjit_aborts("num_baselinejit_aborts");
+        bjit_aborts.log();
         jit->abortCompilation();
         jit.reset();
     }
@@ -338,17 +342,12 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     Value v;
 
-    bool should_jit = false;
     bool from_start = start_block == NULL && start_at == NULL;
 
     assert((start_block == NULL) == (start_at == NULL));
     if (start_block == NULL) {
         start_block = interpreter.source_info->cfg->getStartingBlock();
         start_at = start_block->body[0];
-
-        if (ENABLE_BASELINEJIT && interpreter.clfunc->times_interpreted >= REOPT_THRESHOLD_INTERPRETER
-            && !start_block->code)
-            should_jit = true;
     }
 
     // Important that this happens after RegisterHelper:
@@ -370,11 +369,11 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             v = interpreter.visit_stmt(s);
         }
     } else {
-        if (should_jit)
-            interpreter.startJITing(start_block);
-
         interpreter.next_block = start_block;
     }
+
+    if (ENABLE_BASELINEJIT && interpreter.clfunc->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
+        interpreter.should_jit = true;
 
     while (interpreter.next_block) {
         interpreter.current_block = interpreter.next_block;
@@ -383,7 +382,6 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
         if (ENABLE_BASELINEJIT && !interpreter.jit) {
             CFGBlock* b = interpreter.current_block;
             if (b->entry_code) {
-                should_jit = true;
                 Box* rtn = interpreter.execJITedBlock(b);
                 if (interpreter.next_block)
                     continue;
@@ -391,7 +389,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             }
         }
 
-        if (ENABLE_BASELINEJIT && should_jit && !interpreter.jit) {
+        if (ENABLE_BASELINEJIT && interpreter.should_jit && !interpreter.jit) {
             assert(!interpreter.current_block->code);
             interpreter.startJITing(interpreter.current_block);
         }
@@ -604,13 +602,20 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             jit->emitOSRPoint(node);
         jit->emitJump(node->target);
         finishJITing(node->target);
+
+        // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
+        // additional blocks ouside of the loop if the function is cold.
+        if (clfunc->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+            should_jit = false;
     }
 
     if (backedge)
         ++edgecount;
 
-    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code)
+    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
+        should_jit = true;
         startJITing(node->target);
+    }
 
     if (backedge && edgecount == OSR_THRESHOLD_BASELINE) {
         Box* rtn = doOSR(node);
@@ -788,7 +793,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value val = visit_expr(node->args[0]);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
-        abortJITing();
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
         assert(node->args[1]->type == AST_TYPE::Str);
@@ -798,10 +802,11 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
-        // TODO: shouldn't have to rebox here
-        v.o = importFrom(module.o, internStringMortal(name));
+        BoxedString* name_boxed = source_info->parent_module->getStringConstant(name, true);
+        if (jit)
+            v.var = jit->emitImportFrom(module, name_boxed);
+        v.o = importFrom(module.o, name_boxed);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
-        abortJITing();
         assert(node->args.size() == 3);
         assert(node->args[0]->type == AST_TYPE::Num);
         assert(static_cast<AST_Num*>(node->args[0])->num_type == AST_Num::INT);
@@ -812,9 +817,10 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         auto ast_str = ast_cast<AST_Str>(node->args[2]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
+        if (jit)
+            v.var = jit->emitImportName(level, froms, module_name);
         v.o = import(level, froms.o, module_name);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
-        abortJITing();
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
@@ -822,8 +828,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
-
-        v.o = importStar(module.o, globals);
+        v = Value(importStar(module.o, globals), jit ? jit->emitImportStar(module) : NULL);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {
@@ -943,13 +948,21 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     return s;
 }
 
-Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-    abortJITing();
+Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
     CLFunction* cl = wrapFunction(node, args, body, source_info);
 
     std::vector<Box*, StlCompatAllocator<Box*>> defaults;
-    for (AST_expr* d : args->defaults)
-        defaults.push_back(visit_expr(d).o);
+
+    RewriterVar* defaults_var = NULL;
+    if (jit)
+        defaults_var = args->defaults.size() ? jit->allocate(args->defaults.size()) : jit->imm(0ul);
+    int i = 0;
+    for (AST_expr* d : args->defaults) {
+        Value v = visit_expr(d);
+        defaults.push_back(v.o);
+        if (jit)
+            defaults_var->setAttr(i++ * sizeof(void*), v);
+    }
     defaults.push_back(0);
 
     // FIXME: Using initializer_list is pretty annoying since you're not supposed to create them:
@@ -977,37 +990,60 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     }
 
     BoxedClosure* closure = 0;
+    RewriterVar* closure_var = NULL;
     if (takes_closure) {
         if (scope_info->createsClosure()) {
             closure = created_closure;
+            if (jit)
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, created_closure));
         } else {
             assert(scope_info->passesThroughClosure());
             closure = passed_closure;
+            if (jit)
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, passed_closure));
         }
         assert(closure);
     }
 
     Box* passed_globals = NULL;
-    if (!getCL()->source->scoping->areGlobalsFromModule())
+    RewriterVar* passed_globals_var = NULL;
+    if (!getCL()->source->scoping->areGlobalsFromModule()) {
         passed_globals = globals;
-    return boxCLFunction(cl, closure, passed_globals, u.il);
+        if (jit)
+            passed_globals_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, globals));
+    }
+
+    Value rtn;
+    if (jit) {
+        if (!closure_var)
+            closure_var = jit->imm(0ul);
+        if (!passed_globals_var)
+            passed_globals_var = jit->imm(0ul);
+        rtn.var = jit->call(false, (void*)boxCLFunction, jit->imm(cl), closure_var, passed_globals_var, defaults_var,
+                            jit->imm(args->defaults.size()));
+    }
+
+    rtn.o = boxCLFunction(cl, closure, passed_globals, u.il);
+
+    return rtn;
 }
 
 Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
-    abortJITing();
     AST_FunctionDef* node = mkfn->function_def;
     AST_arguments* args = node->args;
 
-    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
+    std::vector<Value, StlCompatAllocator<Value>> decorators;
     for (AST_expr* d : node->decorator_list)
-        decorators.push_back(visit_expr(d).o);
+        decorators.push_back(visit_expr(d));
 
-    Box* func = createFunction(node, args, node->body);
+    Value func = createFunction(node, args, node->body);
 
-    for (int i = decorators.size() - 1; i >= 0; i--)
-        func = runtimeCall(decorators[i], ArgPassSpec(1), func, 0, 0, 0, 0);
-
-    return Value(func, NULL);
+    for (int i = decorators.size() - 1; i >= 0; i--) {
+        if (jit)
+            func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
+        func.o = runtimeCall(decorators[i].o, ArgPassSpec(1), func.o, 0, 0, 0, 0);
+    }
+    return func;
 }
 
 Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
@@ -1091,52 +1127,51 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
 }
 
 Value ASTInterpreter::visit_global(AST_Global* node) {
-    abortJITing();
+#ifndef NDEBUG
     for (auto name : node->names) {
-        if (getSymVRegMap().count(name))
-            vregs[getSymVRegMap()[name]] = NULL;
+        assert(!getSymVRegMap().count(name));
     }
+#endif
     return Value();
 }
 
 Value ASTInterpreter::visit_delete(AST_Delete* node) {
-    abortJITing();
     for (AST_expr* target_ : node->targets) {
         switch (target_->type) {
             case AST_TYPE::Subscript: {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
                 Value slice = visit_expr(sub->slice);
+                if (jit)
+                    jit->emitDelItem(value, slice);
                 delitem(value.o, slice.o);
                 break;
             }
             case AST_TYPE::Attribute: {
                 AST_Attribute* attr = (AST_Attribute*)target_;
-                pyston::delattr(visit_expr(attr->value).o, attr->attr.getBox());
+                Value target = visit_expr(attr->value);
+                BoxedString* str = attr->attr.getBox();
+                if (jit)
+                    jit->emitDelAttr(target, str);
+                delattr(target.o, str);
                 break;
             }
             case AST_TYPE::Name: {
                 AST_Name* target = (AST_Name*)target_;
-
-                ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
+                if (target->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
+                    target->lookup_type = scope_info->getScopeTypeOfName(target->id);
+                ScopeInfo::VarScopeType vst = target->lookup_type;
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+                    if (jit)
+                        jit->emitDelGlobal(target->id.getBox());
                     delGlobal(globals, target->id.getBox());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
-                    assert(frame_info.boxedLocals != NULL);
-                    if (frame_info.boxedLocals->cls == dict_cls) {
-                        auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-                        auto it = d.find(target->id.getBox());
-                        if (it == d.end()) {
-                            assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
-                        }
-                        d.erase(it);
-                    } else if (frame_info.boxedLocals->cls == attrwrapper_cls) {
-                        attrwrapperDel(frame_info.boxedLocals, target->id);
-                    } else {
-                        RELEASE_ASSERT(0, "%s", frame_info.boxedLocals->cls->tp_name);
-                    }
+                    if (jit)
+                        jit->emitDelName(target->id);
+                    ASTInterpreterJitInterface::delNameHelper(this, target->id);
                 } else {
+                    abortJITing();
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 
                     assert(getSymVRegMap().count(target->id));
@@ -1370,12 +1405,11 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
 }
 
 Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
-    abortJITing();
     AST_Return* expr = new AST_Return();
     expr->value = node->body;
 
     std::vector<AST_stmt*> body = { expr };
-    return Value(createFunction(node, node->args, body), NULL);
+    return createFunction(node, node->args, body);
 }
 
 Value ASTInterpreter::visit_dict(AST_Dict* node) {
@@ -1543,6 +1577,24 @@ int ASTInterpreterJitInterface::getGlobalsOffset() {
     return offsetof(ASTInterpreter, globals);
 }
 
+void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedString name) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    Box* boxed_locals = interpreter->frame_info.boxedLocals;
+    assert(boxed_locals != NULL);
+    if (boxed_locals->cls == dict_cls) {
+        auto& d = static_cast<BoxedDict*>(boxed_locals)->d;
+        auto it = d.find(name.getBox());
+        if (it == d.end()) {
+            assertNameDefined(0, name.c_str(), NameError, false /* local_var_msg */);
+        }
+        d.erase(it);
+    } else if (boxed_locals->cls == attrwrapper_cls) {
+        attrwrapperDel(boxed_locals, name);
+    } else {
+        RELEASE_ASSERT(0, "%s", boxed_locals->cls->tp_name);
+    }
+}
+
 Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString s) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     DerefInfo deref_info = interpreter->scope_info->getDerefInfo(s);
@@ -1583,12 +1635,6 @@ Box* ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type,
     return None;
 }
 
-Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
-    return None;
-}
-
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
 
@@ -1597,6 +1643,12 @@ void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long 
     assert(interpreter->getSymVRegMap()[id] == vreg);
     interpreter->vregs[vreg] = v;
     interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = v;
+}
+
+Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
+    return None;
 }
 
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
