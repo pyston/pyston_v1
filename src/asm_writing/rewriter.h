@@ -422,7 +422,7 @@ protected:
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
-    void _setupCall(RewriterVar* result, bool has_side_effects, const RewriterVar::SmallVector& args,
+    void _setupCall(bool has_side_effects, const RewriterVar::SmallVector& args,
                     const RewriterVar::SmallVector& args_xmm);
     void _call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                const RewriterVar::SmallVector& args_xmm);

@@ -488,8 +488,8 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
 using namespace pyston::set;
 
 void setupSet() {
-    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0, sizeof(BoxedSet),
-                                              false, "setiterator");
+    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0,
+                                              sizeof(BoxedSetIterator), false, "setiterator");
     set_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
