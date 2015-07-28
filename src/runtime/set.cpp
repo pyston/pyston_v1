@@ -99,6 +99,14 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
     std::string O("");
     llvm::raw_string_ostream os(O);
 
+    int status = Py_ReprEnter((PyObject*)self);
+    if (status != 0) {
+        if (status < 0)
+            return boxString(os.str());
+
+        os << type_name << "(...)";
+        return boxString(os.str());
+    }
     os << type_name << "([";
     bool first = true;
     for (Box* elt : self->s) {
@@ -109,6 +117,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         first = false;
     }
     os << "])";
+    Py_ReprLeave((PyObject*)self);
     return boxString(os.str());
 }
 
@@ -548,6 +557,7 @@ void setupSet() {
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr(internStringMortal("__nonzero__")));
 
     frozenset_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)setHash, BOXED_INT, 1)));
+    set_cls->giveAttr("__hash__", None);
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
