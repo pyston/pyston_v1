@@ -3847,6 +3847,12 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     return r;
 }
 
+// force instantiation:
+template Box* callCLFunc<CAPI>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                               BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
+                               Box** oargs);
+template Box* callCLFunc<CXX>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                              BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
 template <enum ExceptionStyle S>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
