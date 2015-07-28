@@ -1016,7 +1016,7 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
     }
 
 
-    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, ExceptionStyle::CXX, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real

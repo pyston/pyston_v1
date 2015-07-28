@@ -638,7 +638,7 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     if (argspec.has_starargs || argspec.num_args == 0) {
         // Get callFunc to expand the arguments.
         // TODO: update this to use rearrangeArguments instead.
-        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        return callFunc<ExceptionStyle::CXX>(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 
     return typeCallInner(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -996,7 +996,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             if (new_npassed_args >= 4)
                 srewrite_args.args = rewrite_args->args;
 
-            made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
+            made = runtimeCallInternal<ExceptionStyle::CXX>(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3,
+                                                            args, keyword_names);
 
             if (!srewrite_args.out_success) {
                 rewrite_args = NULL;
@@ -1013,7 +1014,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init)
             made = objectNewNoArgs(cls);
         else
-            made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
+            made = runtimeCallInternal<ExceptionStyle::CXX>(new_attr, NULL, new_argspec, cls, arg2, arg3, args,
+                                                            keyword_names);
     }
 
     assert(made);
@@ -1063,7 +1065,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // initrtn = callattrInternal(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
             // keyword_names);
-            initrtn = runtimeCallInternal(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
+            initrtn = runtimeCallInternal<ExceptionStyle::CXX>(init_attr, &srewrite_args, argspec, made, arg2, arg3,
+                                                               args, keyword_names);
 
             if (!srewrite_args.out_success) {
                 rewrite_args = NULL;
@@ -1082,10 +1085,11 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // If we weren't passed the args array, it's not safe to index into it
             if (passed <= 2)
-                initrtn = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, NULL, NULL, keyword_names);
+                initrtn = runtimeCallInternal<ExceptionStyle::CXX>(init_attr, NULL, init_argspec, arg2, arg3, NULL,
+                                                                   NULL, keyword_names);
             else
-                initrtn
-                    = runtimeCallInternal(init_attr, NULL, init_argspec, arg2, arg3, args[0], &args[1], keyword_names);
+                initrtn = runtimeCallInternal<ExceptionStyle::CXX>(init_attr, NULL, init_argspec, arg2, arg3, args[0],
+                                                                   &args[1], keyword_names);
         }
         assertInitNone(initrtn);
     } else {
@@ -3414,7 +3418,7 @@ void setupRuntime() {
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
-    typeCallObj->internal_callable = &typeCallInternal;
+    typeCallObj->internal_callable.cxx_ptr = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
     type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));

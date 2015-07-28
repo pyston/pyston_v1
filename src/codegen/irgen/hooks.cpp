@@ -716,6 +716,7 @@ void CompiledFunction::speculationFailed() {
 }
 
 CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+                                   ExceptionStyle::ExceptionStyle exception_style,
                                    const OSREntryDescriptor* entry_descriptor)
     : clfunc(NULL),
       func(func),
@@ -723,6 +724,7 @@ CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization*
       entry_descriptor(entry_descriptor),
       code(code),
       effort(effort),
+      exception_style(exception_style),
       times_called(0),
       times_speculation_failed(0),
       location_map(nullptr) {
@@ -831,29 +833,32 @@ CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs,
     return new CLFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
 }
 
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names) {
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names,
+                          ExceptionStyle::ExceptionStyle exception_style) {
     assert(!param_names.takes_param_names || num_args == param_names.args.size());
     assert(param_names.vararg.str() == "");
     assert(param_names.kwarg.str() == "");
 
-    return boxRTFunction(f, rtn_type, num_args, 0, false, false, param_names);
+    return boxRTFunction(f, rtn_type, num_args, 0, false, false, param_names, exception_style);
 }
 
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs, const ParamNames& param_names) {
+                          bool takes_kwargs, const ParamNames& param_names,
+                          ExceptionStyle::ExceptionStyle exception_style) {
     assert(!param_names.takes_param_names || num_args == param_names.args.size());
     assert(takes_varargs || param_names.vararg.str() == "");
     assert(takes_kwargs || param_names.kwarg.str() == "");
 
     CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
 
-    addRTFunction(cl_f, f, rtn_type);
+    addRTFunction(cl_f, f, rtn_type, exception_style);
     return cl_f;
 }
 
-void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type) {
+void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
+                   ExceptionStyle::ExceptionStyle exception_style) {
     std::vector<ConcreteCompilerType*> arg_types(cl_f->numReceivedArgs(), UNKNOWN);
-    return addRTFunction(cl_f, f, rtn_type, arg_types);
+    return addRTFunction(cl_f, f, rtn_type, arg_types, exception_style);
 }
 
 static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
@@ -862,7 +867,8 @@ static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
 }
 
 void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types) {
+                   const std::vector<ConcreteCompilerType*>& arg_types,
+                   ExceptionStyle::ExceptionStyle exception_style) {
     assert(arg_types.size() == cl_f->numReceivedArgs());
 #ifndef NDEBUG
     for (ConcreteCompilerType* t : arg_types)
@@ -870,6 +876,6 @@ void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-    cl_f->addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, NULL));
+    cl_f->addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
 }
 }

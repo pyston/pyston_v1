@@ -75,6 +75,25 @@ enum ExceptionStyle {
 };
 };
 
+template <typename R, typename... Args> struct ExceptionSwitchableFunction {
+public:
+    typedef R (*FTy)(Args...);
+    FTy capi_ptr;
+    FTy cxx_ptr;
+
+    ExceptionSwitchableFunction(FTy capi_ptr, FTy cxx_ptr) : capi_ptr(capi_ptr), cxx_ptr(cxx_ptr) {}
+
+    template <ExceptionStyle::ExceptionStyle S> FTy get() {
+        if (S == ExceptionStyle::CAPI)
+            return capi_ptr;
+        else
+            return cxx_ptr;
+    }
+    template <ExceptionStyle::ExceptionStyle S> R call(Args... args) noexcept(S == ExceptionStyle::CAPI) {
+        return get()(args...);
+    }
+};
+
 class CompilerType;
 template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
@@ -264,6 +283,7 @@ public:
     int code_size;
 
     EffortLevel effort;
+    ExceptionStyle::ExceptionStyle exception_style;
 
     int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
@@ -273,7 +293,7 @@ public:
     std::vector<ICInfo*> ics;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
-                     const OSREntryDescriptor* entry_descriptor);
+                     ExceptionStyle::ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();
 
@@ -352,9 +372,9 @@ public:
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                     const std::vector<BoxedString*>*);
-    InternalCallable internal_callable = NULL;
+    typedef ExceptionSwitchableFunction<Box*, BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*,
+                                        Box**, const std::vector<BoxedString*>*> InternalCallable;
+    InternalCallable internal_callable;
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                std::unique_ptr<SourceInfo> source);
@@ -393,12 +413,16 @@ public:
 CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                              const ParamNames& param_names = ParamNames::empty());
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
+                          bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
+                          ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
-                          const ParamNames& param_names = ParamNames::empty());
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type);
+                          const ParamNames& param_names = ParamNames::empty(),
+                          ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types);
+                   ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
+                   const std::vector<ConcreteCompilerType*>& arg_types,
+                   ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
 CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;
