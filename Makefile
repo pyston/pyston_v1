@@ -948,6 +948,9 @@ $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained: pyston_release_gcc_pgo_instrumented
 	mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
 	(cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) && ./pyston $(SRC_DIR)/minibenchmarks/combined.py && ./pyston $(SRC_DIR)/minibenchmarks/combined.py ) && touch $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
 
+pyston_pgo: pyston_release_gcc_pgo
+	ln -s $< $@
+
 .PHONY: format check_format
 format: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) format
