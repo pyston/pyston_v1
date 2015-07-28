@@ -557,6 +557,7 @@ void setupSet() {
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr(internStringMortal("__nonzero__")));
 
     frozenset_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)setHash, BOXED_INT, 1)));
+    set_cls->giveAttr("__hash__", None);
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
