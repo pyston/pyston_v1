@@ -274,6 +274,12 @@ public:
     void prepareForCollection() {}
     void cleanupAfterCollection() {}
 
+#ifndef NDEBUG
+    void assertConsistent();
+#else
+    void assertConsistent() {}
+#endif
+
 private:
     template <int N> class Bitmap {
         static_assert(N % 64 == 0, "");
