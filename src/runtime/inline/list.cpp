@@ -22,9 +22,6 @@
 
 namespace pyston {
 
-using namespace pyston::ExceptionStyle;
-using pyston::ExceptionStyle::ExceptionStyle;
-
 BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
 }
 
@@ -68,7 +65,7 @@ i1 listiterHasnextUnboxed(Box* s) {
     return ans;
 }
 
-template <enum ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
+template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 

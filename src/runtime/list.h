@@ -35,7 +35,7 @@ Box* listIter(Box* self);
 Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
-template <ExceptionStyle::ExceptionStyle S> Box* listiterNext(Box* self) noexcept(S == ExceptionStyle::CAPI);
+template <ExceptionStyle S> Box* listiterNext(Box* self) noexcept(S == CAPI);
 Box* listReversed(Box* self);
 Box* listreviterHasnext(Box* self);
 i1 listreviterHasnextUnboxed(Box* self);

@@ -107,25 +107,22 @@ struct BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
 
 struct CallRewriteArgs;
-template <ExceptionStyle::ExceptionStyle S>
+template <ExceptionStyle S>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                         Box** args,
-                         const std::vector<BoxedString*>* keyword_names) noexcept(S == ExceptionStyle::CAPI);
+                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
 struct GetitemRewriteArgs;
-template <ExceptionStyle::ExceptionStyle S>
-Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI);
+template <ExceptionStyle S>
+Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == CAPI);
 
 struct LenRewriteArgs;
-template <ExceptionStyle::ExceptionStyle S>
-BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI);
+template <ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI);
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
-template <ExceptionStyle::ExceptionStyle S>
+template <ExceptionStyle S>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-              Box* arg3, Box** args,
-              const std::vector<BoxedString*>* keyword_names) noexcept(S == ExceptionStyle::CAPI);
+              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
 enum LookupScope {
     CLASS_ONLY = 1,
@@ -141,8 +138,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
 // This is the equivalent of PyObject_GetAttr. Unlike getattrInternalGeneric, it checks for custom __getattr__ or
 // __getattribute__ methods.
-template <ExceptionStyle::ExceptionStyle S>
-Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI);
+template <ExceptionStyle S>
+Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI);
 
 // This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
 // data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
@@ -168,10 +165,10 @@ Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
 Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
-template <ExceptionStyle::ExceptionStyle S>
+template <ExceptionStyle S>
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
-                Box** oargs) noexcept(S == ExceptionStyle::CAPI);
+                Box** oargs) noexcept(S == CAPI);
 
 static const char* objectNewParameterTypeErrorMsg() {
     if (PYTHON_VERSION_HEX >= version_hex(2, 7, 4)) {
