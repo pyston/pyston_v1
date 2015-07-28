@@ -696,8 +696,8 @@ static Box* dict_repr(PyObject* self) noexcept {
 }
 
 void setupDict() {
-    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, 0, sizeof(BoxedDict),
-                                               false, "dictionary-itemiterator");
+    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, 0,
+                                               sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
 
     dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView), false,
                                            "dict_keys");
