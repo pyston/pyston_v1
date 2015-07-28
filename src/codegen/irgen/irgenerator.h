@@ -17,6 +17,7 @@
 
 #include <map>
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Instructions.h"
 
@@ -33,6 +34,7 @@ class MDNode;
 
 namespace pyston {
 
+class AST_Invoke;
 class CFGBlock;
 class GCBuilder;
 struct PatchpointInfo;
@@ -70,6 +72,7 @@ private:
     llvm::Value* frame_info_arg;
     int scratch_size;
 
+    llvm::DenseMap<CFGBlock*, ExceptionStyle> landingpad_styles;
 
 public:
     IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
@@ -104,6 +107,9 @@ public:
     ParamNames* getParamNames() { return param_names; }
 
     void setFrameInfoArgument(llvm::Value* v) { frame_info_arg = v; }
+
+    ExceptionStyle getLandingpadStyle(AST_Invoke* invoke);
+    ExceptionStyle getLandingpadStyle(CFGBlock* block);
 };
 
 // turns CFGBlocks into LLVM IR

@@ -52,3 +52,18 @@ print "******** 2", ''.join(traceback.format_exception(et2, ev2, tb2))
 print et1 is et2
 print ev1 is ev2
 print tb1 is tb2
+
+class C(object):
+    def __getattr__(self, attr):
+        raise AttributeError()
+
+def f4():
+    try:
+        C().a
+    except IOError: # unrelated exception
+        pass
+
+try:
+    f4()
+except AttributeError:
+    print "******** 3", ''.join(traceback.format_exception(*sys.exc_info()))

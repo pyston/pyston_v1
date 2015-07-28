@@ -39,6 +39,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 // will we always want to generate unique function names? (ie will this function always be reasonable?)
 CompiledFunction* cfForMachineFunctionName(const std::string&);
 
+extern "C" void capiExcCaughtInJit(AST_stmt* current_stmt, void* source_info);
+
 extern "C" Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags);
 extern "C" Box* eval(Box* boxedCode, Box* globals, Box* locals);
 extern "C" Box* compile(Box* source, Box* filename, Box* mode, Box** _args /* flags, dont_inherit */);

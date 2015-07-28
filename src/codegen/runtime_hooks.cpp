@@ -270,6 +270,9 @@ void initGlobalFuncs(GlobalState& g) {
     g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
     GET(raise0);
     GET(raise3);
+    GET(PyErr_Fetch);
+    GET(PyErr_NormalizeException);
+    GET(capiExcCaughtInJit);
     GET(deopt);
 
     GET(div_float_float);

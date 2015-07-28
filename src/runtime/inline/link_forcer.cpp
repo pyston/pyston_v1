@@ -117,6 +117,9 @@ void force() {
 
     FORCE(raise0);
     FORCE(raise3);
+    FORCE(PyErr_Fetch);
+    FORCE(PyErr_NormalizeException);
+    FORCE(capiExcCaughtInJit);
     FORCE(deopt);
 
     FORCE(div_i64_i64);

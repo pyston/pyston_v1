@@ -3418,7 +3418,7 @@ void setupRuntime() {
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
-    typeCallObj->internal_callable.cxx_ptr = &typeCallInternal;
+    typeCallObj->internal_callable.cxx_val = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
     type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));

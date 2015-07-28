@@ -73,23 +73,36 @@ enum ExceptionStyle {
     CXX,
 };
 
-template <typename R, typename... Args> struct ExceptionSwitchableFunction {
+template <typename T> struct ExceptionSwitchable {
+public:
+    T capi_val;
+    T cxx_val;
+
+    ExceptionSwitchable() : capi_val(), cxx_val() {}
+    ExceptionSwitchable(T capi_val, T cxx_val) : capi_val(std::move(capi_val)), cxx_val(std::move(cxx_val)) {}
+
+    template <ExceptionStyle S> T get() {
+        if (S == CAPI)
+            return capi_val;
+        else
+            return cxx_val;
+    }
+
+    T get(ExceptionStyle S) {
+        if (S == CAPI)
+            return capi_val;
+        else
+            return cxx_val;
+    }
+};
+
+template <typename R, typename... Args>
+struct ExceptionSwitchableFunction : public ExceptionSwitchable<R (*)(Args...)> {
 public:
     typedef R (*FTy)(Args...);
-    FTy capi_ptr;
-    FTy cxx_ptr;
+    ExceptionSwitchableFunction(FTy capi_ptr, FTy cxx_ptr) : ExceptionSwitchable<FTy>(capi_ptr, cxx_ptr) {}
 
-    ExceptionSwitchableFunction(FTy capi_ptr, FTy cxx_ptr) : capi_ptr(capi_ptr), cxx_ptr(cxx_ptr) {}
-
-    template <ExceptionStyle S> FTy get() {
-        if (S == CAPI)
-            return capi_ptr;
-        else
-            return cxx_ptr;
-    }
-    template <ExceptionStyle S> R call(Args... args) noexcept(S == ExceptionStyle::CAPI) {
-        return get()(args...);
-    }
+    template <ExceptionStyle S> R call(Args... args) noexcept(S == CAPI) { return this->template get<S>()(args...); }
 };
 
 class CompilerType;

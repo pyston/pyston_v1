@@ -603,6 +603,14 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
+extern "C" void capiExcCaughtInJit(AST_stmt* stmt, void* _source_info) {
+    SourceInfo* source = static_cast<SourceInfo*>(_source_info);
+    // TODO: handle reraise (currently on the ExcInfo object)
+    PyThreadState* tstate = PyThreadState_GET();
+    BoxedTraceback::here(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()),
+                         &tstate->curexc_traceback);
+}
+
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
     static StatCounter frames_unwound("num_frames_unwound_python");
     frames_unwound.log();
