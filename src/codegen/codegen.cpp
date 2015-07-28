@@ -43,7 +43,8 @@ CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool 
       param_names(this->source->ast, this->source->getInternedStrings()),
       always_use_version(NULL),
       code_obj(NULL),
-      times_interpreted(0) {
+      times_interpreted(0),
+      internal_callable(NULL, NULL) {
     assert(num_args >= num_defaults);
 }
 CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
@@ -53,7 +54,8 @@ CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool 
       param_names(param_names),
       always_use_version(NULL),
       code_obj(NULL),
-      times_interpreted(0) {
+      times_interpreted(0),
+      internal_callable(NULL, NULL) {
     assert(num_args >= num_defaults);
 }
 

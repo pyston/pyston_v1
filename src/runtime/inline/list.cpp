@@ -22,6 +22,9 @@
 
 namespace pyston {
 
+using namespace pyston::ExceptionStyle;
+using pyston::ExceptionStyle::ExceptionStyle;
+
 BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
 }
 
@@ -65,24 +68,34 @@ i1 listiterHasnextUnboxed(Box* s) {
     return ans;
 }
 
-Box* listiterNext(Box* s) {
+template <enum ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!self->l) {
-        raiseExcHelper(StopIteration, "");
+        if (S == CAPI) {
+            PyErr_SetObject(StopIteration, None);
+            return NULL;
+        } else
+            raiseExcHelper(StopIteration, "");
     }
 
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
         self->l = NULL;
-        raiseExcHelper(StopIteration, "");
+        if (S == CAPI) {
+            PyErr_SetObject(StopIteration, None);
+            return NULL;
+        } else
+            raiseExcHelper(StopIteration, "");
     }
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
     return rtn;
 }
-
+// force instantiation:
+template Box* listiterNext<CAPI>(Box*);
+template Box* listiterNext<CXX>(Box*);
 
 Box* listReversed(Box* s) {
     assert(isSubclass(s->cls, list_cls));
