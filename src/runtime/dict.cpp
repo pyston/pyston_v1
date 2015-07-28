@@ -27,6 +27,9 @@
 
 namespace pyston {
 
+using namespace pyston::ExceptionStyle;
+using pyston::ExceptionStyle::ExceptionStyle;
+
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     chars.push_back('{');
@@ -183,23 +186,54 @@ extern "C" int PyDict_Update(PyObject* a, PyObject* b) noexcept {
     return PyDict_Merge(a, b, 1);
 }
 
-Box* dictGetitem(BoxedDict* self, Box* k) {
-    if (!isSubclass(self->cls, dict_cls))
-        raiseExcHelper(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
-                       getTypeName(self));
+template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexcept(S == CAPI) {
+    if (!isSubclass(self->cls, dict_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
+                         getTypeName(self));
+            return NULL;
+        } else {
+            raiseExcHelper(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
+                           getTypeName(self));
+        }
+    }
 
-    auto it = self->d.find(k);
+    BoxedDict::DictMap::iterator it;
+    try {
+        it = self->d.find(k);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else {
+            throw e;
+        }
+    }
+
     if (it == self->d.end()) {
         // Try calling __missing__ if this is a subclass
         if (self->cls != dict_cls) {
             static BoxedString* missing_str = internStringImmortal("__missing__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(1) };
-            Box* r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
+            Box* r;
+            try {
+                r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
+            } catch (ExcInfo e) {
+                if (S == CAPI) {
+                    setCAPIException(e);
+                    return NULL;
+                } else
+                    throw e;
+            }
             if (r)
                 return r;
         }
 
-        raiseExcHelper(KeyError, k);
+        if (S == CAPI) {
+            PyErr_SetObject(KeyError, k);
+            return NULL;
+        } else
+            raiseExcHelper(KeyError, k);
     }
     return it->second;
 }
@@ -588,7 +622,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = internStringImmortal("keys");
-        if (getattrInternal(arg, keys_str, NULL)) {
+        if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str, NULL)) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);
@@ -715,7 +749,7 @@ void setupDict() {
     dict_cls->giveAttr("setdefault",
                        new BoxedFunction(boxRTFunction((void*)dictSetdefault, UNKNOWN, 3, 1, false, false), { None }));
 
-    dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2)));
+    dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem<CXX>, UNKNOWN, 2)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
     dict_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)dictDelitem, UNKNOWN, 2)));
     dict_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
@@ -746,6 +780,8 @@ void setupDict() {
     // subclass Python classes.
     dict_cls->tp_init = dict_init;
     dict_cls->tp_repr = dict_repr;
+
+    dict_cls->tp_as_mapping->mp_subscript = (binaryfunc)dictGetitem<CAPI>;
 
     dict_keys_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));

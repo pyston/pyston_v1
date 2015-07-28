@@ -204,13 +204,29 @@ done:
 }
 
 
-extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept {
-    try {
-        return getattrMaybeNonstring(o, attr_name);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
+extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr) noexcept {
+    if (!PyString_Check(attr)) {
+        if (PyUnicode_Check(attr)) {
+            attr = _PyUnicode_AsDefaultEncodedString(attr, NULL);
+            if (attr == NULL)
+                return NULL;
+        } else {
+            PyErr_Format(TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr)->tp_name);
+            return NULL;
+        }
     }
+
+    BoxedString* s = static_cast<BoxedString*>(attr);
+    internStringMortalInplace(s);
+
+    Box* r = getattrInternal<ExceptionStyle::CAPI>(o, s, NULL);
+
+    if (!r && !PyErr_Occurred()) {
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
+                     PyString_AS_STRING(attr));
+    }
+
+    return r;
 }
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
@@ -441,12 +457,7 @@ done:
 
 
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
-    try {
-        return getitem(o, key);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    return getitemInternal<ExceptionStyle::CAPI>(o, key, NULL);
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {

@@ -97,6 +97,24 @@ struct CallRewriteArgs {
           out_rtn(NULL) {}
 };
 
+struct GetitemRewriteArgs {
+    Rewriter* rewriter;
+    RewriterVar* target;
+    RewriterVar* slice;
+    Location destination;
+
+    bool out_success;
+    RewriterVar* out_rtn;
+
+    GetitemRewriteArgs(Rewriter* rewriter, RewriterVar* target, RewriterVar* slice, Location destination)
+        : rewriter(rewriter),
+          target(target),
+          slice(slice),
+          destination(destination),
+          out_success(false),
+          out_rtn(NULL) {}
+};
+
 struct BinopRewriteArgs {
     Rewriter* rewriter;
     RewriterVar* lhs;

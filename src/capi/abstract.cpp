@@ -732,12 +732,10 @@ exit:
 }
 
 extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
-    try {
-        return len(o)->n;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
+    BoxedInt* r = lenInternal<ExceptionStyle::CAPI>(o, NULL);
+    if (!r)
         return -1;
-    }
+    return r->n;
 }
 
 extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
