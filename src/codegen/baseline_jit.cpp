@@ -560,7 +560,21 @@ int JitFragmentWriter::finishCompilation() {
     }
 
     if (assembler->hasFailed()) {
-        code_block.fragmentAbort(true /* not_enough_space */);
+        int bytes_written = assembler->bytesWritten();
+
+        // don't retry JITing very large blocks
+        const auto large_block_threshold = JitCodeBlock::code_size - 4096;
+        if (bytes_written > large_block_threshold) {
+            static StatCounter num_jit_large_blocks("num_baselinejit_skipped_large_blocks");
+            num_jit_large_blocks.log();
+
+            blocks_aborted.insert(block);
+            code_block.fragmentAbort(false);
+        } else {
+            // we ran out of space - we allow a retry and set shouldCreateNewBlock to true in order to allocate a new
+            // block for the next attempt.
+            code_block.fragmentAbort(true /* not_enough_space */);
+        }
         return 0;
     }
 
