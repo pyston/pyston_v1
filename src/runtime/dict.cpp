@@ -34,18 +34,17 @@ Box* dictRepr(BoxedDict* self) {
 
     int status = Py_ReprEnter((PyObject*)self);
     std::vector<char> chars;
-    if(status != 0)
-    {
-       if(status < 0) 
-          return boxString(llvm::StringRef(&chars[0], chars.size()));
-      
-       chars.push_back('{');
-       chars.push_back('.');
-       chars.push_back('.');
-       chars.push_back('.');
-       chars.push_back('}');
+    if (status != 0) {
+        if (status < 0)
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
 
-       return boxString(llvm::StringRef(&chars[0], chars.size()));
+        chars.push_back('{');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('}');
+
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
     chars.push_back('{');
     bool first = true;
