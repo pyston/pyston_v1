@@ -144,7 +144,28 @@ template <int N, int... S> struct gens : gens<N - 1, N - 1, S...> {};
 template <int... S> struct gens<0, S...> { typedef seq<S...> type; };
 }
 
-template <typename T, typename... CtorArgs> class PerThreadSet {
+class PerThreadSetBase {
+private:
+    static std::unordered_set<PerThreadSetBase*> all_instances;
+
+protected:
+    PerThreadSetBase() { all_instances.insert(this); }
+
+    virtual ~PerThreadSetBase() {
+        assert(all_instances.count(this));
+        all_instances.erase(this);
+    }
+
+    virtual void onFork() = 0;
+
+public:
+    static void runAllForkHandlers() {
+        for (auto inst : all_instances)
+            inst->onFork();
+    }
+};
+
+template <typename T, typename... CtorArgs> class PerThreadSet : public PerThreadSetBase {
 private:
     pthread_key_t pthread_key;
     PthreadFastMutex lock;
@@ -159,20 +180,26 @@ private:
 
     std::unordered_map<pthread_t, Storage*> map;
     std::tuple<CtorArgs...> ctor_args;
+#ifndef NDEBUG
+    int map_elts = 0;
+#endif
 
     static void dtor(void* val) {
         Storage* s = static_cast<Storage*>(val);
         assert(s);
 
         auto* self = s->self;
+
         LOCK_REGION(&self->lock);
 
+        ASSERT(self->map.size() == self->map_elts, "%ld %d", self->map.size(), self->map_elts);
         assert(s->my_tid == pthread_self());
 
-        // I assume this destructor gets called on the same thread
-        // that this data is bound to:
         assert(self->map.count(pthread_self()));
         self->map.erase(pthread_self());
+#ifndef NDEBUG
+        self->map_elts--;
+#endif
 
         delete s;
     }
@@ -183,6 +210,21 @@ private:
                            .my_tid = pthread_self(),
 #endif
                            .val = T(std::get<S>(ctor_args)...) };
+    }
+
+protected:
+    void onFork() override {
+        pthread_t surviving_ptid = pthread_self();
+        for (auto it = this->map.begin(), end = this->map.end(); it != end;) {
+            if (it->first != surviving_ptid) {
+                delete it->second;
+                it = this->map.erase(it);
+#ifndef NDEBUG
+                this->map_elts--;
+#endif
+            } else
+                ++it;
+        }
     }
 
 public:
@@ -214,6 +256,12 @@ public:
             s = make(typename impl::gens<sizeof...(CtorArgs)>::type());
 
             LOCK_REGION(&lock);
+
+#ifndef NDEBUG
+            assert(map.size() == map_elts);
+            map_elts++;
+#endif
+
             int code = pthread_setspecific(pthread_key, s);
             assert(code == 0);
 

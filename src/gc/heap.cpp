@@ -411,7 +411,37 @@ GCAllocation* SmallArena::allocationFrom(void* ptr) {
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
 
+#ifndef NDEBUG
+void SmallArena::assertConsistent() {
+    std::unordered_set<Block*> seen_blocks;
+
+    auto scan = [&seen_blocks](Block* h) {
+        while (h) {
+            ASSERT(h >= (void*)SMALL_ARENA_START && h < (void*)LARGE_ARENA_START, "%p", h);
+            assert(!seen_blocks.count(h));
+            seen_blocks.insert(h);
+            if (h->next)
+                assert(h->next->prev == &h->next);
+            h = h->next;
+        }
+    };
+
+    thread_caches.forEachValue([&scan](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            scan(cache->cache_free_heads[bidx]);
+            scan(cache->cache_full_heads[bidx]);
+        }
+    });
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        scan(full_heads[bidx]);
+        scan(heads[bidx]);
+    }
+}
+#endif
+
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
+    assertConsistent();
+
     thread_caches.forEachValue([this, &weakly_referenced](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
             Block* h = cache->cache_free_heads[bidx];

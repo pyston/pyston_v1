@@ -17,6 +17,7 @@ if __name__ == '__main__':
     p = multiprocessing.Process(target=f, args=('bob',))
     p.start()
     p.join()
+    print p.exitcode
 
 
 def f(q):
@@ -28,3 +29,5 @@ if __name__ == '__main__':
     p.start()
     print q.get()    # prints "[42, None, 'hello']"
     p.join()
+    print p.exitcode
+print "done"

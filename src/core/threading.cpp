@@ -35,6 +35,8 @@
 namespace pyston {
 namespace threading {
 
+std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
+
 extern "C" {
 __thread PyThreadState cur_thread_state
     = { 0, NULL, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
@@ -508,7 +510,7 @@ extern "C" void PyEval_ReInitThreads() noexcept {
     num_starting_threads = 0;
     threads_waiting_on_gil = 0;
 
-    // TODO we should clean up all created PerThreadSets, such as the one used in the heap for thread-local-caches.
+    PerThreadSetBase::runAllForkHandlers();
 }
 
 void acquireGLWrite() {

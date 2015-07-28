@@ -113,10 +113,10 @@ private:
 
 public:
     TraceStack(TraceStackType type) : visit_type(type) { get_chunk(); }
-    TraceStack(TraceStackType type, const std::unordered_set<void*>& root_handles) : visit_type(type) {
+    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : visit_type(type) {
         get_chunk();
-        for (void* p : root_handles) {
-            assert(!isMarked(GCAllocation::fromUserData(p)));
+        for (void* p : roots) {
+            ASSERT(!isMarked(GCAllocation::fromUserData(p)), "");
             push(p);
         }
     }
