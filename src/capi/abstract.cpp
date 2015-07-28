@@ -2008,20 +2008,93 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
                       o);
 }
 
+/* Add a check for embedded NULL-bytes in the argument. */
+static PyObject* long_from_string(const char* s, Py_ssize_t len) noexcept {
+    char* end;
+    PyObject* x;
+
+    x = PyLong_FromString(s, &end, 10);
+    if (x == NULL)
+        return NULL;
+    if (end != s + len) {
+        PyErr_SetString(PyExc_ValueError, "null byte in argument for long()");
+        Py_DECREF(x);
+        return NULL;
+    }
+    return x;
+}
+
 extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
-    // This method should do quite a bit more, including checking tp_as_number->nb_long or calling __trunc__
+    PyNumberMethods* m;
+    static PyObject* trunc_name = NULL;
+    PyObject* trunc_func;
+    const char* buffer;
+    Py_ssize_t buffer_len;
 
-    if (o->cls == long_cls)
-        return o;
+    if (trunc_name == NULL) {
+        trunc_name = PyString_InternFromString("__trunc__");
+        if (trunc_name == NULL)
+            return NULL;
+    }
 
-    if (o->cls == float_cls)
-        return PyLong_FromDouble(PyFloat_AsDouble(o));
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_long) { /* This should include subclasses of long */
+        /* Classic classes always take this branch. */
+        PyObject* res = m->nb_long(o);
+        if (res == NULL)
+            return NULL;
+        if (PyInt_Check(res)) {
+            long value = PyInt_AS_LONG(res);
+            Py_DECREF(res);
+            return PyLong_FromLong(value);
+        } else if (!PyLong_Check(res)) {
+            PyErr_Format(PyExc_TypeError, "__long__ returned non-long (type %.200s)", res->cls->tp_name);
+            Py_DECREF(res);
+            return NULL;
+        }
+        return res;
+    }
+    if (PyLong_Check(o)) { /* A long subclass without nb_long */
+        BoxedInt* lo = (BoxedInt*)o;
+        return PyLong_FromLong(lo->n);
+    }
+    trunc_func = PyObject_GetAttr(o, trunc_name);
+    if (trunc_func) {
+        PyObject* truncated = PyEval_CallObject(trunc_func, NULL);
+        PyObject* int_instance;
+        Py_DECREF(trunc_func);
+        /* __trunc__ is specified to return an Integral type,
+           but long() needs to return a long. */
+        int_instance = _PyNumber_ConvertIntegralToInt(truncated, "__trunc__ returned non-Integral (type %.200s)");
+        if (int_instance && PyInt_Check(int_instance)) {
+            /* Make sure that long() returns a long instance. */
+            long value = PyInt_AS_LONG(int_instance);
+            Py_DECREF(int_instance);
+            return PyLong_FromLong(value);
+        }
+        return int_instance;
+    }
+    PyErr_Clear(); /* It's not an error if  o.__trunc__ doesn't exist. */
 
-    if (o->cls == int_cls)
-        return PyLong_FromLong(((BoxedInt*)o)->n);
+    if (PyString_Check(o))
+        /* need to do extra error checking that PyLong_FromString()
+         * doesn't do.  In particular long('9.5') must raise an
+         * exception, not truncate the float.
+         */
+        return long_from_string(PyString_AS_STRING(o), PyString_GET_SIZE(o));
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(o))
+        /* The above check is done in PyLong_FromUnicode(). */
+        return PyLong_FromUnicode(PyUnicode_AS_UNICODE(o), PyUnicode_GET_SIZE(o), 10);
+#endif
+    if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
+        return long_from_string(buffer, buffer_len);
 
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    return type_error("long() argument must be a string or a "
+                      "number, not '%.200s'",
+                      o);
 }
 
 extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {

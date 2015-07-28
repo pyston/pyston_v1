@@ -428,10 +428,6 @@ Py_LOCAL_INLINE(PyObject*) getnextarg(PyObject* args, Py_ssize_t arglen, Py_ssiz
 
 extern "C" PyObject* _PyString_FormatLong(PyObject* val, int flags, int prec, int type, const char** pbuf,
                                           int* plen) noexcept {
-    // Pyston change:
-    RELEASE_ASSERT(val->cls == long_cls, "");
-
-
     PyObject* result = NULL;
     char* buf;
     Py_ssize_t i;
@@ -444,21 +440,15 @@ extern "C" PyObject* _PyString_FormatLong(PyObject* val, int flags, int prec, in
     switch (type) {
         case 'd':
         case 'u':
-            // Pyston change:
-            // result = Py_TYPE(val)->tp_str(val);
-            result = longStr((BoxedLong*)val);
+            result = Py_TYPE(val)->tp_str(val);
             break;
         case 'o':
-            // Pyston change:
-            // result = Py_TYPE(val)->tp_as_number->nb_oct(val);
-            result = longOct((BoxedLong*)val);
+            result = Py_TYPE(val)->tp_as_number->nb_oct(val);
             break;
         case 'x':
         case 'X':
             numnondigits = 2;
-            // Pyston change:
-            // result = Py_TYPE(val)->tp_as_number->nb_hex(val);
-            result = longHex((BoxedLong*)val);
+            result = Py_TYPE(val)->tp_as_number->nb_hex(val);
             break;
         default:
             assert(!"'type' not in [duoxX]");
