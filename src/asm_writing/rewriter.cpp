@@ -819,7 +819,7 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     return result;
 }
 
-void Rewriter::_setupCall(RewriterVar* result, bool has_side_effects, const RewriterVar::SmallVector& args,
+void Rewriter::_setupCall(bool has_side_effects, const RewriterVar::SmallVector& args,
                           const RewriterVar::SmallVector& args_xmm) {
     if (has_side_effects)
         assert(done_guarding);
@@ -972,7 +972,7 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
 
-    _setupCall(result, has_side_effects, args, args_xmm);
+    _setupCall(has_side_effects, args, args_xmm);
 
     for (RewriterVar* arg : args) {
         arg->bumpUse();

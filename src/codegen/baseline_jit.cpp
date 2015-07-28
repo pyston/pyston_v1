@@ -803,9 +803,12 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const 
         }
         RewriterVar::SmallVector reg_args(args.begin(), args.begin() + 6);
         assert(reg_args.size() == 6);
-        _setupCall(result, false, reg_args, RewriterVar::SmallVector());
+        _setupCall(false, reg_args, RewriterVar::SmallVector());
     } else
-        _setupCall(result, false, args, RewriterVar::SmallVector());
+        _setupCall(false, args, RewriterVar::SmallVector());
+
+    if (failed)
+        return;
 
     // make sure setupCall doesn't use R11
     assert(vars_by_location.count(assembler::R11) == 0);

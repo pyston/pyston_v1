@@ -203,7 +203,7 @@ static const char* set_bases(PyClassObject* c, PyObject* v) {
     return "";
 }
 
-static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
+static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     RELEASE_ASSERT(_cls->cls == classobj_cls, "");
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
 
@@ -216,10 +216,11 @@ static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
             raiseExcHelper(TypeError, "%s", error_str);
         static BoxedString* bases_str = internStringImmortal("__bases__");
         cls->setattr(bases_str, _value, NULL);
-        return;
+        return None;
     }
     PyObject_GenericSetAttr(cls, _attr, _value);
     checkAndThrowCAPIException();
+    return None;
 }
 
 static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
