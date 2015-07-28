@@ -224,3 +224,11 @@ except ValueError as e:
 
 n = float('nan')
 print n in (n, n)
+
+#recursive printing test
+class C(object):
+    def __init__(self):
+        self.t = (self,)
+    def __repr__(self):
+        return repr(self.t)
+print repr(C())
