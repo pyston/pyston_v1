@@ -3789,7 +3789,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     } else if (obj->cls == instancemethod_cls) {
         BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(obj);
 
-        RewriterVar* r_im_func;
+        RewriterVar* r_im_func = NULL;
         if (rewrite_args) {
             r_im_func = rewrite_args->obj->getAttr(offsetof(BoxedInstanceMethod, func), Location::any());
         }
