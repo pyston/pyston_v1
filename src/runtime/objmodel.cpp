@@ -1475,7 +1475,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
 
 template <enum ExceptionStyle S>
 Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == ExceptionStyle::CAPI) {
     assert(gc::isValidGCObject(attr));
 
     if (S == CAPI) {
@@ -1979,7 +1979,9 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     return NULL;
 }
 
-template <enum ExceptionStyle S> Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+template <enum ExceptionStyle S>
+Box* getattrInternal(Box* obj, BoxedString* attr,
+                     GetattrRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
     return getattrInternalEx<S>(obj, attr, rewrite_args,
                                 /* cls_only */ false,
                                 /* for_call */ false, NULL, NULL);
@@ -2592,7 +2594,8 @@ extern "C" BoxedInt* hash(Box* obj) {
     return new BoxedInt(r);
 }
 
-template <enum ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
+template <enum ExceptionStyle S>
+BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
     static BoxedString* len_str = internStringImmortal("__len__");
 
     if (S == CAPI) {
@@ -4625,7 +4628,8 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
     }
 }
 
-template <enum ExceptionStyle S> Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) {
+template <enum ExceptionStyle S>
+Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
     if (S == CAPI) {
         assert(!rewrite_args && "implement me");
         rewrite_args = NULL;
