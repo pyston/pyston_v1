@@ -31,7 +31,19 @@ extern "C" Box* createPureImaginary(double i) {
 }
 
 extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) noexcept {
-    Py_FatalError("unimplemented");
+    // TODO: Incomplete v.s. CPython's implementation.
+    Py_complex cval;
+    if (PyComplex_Check(op)) {
+        cval.real = ((BoxedComplex*)op)->real;
+        cval.imag = ((BoxedComplex*)op)->imag;
+        return cval;
+    } else if (op->cls == int_cls) {
+        cval.real = ((BoxedInt*)op)->n;
+        cval.imag = 0.0;
+        return cval;
+    } else {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" double PyComplex_RealAsDouble(PyObject* op) noexcept {
@@ -255,6 +267,12 @@ Box* complexHash(BoxedComplex* self) {
     return boxInt(combined);
 }
 
+Box* complexAbs(BoxedComplex* self) {
+    assert(self->cls == complex_cls);
+    // TODO: CPython does a lot more safety checks.
+    return boxFloat(sqrt(self->real * self->real + self->imag * self->imag));
+}
+
 Box* complexStr(BoxedComplex* self) {
     assert(self->cls == complex_cls);
     return boxString(complexFmt(self->real, self->imag, 12, 'g'));
@@ -364,6 +382,7 @@ void setupComplex() {
 
     complex_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)complexPos, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)complexHash, BOXED_INT, 1)));
+    complex_cls->giveAttr("__abs__", new BoxedFunction(boxRTFunction((void*)complexAbs, BOXED_FLOAT, 1)));
     complex_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)complexStr, STR, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",
