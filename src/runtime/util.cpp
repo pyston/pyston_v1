@@ -14,6 +14,7 @@
 
 #include "runtime/util.h"
 
+#include "codegen/codegen.h"
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
@@ -70,5 +71,213 @@ void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i6
 
     *start_out = start;
     *stop_out = stop;
+}
+
+Box* boxStringOrNone(const char* s) {
+    if (s == NULL) {
+        return None;
+    } else {
+        return boxString(s);
+    }
+}
+
+Box* noneIfNull(Box* b) {
+    if (b == NULL) {
+        return None;
+    } else {
+        return b;
+    }
+}
+
+Box* coerceUnicodeToStr(Box* unicode) {
+    if (!isSubclass(unicode->cls, unicode_cls))
+        return unicode;
+
+    Box* r = PyUnicode_AsASCIIString(unicode);
+    if (!r) {
+        PyErr_Clear();
+        raiseExcHelper(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
+    }
+
+    return r;
+}
+
+Box* boxStringFromCharPtr(const char* s) {
+    return boxString(s);
+}
+
+extern "C" bool hasnext(Box* o) {
+    return o->cls->tpp_hasnext(o);
+}
+
+extern "C" void dump(void* p) {
+    dumpEx(p, 0);
+}
+
+extern "C" void dumpEx(void* p, int levels) {
+    printf("\n");
+    printf("Raw address: %p\n", p);
+
+    bool is_gc = gc::isValidGCMemory(p);
+    if (!is_gc) {
+        printf("non-gc memory\n");
+        return;
+    }
+
+    if (gc::isNonheapRoot(p)) {
+        printf("Non-heap GC object\n");
+
+        printf("Assuming it's a class object...\n");
+        PyTypeObject* type = (PyTypeObject*)(p);
+        printf("tp_name: %s\n", type->tp_name);
+        return;
+    }
+
+    gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
+    if (al->kind_id == gc::GCKind::UNTRACKED) {
+        printf("gc-untracked object\n");
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::PRECISE) {
+        printf("precise gc array\n");
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::CONSERVATIVE) {
+        printf("conservatively-scanned object object\n");
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::PYTHON || al->kind_id == gc::GCKind::CONSERVATIVE_PYTHON) {
+        if (al->kind_id == gc::GCKind::PYTHON)
+            printf("Python object (precisely scanned)\n");
+        else
+            printf("Python object (conservatively scanned)\n");
+        Box* b = (Box*)p;
+
+        printf("Class: %s", getFullTypeName(b).c_str());
+        if (b->cls->cls != type_cls) {
+            printf(" (metaclass: %s)\n", getFullTypeName(b->cls).c_str());
+        } else {
+            printf("\n");
+        }
+
+        if (b->cls == bool_cls) {
+            printf("The %s object\n", b == True ? "True" : "False");
+        }
+
+        if (isSubclass(b->cls, type_cls)) {
+            auto cls = static_cast<BoxedClass*>(b);
+            printf("Type name: %s\n", getFullNameOfClass(cls).c_str());
+
+            printf("MRO:");
+
+            if (cls->tp_mro && cls->tp_mro->cls == tuple_cls) {
+                bool first = true;
+                for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
+                    if (!first)
+                        printf(" ->");
+                    first = false;
+                    printf(" %s", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
+                }
+            }
+            printf("\n");
+        }
+
+        if (isSubclass(b->cls, str_cls)) {
+            printf("String value: %s\n", static_cast<BoxedString*>(b)->data());
+        }
+
+        if (isSubclass(b->cls, tuple_cls)) {
+            BoxedTuple* t = static_cast<BoxedTuple*>(b);
+            printf("%ld elements\n", t->size());
+
+            if (levels > 0) {
+                int i = 0;
+                for (auto e : *t) {
+                    printf("\nElement %d:", i);
+                    i++;
+                    dumpEx(e, levels - 1);
+                }
+            }
+        }
+
+        if (isSubclass(b->cls, dict_cls)) {
+            BoxedDict* d = static_cast<BoxedDict*>(b);
+            printf("%ld elements\n", d->d.size());
+
+            if (levels > 0) {
+                int i = 0;
+                for (auto t : d->d) {
+                    printf("\nKey:");
+                    dumpEx(t.first, levels - 1);
+                    printf("Value:");
+                    dumpEx(t.second, levels - 1);
+                }
+            }
+        }
+
+        if (isSubclass(b->cls, int_cls)) {
+            printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
+        }
+
+        if (isSubclass(b->cls, list_cls)) {
+            auto l = static_cast<BoxedList*>(b);
+            printf("%ld elements\n", l->size);
+
+            if (levels > 0) {
+                int i = 0;
+                for (int i = 0; i < l->size; i++) {
+                    printf("\nElement %d:", i);
+                    dumpEx(l->elts->elts[i], levels - 1);
+                }
+            }
+        }
+
+        if (isSubclass(b->cls, function_cls)) {
+            BoxedFunction* f = static_cast<BoxedFunction*>(b);
+
+            CLFunction* cl = f->f;
+            if (cl->source) {
+                printf("User-defined function '%s'\n", cl->source->getName().data());
+            } else {
+                printf("A builtin function\n");
+            }
+
+            printf("Has %ld function versions\n", cl->versions.size());
+            for (CompiledFunction* cf : cl->versions) {
+                bool got_name;
+                std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
+                if (got_name)
+                    printf("%s\n", name.c_str());
+                else
+                    printf("%p\n", cf->code);
+            }
+        }
+
+        if (isSubclass(b->cls, module_cls)) {
+            printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
+        }
+
+        /*
+        if (b->cls->instancesHaveHCAttrs()) {
+            HCAttrs* attrs = b->getHCAttrsPtr();
+            printf("Has %ld attrs\n", attrs->hcls->attr_offsets.size());
+            for (const auto& p : attrs->hcls->attr_offsets) {
+                printf("Index %d: %s: %p\n", p.second, p.first.c_str(), attrs->attr_list->attrs[p.second]);
+            }
+        }
+        */
+
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::HIDDEN_CLASS) {
+        printf("Hidden class object\n");
+        return;
+    }
+
+    RELEASE_ASSERT(0, "%d", (int)al->kind_id);
 }
 }

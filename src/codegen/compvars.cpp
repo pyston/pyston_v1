@@ -31,6 +31,7 @@
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
+#include "runtime/util.h"
 
 namespace pyston {
 
