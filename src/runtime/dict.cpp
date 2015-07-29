@@ -31,8 +31,32 @@ using namespace pyston::ExceptionStyle;
 using pyston::ExceptionStyle::ExceptionStyle;
 
 Box* dictRepr(BoxedDict* self) {
+
     std::vector<char> chars;
+    try {
+
+        int status = Py_ReprEnter((PyObject*)self);
+        if (status != 0) {
+            if (status < 0)
+                throwCAPIException();
+
+            chars.push_back('{');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back('}');
+
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        }
+
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        Py_ReprLeave((PyObject*)self);
+        return NULL;
+    }
+
     chars.push_back('{');
+
     bool first = true;
     for (const auto& p : self->d) {
         if (!first) {
@@ -49,6 +73,7 @@ Box* dictRepr(BoxedDict* self) {
         chars.insert(chars.end(), v->s().begin(), v->s().end());
     }
     chars.push_back('}');
+    Py_ReprLeave((PyObject*)self);
     return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 

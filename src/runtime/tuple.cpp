@@ -16,8 +16,6 @@
 
 #include <algorithm>
 
-#include "llvm/Support/raw_ostream.h"
-
 #include "capi/typeobject.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -204,39 +202,56 @@ Box* tupleRepr(BoxedTuple* t) {
     assert(isSubclass(t->cls, tuple_cls));
 
     int n;
-    std::string O("");
-    llvm::raw_string_ostream os(O);
+    std::vector<char> chars;
 
     n = t->size();
     if (n == 0) {
-        os << "()";
-        return boxString(os.str());
+        chars.push_back('(');
+        chars.push_back(')');
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
 
-    int status = Py_ReprEnter((PyObject*)t);
-    if (status != 0) {
-        if (status < 0)
-            return boxString(os.str());
+    try {
+        int status = Py_ReprEnter((PyObject*)t);
+        if (status != 0) {
+            if (status < 0)
+                throwCAPIException();
 
-        os << "(...)";
-        return boxString(os.str());
+            chars.push_back('(');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back(')');
+
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        }
+
+    } catch (ExcInfo e) {
+
+        setCAPIException(e);
+        Py_ReprLeave((PyObject*)t);
+
+        return NULL;
     }
 
-    os << "(";
+    chars.push_back('(');
 
     for (int i = 0; i < n; i++) {
-        if (i)
-            os << ", ";
-
+        if (i) {
+            chars.push_back(',');
+            chars.push_back(' ');
+        }
         BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
-        os << elt_repr->s();
+        chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
     }
-    if (n == 1)
-        os << ",";
-    os << ")";
 
+    if (n == 1)
+        chars.push_back(',');
+
+    chars.push_back(')');
     Py_ReprLeave((PyObject*)t);
-    return boxString(os.str());
+
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* tupleNonzero(BoxedTuple* self) {
