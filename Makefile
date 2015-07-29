@@ -1229,7 +1229,7 @@ endif
 # depend on the first one.
 $(firstword $(TEST_EXT_MODULE_OBJS)): $(TEST_EXT_MODULE_SRCS) | $(BUILD_PY)
 	$(VERB) cd $(TEST_DIR)/test_extension; time ../../$(BUILD_PY) setup.py build
-	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
+	$(VERB) cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux-x86_64-2.7/%.pyston.so) .
 	$(VERB) touch -c $(TEST_EXT_MODULE_OBJS)
 $(wordlist 2,9999,$(TEST_EXT_MODULE_OBJS)): $(firstword $(TEST_EXT_MODULE_OBJS))
 $(firstword $(SHAREDMODS_OBJS)): $(SHAREDMODS_SRCS) | $(BUILD_PY)
