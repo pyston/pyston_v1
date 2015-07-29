@@ -62,15 +62,10 @@ namespace pyston {
 using namespace pyston::ExceptionStyle;
 using pyston::ExceptionStyle::ExceptionStyle;
 
-static const std::string delitem_str("__delitem__");
-static const std::string getattribute_str("__getattribute__");
-static const std::string getattr_str("__getattr__");
-static const std::string init_str("__init__");
 static const std::string iter_str("__iter__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
 static const std::string repr_str("__repr__");
-static const std::string setitem_str("__setitem__");
 static const std::string str_str("__str__");
 
 #if 0
