@@ -106,6 +106,35 @@ ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
     // printf("Added %d\n", invoke->exc_dest->idx);
 
     r = CXX; // default
+
+    // print_ast(invoke);
+    // printf("\n");
+    AST_expr* expr = NULL;
+
+    if (invoke->stmt->type == AST_TYPE::Assign) {
+        expr = ast_cast<AST_Assign>(invoke->stmt)->value;
+    } else if (invoke->stmt->type == AST_TYPE::Expr) {
+        expr = ast_cast<AST_Expr>(invoke->stmt)->value;
+    }
+
+    if (!expr)
+        return r;
+
+    if (0 && expr->type == AST_TYPE::Call) {
+        AST_Call* call = ast_cast<AST_Call>(expr);
+        if (call->func->type != AST_TYPE::Attribute && call->func->type != AST_TYPE::ClsAttribute) {
+            r = CAPI;
+            // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
+        }
+        return r;
+    }
+
+    if (expr->type == AST_TYPE::Attribute) {
+        r = CAPI;
+        // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
+        return r;
+    }
+
     return r;
 }
 

@@ -489,14 +489,24 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     llvm::Value* rtn_val = NULL;
 
+    ExceptionStyle target_exception_style = CXX;
+    if (info.unw_info.capi_exc_dest)
+        target_exception_style = CAPI;
+
     llvm::Value* llvm_func;
     void* raw_func;
     if (cls_only) {
+        assert(target_exception_style == CXX);
         llvm_func = g.funcs.getclsattr;
         raw_func = (void*)pyston::getclsattr;
     } else {
-        llvm_func = g.funcs.getattr;
-        raw_func = (void*)pyston::getattr;
+        if (target_exception_style == CXX) {
+            llvm_func = g.funcs.getattr;
+            raw_func = (void*)pyston::getattr;
+        } else {
+            llvm_func = g.funcs.getattr_capi;
+            raw_func = (void*)pyston::getattr_capi;
+        }
     }
 
     bool do_patchpoint = ENABLE_ICGETATTRS;
@@ -507,11 +517,15 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info);
+        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style);
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr);
+        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style);
     }
+
+    if (target_exception_style == CAPI)
+        emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
+
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
 
@@ -1480,10 +1494,18 @@ public:
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
+                ExceptionStyle exception_style = info.unw_info.capi_exc_dest ? CAPI : CXX;
+                llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
+                                                                 : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
-                    info.unw_info, g.funcs.raiseAttributeErrorStr, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
-                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64));
-                call.setDoesNotReturn();
+                    info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
+                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style);
+                if (exception_style == CAPI) {
+                    emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                           getNullPtr(g.llvm_value_type_ptr));
+                } else {
+                    call.setDoesNotReturn();
+                }
                 return undefVariable();
             }
 

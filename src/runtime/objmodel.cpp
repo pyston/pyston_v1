@@ -271,7 +271,12 @@ extern "C" void assertFailDerefNameDefined(const char* name) {
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, llvm::StringRef attr) {
     assert(attr.data()[attr.size()] == '\0');
-    raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr);
+    raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr.data());
+}
+
+extern "C" void raiseAttributeErrorStrCapi(const char* typeName, llvm::StringRef attr) noexcept {
+    assert(attr.data()[attr.size()] == '\0');
+    PyErr_Format(AttributeError, "'%s' object has no attribute '%s'", typeName, attr.data());
 }
 
 extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) {
@@ -282,6 +287,17 @@ extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) {
                        getNameOfClass(static_cast<BoxedClass*>(obj)), attr.data());
     } else {
         raiseAttributeErrorStr(getTypeName(obj), attr);
+    }
+}
+
+extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept {
+    if (obj->cls == type_cls) {
+        // Slightly different error message:
+        assert(attr.data()[attr.size()] == '\0');
+        PyErr_Format(AttributeError, "type object '%s' has no attribute '%s'",
+                     getNameOfClass(static_cast<BoxedClass*>(obj)), attr.data());
+    } else {
+        raiseAttributeErrorStrCapi(getTypeName(obj), attr);
     }
 }
 
@@ -1876,6 +1892,25 @@ Box* getattrMaybeNonstring(Box* obj, Box* attr) {
     return r;
 }
 
+extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept {
+    STAT_TIMER(t0, "us_timer_slowpath_getattr_capi", 10);
+
+    static StatCounter slowpath_getattr_capi("slowpath_getattr_capi");
+    slowpath_getattr_capi.log();
+
+    assert(!PyErr_Occurred());
+    Box* val = getattrInternal<CAPI>(obj, attr, NULL);
+
+    if (val)
+        return val;
+
+    if (!PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", obj->cls->tp_name,
+                     PyString_AS_STRING(attr));
+
+    return NULL;
+}
+
 extern "C" Box* getattr(Box* obj, BoxedString* attr) {
     STAT_TIMER(t0, "us_timer_slowpath_getattr", 10);
 
@@ -1954,6 +1989,13 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
 
     if (val) {
         return val;
+
+    if (S == CAPI) {
+        if (!PyErr_Occurred())
+            raiseAttributeErrorCapi(obj, attr->s());
+        return NULL;
+    } else {
+        raiseAttributeError(obj, attr->s());
     }
 
     raiseAttributeError(obj, attr->s());

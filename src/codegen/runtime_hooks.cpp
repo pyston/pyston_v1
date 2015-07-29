@@ -195,6 +195,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSet);
 
     GET(getattr);
+    GET(getattr_capi);
     GET(setattr);
     GET(delattr);
     GET(getitem);
@@ -223,6 +224,8 @@ void initGlobalFuncs(GlobalState& g) {
     GET(unpackIntoArray);
     GET(raiseAttributeError);
     GET(raiseAttributeErrorStr);
+    GET(raiseAttributeErrorCapi);
+    GET(raiseAttributeErrorStrCapi);
     GET(raiseIndexErrorStr);
     GET(raiseNotIterableError);
     GET(assertNameDefined);

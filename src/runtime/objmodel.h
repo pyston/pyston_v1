@@ -55,6 +55,7 @@ extern "C" bool softspace(Box* b, bool newval);
 extern "C" void printHelper(Box* dest, Box* var, bool nl);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, BoxedString* attr);
+extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept;
 extern "C" Box* getattrMaybeNonstring(Box* obj, Box* attr);
 extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val);
 extern "C" void setattrMaybeNonstring(Box* obj, Box* attr, Box* attr_val);
@@ -153,6 +154,8 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, llvm::StringRef attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) __attribute__((__noreturn__));
+extern "C" void raiseAttributeErrorStrCapi(const char* typeName, llvm::StringRef attr) noexcept;
+extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept;
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
 extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
 

@@ -74,6 +74,7 @@ void force() {
     FORCE(decodeUTF8StringPtr);
 
     FORCE(getattr);
+    FORCE(getattr_capi);
     FORCE(setattr);
     FORCE(delattr);
     FORCE(nonzero);
@@ -101,6 +102,8 @@ void force() {
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);
     FORCE(raiseAttributeErrorStr);
+    FORCE(raiseAttributeErrorCapi);
+    FORCE(raiseAttributeErrorStrCapi);
     FORCE(raiseIndexErrorStr);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
