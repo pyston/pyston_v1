@@ -38,6 +38,7 @@
 #include "runtime/complex.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"

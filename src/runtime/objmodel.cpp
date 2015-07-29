@@ -44,6 +44,7 @@
 #include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
@@ -579,117 +580,6 @@ const char* getTypeName(Box* b) {
 
 const char* getNameOfClass(BoxedClass* cls) {
     return cls->tp_name;
-}
-
-void HiddenClass::appendAttribute(BoxedString* attr) {
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr) == 0);
-    int n = this->attributeArraySize();
-    attr_offsets[attr] = n;
-}
-
-void HiddenClass::appendAttrwrapper() {
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attrwrapper_offset == -1);
-    attrwrapper_offset = this->attributeArraySize();
-}
-
-void HiddenClass::delAttribute(BoxedString* attr) {
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr));
-
-    int prev_idx = attr_offsets[attr];
-    attr_offsets.erase(attr);
-
-    for (auto it = attr_offsets.begin(), end = attr_offsets.end(); it != end; ++it) {
-        assert(it->second != prev_idx);
-        if (it->second > prev_idx)
-            it->second--;
-    }
-    if (attrwrapper_offset != -1 && attrwrapper_offset > prev_idx)
-        attrwrapper_offset--;
-}
-
-void HiddenClass::addDependence(Rewriter* rewriter) {
-    assert(type == SINGLETON);
-    rewriter->addDependenceOn(dependent_getattrs);
-}
-
-HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
-    STAT_TIMER(t0, "us_timer_hiddenclass_getOrMakeChild", 0);
-
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == NORMAL);
-
-    auto it = children.find(attr);
-    if (it != children.end())
-        return children.getMapped(it->second);
-
-    static StatCounter num_hclses("num_hidden_classes");
-    num_hclses.log();
-
-    HiddenClass* rtn = new HiddenClass(this);
-    rtn->attr_offsets[attr] = this->attributeArraySize();
-    this->children[attr] = rtn;
-    assert(rtn->attributeArraySize() == this->attributeArraySize() + 1);
-    return rtn;
-}
-
-HiddenClass* HiddenClass::getAttrwrapperChild() {
-    assert(type == NORMAL);
-    assert(attrwrapper_offset == -1);
-
-    if (!attrwrapper_child) {
-        HiddenClass* made = new HiddenClass(this);
-        made->attrwrapper_offset = this->attributeArraySize();
-        this->attrwrapper_child = made;
-        assert(made->attributeArraySize() == this->attributeArraySize() + 1);
-    }
-
-    return attrwrapper_child;
-}
-
-/**
- * del attr from current HiddenClass, maintaining the order of the remaining attrs
- */
-HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
-    STAT_TIMER(t0, "us_timer_hiddenclass_delAttrToMakeHC", 0);
-
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == NORMAL);
-    int idx = getOffset(attr);
-    assert(idx >= 0);
-
-    std::vector<BoxedString*> new_attrs(attributeArraySize() - 1);
-    for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
-        if (it->second < idx)
-            new_attrs[it->second] = it->first;
-        else if (it->second > idx) {
-            new_attrs[it->second - 1] = it->first;
-        }
-    }
-
-    int new_attrwrapper_offset = attrwrapper_offset;
-    if (new_attrwrapper_offset > idx)
-        new_attrwrapper_offset--;
-
-    // TODO we can first locate the parent HiddenClass of the deleted
-    // attribute and hence avoid creation of its ancestors.
-    HiddenClass* cur = root_hcls;
-    int curidx = 0;
-    for (const auto& attr : new_attrs) {
-        if (curidx == new_attrwrapper_offset)
-            cur = cur->getAttrwrapperChild();
-        else
-            cur = cur->getOrMakeChild(attr);
-        curidx++;
-    }
-    return cur;
 }
 
 size_t Box::getHCAttrsOffset() {

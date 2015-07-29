@@ -21,6 +21,7 @@
 #include "core/common.h"
 #include "core/util.h"
 #include "gc/gc_alloc.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 

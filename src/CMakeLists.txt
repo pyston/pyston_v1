@@ -94,6 +94,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/float.cpp
 		runtime/frame.cpp
 		runtime/generator.cpp
+		runtime/hiddenclass.cpp
 		runtime/ics.cpp
 		runtime/import.cpp
 		runtime/int.cpp
