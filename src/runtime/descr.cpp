@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "capi/typeobject.h"
 #include "codegen/compvars.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
@@ -416,26 +417,13 @@ void BoxedMethodDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     v->visit(o->type);
 }
 
-Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
-    STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_get", 20);
-
-    RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
-
-    if (inst == None)
-        return self;
-
-    if (!isSubclass(inst->cls, self->type))
-        raiseExcHelper(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
-                       getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
-
-    return new BoxedWrapperObject(self, inst);
-}
-
 Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
+    STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_descr_get", 20);
+
     RELEASE_ASSERT(_self->cls == wrapperdescr_cls, "");
     BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
 
-    if (inst == None)
+    if (inst == NULL)
         return self;
 
     if (!isSubclass(inst->cls, self->type)) {
@@ -633,14 +621,14 @@ void setupDescr() {
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
-    wrapperdescr_cls->giveAttr("__get__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
                                                                            UNKNOWN, 2, 0, true, true)));
     wrapperdescr_cls->giveAttr("__doc__",
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
-    wrapperdescr_cls->freeze();
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
+    add_operators(wrapperdescr_cls);
+    wrapperdescr_cls->freeze();
+    assert(wrapperdescr_cls->tp_descr_get == BoxedWrapperDescriptor::descr_get);
 
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));

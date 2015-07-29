@@ -1118,12 +1118,12 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         Box* inst = obj;
         Box* owner = obj->cls;
 
-        Box* r = BoxedWrapperDescriptor::__get__(self, inst, owner);
+        Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
 
         if (rewrite_args) {
             // TODO: inline this?
             RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::__get__, r_descr, rewrite_args->obj,
+                /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr, rewrite_args->obj,
                 r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
 
             rewrite_args->out_success = true;
