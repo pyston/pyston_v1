@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <cstring>
 
-#include "llvm/Support/raw_ostream.h"
-
 #include "capi/types.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -63,36 +61,46 @@ extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
 }
 
 extern "C" Box* listRepr(BoxedList* self) {
-    // TODO highly inefficient with all the string copying
 
-    std::string O("");
-    llvm::raw_string_ostream os(O);
+    std::vector<char> chars;
 
     // Implementing Recursive Print of list in same way from  Cpython
-    int recursive = Py_ReprEnter((PyObject*)self);
-    if (recursive != 0) {
-        if (recursive < 0)
-            return boxString(os.str());
+    try {
+        int status = Py_ReprEnter((PyObject*)self);
+        if (status != 0) {
+            if (status < 0)
+                throwCAPIException();
 
-        os << "[...]";
-        return boxString(os.str());
+            chars.push_back('[');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back(']');
+
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        Py_ReprLeave((PyObject*)self);
+        return NULL;
     }
-
-    os << '[';
+    chars.push_back('[');
     for (int i = 0; i < self->size; i++) {
-        if (i > 0)
-            os << ", ";
+        if (i > 0) {
+            chars.push_back(',');
+            chars.push_back(' ');
+        }
 
         Box* r = self->elts->elts[i]->reprICAsString();
 
         assert(r->cls == str_cls);
         BoxedString* s = static_cast<BoxedString*>(r);
-        os << s->s();
+        chars.insert(chars.end(), s->s().begin(), s->s().end());
     }
-    os << ']';
+    chars.push_back(']');
 
     Py_ReprLeave((PyObject*)self);
-    return boxString(os.str());
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 extern "C" Box* listNonzero(BoxedList* self) {

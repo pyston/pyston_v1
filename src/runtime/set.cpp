@@ -14,8 +14,6 @@
 
 #include "runtime/set.h"
 
-#include <llvm/Support/raw_ostream.h>
-
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
 
@@ -96,29 +94,54 @@ Box* setNew(Box* _cls, Box* container) {
 }
 
 static Box* _setRepr(BoxedSet* self, const char* type_name) {
-    std::string O("");
-    llvm::raw_string_ostream os(O);
 
-    int status = Py_ReprEnter((PyObject*)self);
-    if (status != 0) {
-        if (status < 0)
-            return boxString(os.str());
+    std::vector<char> chars;
 
-        os << type_name << "(...)";
-        return boxString(os.str());
+    try {
+        int status = Py_ReprEnter((PyObject*)self);
+        if (status != 0) {
+            if (status < 0)
+                throwCAPIException();
+
+            std::string ty = std::string(type_name);
+            chars.insert(chars.end(), ty.begin(), ty.end());
+
+            chars.push_back('(');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back('.');
+            chars.push_back(')');
+
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        Py_ReprLeave((PyObject*)self);
+        return NULL;
     }
-    os << type_name << "([";
+
+    std::string ty = std::string(type_name);
+    chars.insert(chars.end(), ty.begin(), ty.end());
+
+    chars.push_back('(');
+    chars.push_back('[');
+
     bool first = true;
     for (Box* elt : self->s) {
+
         if (!first) {
-            os << ", ";
+            chars.push_back(',');
+            chars.push_back(' ');
         }
-        os << static_cast<BoxedString*>(repr(elt))->s();
+
+        BoxedString* str = static_cast<BoxedString*>(repr(elt));
+        chars.insert(chars.end(), str->s().begin(), str->s().end());
         first = false;
     }
-    os << "])";
+    chars.push_back(']');
+    chars.push_back(')');
     Py_ReprLeave((PyObject*)self);
-    return boxString(os.str());
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* setRepr(BoxedSet* self) {
