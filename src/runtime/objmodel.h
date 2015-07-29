@@ -165,7 +165,6 @@ extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noretu
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
-bool isUserDefined(BoxedClass* cls);
 
 // These process a potential descriptor, differing in their behavior if the object was not a descriptor.
 // the OrNull variant returns NULL to signify it wasn't a descriptor, and the processDescriptor version

@@ -2159,7 +2159,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     // TODO this should be in type_setattro
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
+        if (!cobj->is_user_defined) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
         }
     }
@@ -2340,11 +2340,6 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     }
 }
 
-bool isUserDefined(BoxedClass* cls) {
-    return cls->is_user_defined;
-    // return cls->hasattrs && (cls != function_cls && cls != type_cls) && !cls->is_constant;
-}
-
 extern "C" bool nonzero(Box* obj) {
     STAT_TIMER(t0, "us_timer_slowpath_nonzero", 10);
 
@@ -2453,7 +2448,7 @@ extern "C" bool nonzero(Box* obj) {
         func = getclsattrInternal(obj, len_str, NULL);
 
     if (func == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
+        ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                    || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
                    || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
@@ -4211,7 +4206,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
 #if 0
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_binop_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_binop_nopatch");
@@ -4268,7 +4263,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
     // TODO implement full resolving semantics inside the rewrite?
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
     if (can_patchpoint)
         rewriter.reset(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
@@ -4427,7 +4422,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return boxBool(b);
     }
 
-    bool any_user_defined = isUserDefined(lhs->cls) || isUserDefined(rhs->cls);
+    bool any_user_defined = lhs->cls->is_user_defined || rhs->cls->is_user_defined;
     if (any_user_defined) {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
@@ -4476,7 +4471,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         // simplified by using the assumption that tp_richcompare exists and never returns NotImplemented
         // for builtin types when both arguments are the right type.
 
-        assert(!isUserDefined(lhs->cls));
+        assert(!lhs->cls->is_user_defined);
 
         Box* r = lhs->cls->tp_richcompare(lhs, rhs, cpython_op_type);
         RELEASE_ASSERT(r != NotImplemented, "%s returned notimplemented?", lhs->cls->tp_name);
@@ -5052,7 +5047,7 @@ extern "C" void delattr(Box* obj, BoxedString* attr) {
 
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
+        if (!cobj->is_user_defined) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n", getNameOfClass(cobj));
         }
     }
