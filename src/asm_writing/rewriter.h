@@ -285,12 +285,20 @@ public:
 
 class RewriterAction {
 public:
-    std::function<void()> action;
+    const std::function<void()> action;
+    const RewriterVar* result;
 
-    RewriterAction(std::function<void()> f) : action(std::move(f)) {}
+    bool necessary;
+
+    RewriterAction(std::function<void()> f, RewriterVar* result, bool necessary)
+        : action(std::move(f)), result(result), necessary(necessary) {}
 };
 
-enum class ActionType { NORMAL, GUARD, MUTATION };
+// GUARD should be self-explanatory
+// MUTATION means it can mutate something (setattr or a call, for example)
+// VISIBLE means that the action is necessary even if it doesn't mutate anything
+// NORMAL means that it doesn't mutate anything and can even be dropped if the result is not used
+enum class ActionType { NORMAL, GUARD, MUTATION, VISIBLE };
 
 // non-NULL fake pointer, definitely legit
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
@@ -358,7 +366,8 @@ protected:
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
     llvm::SmallVector<RewriterAction, 32> actions;
-    void addAction(std::function<void()> action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
+    void addAction(std::function<void()> action, llvm::ArrayRef<RewriterVar*> vars, RewriterVar* result,
+                   ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -377,7 +386,8 @@ protected:
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
-        actions.emplace_back(std::move(action));
+
+        actions.emplace_back(std::move(action), result, type != ActionType::NORMAL);
     }
     bool added_changing_action;
     bool marked_inside_ic;

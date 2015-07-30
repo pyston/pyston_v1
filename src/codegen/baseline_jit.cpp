@@ -460,13 +460,13 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     RewriterVar* next = imm(b);
-    addAction([=]() { _emitJump(b, next, num_bytes_exit); }, { next }, ActionType::NORMAL);
+    addAction([=]() { _emitJump(b, next, num_bytes_exit); }, { next }, NULL, ActionType::VISIBLE);
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
     RewriterVar* node_var = imm(node);
     RewriterVar* result = createNewVar();
-    addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, ActionType::NORMAL);
+    addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, NULL, ActionType::VISIBLE);
 }
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
@@ -486,7 +486,7 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
 }
 
 void JitFragmentWriter::emitReturn(RewriterVar* v) {
-    addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
+    addAction([=]() { _emitReturn(v); }, { v }, NULL, ActionType::VISIBLE);
 }
 
 void JitFragmentWriter::emitSetAttr(RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
@@ -535,8 +535,8 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
-    addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
-              ActionType::NORMAL);
+    addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var }, NULL,
+              ActionType::VISIBLE);
 }
 
 void JitFragmentWriter::emitUncacheExcInfo() {
@@ -666,8 +666,8 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_emitPPCall(result, func_addr, args_vec, num_slots, slot_size); }, args,
-              ActionType::NORMAL);
+    addAction([=]() { this->_emitPPCall(result, func_addr, args_vec, num_slots, slot_size); }, args, result,
+              ActionType::VISIBLE);
     if (type_recorder)
         return call(false, (void*)recordType, imm(type_recorder), result);
     return result;
