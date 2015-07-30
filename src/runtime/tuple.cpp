@@ -201,18 +201,19 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
 Box* tupleRepr(BoxedTuple* t) {
     assert(isSubclass(t->cls, tuple_cls));
 
-    int n;
-    std::vector<char> chars;
-
-    n = t->size();
-    if (n == 0) {
-        chars.push_back('(');
-        chars.push_back(')');
-        return boxString(llvm::StringRef(&chars[0], chars.size()));
-    }
-
     try {
+
+        int n;
+        std::vector<char> chars;
         int status = Py_ReprEnter((PyObject*)t);
+
+        n = t->size();
+        if (n == 0) {
+            chars.push_back('(');
+            chars.push_back(')');
+            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        }
+
         if (status != 0) {
             if (status < 0)
                 throwCAPIException();
@@ -226,32 +227,30 @@ Box* tupleRepr(BoxedTuple* t) {
             return boxString(llvm::StringRef(&chars[0], chars.size()));
         }
 
-    } catch (ExcInfo e) {
 
-        setCAPIException(e);
+        chars.push_back('(');
+
+        for (int i = 0; i < n; i++) {
+            if (i) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
+            BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
+            chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
+        }
+
+        if (n == 1)
+            chars.push_back(',');
+
+        chars.push_back(')');
         Py_ReprLeave((PyObject*)t);
 
-        return NULL;
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
+
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)t);
+        throw e;
     }
-
-    chars.push_back('(');
-
-    for (int i = 0; i < n; i++) {
-        if (i) {
-            chars.push_back(',');
-            chars.push_back(' ');
-        }
-        BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
-        chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
-    }
-
-    if (n == 1)
-        chars.push_back(',');
-
-    chars.push_back(')');
-    Py_ReprLeave((PyObject*)t);
-
-    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* tupleNonzero(BoxedTuple* self) {

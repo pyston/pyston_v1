@@ -62,12 +62,13 @@ extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
 
 extern "C" Box* listRepr(BoxedList* self) {
 
-    std::vector<char> chars;
-
-    // Implementing Recursive Print of list in same way from  Cpython
     try {
+
+        std::vector<char> chars;
         int status = Py_ReprEnter((PyObject*)self);
+
         if (status != 0) {
+
             if (status < 0)
                 throwCAPIException();
 
@@ -79,28 +80,35 @@ extern "C" Box* listRepr(BoxedList* self) {
 
             return boxString(llvm::StringRef(&chars[0], chars.size()));
         }
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        Py_ReprLeave((PyObject*)self);
-        return NULL;
-    }
-    chars.push_back('[');
-    for (int i = 0; i < self->size; i++) {
-        if (i > 0) {
-            chars.push_back(',');
-            chars.push_back(' ');
+
+        chars.push_back('[');
+
+        for (int i = 0; i < self->size; i++) {
+
+            if (i > 0) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
+
+            Box* r = self->elts->elts[i]->reprICAsString();
+
+            assert(r->cls == str_cls);
+            BoxedString* s = static_cast<BoxedString*>(r);
+            chars.insert(chars.end(), s->s().begin(), s->s().end());
         }
 
-        Box* r = self->elts->elts[i]->reprICAsString();
+        chars.push_back(']');
 
-        assert(r->cls == str_cls);
-        BoxedString* s = static_cast<BoxedString*>(r);
-        chars.insert(chars.end(), s->s().begin(), s->s().end());
+        Py_ReprLeave((PyObject*)self);
+
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
+
+    } catch (ExcInfo e) {
+
+        Py_ReprLeave((PyObject*)self);
+
+        throw e;
     }
-    chars.push_back(']');
-
-    Py_ReprLeave((PyObject*)self);
-    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 extern "C" Box* listNonzero(BoxedList* self) {

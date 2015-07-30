@@ -32,10 +32,11 @@ using pyston::ExceptionStyle::ExceptionStyle;
 
 Box* dictRepr(BoxedDict* self) {
 
-    std::vector<char> chars;
     try {
 
+        std::vector<char> chars;
         int status = Py_ReprEnter((PyObject*)self);
+
         if (status != 0) {
             if (status < 0)
                 throwCAPIException();
@@ -49,32 +50,38 @@ Box* dictRepr(BoxedDict* self) {
             return boxString(llvm::StringRef(&chars[0], chars.size()));
         }
 
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        Py_ReprLeave((PyObject*)self);
-        return NULL;
-    }
 
-    chars.push_back('{');
+        chars.push_back('{');
 
-    bool first = true;
-    for (const auto& p : self->d) {
-        if (!first) {
-            chars.push_back(',');
+        bool first = true;
+
+        for (const auto& p : self->d) {
+
+            if (!first) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
+
+            first = false;
+
+            BoxedString* k = static_cast<BoxedString*>(repr(p.first));
+            BoxedString* v = static_cast<BoxedString*>(repr(p.second));
+
+            chars.insert(chars.end(), k->s().begin(), k->s().end());
+            chars.push_back(':');
             chars.push_back(' ');
+            chars.insert(chars.end(), v->s().begin(), v->s().end());
         }
-        first = false;
+        chars.push_back('}');
 
-        BoxedString* k = static_cast<BoxedString*>(repr(p.first));
-        BoxedString* v = static_cast<BoxedString*>(repr(p.second));
-        chars.insert(chars.end(), k->s().begin(), k->s().end());
-        chars.push_back(':');
-        chars.push_back(' ');
-        chars.insert(chars.end(), v->s().begin(), v->s().end());
+        Py_ReprLeave((PyObject*)self);
+
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
+
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)self);
+        throw e;
     }
-    chars.push_back('}');
-    Py_ReprLeave((PyObject*)self);
-    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* dictClear(BoxedDict* self) {
