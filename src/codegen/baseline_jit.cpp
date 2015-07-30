@@ -27,6 +27,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
+#include "runtime/util.h"
 
 namespace pyston {
 

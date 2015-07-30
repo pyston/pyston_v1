@@ -99,10 +99,6 @@ Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
 extern "C" Box* getiterHelper(Box* o);
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
-extern "C" bool hasnext(Box* o);
-
-extern "C" void dump(void* p);
-extern "C" void dumpEx(void* p, int levels = 0);
 
 struct SetattrRewriteArgs;
 void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
@@ -165,7 +161,6 @@ extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noretu
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
-bool isUserDefined(BoxedClass* cls);
 
 // These process a potential descriptor, differing in their behavior if the object was not a descriptor.
 // the OrNull variant returns NULL to signify it wasn't a descriptor, and the processDescriptor version
@@ -185,16 +180,6 @@ static const char* objectNewParameterTypeErrorMsg() {
         return "object.__new__() takes no parameters";
     }
 }
-
-// This function will ascii-encode any unicode objects it gets passed, or return the argument
-// unmodified if it wasn't a unicode object.
-// This is intended for functions that deal with attribute or variable names, which we internally
-// assume will always be strings, but CPython lets be unicode.
-// If we used an encoding like utf8 instead of ascii, we would allow collisions between unicode
-// strings and a string that happens to be its encoding.  It seems safer to just encode as ascii,
-// which will throw an exception if you try to pass something that might run into this risk.
-// (We wrap the unicode error and throw a TypeError)
-Box* coerceUnicodeToStr(Box* unicode);
 
 inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int num_args) {
     Box* arg1 = num_args >= 1 ? args[0] : nullptr;

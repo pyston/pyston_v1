@@ -26,6 +26,7 @@
 #include "core/ast.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
+#include "runtime/util.h"
 
 namespace pyston {
 

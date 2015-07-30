@@ -44,6 +44,24 @@ void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop);
 // Ensure stop >= start and remain within bounds.
 void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size);
 
+Box* noneIfNull(Box* b);
+Box* boxStringOrNone(const char* s);
+Box* boxStringFromCharPtr(const char* s);
+
+// This function will ascii-encode any unicode objects it gets passed, or return the argument
+// unmodified if it wasn't a unicode object.
+// This is intended for functions that deal with attribute or variable names, which we internally
+// assume will always be strings, but CPython lets be unicode.
+// If we used an encoding like utf8 instead of ascii, we would allow collisions between unicode
+// strings and a string that happens to be its encoding.  It seems safer to just encode as ascii,
+// which will throw an exception if you try to pass something that might run into this risk.
+// (We wrap the unicode error and throw a TypeError)
+Box* coerceUnicodeToStr(Box* unicode);
+
+extern "C" bool hasnext(Box* o);
+extern "C" void dump(void* p);
+extern "C" void dumpEx(void* p, int levels = 0);
+
 template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
     assert(dst != src);
     if (step == 1) {

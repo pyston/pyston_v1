@@ -44,6 +44,7 @@
 #include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
@@ -62,15 +63,10 @@ namespace pyston {
 using namespace pyston::ExceptionStyle;
 using pyston::ExceptionStyle::ExceptionStyle;
 
-static const std::string delitem_str("__delitem__");
-static const std::string getattribute_str("__getattribute__");
-static const std::string getattr_str("__getattr__");
-static const std::string init_str("__init__");
 static const std::string iter_str("__iter__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
 static const std::string repr_str("__repr__");
-static const std::string setitem_str("__setitem__");
 static const std::string str_str("__str__");
 
 #if 0
@@ -584,117 +580,6 @@ const char* getTypeName(Box* b) {
 
 const char* getNameOfClass(BoxedClass* cls) {
     return cls->tp_name;
-}
-
-void HiddenClass::appendAttribute(BoxedString* attr) {
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr) == 0);
-    int n = this->attributeArraySize();
-    attr_offsets[attr] = n;
-}
-
-void HiddenClass::appendAttrwrapper() {
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attrwrapper_offset == -1);
-    attrwrapper_offset = this->attributeArraySize();
-}
-
-void HiddenClass::delAttribute(BoxedString* attr) {
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr));
-
-    int prev_idx = attr_offsets[attr];
-    attr_offsets.erase(attr);
-
-    for (auto it = attr_offsets.begin(), end = attr_offsets.end(); it != end; ++it) {
-        assert(it->second != prev_idx);
-        if (it->second > prev_idx)
-            it->second--;
-    }
-    if (attrwrapper_offset != -1 && attrwrapper_offset > prev_idx)
-        attrwrapper_offset--;
-}
-
-void HiddenClass::addDependence(Rewriter* rewriter) {
-    assert(type == SINGLETON);
-    rewriter->addDependenceOn(dependent_getattrs);
-}
-
-HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
-    STAT_TIMER(t0, "us_timer_hiddenclass_getOrMakeChild", 0);
-
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == NORMAL);
-
-    auto it = children.find(attr);
-    if (it != children.end())
-        return children.getMapped(it->second);
-
-    static StatCounter num_hclses("num_hidden_classes");
-    num_hclses.log();
-
-    HiddenClass* rtn = new HiddenClass(this);
-    rtn->attr_offsets[attr] = this->attributeArraySize();
-    this->children[attr] = rtn;
-    assert(rtn->attributeArraySize() == this->attributeArraySize() + 1);
-    return rtn;
-}
-
-HiddenClass* HiddenClass::getAttrwrapperChild() {
-    assert(type == NORMAL);
-    assert(attrwrapper_offset == -1);
-
-    if (!attrwrapper_child) {
-        HiddenClass* made = new HiddenClass(this);
-        made->attrwrapper_offset = this->attributeArraySize();
-        this->attrwrapper_child = made;
-        assert(made->attributeArraySize() == this->attributeArraySize() + 1);
-    }
-
-    return attrwrapper_child;
-}
-
-/**
- * del attr from current HiddenClass, maintaining the order of the remaining attrs
- */
-HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
-    STAT_TIMER(t0, "us_timer_hiddenclass_delAttrToMakeHC", 0);
-
-    assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == NORMAL);
-    int idx = getOffset(attr);
-    assert(idx >= 0);
-
-    std::vector<BoxedString*> new_attrs(attributeArraySize() - 1);
-    for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
-        if (it->second < idx)
-            new_attrs[it->second] = it->first;
-        else if (it->second > idx) {
-            new_attrs[it->second - 1] = it->first;
-        }
-    }
-
-    int new_attrwrapper_offset = attrwrapper_offset;
-    if (new_attrwrapper_offset > idx)
-        new_attrwrapper_offset--;
-
-    // TODO we can first locate the parent HiddenClass of the deleted
-    // attribute and hence avoid creation of its ancestors.
-    HiddenClass* cur = root_hcls;
-    int curidx = 0;
-    for (const auto& attr : new_attrs) {
-        if (curidx == new_attrwrapper_offset)
-            cur = cur->getAttrwrapperChild();
-        else
-            cur = cur->getOrMakeChild(attr);
-        curidx++;
-    }
-    return cur;
 }
 
 size_t Box::getHCAttrsOffset() {
@@ -1271,26 +1156,6 @@ Box* boxChar(char c) {
     char d[1];
     d[0] = c;
     return boxString(llvm::StringRef(d, 1));
-}
-
-static Box* noneIfNull(Box* b) {
-    if (b == NULL) {
-        return None;
-    } else {
-        return b;
-    }
-}
-
-static Box* boxStringOrNone(const char* s) {
-    if (s == NULL) {
-        return None;
-    } else {
-        return boxString(s);
-    }
-}
-
-static Box* boxStringFromCharPtr(const char* s) {
-    return boxString(s);
 }
 
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedString* attr_name, Box* obj, Box* descr,
@@ -2159,7 +2024,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     // TODO this should be in type_setattro
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
+        if (!cobj->is_user_defined) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
         }
     }
@@ -2340,11 +2205,6 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     }
 }
 
-bool isUserDefined(BoxedClass* cls) {
-    return cls->is_user_defined;
-    // return cls->hasattrs && (cls != function_cls && cls != type_cls) && !cls->is_constant;
-}
-
 extern "C" bool nonzero(Box* obj) {
     STAT_TIMER(t0, "us_timer_slowpath_nonzero", 10);
 
@@ -2453,7 +2313,7 @@ extern "C" bool nonzero(Box* obj) {
         func = getclsattrInternal(obj, len_str, NULL);
 
     if (func == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
+        ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                    || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
                    || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
@@ -2748,177 +2608,6 @@ extern "C" i64 unboxedLen(Box* obj) {
         rewriter->commitReturning(rtn);
     }
     return rtn;
-}
-
-extern "C" void dumpEx(void* p, int levels) {
-    printf("\n");
-    printf("Raw address: %p\n", p);
-
-    bool is_gc = gc::isValidGCMemory(p);
-    if (!is_gc) {
-        printf("non-gc memory\n");
-        return;
-    }
-
-    if (gc::isNonheapRoot(p)) {
-        printf("Non-heap GC object\n");
-
-        printf("Assuming it's a class object...\n");
-        PyTypeObject* type = (PyTypeObject*)(p);
-        printf("tp_name: %s\n", type->tp_name);
-        return;
-    }
-
-    gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
-    if (al->kind_id == gc::GCKind::UNTRACKED) {
-        printf("gc-untracked object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PRECISE) {
-        printf("precise gc array\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::CONSERVATIVE) {
-        printf("conservatively-scanned object object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PYTHON || al->kind_id == gc::GCKind::CONSERVATIVE_PYTHON) {
-        if (al->kind_id == gc::GCKind::PYTHON)
-            printf("Python object (precisely scanned)\n");
-        else
-            printf("Python object (conservatively scanned)\n");
-        Box* b = (Box*)p;
-
-        printf("Class: %s", getFullTypeName(b).c_str());
-        if (b->cls->cls != type_cls) {
-            printf(" (metaclass: %s)\n", getFullTypeName(b->cls).c_str());
-        } else {
-            printf("\n");
-        }
-
-        if (b->cls == bool_cls) {
-            printf("The %s object\n", b == True ? "True" : "False");
-        }
-
-        if (isSubclass(b->cls, type_cls)) {
-            auto cls = static_cast<BoxedClass*>(b);
-            printf("Type name: %s\n", getFullNameOfClass(cls).c_str());
-
-            printf("MRO:");
-
-            if (cls->tp_mro && cls->tp_mro->cls == tuple_cls) {
-                bool first = true;
-                for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
-                    if (!first)
-                        printf(" ->");
-                    first = false;
-                    printf(" %s", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
-                }
-            }
-            printf("\n");
-        }
-
-        if (isSubclass(b->cls, str_cls)) {
-            printf("String value: %s\n", static_cast<BoxedString*>(b)->data());
-        }
-
-        if (isSubclass(b->cls, tuple_cls)) {
-            BoxedTuple* t = static_cast<BoxedTuple*>(b);
-            printf("%ld elements\n", t->size());
-
-            if (levels > 0) {
-                int i = 0;
-                for (auto e : *t) {
-                    printf("\nElement %d:", i);
-                    i++;
-                    dumpEx(e, levels - 1);
-                }
-            }
-        }
-
-        if (isSubclass(b->cls, dict_cls)) {
-            BoxedDict* d = static_cast<BoxedDict*>(b);
-            printf("%ld elements\n", d->d.size());
-
-            if (levels > 0) {
-                int i = 0;
-                for (auto t : d->d) {
-                    printf("\nKey:");
-                    dumpEx(t.first, levels - 1);
-                    printf("Value:");
-                    dumpEx(t.second, levels - 1);
-                }
-            }
-        }
-
-        if (isSubclass(b->cls, int_cls)) {
-            printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
-        }
-
-        if (isSubclass(b->cls, list_cls)) {
-            auto l = static_cast<BoxedList*>(b);
-            printf("%ld elements\n", l->size);
-
-            if (levels > 0) {
-                int i = 0;
-                for (int i = 0; i < l->size; i++) {
-                    printf("\nElement %d:", i);
-                    dumpEx(l->elts->elts[i], levels - 1);
-                }
-            }
-        }
-
-        if (isSubclass(b->cls, function_cls)) {
-            BoxedFunction* f = static_cast<BoxedFunction*>(b);
-
-            CLFunction* cl = f->f;
-            if (cl->source) {
-                printf("User-defined function '%s'\n", cl->source->getName().data());
-            } else {
-                printf("A builtin function\n");
-            }
-
-            printf("Has %ld function versions\n", cl->versions.size());
-            for (CompiledFunction* cf : cl->versions) {
-                bool got_name;
-                std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
-                if (got_name)
-                    printf("%s\n", name.c_str());
-                else
-                    printf("%p\n", cf->code);
-            }
-        }
-
-        if (isSubclass(b->cls, module_cls)) {
-            printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
-        }
-
-        /*
-        if (b->cls->instancesHaveHCAttrs()) {
-            HCAttrs* attrs = b->getHCAttrsPtr();
-            printf("Has %ld attrs\n", attrs->hcls->attr_offsets.size());
-            for (const auto& p : attrs->hcls->attr_offsets) {
-                printf("Index %d: %s: %p\n", p.second, p.first.c_str(), attrs->attr_list->attrs[p.second]);
-            }
-        }
-        */
-
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::HIDDEN_CLASS) {
-        printf("Hidden class object\n");
-        return;
-    }
-
-    RELEASE_ASSERT(0, "%d", (int)al->kind_id);
-}
-
-extern "C" void dump(void* p) {
-    dumpEx(p, 0);
 }
 
 // For rewriting purposes, this function assumes that nargs will be constant.
@@ -4211,7 +3900,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
 #if 0
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_binop_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_binop_nopatch");
@@ -4268,7 +3957,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
     // TODO implement full resolving semantics inside the rewrite?
-    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
     if (can_patchpoint)
         rewriter.reset(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
@@ -4427,7 +4116,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return boxBool(b);
     }
 
-    bool any_user_defined = isUserDefined(lhs->cls) || isUserDefined(rhs->cls);
+    bool any_user_defined = lhs->cls->is_user_defined || rhs->cls->is_user_defined;
     if (any_user_defined) {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
@@ -4476,7 +4165,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         // simplified by using the assumption that tp_richcompare exists and never returns NotImplemented
         // for builtin types when both arguments are the right type.
 
-        assert(!isUserDefined(lhs->cls));
+        assert(!lhs->cls->is_user_defined);
 
         Box* r = lhs->cls->tp_richcompare(lhs, rhs, cpython_op_type);
         RELEASE_ASSERT(r != NotImplemented, "%s returned notimplemented?", lhs->cls->tp_name);
@@ -5052,7 +4741,7 @@ extern "C" void delattr(Box* obj, BoxedString* attr) {
 
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
+        if (!cobj->is_user_defined) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n", getNameOfClass(cobj));
         }
     }
@@ -5129,10 +4818,6 @@ Box* getiter(Box* o) {
         return r;
     }
     return getiterHelper(o);
-}
-
-extern "C" bool hasnext(Box* o) {
-    return o->cls->tpp_hasnext(o);
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {
@@ -5658,19 +5343,6 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
     }
 
     return None;
-}
-
-Box* coerceUnicodeToStr(Box* unicode) {
-    if (!isSubclass(unicode->cls, unicode_cls))
-        return unicode;
-
-    Box* r = PyUnicode_AsASCIIString(unicode);
-    if (!r) {
-        PyErr_Clear();
-        raiseExcHelper(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
-    }
-
-    return r;
 }
 
 // TODO Make these fast, do inline caches and stuff

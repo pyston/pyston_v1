@@ -38,6 +38,7 @@
 #include "runtime/complex.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"
@@ -1832,7 +1833,7 @@ Box* typeRepr(BoxedClass* self) {
     std::string O("");
     llvm::raw_string_ostream os(O);
 
-    if ((self->tp_flags & Py_TPFLAGS_HEAPTYPE) && isUserDefined(self))
+    if ((self->tp_flags & Py_TPFLAGS_HEAPTYPE) && self->is_user_defined)
         os << "<class '";
     else
         os << "<type '";

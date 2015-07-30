@@ -17,6 +17,7 @@
 
 #include "capi/types.h"
 #include "runtime/classobj.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
 

@@ -31,6 +31,7 @@
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
+#include "runtime/util.h"
 
 namespace pyston {
 
@@ -1415,12 +1416,7 @@ private:
 
     static std::unordered_map<BoxedClass*, NormalObjectType*> made;
 
-    NormalObjectType(BoxedClass* cls) : cls(cls) {
-        // ASSERT(!isUserDefined(cls) && "instances of user-defined classes can change their __class__, plus even if
-        // they couldn't we couldn't statically resolve their attributes", "%s", getNameOfClass(cls)->c_str());
-
-        assert(cls);
-    }
+    NormalObjectType(BoxedClass* cls) : cls(cls) { assert(cls); }
 
 public:
     llvm::Type* llvmType() override { return g.llvm_value_type_ptr; }

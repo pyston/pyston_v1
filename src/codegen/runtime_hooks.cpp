@@ -46,6 +46,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
+#include "runtime/util.h"
 
 extern "C" void* __cxa_begin_catch(void*);
 extern "C" void __cxa_end_catch();

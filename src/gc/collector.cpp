@@ -25,6 +25,7 @@
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/heap.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
