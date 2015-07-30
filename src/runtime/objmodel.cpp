@@ -1355,15 +1355,17 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     return NULL;
 }
 
+// Helper function: make sure that a capi function either returned a non-error value, or
+// it set an exception.
+static void ensureValidCapiReturn(Box* r) {
+    if (!r)
+        ensureCAPIExceptionSet();
+}
+
 template <ExceptionStyle S>
 Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
                        Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
     assert(gc::isValidGCObject(attr));
-
-    if (S == CAPI) {
-        assert(!rewrite_args && "implement me");
-        rewrite_args = NULL;
-    }
 
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
@@ -1376,23 +1378,19 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
-            if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
-                if (S == CAPI) {
-                    assert(!rewrite_args && "implement me");
-                    return obj->cls->tp_getattro(obj, attr);
-                } else {
-                    return slotTpGetattrHookInternal(obj, attr, rewrite_args);
-                }
+            if (obj->cls->tp_getattro == slot_tp_getattr_hook && S == CXX) {
+                return slotTpGetattrHookInternal(obj, attr, rewrite_args);
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
-            if (S == CAPI) {
-                assert(!rewrite_args && "implement me");
-                return r;
-            }
 
-            if (!r)
-                throwCAPIException();
+            if (!r) {
+                if (S == CAPI) {
+                    ensureCAPIExceptionSet();
+                    return r;
+                } else
+                    throwCAPIException();
+            }
 
             // If attr is immortal, then we are free to write an embedded reference to it.
             // Immortal are (unfortunately) common right now, so this is an easy way to get
@@ -1401,7 +1399,11 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             if (rewrite_args && attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
                 auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
+                if (S == CXX)
+                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                else
+                    rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
 
                 rewrite_args->out_rtn = r_rtn;
                 rewrite_args->out_success = true;
@@ -1419,9 +1421,13 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
             assert(attr->data()[attr->size()] == '\0');
 
+            rewrite_args = NULL;
+
             Box* r = obj->cls->tp_getattr(obj, const_cast<char*>(attr->data()));
 
             if (S == CAPI) {
+                if (!r)
+                    ensureCAPIExceptionSet();
                 return r;
             } else {
                 if (!r)
@@ -1892,26 +1898,7 @@ Box* getattrMaybeNonstring(Box* obj, Box* attr) {
     return r;
 }
 
-extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept {
-    STAT_TIMER(t0, "us_timer_slowpath_getattr_capi", 10);
-
-    static StatCounter slowpath_getattr_capi("slowpath_getattr_capi");
-    slowpath_getattr_capi.log();
-
-    assert(!PyErr_Occurred());
-    Box* val = getattrInternal<CAPI>(obj, attr, NULL);
-
-    if (val)
-        return val;
-
-    if (!PyErr_Occurred())
-        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", obj->cls->tp_name,
-                     PyString_AS_STRING(attr));
-
-    return NULL;
-}
-
-extern "C" Box* getattr(Box* obj, BoxedString* attr) {
+template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void* return_addr) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slowpath_getattr", 10);
 
     static StatCounter slowpath_getattr("slowpath_getattr");
@@ -1927,14 +1914,13 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
 #endif
     }
 
-    std::unique_ptr<Rewriter> rewriter(
-        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
 
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_getattr_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_getattr_nopatch");
     static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_getattr_megamorphic");
-    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ICInfo* icinfo = getICInfo(return_addr);
     uint64_t* counter;
     if (!icinfo)
         counter = st_id_nopatch;
@@ -1962,15 +1948,22 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
         else
             dest = rewriter->getReturnDestination();
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
-        val = getattrInternal<CXX>(obj, attr, &rewrite_args);
+        val = getattrInternal<S>(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success) {
             if (!val) {
                 if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
-                    rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
-                                   rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
-                                   rewriter->loadConst(attr->size(), Location::forArg(2)));
-                    rewriter->commit();
+                    if (S == CXX) {
+                        rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
+                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
+                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
+                        rewriter->commit();
+                    } else if (S == CAPI && !PyErr_Occurred()) {
+                        rewriter->call(true, (void*)raiseAttributeErrorCapi, rewriter->getArg(0),
+                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
+                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
+                        rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
+                    }
                 }
             } else if (recorder) {
                 RewriterVar* record_rtn = rewriter->call(false, (void*)recordType,
@@ -1984,10 +1977,10 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
             }
         }
     } else {
-        val = getattrInternal<CXX>(obj, attr, NULL);
+        val = getattrInternal<S>(obj, attr, NULL);
     }
 
-    if (val) {
+    if (val)
         return val;
 
     if (S == CAPI) {
@@ -1997,8 +1990,14 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
     } else {
         raiseAttributeError(obj, attr->s());
     }
+}
 
-    raiseAttributeError(obj, attr->s());
+extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept {
+    return _getattrEntry<CAPI>(obj, attr, __builtin_extract_return_addr(__builtin_return_address(0)));
+}
+
+extern "C" Box* getattr(Box* obj, BoxedString* attr) {
+    return _getattrEntry<CXX>(obj, attr, __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
 bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewriteArgs* rewrite_args,

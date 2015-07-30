@@ -786,6 +786,11 @@ void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_traceback = e.traceback;
 }
 
+void ensureCAPIExceptionSet() {
+    if (!cur_thread_state.curexc_type)
+        PyErr_SetString(SystemError, "error return without exception set");
+}
+
 void throwCAPIException() {
     checkAndThrowCAPIException();
     raiseExcHelper(SystemError, "error return without exception set");
