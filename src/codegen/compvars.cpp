@@ -489,14 +489,24 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     llvm::Value* rtn_val = NULL;
 
+    ExceptionStyle target_exception_style = CXX;
+    if (info.unw_info.capi_exc_dest)
+        target_exception_style = CAPI;
+
     llvm::Value* llvm_func;
     void* raw_func;
     if (cls_only) {
+        assert(target_exception_style == CXX);
         llvm_func = g.funcs.getclsattr;
         raw_func = (void*)pyston::getclsattr;
     } else {
-        llvm_func = g.funcs.getattr;
-        raw_func = (void*)pyston::getattr;
+        if (target_exception_style == CXX) {
+            llvm_func = g.funcs.getattr;
+            raw_func = (void*)pyston::getattr;
+        } else {
+            llvm_func = g.funcs.getattr_capi;
+            raw_func = (void*)pyston::getattr_capi;
+        }
     }
 
     bool do_patchpoint = ENABLE_ICGETATTRS;
@@ -507,15 +517,20 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info);
+        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style);
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr);
+        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style);
     }
+
+    if (target_exception_style == CAPI)
+        emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
+
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
 
-static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, void* func_addr,
+static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func,
+                                       ExceptionStyle target_exception_style, void* func_addr,
                                        const std::vector<llvm::Value*>& other_args, ArgPassSpec argspec,
                                        const std::vector<CompilerVariable*>& args,
                                        const std::vector<BoxedString*>* keyword_names, ConcreteCompilerType* rtn_type) {
@@ -551,7 +566,6 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
     }
 
-    llvm::Value* mallocsave = NULL;
     if (args.size() >= 4) {
         llvm::Value* arg_array;
 
@@ -594,7 +608,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
         ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size());
 
-        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info);
+        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style);
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
@@ -608,13 +622,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
-        rtn = emitter.createCall(info.unw_info, func, llvm_args);
-    }
-
-    if (mallocsave) {
-        llvm::Value* l_free = embedConstantPtr(
-            (void*)free, llvm::FunctionType::get(g.void_, g.i8->getPointerTo(), false)->getPointerTo());
-        emitter.getBuilder()->CreateCall(l_free, mallocsave);
+        rtn = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
     }
 
     for (int i = 0; i < args.size(); i++) {
@@ -622,6 +630,11 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     }
 
     assert(rtn->getType() == rtn_type->llvmType());
+
+    if (target_exception_style == CAPI) {
+        emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
+    }
+
     return new ConcreteCompilerVariable(rtn_type, rtn, true);
 }
 
@@ -650,7 +663,7 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
 
     llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
     other_args.push_back(llvm_argspec);
-    return _call(emitter, info, func, (void*)runtimeCall, other_args, argspec, args, keyword_names, UNKNOWN);
+    return _call(emitter, info, func, CXX, (void*)runtimeCall, other_args, argspec, args, keyword_names, UNKNOWN);
 }
 
 CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -678,7 +691,8 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     other_args.push_back(var->getValue());
     other_args.push_back(embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr));
     other_args.push_back(getConstantInt(flags.asInt(), g.i64));
-    return _call(emitter, info, func, (void*)pyston::callattr, other_args, flags.argspec, args, keyword_names, UNKNOWN);
+    return _call(emitter, info, func, CXX, (void*)pyston::callattr, other_args, flags.argspec, args, keyword_names,
+                 UNKNOWN);
 }
 
 ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
@@ -1480,10 +1494,18 @@ public:
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
+                ExceptionStyle exception_style = info.unw_info.capi_exc_dest ? CAPI : CXX;
+                llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
+                                                                 : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
-                    info.unw_info, g.funcs.raiseAttributeErrorStr, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
-                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64));
-                call.setDoesNotReturn();
+                    info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
+                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style);
+                if (exception_style == CAPI) {
+                    emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                           getNullPtr(g.llvm_value_type_ptr));
+                } else {
+                    call.setDoesNotReturn();
+                }
                 return undefVariable();
             }
 
@@ -1623,8 +1645,8 @@ public:
 
         std::vector<llvm::Value*> other_args;
 
-        ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->code, other_args, argspec, new_args,
-                                              keyword_names, cf->spec->rtn_type);
+        ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->exception_style, cf->code, other_args,
+                                              argspec, new_args, keyword_names, cf->spec->rtn_type);
         assert(rtn->getType() == cf->spec->rtn_type);
         assert(rtn->getType() != UNDEF);
 

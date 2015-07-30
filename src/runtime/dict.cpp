@@ -27,9 +27,6 @@
 
 namespace pyston {
 
-using namespace pyston::ExceptionStyle;
-using pyston::ExceptionStyle::ExceptionStyle;
-
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     chars.push_back('{');

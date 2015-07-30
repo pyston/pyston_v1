@@ -68,30 +68,41 @@ enum class EffortLevel {
     MAXIMAL = 3,
 };
 
-namespace ExceptionStyle {
 enum ExceptionStyle {
     CAPI,
     CXX,
 };
+
+template <typename T> struct ExceptionSwitchable {
+public:
+    T capi_val;
+    T cxx_val;
+
+    ExceptionSwitchable() : capi_val(), cxx_val() {}
+    ExceptionSwitchable(T capi_val, T cxx_val) : capi_val(std::move(capi_val)), cxx_val(std::move(cxx_val)) {}
+
+    template <ExceptionStyle S> T get() {
+        if (S == CAPI)
+            return capi_val;
+        else
+            return cxx_val;
+    }
+
+    T get(ExceptionStyle S) {
+        if (S == CAPI)
+            return capi_val;
+        else
+            return cxx_val;
+    }
 };
 
-template <typename R, typename... Args> struct ExceptionSwitchableFunction {
+template <typename R, typename... Args>
+struct ExceptionSwitchableFunction : public ExceptionSwitchable<R (*)(Args...)> {
 public:
     typedef R (*FTy)(Args...);
-    FTy capi_ptr;
-    FTy cxx_ptr;
+    ExceptionSwitchableFunction(FTy capi_ptr, FTy cxx_ptr) : ExceptionSwitchable<FTy>(capi_ptr, cxx_ptr) {}
 
-    ExceptionSwitchableFunction(FTy capi_ptr, FTy cxx_ptr) : capi_ptr(capi_ptr), cxx_ptr(cxx_ptr) {}
-
-    template <ExceptionStyle::ExceptionStyle S> FTy get() {
-        if (S == ExceptionStyle::CAPI)
-            return capi_ptr;
-        else
-            return cxx_ptr;
-    }
-    template <ExceptionStyle::ExceptionStyle S> R call(Args... args) noexcept(S == ExceptionStyle::CAPI) {
-        return get()(args...);
-    }
+    template <ExceptionStyle S> R call(Args... args) noexcept(S == CAPI) { return this->template get<S>()(args...); }
 };
 
 class CompilerType;
@@ -283,7 +294,7 @@ public:
     int code_size;
 
     EffortLevel effort;
-    ExceptionStyle::ExceptionStyle exception_style;
+    ExceptionStyle exception_style;
 
     int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
@@ -293,7 +304,7 @@ public:
     std::vector<ICInfo*> ics;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
-                     ExceptionStyle::ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
+                     ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();
 
@@ -414,15 +425,12 @@ CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs,
                              const ParamNames& param_names = ParamNames::empty());
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
                           bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
-                          ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
+                          ExceptionStyle exception_style = CXX);
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
-                          const ParamNames& param_names = ParamNames::empty(),
-                          ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
+                          const ParamNames& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types,
-                   ExceptionStyle::ExceptionStyle exception_style = ExceptionStyle::CXX);
+                   const std::vector<ConcreteCompilerType*>& arg_types, ExceptionStyle exception_style = CXX);
 CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;

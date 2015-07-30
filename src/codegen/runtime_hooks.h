@@ -35,12 +35,13 @@ struct GlobalFuncs {
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxCLFunction, *unboxCLFunction, *boxInstanceMethod,
         *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createUserClass, *createClosure,
         *createGenerator, *createSet;
-    llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare, *augbinop, *unboxedLen,
-        *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr, *str,
-        *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;
+    llvm::Value* getattr, *getattr_capi, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare,
+        *augbinop, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom,
+        *importStar, *repr, *str, *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;
 
-    llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
-        *raiseIndexErrorStr, *assertNameDefined, *assertFail, *assertFailDerefNameDefined;
+    llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseAttributeErrorCapi,
+        *raiseAttributeErrorStrCapi, *raiseNotIterableError, *raiseIndexErrorStr, *assertNameDefined, *assertFail,
+        *assertFailDerefNameDefined;
     llvm::Value* printFloat, *listAppendInternal, *getSysStdout;
     llvm::Value* runtimeCall0, *runtimeCall1, *runtimeCall2, *runtimeCall3, *runtimeCall, *runtimeCallN;
     llvm::Value* callattr0, *callattr1, *callattr2, *callattr3, *callattr, *callattrN;
@@ -50,6 +51,7 @@ struct GlobalFuncs {
 
     llvm::Value* __cxa_end_catch;
     llvm::Value* raise0, *raise3;
+    llvm::Value* PyErr_Fetch, *PyErr_NormalizeException, *capiExcCaughtInJit;
     llvm::Value* deopt;
 
     llvm::Value* div_float_float, *floordiv_float_float, *mod_float_float, *pow_float_float;

@@ -37,7 +37,8 @@
 
 namespace pyston {
 
-extern "C" void dumpLLVM(llvm::Value* v) {
+extern "C" void dumpLLVM(void* _v) {
+    llvm::Value* v = (llvm::Value*)_v;
     v->getType()->dump();
     v->dump();
 }
@@ -91,6 +92,55 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     scratch_space = new_scratch_space;
 
     return scratch_space;
+}
+
+// This function is where we decide whether to have a certain operation use CAPI or CXX exceptions.
+// FIXME It's a bit messy at the moment because this requires coordinating between a couple different
+// parts: we need to make sure that the associated landingpad will catch the right kind of exception,
+// and we need to make sure that we can actually emit this statement using capi-exceptions.
+// It doesn't really belong on the IRGenState, but it's here so that we can access this state from
+// separate basic blocks (the IRGenerator only exists for a single bb).
+ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
+    assert(!landingpad_styles.count(invoke->exc_dest));
+    ExceptionStyle& r = landingpad_styles[invoke->exc_dest];
+    // printf("Added %d\n", invoke->exc_dest->idx);
+
+    r = CXX; // default
+
+    // print_ast(invoke);
+    // printf("\n");
+    AST_expr* expr = NULL;
+
+    if (invoke->stmt->type == AST_TYPE::Assign) {
+        expr = ast_cast<AST_Assign>(invoke->stmt)->value;
+    } else if (invoke->stmt->type == AST_TYPE::Expr) {
+        expr = ast_cast<AST_Expr>(invoke->stmt)->value;
+    }
+
+    if (!expr)
+        return r;
+
+    if (0 && expr->type == AST_TYPE::Call) {
+        AST_Call* call = ast_cast<AST_Call>(expr);
+        if (call->func->type != AST_TYPE::Attribute && call->func->type != AST_TYPE::ClsAttribute) {
+            r = CAPI;
+            // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
+        }
+        return r;
+    }
+
+    if (expr->type == AST_TYPE::Attribute) {
+        r = CAPI;
+        // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
+        return r;
+    }
+
+    return r;
+}
+
+ExceptionStyle IRGenState::getLandingpadStyle(CFGBlock* block) {
+    ASSERT(landingpad_styles.count(block), "%d", block->idx);
+    return landingpad_styles[block];
 }
 
 static llvm::Value* getClosureParentGep(IREmitter& emitter, llvm::Value* closure) {
@@ -230,25 +280,64 @@ private:
     llvm::BasicBlock*& curblock;
     IRGenerator* irgenerator;
 
-    llvm::CallSite emitCall(UnwindInfo unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) {
-        if (unw_info.needsInvoke()) {
+    llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
+                            ExceptionStyle target_exception_style) {
+        if (unw_info.hasHandler() && target_exception_style == CXX) {
+            assert(unw_info.cxx_exc_dest);
             llvm::BasicBlock* normal_dest
                 = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
             normal_dest->moveAfter(curblock);
 
-            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, unw_info.exc_dest, args);
+            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, unw_info.cxx_exc_dest, args);
             getBuilder()->SetInsertPoint(normal_dest);
             curblock = normal_dest;
             return rtn;
         } else {
-            return getBuilder()->CreateCall(callee, args);
+            llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
+            return cs;
         }
     }
 
+    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
+                                        bool double_check) {
+        assert(!double_check); // need to call PyErr_Occurred
+
+        llvm::BasicBlock* normal_dest
+            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+        normal_dest->moveAfter(curblock);
+
+        llvm::BasicBlock* exc_dest;
+        bool exc_caught;
+        if (unw_info.hasHandler()) {
+            assert(unw_info.capi_exc_dest);
+            exc_dest = unw_info.capi_exc_dest;
+            exc_caught = true;
+        } else {
+            exc_dest = llvm::BasicBlock::Create(g.context, curblock->getName() + "_exc", irstate->getLLVMFunction());
+            exc_dest->moveAfter(curblock);
+            exc_caught = false;
+        }
+
+        assert(returned_val->getType() == exc_val->getType());
+        llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
+        llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
+
+        setCurrentBasicBlock(exc_dest);
+        getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
+                                  embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr),
+                                  embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+
+        if (!exc_caught) {
+            RELEASE_ASSERT(0, "need to implement this");
+        }
+
+        setCurrentBasicBlock(normal_dest);
+    }
 
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
-                                  const std::vector<llvm::Value*>& ic_stackmap_args, UnwindInfo unw_info) {
+                                  const std::vector<llvm::Value*>& ic_stackmap_args, const UnwindInfo& unw_info,
+                                  ExceptionStyle target_exception_style) {
         if (pp == NULL)
             assert(ic_stackmap_args.size() == 0);
 
@@ -272,7 +361,7 @@ private:
         int pp_size = pp ? pp->totalSize() : CALL_ONLY_SIZE;
 
         std::vector<llvm::Value*> pp_args;
-        pp_args.push_back(getConstantInt(pp_id, g.i64)); // pp_id: will fill this in later
+        pp_args.push_back(getConstantInt(pp_id, g.i64));
         pp_args.push_back(getConstantInt(pp_size, g.i32));
         if (ENABLE_JIT_OBJECT_CACHE)
             // add fixed dummy dest pointer, we will replace it with the correct address during stackmap processing
@@ -304,7 +393,7 @@ private:
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
 
-        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args);
+        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style);
         return rtn;
     }
 
@@ -343,7 +432,8 @@ public:
         return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
     }
 
-    llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
+    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
+                            ExceptionStyle target_exception_style = CXX) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
         // get checked.
@@ -367,7 +457,7 @@ public:
                                                                       ->getElementType())->getReturnType();
 
             llvm::Value* bitcasted = getBuilder()->CreateBitCast(callee, g.i8->getPointerTo());
-            llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, unw_info);
+            llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, unw_info, target_exception_style);
 
             if (rtn_type == cs->getType()) {
                 return cs.getInstruction();
@@ -381,34 +471,37 @@ public:
                 RELEASE_ASSERT(0, "don't know how to convert those");
             }
         } else {
-            return emitCall(unw_info, callee, args).getInstruction();
+            return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
         }
     }
 
-    llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>());
+    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                            ExceptionStyle target_exception_style = CXX) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style);
     }
 
-    llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }));
+    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                            ExceptionStyle target_exception_style = CXX) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style);
     }
 
-    llvm::Value* createCall2(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) override {
-        return createCall(unw_info, callee, { arg1, arg2 });
+    llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                             ExceptionStyle target_exception_style = CXX) override {
+        return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style);
     }
 
-    llvm::Value* createCall3(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                             llvm::Value* arg3) override {
-        return createCall(unw_info, callee, { arg1, arg2, arg3 });
+    llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                             llvm::Value* arg3, ExceptionStyle target_exception_style = CXX) override {
+        return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style);
     }
 
     llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                          UnwindInfo unw_info) override {
+                          const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) override {
         std::vector<llvm::Value*> stackmap_args;
 
-        llvm::CallSite rtn
-            = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
-                             embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args, unw_info);
+        llvm::CallSite rtn = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
+                                            embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args,
+                                            unw_info, target_exception_style);
 
         rtn.setCallingConv(pp->getCallingConvention());
         return rtn.getInstruction();
@@ -489,7 +582,7 @@ public:
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 
 private:
-    OpInfo getOpInfoForNode(AST* ast, UnwindInfo unw_info) {
+    OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {
         assert(ast);
 
         EffortLevel effort = irstate->getEffortLevel();
@@ -508,7 +601,7 @@ private:
         return OpInfo(irstate->getEffortLevel(), type_recorder, unw_info);
     }
 
-    OpInfo getEmptyOpInfo(UnwindInfo unw_info) { return OpInfo(irstate->getEffortLevel(), NULL, unw_info); }
+    OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) { return OpInfo(irstate->getEffortLevel(), NULL, unw_info); }
 
     void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, llvm::Value* node_value,
                              AST_stmt* current_statement) {
@@ -532,7 +625,7 @@ private:
 
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
-        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
+        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL, NULL), g.funcs.deopt,
                                              embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
         emitter.getBuilder()->CreateRet(v);
 
@@ -548,7 +641,7 @@ private:
         return pyston::getIsDefinedName(name, irstate->getSourceInfo()->getInternedStrings());
     }
 
-    CompilerVariable* evalAttribute(AST_Attribute* node, UnwindInfo unw_info) {
+    CompilerVariable* evalAttribute(AST_Attribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), false);
@@ -556,14 +649,14 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, UnwindInfo unw_info) {
+    CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), true);
         value->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalLangPrimitive(AST_LangPrimitive* node, UnwindInfo unw_info) {
+    CompilerVariable* evalLangPrimitive(AST_LangPrimitive* node, const UnwindInfo& unw_info) {
         switch (node->opcode) {
             case AST_LangPrimitive::CHECK_EXC_MATCH: {
                 assert(node->args.size() == 2);
@@ -582,38 +675,59 @@ private:
                 return boolFromI1(emitter, v);
             }
             case AST_LangPrimitive::LANDINGPAD: {
-                // llvm::Function* _personality_func = g.stdlib_module->getFunction("__py_personality_v0");
-                llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
-                assert(_personality_func);
-                llvm::Value* personality_func = g.cur_module->getOrInsertFunction(_personality_func->getName(),
-                                                                                  _personality_func->getFunctionType());
-                assert(personality_func);
-                llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
-                    llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
-                landing_pad->addClause(getNullPtr(g.i8_ptr));
+                llvm::Value* exc_type;
+                llvm::Value* exc_value;
+                llvm::Value* exc_traceback;
+                if (irstate->getLandingpadStyle(myblock) == CXX) {
+                    // llvm::Function* _personality_func = g.stdlib_module->getFunction("__py_personality_v0");
+                    llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+                    assert(_personality_func);
+                    llvm::Value* personality_func = g.cur_module->getOrInsertFunction(
+                        _personality_func->getName(), _personality_func->getFunctionType());
+                    assert(personality_func);
+                    llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
+                        llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+                    landing_pad->addClause(getNullPtr(g.i8_ptr));
 
-                llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
+                    llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
 
-                llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
-                auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
-                                                                          std_module_catch->getFunctionType());
-                assert(begin_catch_func);
+                    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+                    auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
+                                                                              std_module_catch->getFunctionType());
+                    assert(begin_catch_func);
 
-                llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
-                llvm::Value* excinfo_pointer_casted
-                    = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+                    llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
+                    llvm::Value* excinfo_pointer_casted
+                        = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
 
-                auto* builder = emitter.getBuilder();
-                llvm::Value* exc_type
-                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-                llvm::Value* exc_value
-                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
-                llvm::Value* exc_traceback
-                    = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+                    auto* builder = emitter.getBuilder();
+                    exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+                    exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+                    exc_traceback
+                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+                } else {
+                    llvm::Value* exc_type_ptr
+                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
+                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                    llvm::Value* exc_value_ptr
+                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_value",
+                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                    llvm::Value* exc_traceback_ptr
+                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
+                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                    emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr,
+                                                      exc_traceback_ptr);
+                    // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
+                    emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
+                                                      exc_traceback_ptr);
+                    exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
+                    exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
+                    exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
+                }
+
                 assert(exc_type->getType() == g.llvm_value_type_ptr);
                 assert(exc_value->getType() == g.llvm_value_type_ptr);
                 assert(exc_traceback->getType() == g.llvm_value_type_ptr);
-
                 return makeTuple({ new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
                                    new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
                                    new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true) });
@@ -763,7 +877,7 @@ private:
     }
 
     CompilerVariable* _evalBinExp(AST* node, CompilerVariable* left, CompilerVariable* right, AST_TYPE::AST_TYPE type,
-                                  BinExpType exp_type, UnwindInfo unw_info) {
+                                  BinExpType exp_type, const UnwindInfo& unw_info) {
         assert(left);
         assert(right);
 
@@ -783,7 +897,7 @@ private:
         return left->binexp(emitter, getOpInfoForNode(node, unw_info), right, type, exp_type);
     }
 
-    CompilerVariable* evalBinOp(AST_BinOp* node, UnwindInfo unw_info) {
+    CompilerVariable* evalBinOp(AST_BinOp* node, const UnwindInfo& unw_info) {
         CompilerVariable* left = evalExpr(node->left, unw_info);
         CompilerVariable* right = evalExpr(node->right, unw_info);
 
@@ -795,7 +909,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalAugBinOp(AST_AugBinOp* node, UnwindInfo unw_info) {
+    CompilerVariable* evalAugBinOp(AST_AugBinOp* node, const UnwindInfo& unw_info) {
         CompilerVariable* left = evalExpr(node->left, unw_info);
         CompilerVariable* right = evalExpr(node->right, unw_info);
 
@@ -807,7 +921,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalCompare(AST_Compare* node, UnwindInfo unw_info) {
+    CompilerVariable* evalCompare(AST_Compare* node, const UnwindInfo& unw_info) {
         RELEASE_ASSERT(node->ops.size() == 1, "");
 
         CompilerVariable* left = evalExpr(node->left, unw_info);
@@ -826,7 +940,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalCall(AST_Call* node, UnwindInfo unw_info) {
+    CompilerVariable* evalCall(AST_Call* node, const UnwindInfo& unw_info) {
         bool is_callattr;
         bool callattr_clsonly = false;
         InternedString attr;
@@ -891,7 +1005,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalDict(AST_Dict* node, UnwindInfo unw_info) {
+    CompilerVariable* evalDict(AST_Dict* node, const UnwindInfo& unw_info) {
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
@@ -926,9 +1040,9 @@ private:
         inst->setMetadata(message, mdnode);
     }
 
-    CompilerVariable* evalIndex(AST_Index* node, UnwindInfo unw_info) { return evalExpr(node->value, unw_info); }
+    CompilerVariable* evalIndex(AST_Index* node, const UnwindInfo& unw_info) { return evalExpr(node->value, unw_info); }
 
-    CompilerVariable* evalLambda(AST_Lambda* node, UnwindInfo unw_info) {
+    CompilerVariable* evalLambda(AST_Lambda* node, const UnwindInfo& unw_info) {
         AST_Return* expr = new AST_Return();
         expr->value = node->body;
 
@@ -941,7 +1055,7 @@ private:
     }
 
 
-    CompilerVariable* evalList(AST_List* node, UnwindInfo unw_info) {
+    CompilerVariable* evalList(AST_List* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -977,7 +1091,7 @@ private:
         return embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
     }
 
-    ConcreteCompilerVariable* _getGlobal(AST_Name* node, UnwindInfo unw_info) {
+    ConcreteCompilerVariable* _getGlobal(AST_Name* node, const UnwindInfo& unw_info) {
         if (node->id.s() == "None")
             return getNone();
 
@@ -999,7 +1113,7 @@ private:
         }
     }
 
-    CompilerVariable* evalName(AST_Name* node, UnwindInfo unw_info) {
+    CompilerVariable* evalName(AST_Name* node, const UnwindInfo& unw_info) {
         auto scope_info = irstate->getScopeInfo();
 
         bool is_kill = irstate->getLiveness()->isKill(node, myblock);
@@ -1100,7 +1214,7 @@ private:
         }
     }
 
-    CompilerVariable* evalNum(AST_Num* node, UnwindInfo unw_info) {
+    CompilerVariable* evalNum(AST_Num* node, const UnwindInfo& unw_info) {
         // We can operate on ints and floats unboxed, so don't box those at first;
         // complex and long's have to get boxed so box them immediately.
         if (node->num_type == AST_Num::INT) {
@@ -1114,7 +1228,7 @@ private:
         }
     }
 
-    CompilerVariable* evalRepr(AST_Repr* node, UnwindInfo unw_info) {
+    CompilerVariable* evalRepr(AST_Repr* node, const UnwindInfo& unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
         var->decvref(emitter);
@@ -1127,7 +1241,7 @@ private:
         return new ConcreteCompilerVariable(STR, rtn, true);
     }
 
-    CompilerVariable* evalSet(AST_Set* node, UnwindInfo unw_info) {
+    CompilerVariable* evalSet(AST_Set* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -1151,7 +1265,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalSlice(AST_Slice* node, UnwindInfo unw_info) {
+    CompilerVariable* evalSlice(AST_Slice* node, const UnwindInfo& unw_info) {
         CompilerVariable* start, *stop, *step;
         start = node->lower ? evalExpr(node->lower, unw_info) : getNone();
         stop = node->upper ? evalExpr(node->upper, unw_info) : getNone();
@@ -1177,7 +1291,7 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
-    CompilerVariable* evalExtSlice(AST_ExtSlice* node, UnwindInfo unw_info) {
+    CompilerVariable* evalExtSlice(AST_ExtSlice* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
         for (auto* e : node->dims) {
             elts.push_back(evalExpr(e, unw_info));
@@ -1191,7 +1305,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
+    CompilerVariable* evalStr(AST_Str* node, const UnwindInfo& unw_info) {
         if (node->str_type == AST_Str::STR) {
             llvm::Value* rtn = embedRelocatablePtr(
                 irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
@@ -1207,7 +1321,7 @@ private:
         }
     }
 
-    CompilerVariable* evalSubscript(AST_Subscript* node, UnwindInfo unw_info) {
+    CompilerVariable* evalSubscript(AST_Subscript* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* slice = evalExpr(node->slice, unw_info);
 
@@ -1217,7 +1331,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalTuple(AST_Tuple* node, UnwindInfo unw_info) {
+    CompilerVariable* evalTuple(AST_Tuple* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -1232,7 +1346,7 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalUnaryOp(AST_UnaryOp* node, UnwindInfo unw_info) {
+    CompilerVariable* evalUnaryOp(AST_UnaryOp* node, const UnwindInfo& unw_info) {
         CompilerVariable* operand = evalExpr(node->operand, unw_info);
 
         if (node->op_type == AST_TYPE::Not) {
@@ -1259,7 +1373,7 @@ private:
         }
     }
 
-    CompilerVariable* evalYield(AST_Yield* node, UnwindInfo unw_info) {
+    CompilerVariable* evalYield(AST_Yield* node, const UnwindInfo& unw_info) {
         CompilerVariable* generator = symbol_table[internString(PASSED_GENERATOR_NAME)];
         assert(generator);
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
@@ -1277,7 +1391,7 @@ private:
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
-    CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, UnwindInfo unw_info) {
+    CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, const UnwindInfo& unw_info) {
         assert(mkclass->type == AST_TYPE::MakeClass && mkclass->class_def->type == AST_TYPE::ClassDef);
         AST_ClassDef* node = mkclass->class_def;
         ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
@@ -1346,7 +1460,7 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(AST* node, UnwindInfo unw_info, AST_arguments* args,
+    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args,
                                       const std::vector<AST_stmt*>& body) {
         CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
 
@@ -1394,7 +1508,7 @@ private:
         return func;
     }
 
-    CompilerVariable* evalMakeFunction(AST_MakeFunction* mkfn, UnwindInfo unw_info) {
+    CompilerVariable* evalMakeFunction(AST_MakeFunction* mkfn, const UnwindInfo& unw_info) {
         AST_FunctionDef* node = mkfn->function_def;
         std::vector<CompilerVariable*> decorators;
         for (auto d : node->decorator_list) {
@@ -1429,7 +1543,7 @@ private:
         return new ConcreteCompilerVariable(t, v, grabbed);
     }
 
-    CompilerVariable* evalExpr(AST_expr* node, UnwindInfo unw_info) {
+    CompilerVariable* evalExpr(AST_expr* node, const UnwindInfo& unw_info) {
         // printf("%d expr: %d\n", node->type, node->lineno);
         if (node->lineno) {
             emitter.getBuilder()->SetCurrentDebugLocation(
@@ -1584,7 +1698,7 @@ private:
     }
 
     // only updates symbol_table if we're *not* setting a global
-    void _doSet(InternedString name, CompilerVariable* val, UnwindInfo unw_info) {
+    void _doSet(InternedString name, CompilerVariable* val, const UnwindInfo& unw_info) {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
 
@@ -1632,13 +1746,13 @@ private:
         }
     }
 
-    void _doSetattr(AST_Attribute* target, CompilerVariable* val, UnwindInfo unw_info) {
+    void _doSetattr(AST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         CompilerVariable* t = evalExpr(target->value, unw_info);
         t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
         t->decvref(emitter);
     }
 
-    void _doSetitem(AST_Subscript* target, CompilerVariable* val, UnwindInfo unw_info) {
+    void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         CompilerVariable* tget = evalExpr(target->value, unw_info);
         CompilerVariable* slice = evalExpr(target->slice, unw_info);
 
@@ -1672,7 +1786,7 @@ private:
         converted_val->decvref(emitter);
     }
 
-    void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, UnwindInfo unw_info) {
+    void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         int ntargets = target->elts.size();
 
         std::vector<CompilerVariable*> unpacked = val->unpack(emitter, getOpInfoForNode(target, unw_info), ntargets);
@@ -1691,7 +1805,7 @@ private:
         }
     }
 
-    void _doSet(AST* target, CompilerVariable* val, UnwindInfo unw_info) {
+    void _doSet(AST* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         switch (target->type) {
             case AST_TYPE::Attribute:
                 _doSetattr(ast_cast<AST_Attribute>(target), val, unw_info);
@@ -1711,7 +1825,7 @@ private:
         }
     }
 
-    void doAssert(AST_Assert* node, UnwindInfo unw_info) {
+    void doAssert(AST_Assert* node, const UnwindInfo& unw_info) {
         // cfg translates all asserts into only 'assert 0' on the failing path.
         AST_expr* test = node->test;
         assert(test->type == AST_TYPE::Num);
@@ -1740,7 +1854,7 @@ private:
         call.setDoesNotReturn();
     }
 
-    void doAssign(AST_Assign* node, UnwindInfo unw_info) {
+    void doAssign(AST_Assign* node, const UnwindInfo& unw_info) {
         CompilerVariable* val = evalExpr(node->value, unw_info);
 
         for (int i = 0; i < node->targets.size(); i++) {
@@ -1749,7 +1863,7 @@ private:
         val->decvref(emitter);
     }
 
-    void doDelete(AST_Delete* node, UnwindInfo unw_info) {
+    void doDelete(AST_Delete* node, const UnwindInfo& unw_info) {
         for (AST_expr* target : node->targets) {
             switch (target->type) {
                 case AST_TYPE::Subscript:
@@ -1769,7 +1883,7 @@ private:
     }
 
     // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
-    void _doDelitem(AST_Subscript* target, UnwindInfo unw_info) {
+    void _doDelitem(AST_Subscript* target, const UnwindInfo& unw_info) {
         CompilerVariable* tget = evalExpr(target->value, unw_info);
         CompilerVariable* slice = evalExpr(target->slice, unw_info);
 
@@ -1795,12 +1909,12 @@ private:
         converted_slice->decvref(emitter);
     }
 
-    void _doDelAttr(AST_Attribute* node, UnwindInfo unw_info) {
+    void _doDelAttr(AST_Attribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         value->delattr(emitter, getEmptyOpInfo(unw_info), node->attr.getBox());
     }
 
-    void _doDelName(AST_Name* target, UnwindInfo unw_info) {
+    void _doDelName(AST_Name* target, const UnwindInfo& unw_info) {
         auto scope_info = irstate->getScopeInfo();
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
@@ -1845,7 +1959,7 @@ private:
         symbol_table.erase(target->id);
     }
 
-    void doExec(AST_Exec* node, UnwindInfo unw_info) {
+    void doExec(AST_Exec* node, const UnwindInfo& unw_info) {
         CompilerVariable* body = evalExpr(node->body, unw_info);
         llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
         body->decvref(emitter);
@@ -1873,7 +1987,7 @@ private:
                            { vbody, vglobals, vlocals, getConstantInt(irstate->getSourceInfo()->future_flags, g.i32) });
     }
 
-    void doPrint(AST_Print* node, UnwindInfo unw_info) {
+    void doPrint(AST_Print* node, const UnwindInfo& unw_info) {
         ConcreteCompilerVariable* dest = NULL;
         if (node->dest) {
             auto d = evalExpr(node->dest, unw_info);
@@ -1945,8 +2059,8 @@ private:
         dest->decvref(emitter);
     }
 
-    void doReturn(AST_Return* node, UnwindInfo unw_info) {
-        assert(!unw_info.needsInvoke());
+    void doReturn(AST_Return* node, const UnwindInfo& unw_info) {
+        assert(!unw_info.hasHandler());
 
         CompilerVariable* val;
         if (node->value == NULL) {
@@ -1984,8 +2098,8 @@ private:
         emitter.getBuilder()->CreateRet(rtn->getValue());
     }
 
-    void doBranch(AST_Branch* node, UnwindInfo unw_info) {
-        assert(!unw_info.needsInvoke());
+    void doBranch(AST_Branch* node, const UnwindInfo& unw_info) {
+        assert(!unw_info.hasHandler());
 
         assert(node->iftrue->idx > myblock->idx);
         assert(node->iffalse->idx > myblock->idx);
@@ -2007,7 +2121,7 @@ private:
         emitter.getBuilder()->CreateCondBr(v, iftrue, iffalse);
     }
 
-    void doExpr(AST_Expr* node, UnwindInfo unw_info) {
+    void doExpr(AST_Expr* node, const UnwindInfo& unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
 
         var->decvref(emitter);
@@ -2179,7 +2293,7 @@ private:
         emitter.getBuilder()->SetInsertPoint(starting_block);
     }
 
-    void doJump(AST_Jump* node, UnwindInfo unw_info) {
+    void doJump(AST_Jump* node, const UnwindInfo& unw_info) {
         endBlock(FINISHED);
 
         llvm::BasicBlock* target = entry_blocks[node->target];
@@ -2192,7 +2306,7 @@ private:
         }
     }
 
-    void doRaise(AST_Raise* node, UnwindInfo unw_info) {
+    void doRaise(AST_Raise* node, const UnwindInfo& unw_info) {
         // It looks like ommitting the second and third arguments are equivalent to passing None,
         // but ommitting the first argument is *not* the same as passing None.
 
@@ -2225,7 +2339,7 @@ private:
         endBlock(DEAD);
     }
 
-    void doStmt(AST_stmt* node, UnwindInfo unw_info) {
+    void doStmt(AST_stmt* node, const UnwindInfo& unw_info) {
         // printf("%d stmt: %d\n", node->type, node->lineno);
         if (node->lineno) {
             emitter.getBuilder()->SetCurrentDebugLocation(
@@ -2267,21 +2381,27 @@ private:
                 doPrint(ast_cast<AST_Print>(node), unw_info);
                 break;
             case AST_TYPE::Return:
-                assert(!unw_info.needsInvoke());
+                assert(!unw_info.hasHandler());
                 doReturn(ast_cast<AST_Return>(node), unw_info);
                 break;
             case AST_TYPE::Branch:
-                assert(!unw_info.needsInvoke());
+                assert(!unw_info.hasHandler());
                 doBranch(ast_cast<AST_Branch>(node), unw_info);
                 break;
             case AST_TYPE::Jump:
-                assert(!unw_info.needsInvoke());
+                assert(!unw_info.hasHandler());
                 doJump(ast_cast<AST_Jump>(node), unw_info);
                 break;
             case AST_TYPE::Invoke: {
-                assert(!unw_info.needsInvoke());
+                assert(!unw_info.hasHandler());
                 AST_Invoke* invoke = ast_cast<AST_Invoke>(node);
-                doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest]));
+
+                ExceptionStyle landingpad_style = irstate->getLandingpadStyle(invoke);
+
+                if (landingpad_style == CXX)
+                    doStmt(invoke->stmt, UnwindInfo(node, NULL, entry_blocks[invoke->exc_dest]));
+                else
+                    doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest], NULL));
 
                 assert(state == RUNNING || state == DEAD);
                 if (state == RUNNING) {
@@ -2300,14 +2420,14 @@ private:
         }
     }
 
-    void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, UnwindInfo unw_info) {
+    void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         assert(name.s() != FRAME_INFO_PTR_NAME);
         ConcreteCompilerVariable* var = unboxVar(t, v, false);
         _doSet(name, var, unw_info);
         var->decvref(emitter);
     }
 
-    void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, UnwindInfo unw_info) {
+    void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         ConcreteCompilerVariable* var = unboxVar(t, v, false);
         _doSet(name, var, unw_info);
         var->decvref(emitter);
@@ -2656,7 +2776,7 @@ public:
                 doSafePoint(block->body[i]);
 #endif
 
-            doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
+            doStmt(block->body[i], UnwindInfo(block->body[i], NULL, NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
@@ -2669,7 +2789,7 @@ public:
     void doSafePoint(AST_stmt* next_statement) override {
         // Unwind info is always needed in allowGLReadPreemption if it has any chance of
         // running arbitrary code like finalizers.
-        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
+        emitter.createCall(UnwindInfo(next_statement, NULL, NULL), g.funcs.allowGLReadPreemption);
     }
 };
 

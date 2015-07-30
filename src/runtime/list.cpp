@@ -704,7 +704,7 @@ private:
 public:
     PyCmpComparer(Box* cmp) : cmp(cmp) {}
     bool operator()(Box* lhs, Box* rhs) {
-        Box* r = runtimeCallInternal<ExceptionStyle::CXX>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+        Box* r = runtimeCallInternal<CXX>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
         if (!isSubclass(r->cls, int_cls))
             raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
         return static_cast<BoxedInt*>(r)->n < 0;
@@ -1170,8 +1170,8 @@ void setupList() {
     list_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_iterator_cls), 1)));
 
-    CLFunction* listiter_next = boxRTFunction((void*)listiterNext<ExceptionStyle::CXX>, UNKNOWN, 1);
-    addRTFunction(listiter_next, (void*)listiterNext<ExceptionStyle::CAPI>, UNKNOWN, ExceptionStyle::CAPI);
+    CLFunction* listiter_next = boxRTFunction((void*)listiterNext<CXX>, UNKNOWN, 1);
+    addRTFunction(listiter_next, (void*)listiterNext<CAPI>, UNKNOWN, CAPI);
     list_iterator_cls->giveAttr("next", new BoxedFunction(listiter_next));
 
     list_iterator_cls->freeze();

@@ -1000,6 +1000,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 void checkAndThrowCAPIException();
 void throwCAPIException() __attribute__((noreturn));
+void ensureCAPIExceptionSet();
 struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
 

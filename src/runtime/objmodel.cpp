@@ -60,9 +60,6 @@
 
 namespace pyston {
 
-using namespace pyston::ExceptionStyle;
-using pyston::ExceptionStyle::ExceptionStyle;
-
 static const std::string iter_str("__iter__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
@@ -76,20 +73,20 @@ void REWRITE_ABORTED(const char* reason) {
 #define REWRITE_ABORTED(reason) ((void)(reason))
 #endif
 
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 static inline Box* runtimeCallInternal0(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec) {
     return runtimeCallInternal<S>(obj, rewrite_args, argspec, NULL, NULL, NULL, NULL, NULL);
 }
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 static inline Box* runtimeCallInternal1(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1) {
     return runtimeCallInternal<S>(obj, rewrite_args, argspec, arg1, NULL, NULL, NULL, NULL);
 }
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 static inline Box* runtimeCallInternal2(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                         Box* arg2) {
     return runtimeCallInternal<S>(obj, rewrite_args, argspec, arg1, arg2, NULL, NULL, NULL);
 }
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 static inline Box* runtimeCallInternal3(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                         Box* arg2, Box* arg3) {
     return runtimeCallInternal<S>(obj, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
@@ -274,7 +271,12 @@ extern "C" void assertFailDerefNameDefined(const char* name) {
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, llvm::StringRef attr) {
     assert(attr.data()[attr.size()] == '\0');
-    raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr);
+    raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr.data());
+}
+
+extern "C" void raiseAttributeErrorStrCapi(const char* typeName, llvm::StringRef attr) noexcept {
+    assert(attr.data()[attr.size()] == '\0');
+    PyErr_Format(AttributeError, "'%s' object has no attribute '%s'", typeName, attr.data());
 }
 
 extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) {
@@ -285,6 +287,17 @@ extern "C" void raiseAttributeError(Box* obj, llvm::StringRef attr) {
                        getNameOfClass(static_cast<BoxedClass*>(obj)), attr.data());
     } else {
         raiseAttributeErrorStr(getTypeName(obj), attr);
+    }
+}
+
+extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept {
+    if (obj->cls == type_cls) {
+        // Slightly different error message:
+        assert(attr.data()[attr.size()] == '\0');
+        PyErr_Format(AttributeError, "type object '%s' has no attribute '%s'",
+                     getNameOfClass(static_cast<BoxedClass*>(obj)), attr.data());
+    } else {
+        raiseAttributeErrorStrCapi(getTypeName(obj), attr);
     }
 }
 
@@ -1342,15 +1355,17 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     return NULL;
 }
 
-template <enum ExceptionStyle S>
-Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == ExceptionStyle::CAPI) {
-    assert(gc::isValidGCObject(attr));
+// Helper function: make sure that a capi function either returned a non-error value, or
+// it set an exception.
+static void ensureValidCapiReturn(Box* r) {
+    if (!r)
+        ensureCAPIExceptionSet();
+}
 
-    if (S == CAPI) {
-        assert(!rewrite_args && "implement me");
-        rewrite_args = NULL;
-    }
+template <ExceptionStyle S>
+Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
+                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
+    assert(gc::isValidGCObject(attr));
 
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
@@ -1363,23 +1378,19 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
-            if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
-                if (S == CAPI) {
-                    assert(!rewrite_args && "implement me");
-                    return obj->cls->tp_getattro(obj, attr);
-                } else {
-                    return slotTpGetattrHookInternal(obj, attr, rewrite_args);
-                }
+            if (obj->cls->tp_getattro == slot_tp_getattr_hook && S == CXX) {
+                return slotTpGetattrHookInternal(obj, attr, rewrite_args);
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
-            if (S == CAPI) {
-                assert(!rewrite_args && "implement me");
-                return r;
-            }
 
-            if (!r)
-                throwCAPIException();
+            if (!r) {
+                if (S == CAPI) {
+                    ensureCAPIExceptionSet();
+                    return r;
+                } else
+                    throwCAPIException();
+            }
 
             // If attr is immortal, then we are free to write an embedded reference to it.
             // Immortal are (unfortunately) common right now, so this is an easy way to get
@@ -1388,7 +1399,11 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             if (rewrite_args && attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
                 auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
+                if (S == CXX)
+                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                else
+                    rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
 
                 rewrite_args->out_rtn = r_rtn;
                 rewrite_args->out_success = true;
@@ -1406,9 +1421,13 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
             assert(attr->data()[attr->size()] == '\0');
 
+            rewrite_args = NULL;
+
             Box* r = obj->cls->tp_getattr(obj, const_cast<char*>(attr->data()));
 
             if (S == CAPI) {
+                if (!r)
+                    ensureCAPIExceptionSet();
                 return r;
             } else {
                 if (!r)
@@ -1848,9 +1867,8 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     return NULL;
 }
 
-template <enum ExceptionStyle S>
-Box* getattrInternal(Box* obj, BoxedString* attr,
-                     GetattrRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
+template <ExceptionStyle S>
+Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     return getattrInternalEx<S>(obj, attr, rewrite_args,
                                 /* cls_only */ false,
                                 /* for_call */ false, NULL, NULL);
@@ -1880,7 +1898,7 @@ Box* getattrMaybeNonstring(Box* obj, Box* attr) {
     return r;
 }
 
-extern "C" Box* getattr(Box* obj, BoxedString* attr) {
+template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void* return_addr) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slowpath_getattr", 10);
 
     static StatCounter slowpath_getattr("slowpath_getattr");
@@ -1896,14 +1914,13 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
 #endif
     }
 
-    std::unique_ptr<Rewriter> rewriter(
-        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
 
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_getattr_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_getattr_nopatch");
     static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_getattr_megamorphic");
-    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ICInfo* icinfo = getICInfo(return_addr);
     uint64_t* counter;
     if (!icinfo)
         counter = st_id_nopatch;
@@ -1931,15 +1948,22 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
         else
             dest = rewriter->getReturnDestination();
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
-        val = getattrInternal<CXX>(obj, attr, &rewrite_args);
+        val = getattrInternal<S>(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success) {
             if (!val) {
                 if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
-                    rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
-                                   rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
-                                   rewriter->loadConst(attr->size(), Location::forArg(2)));
-                    rewriter->commit();
+                    if (S == CXX) {
+                        rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
+                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
+                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
+                        rewriter->commit();
+                    } else if (S == CAPI && !PyErr_Occurred()) {
+                        rewriter->call(true, (void*)raiseAttributeErrorCapi, rewriter->getArg(0),
+                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
+                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
+                        rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
+                    }
                 }
             } else if (recorder) {
                 RewriterVar* record_rtn = rewriter->call(false, (void*)recordType,
@@ -1953,14 +1977,27 @@ extern "C" Box* getattr(Box* obj, BoxedString* attr) {
             }
         }
     } else {
-        val = getattrInternal<CXX>(obj, attr, NULL);
+        val = getattrInternal<S>(obj, attr, NULL);
     }
 
-    if (val) {
+    if (val)
         return val;
-    }
 
-    raiseAttributeError(obj, attr->s());
+    if (S == CAPI) {
+        if (!PyErr_Occurred())
+            raiseAttributeErrorCapi(obj, attr->s());
+        return NULL;
+    } else {
+        raiseAttributeError(obj, attr->s());
+    }
+}
+
+extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept {
+    return _getattrEntry<CAPI>(obj, attr, __builtin_extract_return_addr(__builtin_return_address(0)));
+}
+
+extern "C" Box* getattr(Box* obj, BoxedString* attr) {
+    return _getattrEntry<CXX>(obj, attr, __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
 bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewriteArgs* rewrite_args,
@@ -2458,8 +2495,7 @@ extern "C" BoxedInt* hash(Box* obj) {
     return new BoxedInt(r);
 }
 
-template <enum ExceptionStyle S>
-BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
+template <ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     static BoxedString* len_str = internStringImmortal("__len__");
 
     if (S == CAPI) {
@@ -2793,7 +2829,7 @@ static inline RewriterVar* getArg(int idx, CallRewriteArgs* rewrite_args) {
 }
 
 static StatCounter slowpath_pickversion("slowpath_pickversion");
-static CompiledFunction* pickVersion(CLFunction* f, enum ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
+static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
                                      Box* oarg3, Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -3256,7 +3292,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 }
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
 #if STAT_TIMERS
@@ -3389,7 +3425,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     return res;
 }
 
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* oarg1,
                          Box* oarg2, Box* oarg3, Box** oargs) noexcept(S == CAPI) {
     if (S != chosen_cf->exception_style) {
@@ -3431,7 +3467,7 @@ static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closur
     return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI) {
@@ -3543,7 +3579,7 @@ template Box* callCLFunc<CAPI>(CLFunction* f, CallRewriteArgs* rewrite_args, int
 template Box* callCLFunc<CXX>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                               BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
-template <enum ExceptionStyle S>
+template <ExceptionStyle S>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                          Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     int npassed_args = argspec.totalPassed();
@@ -4416,8 +4452,8 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
     }
 }
 
-template <enum ExceptionStyle S>
-Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == ExceptionStyle::CAPI) {
+template <ExceptionStyle S>
+Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     if (S == CAPI) {
         assert(!rewrite_args && "implement me");
         rewrite_args = NULL;

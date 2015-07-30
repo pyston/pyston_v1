@@ -1382,7 +1382,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("repr", repr_obj);
 
     auto len_func = boxRTFunction((void*)len, UNKNOWN, 1);
-    len_func->internal_callable.cxx_ptr = lenCallInternal;
+    len_func->internal_callable.cxx_val = lenCallInternal;
     len_obj = new BoxedBuiltinFunctionOrMethod(len_func, "len");
     builtins_module->giveAttr("len", len_obj);
 

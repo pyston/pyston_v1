@@ -32,16 +32,19 @@ class IREmitter;
 struct UnwindInfo {
 public:
     AST_stmt* current_stmt;
-    llvm::BasicBlock* exc_dest;
 
-    bool needsInvoke() { return exc_dest != NULL; }
+    llvm::BasicBlock* capi_exc_dest;
+    llvm::BasicBlock* cxx_exc_dest;
 
-    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest) : current_stmt(current_stmt), exc_dest(exc_dest) {}
+    bool hasHandler() const { return cxx_exc_dest != NULL || capi_exc_dest != NULL; }
+
+    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* capi_exc_dest, llvm::BasicBlock* cxx_exc_dest)
+        : current_stmt(current_stmt), capi_exc_dest(capi_exc_dest), cxx_exc_dest(cxx_exc_dest) {}
 
     // Risky!  This means that we can't unwind from this location, and should be used in the
     // rare case that there are language-specific reasons that the statement should not unwind
     // (ex: loading function arguments into the appropriate scopes).
-    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL); }
+    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL, NULL); }
 };
 
 // TODO get rid of this
@@ -78,16 +81,23 @@ public:
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
-    virtual llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args)
+    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                    const std::vector<llvm::Value*>& args, ExceptionStyle target_exception_style = CXX)
         = 0;
-    virtual llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee) = 0;
-    virtual llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1) = 0;
-    virtual llvm::Value* createCall2(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2)
+    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                    ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                    ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                     llvm::Value* arg2, ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                     llvm::Value* arg2, llvm::Value* arg3, ExceptionStyle target_exception_style = CXX)
         = 0;
-    virtual llvm::Value* createCall3(UnwindInfo unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                                     llvm::Value* arg3) = 0;
     virtual llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                  UnwindInfo unw_info) = 0;
+                                  const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) = 0;
+
+    virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
+                                                llvm::Value* exc_val, bool double_check = false) = 0;
 
     virtual Box* getIntConstant(int64_t n) = 0;
     virtual Box* getFloatConstant(double d) = 0;
@@ -132,7 +142,7 @@ private:
 public:
     const UnwindInfo unw_info;
 
-    OpInfo(EffortLevel effort, TypeRecorder* type_recorder, UnwindInfo unw_info)
+    OpInfo(EffortLevel effort, TypeRecorder* type_recorder, const UnwindInfo& unw_info)
         : effort(effort), type_recorder(type_recorder), unw_info(unw_info) {}
 
     TypeRecorder* getTypeRecorder() const { return type_recorder; }

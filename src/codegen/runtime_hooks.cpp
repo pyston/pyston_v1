@@ -195,6 +195,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSet);
 
     GET(getattr);
+    GET(getattr_capi);
     GET(setattr);
     GET(delattr);
     GET(getitem);
@@ -223,6 +224,8 @@ void initGlobalFuncs(GlobalState& g) {
     GET(unpackIntoArray);
     GET(raiseAttributeError);
     GET(raiseAttributeErrorStr);
+    GET(raiseAttributeErrorCapi);
+    GET(raiseAttributeErrorStrCapi);
     GET(raiseIndexErrorStr);
     GET(raiseNotIterableError);
     GET(assertNameDefined);
@@ -270,6 +273,9 @@ void initGlobalFuncs(GlobalState& g) {
     g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
     GET(raise0);
     GET(raise3);
+    GET(PyErr_Fetch);
+    GET(PyErr_NormalizeException);
+    GET(capiExcCaughtInJit);
     GET(deopt);
 
     GET(div_float_float);
