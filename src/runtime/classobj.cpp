@@ -488,6 +488,15 @@ Box* instanceGetitem(Box* _inst, Box* key) {
     return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
+Box* instanceReversed(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* reversed_str = internStringImmortal("__reversed__");
+    Box* reversed_func = _instanceGetattribute(inst, reversed_str, true);
+    return runtimeCall(reversed_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
 Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -504,6 +513,76 @@ Box* instanceDelitem(Box* _inst, Box* key) {
     static BoxedString* delitem_str = internStringImmortal("__delitem__");
     Box* delitem_func = _instanceGetattribute(inst, delitem_str, true);
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* getslice_str = internStringImmortal("__getslice__");
+    Box* getslice_func = NULL;
+
+    try {
+        getslice_func = _instanceGetattribute(inst, getslice_str, false);
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            throw e;
+    }
+
+    if (getslice_func == NULL) {
+        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        return instanceGetitem(inst, slice);
+    }
+
+    return runtimeCall(getslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
+}
+
+Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* setslice_str = internStringImmortal("__setslice__");
+    Box* setslice_func = NULL;
+
+    try {
+        setslice_func = _instanceGetattribute(inst, setslice_str, false);
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            throw e;
+    }
+
+    if (setslice_func == NULL) {
+        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        return instanceSetitem(inst, slice, *sequence);
+    }
+
+    return runtimeCall(setslice_func, ArgPassSpec(3), i, j, *sequence, NULL, NULL);
+}
+
+Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* delslice_str = internStringImmortal("__delslice__");
+    Box* delslice_func = NULL;
+
+    try {
+        delslice_func = _instanceGetattribute(inst, delslice_str, false);
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            throw e;
+    }
+
+    if (delslice_func == NULL) {
+        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        return instanceDelitem(inst, slice);
+    }
+    try {
+        return runtimeCall(delslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 /* Try a 3-way comparison, returning an int; v is an instance.  Return:
@@ -1186,6 +1265,119 @@ Box* instanceIor(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, attr_str);
 }
 
+Box* instanceNeg(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* neg_str = internStringImmortal("__neg__");
+    Box* neg_func = _instanceGetattribute(inst, neg_str, true);
+    return runtimeCall(neg_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instancePos(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* pos_str = internStringImmortal("__pos__");
+    Box* pos_func = _instanceGetattribute(inst, pos_str, true);
+    return runtimeCall(pos_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceAbs(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* abs_str = internStringImmortal("__abs__");
+    Box* abs_func = _instanceGetattribute(inst, abs_str, true);
+    return runtimeCall(abs_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceInvert(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* invert_str = internStringImmortal("__invert__");
+    Box* invert_func = _instanceGetattribute(inst, invert_str, true);
+    return runtimeCall(invert_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceComplex(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* complex_str = internStringImmortal("__complex__");
+    Box* complex_func = _instanceGetattribute(inst, complex_str, true);
+    return runtimeCall(complex_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceInt(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* int_str = internStringImmortal("__int__");
+    Box* int_func = _instanceGetattribute(inst, int_str, true);
+    return runtimeCall(int_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceLong(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* long_str = internStringImmortal("__long__");
+    Box* long_func = _instanceGetattribute(inst, long_str, true);
+    return runtimeCall(long_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceFloat(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* float_str = internStringImmortal("__float__");
+    Box* float_func = _instanceGetattribute(inst, float_str, true);
+    return runtimeCall(float_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceOct(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* oct_str = internStringImmortal("__oct__");
+    Box* oct_func = _instanceGetattribute(inst, oct_str, true);
+    return runtimeCall(oct_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceHex(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* hex_str = internStringImmortal("__hex__");
+    Box* hex_func = _instanceGetattribute(inst, hex_str, true);
+    return runtimeCall(hex_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceCoerce(Box* _inst, Box* other) {
+    static BoxedString* attr_str = internStringImmortal("__coerce__");
+    return _instanceBinary(_inst, other, attr_str);
+}
+
+Box* instanceEnter(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* enter_str = internStringImmortal("__enter__");
+    Box* enter_func = _instanceGetattribute(inst, enter_str, true);
+    return runtimeCall(enter_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceExit(Box* _inst, Box* _exc_type, Box* _exc_value, Box* traceback) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* exit_str = internStringImmortal("__exit__");
+    Box* exit_func = _instanceGetattribute(inst, exit_str, true);
+    return runtimeCall(exit_func, ArgPassSpec(3), _exc_type, _exc_value, traceback, NULL, NULL);
+}
+
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     assert(_inst->cls == instance_cls);
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -1282,8 +1474,12 @@ void setupClassobj() {
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
     instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__reversed__", new BoxedFunction(boxRTFunction((void*)instanceReversed, UNKNOWN, 1)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)instanceGetslice, UNKNOWN, 3)));
+    instance_cls->giveAttr("__setslice__", new BoxedFunction(boxRTFunction((void*)instanceSetslice, UNKNOWN, 4)));
+    instance_cls->giveAttr("__delslice__", new BoxedFunction(boxRTFunction((void*)instanceDelslice, UNKNOWN, 3)));
     instance_cls->giveAttr("__cmp__", new BoxedFunction(boxRTFunction((void*)instanceCompare, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
@@ -1340,6 +1536,21 @@ void setupClassobj() {
     instance_cls->giveAttr("__iand__", new BoxedFunction(boxRTFunction((void*)instanceIand, UNKNOWN, 2)));
     instance_cls->giveAttr("__ixor__", new BoxedFunction(boxRTFunction((void*)instanceIxor, UNKNOWN, 2)));
     instance_cls->giveAttr("__ior__", new BoxedFunction(boxRTFunction((void*)instanceIor, UNKNOWN, 2)));
+
+    instance_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)instanceNeg, UNKNOWN, 1)));
+    instance_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)instancePos, UNKNOWN, 1)));
+    instance_cls->giveAttr("__abs__", new BoxedFunction(boxRTFunction((void*)instanceAbs, UNKNOWN, 1)));
+    instance_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)instanceInvert, UNKNOWN, 1)));
+    instance_cls->giveAttr("__complex__", new BoxedFunction(boxRTFunction((void*)instanceComplex, UNKNOWN, 1)));
+    instance_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)instanceInt, UNKNOWN, 1)));
+    instance_cls->giveAttr("__long__", new BoxedFunction(boxRTFunction((void*)instanceLong, UNKNOWN, 1)));
+    instance_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)instanceFloat, UNKNOWN, 1)));
+    instance_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)instanceOct, UNKNOWN, 1)));
+    instance_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)instanceHex, UNKNOWN, 1)));
+    instance_cls->giveAttr("__coerce__", new BoxedFunction(boxRTFunction((void*)instanceCoerce, UNKNOWN, 2)));
+
+    instance_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)instanceEnter, UNKNOWN, 1)));
+    instance_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)instanceExit, UNKNOWN, 4)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
