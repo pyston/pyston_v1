@@ -24,6 +24,7 @@
 
 #include "codegen/irgen/future.h"
 #include "core/contiguous_map.h"
+#include "core/DenseMap.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -798,9 +799,33 @@ struct PyLt {
     bool operator()(Box*, Box*) const;
 };
 
+} // namespace pyston
+
+namespace llvm {
+template <> struct DenseMapInfo<pyston::Box*> {
+    static inline pyston::Box* getEmptyKey() { return nullptr; }
+    static inline pyston::Box* getTombstoneKey() { return (pyston::Box*)-1; }
+    static unsigned getHashValue(const pyston::Box* val) { return pyston::PyHasher()(const_cast<pyston::Box*>(val)); }
+    static bool isEqual(const pyston::Box* lhs, const pyston::Box* rhs) {
+        if (lhs == NULL)
+            return rhs == NULL;
+        if (lhs == (pyston::Box*)-1)
+            return rhs == (pyston::Box*)-1;
+
+        if (rhs == NULL || rhs == (pyston::Box*)-1)
+            return false;
+
+        return rhs && pyston::PyEq()(const_cast<pyston::Box*>(lhs), const_cast<pyston::Box*>(rhs));
+    }
+};
+
+} // namespace llvm
+
+namespace pyston {
 class BoxedDict : public Box {
 public:
-    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*>>> DictMap;
+    typedef DenseMap<Box*, Box*, llvm::DenseMapInfo<Box*>, detail::DenseMapPair<Box*, Box*>,
+                     StlCompatAllocator<detail::DenseMapPair<Box*, Box*>>> DictMap;
 
     DictMap d;
 

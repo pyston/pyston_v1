@@ -35,6 +35,7 @@
 #include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/options.h"
+#include "core/SmallVector.h"
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -2841,7 +2842,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (isSubclass(b->cls, dict_cls)) {
             BoxedDict* d = static_cast<BoxedDict*>(b);
-            printf("%ld elements\n", d->d.size());
+            printf("%u elements\n", d->d.size());
 
             if (levels > 0) {
                 int i = 0;
@@ -3349,7 +3350,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> varargs;
+    SmallVector<Box*, StlCompatAllocator<Box*>, 8> varargs;
     if (argspec.has_starargs) {
         assert(!rewrite_args);
         Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
@@ -3376,7 +3377,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         params_filled[i] = true;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
+    SmallVector<Box*, StlCompatAllocator<Box*>, 8> unused_positional;
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
@@ -3435,7 +3436,9 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             }
         }
 
-        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
+        size_t unused_positional_size = unused_positional.size();
+        Box* ovarargs
+            = BoxedTuple::create(unused_positional_size, unused_positional_size > 0 ? &unused_positional[0] : NULL);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", func_name, paramspec.num_args,

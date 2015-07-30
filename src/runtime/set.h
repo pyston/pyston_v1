@@ -15,8 +15,7 @@
 #ifndef PYSTON_RUNTIME_SET_H
 #define PYSTON_RUNTIME_SET_H
 
-#include <unordered_set>
-
+#include "core/DenseSet.h"
 #include "core/types.h"
 #include "runtime/types.h"
 
@@ -29,7 +28,7 @@ extern "C" Box* createSet();
 
 class BoxedSet : public Box {
 public:
-    typedef std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*>> Set;
+    typedef DenseSet<Box*, llvm::DenseMapInfo<Box*>, StlCompatAllocator<detail::DenseSetPair<Box*>>> Set;
     Set s;
     Box** weakreflist; /* List of weak references */
 

@@ -67,6 +67,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		core/ast.cpp
 		core/cfg.cpp
 		core/options.cpp
+		core/SmallVector.cpp
 		core/stats.cpp
 		core/stringpool.cpp
 		core/threading.cpp
