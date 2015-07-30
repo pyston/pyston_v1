@@ -98,15 +98,12 @@ extern "C" Box* listRepr(BoxedList* self) {
         }
 
         chars.push_back(']');
-
         Py_ReprLeave((PyObject*)self);
 
         return boxString(llvm::StringRef(&chars[0], chars.size()));
 
     } catch (ExcInfo e) {
-
         Py_ReprLeave((PyObject*)self);
-
         throw e;
     }
 }
