@@ -1865,8 +1865,11 @@ extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) noexcept {
     return nullptr;
 }
 
-extern "C" int PyNumber_Coerce(PyObject**, PyObject**) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+extern "C" int PyNumber_Coerce(PyObject** pv, PyObject** pw) noexcept {
+    int err = PyNumber_CoerceEx(pv, pw);
+    if (err <= 0)
+        return err;
+    PyErr_SetString(PyExc_TypeError, "number coercion failed");
     return -1;
 }
 
