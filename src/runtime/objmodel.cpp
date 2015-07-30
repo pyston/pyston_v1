@@ -429,6 +429,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
         tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
+    // From CPython: It's a new-style number unless it specifically inherits any
+    // old-style numeric behavior.
+    if (base) {
+        if ((base->tp_flags & Py_TPFLAGS_CHECKTYPES) || (base->tp_as_number == NULL))
+            tp_flags |= Py_TPFLAGS_CHECKTYPES;
+    }
+
     tp_base = base;
 
     if (tp_base) {
