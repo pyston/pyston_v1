@@ -83,6 +83,7 @@ extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* getitem(Box* value, Box* slice);
+extern "C" Box* getitem_capi(Box* value, Box* slice) noexcept;
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, BoxedString* attr);

@@ -83,6 +83,7 @@ void force() {
     FORCE(augbinop);
     FORCE(unboxedLen);
     FORCE(getitem);
+    FORCE(getitem_capi);
     FORCE(getclsattr);
     FORCE(getGlobal);
     FORCE(delGlobal);

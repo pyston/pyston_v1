@@ -199,6 +199,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(setattr);
     GET(delattr);
     GET(getitem);
+    GET(getitem_capi);
     GET(setitem);
     GET(delitem);
     GET(getGlobal);

@@ -36,8 +36,8 @@ struct GlobalFuncs {
         *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createUserClass, *createClosure,
         *createGenerator, *createSet;
     llvm::Value* getattr, *getattr_capi, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare,
-        *augbinop, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom,
-        *importStar, *repr, *str, *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;
+        *augbinop, *unboxedLen, *getitem, *getitem_capi, *getclsattr, *getGlobal, *setitem, *unaryop, *import,
+        *importFrom, *importStar, *repr, *str, *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;
 
     llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseAttributeErrorCapi,
         *raiseAttributeErrorStrCapi, *raiseNotIterableError, *raiseIndexErrorStr, *assertNameDefined, *assertFail,

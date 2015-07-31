@@ -4481,11 +4481,6 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
 
 template <ExceptionStyle S>
 Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == CAPI) {
-    if (S == CAPI) {
-        assert(!rewrite_args && "implement me");
-        rewrite_args = NULL;
-    }
-
     // The PyObject_GetItem logic is:
     // - call mp_subscript if it exists
     // - if tp_as_sequence exists, try using that (with a number of conditions)
@@ -4497,7 +4492,6 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
     PyMappingMethods* m = target->cls->tp_as_mapping;
     if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
         if (rewrite_args) {
-            assert(S == CXX);
             RewriterVar* r_obj = rewrite_args->target;
             RewriterVar* r_slice = rewrite_args->slice;
             RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
@@ -4511,7 +4505,8 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             // support calling a RewriterVar (can only call fixed function addresses).
             r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
             RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
-            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            if (S == CXX)
+                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;
         }
@@ -4519,6 +4514,11 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
         if (S == CXX && !r)
             throwCAPIException();
         return r;
+    }
+
+    if (S == CAPI) {
+        assert(!rewrite_args && "implement me");
+        rewrite_args = NULL;
     }
 
     static BoxedString* getitem_str = internStringImmortal("__getitem__");
@@ -4610,6 +4610,39 @@ extern "C" Box* getitem(Box* target, Box* slice) {
         rtn = getitemInternal<CXX>(target, slice, NULL);
     }
     assert(rtn);
+
+    return rtn;
+}
+
+// target[slice]
+extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
+    STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
+
+    // This possibly could just be represented as a single callattr; the only tricky part
+    // are the error messages.
+    // Ex "(1)[1]" and "(1).__getitem__(1)" give different error messages.
+
+    static StatCounter slowpath_getitem("slowpath_getitem");
+    slowpath_getitem.log();
+
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
+
+    Box* rtn;
+    if (rewriter.get()) {
+        GetitemRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
+                                        rewriter->getReturnDestination());
+
+        rtn = getitemInternal<CAPI>(target, slice, &rewrite_args);
+
+        if (!rewrite_args.out_success) {
+            rewriter.reset(NULL);
+        } else {
+            rewriter->commitReturning(rewrite_args.out_rtn);
+        }
+    } else {
+        rtn = getitemInternal<CAPI>(target, slice, NULL);
+    }
 
     return rtn;
 }

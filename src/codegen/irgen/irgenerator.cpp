@@ -136,7 +136,7 @@ ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
         return r;
     }
 
-    if (expr->type == AST_TYPE::Attribute) {
+    if (expr->type == AST_TYPE::Attribute || expr->type == AST_TYPE::Subscript) {
         r = CAPI;
         // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
         return r;

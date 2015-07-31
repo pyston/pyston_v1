@@ -746,7 +746,9 @@ void setupDict() {
     dict_cls->giveAttr("setdefault",
                        new BoxedFunction(boxRTFunction((void*)dictSetdefault, UNKNOWN, 3, 1, false, false), { None }));
 
-    dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem<CXX>, UNKNOWN, 2)));
+    auto dict_getitem = boxRTFunction((void*)dictGetitem<CXX>, UNKNOWN, 2, ParamNames::empty(), CXX);
+    addRTFunction(dict_getitem, (void*)dictGetitem<CAPI>, UNKNOWN, CAPI);
+    dict_cls->giveAttr("__getitem__", new BoxedFunction(dict_getitem));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
     dict_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)dictDelitem, UNKNOWN, 2)));
     dict_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
