@@ -299,7 +299,7 @@ private:
     }
 
     void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
-                                        bool double_check) {
+                                        bool double_check) override {
         assert(!double_check); // need to call PyErr_Occurred
 
         llvm::BasicBlock* normal_dest
