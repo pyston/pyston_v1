@@ -3366,9 +3366,17 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         oargs = NULL;
     }
 
-    rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
-                       paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    try {
+        rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
+                           paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
+                           arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else
+            throw e;
+    }
 
 #if 0
     for (int i = 0; i < num_output_args; i++) {
@@ -3848,6 +3856,11 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
     assert(rtn);
 
     return rtn;
+}
+
+extern "C" Box* runtimeCallCapi(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                const std::vector<BoxedString*>* keyword_names) noexcept {
+    return runtimeCallInternal<CAPI>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {

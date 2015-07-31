@@ -65,6 +65,7 @@ extern "C" void delattrMaybeNonstring(Box* obj, Box* attr);
 extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
+extern "C" Box* runtimeCallCapi(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*) noexcept;
 extern "C" Box* callattr(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
 extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);

@@ -245,17 +245,31 @@ void initGlobalFuncs(GlobalState& g) {
     GET(boxedLocalsGet);
     GET(boxedLocalsDel);
 
-    g.funcs.runtimeCall = getFunc((void*)runtimeCall, "runtimeCall");
-    g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
-    g.funcs.runtimeCall1
+    g.funcs.runtimeCall.cxx_val = getFunc((void*)runtimeCall, "runtimeCall");
+    g.funcs.runtimeCall0.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
+    g.funcs.runtimeCall1.cxx_val
         = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall2 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
-                                   g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall3 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
-                                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCallN
+    g.funcs.runtimeCall2.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+                                           g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall3.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+                                           g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.runtimeCallN.cxx_val
         = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
+
+    g.funcs.runtimeCall.capi_val = getFunc((void*)runtimeCallCapi, "runtimeCallCapi");
+    g.funcs.runtimeCall0.capi_val
+        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
+    g.funcs.runtimeCall1.capi_val
+        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall2.capi_val = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+                                            g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall3.capi_val = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+                                            g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+    g.funcs.runtimeCallN.capi_val
+        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
+                  g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
+
 
     g.funcs.callattr = getFunc((void*)callattr, "callattr");
     g.funcs.callattr0

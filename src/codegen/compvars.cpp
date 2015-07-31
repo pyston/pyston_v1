@@ -613,7 +613,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     // for (auto a : llvm_args)
     // a->dump();
 
-    bool do_patchpoint = ENABLE_ICCALLSITES && (func_addr == runtimeCall || func_addr == pyston::callattr);
+    bool do_patchpoint = ENABLE_ICCALLSITES
+                         && (func_addr == runtimeCall || func_addr == runtimeCallCapi || func_addr == pyston::callattr);
     if (do_patchpoint) {
         assert(func_addr);
 
@@ -655,26 +656,32 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
     bool pass_keywords = (argspec.num_keywords != 0);
     int npassed_args = argspec.totalPassed();
 
+    ExceptionStyle exception_style = ((FORCE_LLVM_CAPI && !info.unw_info.cxx_exc_dest) || info.unw_info.capi_exc_dest)
+                                         ? ExceptionStyle::CAPI
+                                         : ExceptionStyle::CXX;
+
     llvm::Value* func;
     if (pass_keywords)
-        func = g.funcs.runtimeCall;
+        func = g.funcs.runtimeCall.get(exception_style);
     else if (npassed_args == 0)
-        func = g.funcs.runtimeCall0;
+        func = g.funcs.runtimeCall0.get(exception_style);
     else if (npassed_args == 1)
-        func = g.funcs.runtimeCall1;
+        func = g.funcs.runtimeCall1.get(exception_style);
     else if (npassed_args == 2)
-        func = g.funcs.runtimeCall2;
+        func = g.funcs.runtimeCall2.get(exception_style);
     else if (npassed_args == 3)
-        func = g.funcs.runtimeCall3;
+        func = g.funcs.runtimeCall3.get(exception_style);
     else
-        func = g.funcs.runtimeCallN;
+        func = g.funcs.runtimeCallN.get(exception_style);
+
+    void* func_ptr = (exception_style == ExceptionStyle::CXX) ? (void*)runtimeCall : (void*)runtimeCallCapi;
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
 
     llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
     other_args.push_back(llvm_argspec);
-    return _call(emitter, info, func, CXX, (void*)runtimeCall, other_args, argspec, args, keyword_names, UNKNOWN);
+    return _call(emitter, info, func, exception_style, func_ptr, other_args, argspec, args, keyword_names, UNKNOWN);
 }
 
 CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
