@@ -338,7 +338,7 @@ public:
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
         ExceptionStyle target_exception_style = CXX;
-        if (info.unw_info.capi_exc_dest)
+        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
             target_exception_style = CAPI;
 
         bool do_patchpoint = ENABLE_ICGETITEMS;
@@ -501,7 +501,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     llvm::Value* rtn_val = NULL;
 
     ExceptionStyle target_exception_style = CXX;
-    if (info.unw_info.capi_exc_dest)
+    if (info.unw_info.capi_exc_dest || (!cls_only && FORCE_LLVM_CAPI))
         target_exception_style = CAPI;
 
     llvm::Value* llvm_func;
@@ -1505,7 +1505,7 @@ public:
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
-                ExceptionStyle exception_style = info.unw_info.capi_exc_dest ? CAPI : CXX;
+                ExceptionStyle exception_style = (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest) ? CAPI : CXX;
                 llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
                                                                  : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
@@ -1557,13 +1557,9 @@ public:
                                                   BoxedString* attr, bool clsonly, ArgPassSpec argspec,
                                                   const std::vector<CompilerVariable*>& args,
                                                   const std::vector<BoxedString*>* keyword_names,
-                                                  bool* no_attribute = NULL) {
+                                                  bool* no_attribute = NULL, ExceptionStyle exception_style = CXX) {
         if (!canStaticallyResolveGetattrs())
             return NULL;
-
-        ExceptionStyle exception_style = CXX;
-        if (info.unw_info.capi_exc_dest)
-            exception_style = CAPI;
 
         Box* rtattr = cls->getattr(attr);
         if (rtattr == NULL) {
@@ -1763,8 +1759,13 @@ public:
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         static BoxedString* attr = internStringImmortal("__getitem__");
         bool no_attribute = false;
+
+        ExceptionStyle exception_style = CXX;
+        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
+            exception_style = CAPI;
+
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(
-            emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute);
+            emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute, exception_style);
 
         if (no_attribute) {
             assert(called_constant->getType() == UNDEF);
@@ -2269,9 +2270,20 @@ public:
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
-                                                             embedConstantPtr("tuple", g.i8_ptr));
-                    call.setDoesNotReturn();
+                    ExceptionStyle target_exception_style = CXX;
+                    if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
+                        target_exception_style = CAPI;
+
+                    if (target_exception_style == CAPI) {
+                        llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,
+                                                                 embedConstantPtr("tuple", g.i8_ptr), CAPI);
+                        emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                               getNullPtr(g.llvm_value_type_ptr));
+                    } else {
+                        llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
+                                                                 embedConstantPtr("tuple", g.i8_ptr), CXX);
+                        call.setDoesNotReturn();
+                    }
                     return undefVariable();
                 }
             }

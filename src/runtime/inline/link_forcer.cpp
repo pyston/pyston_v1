@@ -106,6 +106,7 @@ void force() {
     FORCE(raiseAttributeErrorCapi);
     FORCE(raiseAttributeErrorStrCapi);
     FORCE(raiseIndexErrorStr);
+    FORCE(raiseIndexErrorStrCapi);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
     FORCE(assertFailDerefNameDefined);
@@ -125,6 +126,7 @@ void force() {
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
     FORCE(capiExcCaughtInJit);
+    FORCE(reraiseJitCapiExc);
     FORCE(deopt);
 
     FORCE(div_i64_i64);

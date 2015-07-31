@@ -228,6 +228,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raiseAttributeErrorCapi);
     GET(raiseAttributeErrorStrCapi);
     GET(raiseIndexErrorStr);
+    GET(raiseIndexErrorStrCapi);
     GET(raiseNotIterableError);
     GET(assertNameDefined);
     GET(assertFailDerefNameDefined);
@@ -278,6 +279,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(PyErr_Fetch);
     GET(PyErr_NormalizeException);
     GET(capiExcCaughtInJit);
+    GET(reraiseJitCapiExc);
     GET(deopt);
 
     GET(div_float_float);

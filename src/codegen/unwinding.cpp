@@ -481,6 +481,16 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
     return true;
 }
 
+static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
+    AST_stmt* current_stmt = frame_it->getCurrentStatement();
+    auto* cl = frame_it->getCL();
+    assert(cl);
+
+    auto source = cl->source.get();
+
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+}
+
 class PythonUnwindSession : public Box {
     ExcInfo exc_info;
     bool skip;
@@ -518,12 +528,13 @@ public:
         stat.log(t.end());
     }
 
-    void addTraceback(const LineInfo& line_info) {
+    void addTraceback(PythonFrameIteratorImpl& frame_iter) {
         RELEASE_ASSERT(is_active, "");
         if (exc_info.reraise) {
             exc_info.reraise = false;
             return;
         }
+        auto line_info = lineInfoForFrame(&frame_iter);
         BoxedTraceback::here(line_info, &exc_info.traceback);
     }
 
@@ -593,22 +604,22 @@ void throwingException(PythonUnwindSession* unwind) {
     unwind->logException();
 }
 
-static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
-    AST_stmt* current_stmt = frame_it->getCurrentStatement();
-    auto* cl = frame_it->getCL();
-    assert(cl);
-
-    auto source = cl->source.get();
-
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
-}
-
 extern "C" void capiExcCaughtInJit(AST_stmt* stmt, void* _source_info) {
     SourceInfo* source = static_cast<SourceInfo*>(_source_info);
     // TODO: handle reraise (currently on the ExcInfo object)
     PyThreadState* tstate = PyThreadState_GET();
     BoxedTraceback::here(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()),
                          &tstate->curexc_traceback);
+}
+
+extern "C" void reraiseJitCapiExc() {
+    ensureCAPIExceptionSet();
+    // TODO: we are normalizing to many times?
+    ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
+                                cur_thread_state.curexc_traceback);
+    PyErr_Clear();
+    e.reraise = true;
+    throw e;
 }
 
 void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
@@ -647,7 +658,7 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
         frames_unwound.log();
 
         if (!unwind_session->shouldSkipFrame())
-            unwind_session->addTraceback(lineInfoForFrame(&frame_iter));
+            unwind_session->addTraceback(frame_iter);
 
         // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
         bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);

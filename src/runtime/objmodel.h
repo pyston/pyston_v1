@@ -160,6 +160,7 @@ extern "C" void raiseAttributeErrorStrCapi(const char* typeName, llvm::StringRef
 extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept;
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
 extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
+extern "C" void raiseIndexErrorStrCapi(const char* typeName) noexcept;
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* type_new(BoxedClass* metatype, Box* args, Box* kwds) noexcept;

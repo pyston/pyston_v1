@@ -305,6 +305,10 @@ extern "C" void raiseIndexErrorStr(const char* typeName) {
     raiseExcHelper(IndexError, "%s index out of range", typeName);
 }
 
+extern "C" void raiseIndexErrorStrCapi(const char* typeName) noexcept {
+    PyErr_Format(IndexError, "%s index out of range", typeName);
+}
+
 extern "C" void raiseNotIterableError(const char* typeName) {
     raiseExcHelper(TypeError, "'%s' object is not iterable", typeName);
 }
@@ -4517,7 +4521,7 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
     }
 
     if (S == CAPI) {
-        assert(!rewrite_args && "implement me");
+        // assert(!rewrite_args && "implement me");
         rewrite_args = NULL;
     }
 

@@ -508,7 +508,8 @@ public:
                                   embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
         if (!exc_caught) {
-            RELEASE_ASSERT(0, "need to implement this");
+            getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+            getBuilder()->CreateUnreachable();
         }
 
         setCurrentBasicBlock(normal_dest);
@@ -2318,7 +2319,7 @@ private:
         // but ommitting the first argument is *not* the same as passing None.
 
         ExceptionStyle target_exception_style = CXX;
-        if (unw_info.capi_exc_dest)
+        if (unw_info.capi_exc_dest || (FORCE_LLVM_CAPI && node->arg0 && !node->arg2))
             target_exception_style = CAPI;
 
         if (node->arg0 == NULL) {
