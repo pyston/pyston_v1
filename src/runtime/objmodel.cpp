@@ -4378,12 +4378,23 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     BoxedString* op_name = getOpName(op_type);
 
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* rtn = callattr(operand, op_name, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unaryop"));
+
+    Box* rtn = NULL;
+    if (rewriter) {
+        CallRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
+        if (srewrite_args.out_success && rtn)
+            rewriter->commitReturning(srewrite_args.out_rtn);
+        else
+            rewriter.reset();
+    } else
+        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, NULL, ArgPassSpec(0));
+
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "bad operand type for unary '%s': '%s'", op_name->c_str(), getTypeName(operand));
     }
-
     return rtn;
 }
 
