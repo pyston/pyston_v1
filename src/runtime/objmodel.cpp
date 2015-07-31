@@ -1363,7 +1363,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
 }
 
 // Helper function: make sure that a capi function either returned a non-error value, or
-// it set an exception.
+// it set an exception.  This is only needed in specialized situations; usually the "error
+// return without exception set" state can just be passed up to the caller.
 static void ensureValidCapiReturn(Box* r) {
     if (!r)
         ensureCAPIExceptionSet();
@@ -3011,8 +3012,27 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
-        && !paramspec.takes_kwargs && argspec.num_args == paramspec.num_args) {
-        assert(num_output_args == num_passed_args);
+        && argspec.num_args == paramspec.num_args && (!paramspec.takes_kwargs || paramspec.kwargsIndex() < 3)) {
+
+        // TODO could also do this for empty varargs
+        if (paramspec.takes_kwargs) {
+            assert(num_output_args == num_passed_args + 1);
+            int idx = paramspec.kwargsIndex();
+            assert(idx < 3);
+            getArg(idx, arg1, arg2, arg3, NULL) = NULL; // pass NULL for kwargs
+            if (rewrite_args) {
+                if (idx == 0)
+                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0);
+                else if (idx == 1)
+                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0);
+                else if (idx == 2)
+                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0);
+                else
+                    abort();
+            }
+        } else {
+            assert(num_output_args == num_passed_args);
+        }
 
         // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
         // since otherwise modifications by the callee would be visible to the caller (hence why varargs

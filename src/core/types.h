@@ -242,6 +242,7 @@ struct ParamReceiveSpec {
     bool operator!=(ParamReceiveSpec rhs) { return !(*this == rhs); }
 
     int totalReceived() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+    int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
 };
 
 class ICInvalidator {

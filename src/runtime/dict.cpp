@@ -227,7 +227,7 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
         }
 
         if (S == CAPI) {
-            PyErr_SetObject(KeyError, k);
+            PyErr_SetObject(KeyError, BoxedTuple::create1(k));
             return NULL;
         } else
             raiseExcHelper(KeyError, k);
