@@ -244,6 +244,12 @@ Integration tests that run `pip` will often cache downloaded packages, so you ma
 
 The real cause of an error is often deeper down in the stack. If an assertion failed for example, it may be the case that the assertion calls an exception handler, which tries unwinding the stack for debug information, then fails again and triggers another assertion, which is the one you see. If you see anything that refers to unwinding or exception handling in the stacktrace, you may need to look deeper down.
 
+##### Problem: I get a segmentation due to stackoverflow from an infinite loop of mutually recursive functions like `runtimeCall`.
+
+Pyston started without support for [CPython slots](https://docs.python.org/2/c-api/typeobj.html#sequence-structs) (e.g. `tp_` or `mp_`, `sq_`, etc) but they were introduced later. Some legacy code will still assign functions to the `tp_` slots that do an attribute lookup for a function that contains the logic instead of just running the logic directly. For example, `slot_tp_del` might do an attribute for `__del__` instead of just calling a finalizer.
+
+Sometimes, that attribute lookup ends up calling the `tp_` slot again which creates a loop which only terminates with a stackoverflow. The solution in those cases is often to figure out the object and the slot involved in the recursive calls, and assign a non-default function to the `tp_` slot that does not do another attribute lookup.
+
 ##### Problem: My object is not getting garbage collected
 
 This mostly concerns code or tests that involve finalizers and weak reference callbacks in some way.
