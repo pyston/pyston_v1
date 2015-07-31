@@ -31,57 +31,48 @@ using namespace pyston::ExceptionStyle;
 using pyston::ExceptionStyle::ExceptionStyle;
 
 Box* dictRepr(BoxedDict* self) {
-
-    try {
-
-        std::vector<char> chars;
-        int status = Py_ReprEnter((PyObject*)self);
-
-        if (status != 0) {
+    std::vector<char> chars;
+    int status = Py_ReprEnter((PyObject*)self);
+    if (status != 0) {
+        try {
             if (status < 0)
                 throwCAPIException();
-
-            chars.push_back('{');
-            chars.push_back('.');
-            chars.push_back('.');
-            chars.push_back('.');
-            chars.push_back('}');
-
-            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        } catch (ExcInfo e) {
+            Py_ReprLeave((PyObject*)self);
+            throw e;
         }
 
-
         chars.push_back('{');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('}');
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
+    }
 
-        bool first = true;
-
-        for (const auto& p : self->d) {
-
-            if (!first) {
-                chars.push_back(',');
-                chars.push_back(' ');
-            }
-
-            first = false;
-
+    chars.push_back('{');
+    bool first = true;
+    for (const auto& p : self->d) {
+        if (!first) {
+            chars.push_back(',');
+            chars.push_back(' ');
+        }
+        first = false;
+        try {
             BoxedString* k = static_cast<BoxedString*>(repr(p.first));
             BoxedString* v = static_cast<BoxedString*>(repr(p.second));
-
             chars.insert(chars.end(), k->s().begin(), k->s().end());
             chars.push_back(':');
             chars.push_back(' ');
             chars.insert(chars.end(), v->s().begin(), v->s().end());
+        } catch (ExcInfo e) {
+            Py_ReprLeave((PyObject*)self);
+            throw e;
         }
-        chars.push_back('}');
-
-        Py_ReprLeave((PyObject*)self);
-
-        return boxString(llvm::StringRef(&chars[0], chars.size()));
-
-    } catch (ExcInfo e) {
-        Py_ReprLeave((PyObject*)self);
-        throw e;
     }
+    chars.push_back('}');
+    Py_ReprLeave((PyObject*)self);
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* dictClear(BoxedDict* self) {

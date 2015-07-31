@@ -95,55 +95,56 @@ Box* setNew(Box* _cls, Box* container) {
 
 static Box* _setRepr(BoxedSet* self, const char* type_name) {
 
-    try {
+    std::vector<char> chars;
+    int status = Py_ReprEnter((PyObject*)self);
 
-        std::vector<char> chars;
-        int status = Py_ReprEnter((PyObject*)self);
-
-        if (status != 0) {
-
+    if (status != 0) {
+        try {
             if (status < 0)
                 throwCAPIException();
-
-            std::string ty = std::string(type_name);
-            chars.insert(chars.end(), ty.begin(), ty.end());
-
-            chars.push_back('(');
-            chars.push_back('.');
-            chars.push_back('.');
-            chars.push_back('.');
-            chars.push_back(')');
-
-            return boxString(llvm::StringRef(&chars[0], chars.size()));
+        } catch (ExcInfo e) {
+            Py_ReprLeave((PyObject*)self);
+            throw e;
         }
 
         std::string ty = std::string(type_name);
         chars.insert(chars.end(), ty.begin(), ty.end());
-
         chars.push_back('(');
-        chars.push_back('[');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back(')');
 
-        bool first = true;
-        for (Box* elt : self->s) {
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
+    }
 
-            if (!first) {
-                chars.push_back(',');
-                chars.push_back(' ');
-            }
+    std::string ty = std::string(type_name);
+    chars.insert(chars.end(), ty.begin(), ty.end());
 
+    chars.push_back('(');
+    chars.push_back('[');
+
+    bool first = true;
+    for (Box* elt : self->s) {
+
+        if (!first) {
+            chars.push_back(',');
+            chars.push_back(' ');
+        }
+        try {
             BoxedString* str = static_cast<BoxedString*>(repr(elt));
             chars.insert(chars.end(), str->s().begin(), str->s().end());
-            first = false;
+        } catch (ExcInfo e) {
+            Py_ReprLeave((PyObject*)self);
+            throw e;
         }
-        chars.push_back(']');
-        chars.push_back(')');
-        Py_ReprLeave((PyObject*)self);
-        return boxString(llvm::StringRef(&chars[0], chars.size()));
 
-    } catch (ExcInfo e) {
-        Py_ReprLeave((PyObject*)self);
-        throw e;
+        first = false;
     }
+    chars.push_back(']');
+    chars.push_back(')');
+    Py_ReprLeave((PyObject*)self);
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* setRepr(BoxedSet* self) {
