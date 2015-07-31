@@ -2747,15 +2747,25 @@ extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope,
     }
 }
 
-extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                         const std::vector<BoxedString*>* keyword_names) {
+template <ExceptionStyle S>
+Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                    const std::vector<BoxedString*>* keyword_names, void* return_addr) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
+
+    if (S == CAPI) {
+        try {
+            return _callattrEntry<CXX>(obj, attr, flags, arg1, arg2, arg3, args, keyword_names, NULL);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
 
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_callattr_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_callattr_nopatch");
     static uint64_t* st_id_megamorphic = Stats::getStatCounter("us_timer_slowpath_callattr_megamorphic");
-    ICInfo* icinfo = getICInfo(__builtin_extract_return_addr(__builtin_return_address(0)));
+    ICInfo* icinfo = getICInfo(return_addr);
     uint64_t* counter;
     if (!icinfo)
         counter = st_id_nopatch;
@@ -2783,10 +2793,9 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* 
         num_orig_args++;
 
     // Uncomment this to help debug if callsites aren't getting rewritten:
-    // printf("Slowpath call: %p (%s.%s)\n", __builtin_return_address(0), obj->cls->tp_name, attr->c_str());
+    // printf("Slowpath call: %p (%s.%s)\n", return_addr, obj->cls->tp_name, attr->c_str());
 
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
-        __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, "callattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "callattr"));
     Box* rtn;
 
     LookupScope scope = flags.cls_only ? CLASS_ONLY : CLASS_OR_INST;
@@ -2829,6 +2838,18 @@ extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* 
     }
 
     return rtn;
+}
+
+extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                         const std::vector<BoxedString*>* keyword_names) {
+    return _callattrEntry<CXX>(obj, attr, flags, arg1, arg2, arg3, args, keyword_names,
+                               __builtin_extract_return_addr(__builtin_return_address(0)));
+}
+
+extern "C" Box* callattrCapi(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3,
+                             Box** args, const std::vector<BoxedString*>* keyword_names) noexcept {
+    return _callattrEntry<CAPI>(obj, attr, flags, arg1, arg2, arg3, args, keyword_names,
+                                __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
 static inline RewriterVar* getArg(int idx, CallRewriteArgs* rewrite_args) {
@@ -3860,6 +3881,7 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
 
 extern "C" Box* runtimeCallCapi(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                 const std::vector<BoxedString*>* keyword_names) noexcept {
+    // TODO add rewriting
     return runtimeCallInternal<CAPI>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 

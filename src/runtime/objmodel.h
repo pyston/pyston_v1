@@ -67,6 +67,8 @@ extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
 extern "C" Box* runtimeCallCapi(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*) noexcept;
 extern "C" Box* callattr(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
+extern "C" Box* callattrCapi(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**,
+                             const std::vector<BoxedString*>*) noexcept;
 extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);
 extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
