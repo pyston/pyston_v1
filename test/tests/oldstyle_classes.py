@@ -79,10 +79,6 @@ class E():
         print "invert"
         return ~self.n
 
-    def __complex__(self):
-        print "complex"
-        return complex(self.n)
-
     def __int__(self):
         print "int"
         return int(self.n)
@@ -107,16 +103,9 @@ class E():
         print "coerce"
         return (int(self.n), other)
 
-    def __enter__(self):
-        print 'enter'
-        return 'something'
-
-    def __exit__(self, type, value, traceback):
-        print 'exit'
-        return False
-
-    def __reversed__(self):
-        print "reversed"
+    def __index__(self):
+        print "index"
+        return self.n
 
 e = E(1)
 print e
@@ -138,10 +127,8 @@ print float(e)
 print oct(e)
 print hex(e)
 print coerce(e, 10)
-reversed(e)
-
-with e as s:
-    print s
+test_list = ["abc", "efg", "hij"]
+print test_list[e]
 
 def str2():
     return "str2"
