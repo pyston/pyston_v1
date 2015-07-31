@@ -1,3 +1,4 @@
+# skip-if: True
 # expected: fail
 # - CPython calls subclasscheck twice, while we call it once.
 #   Looks like this is because CPython calls PyErr_NormalizeException

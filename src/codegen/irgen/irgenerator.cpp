@@ -107,8 +107,15 @@ ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
 
     r = CXX; // default
 
-    // print_ast(invoke);
-    // printf("\n");
+    if (invoke->stmt->type == AST_TYPE::Raise) {
+        AST_Raise* raise_stmt = ast_cast<AST_Raise>(invoke->stmt);
+        // Currently can't do a re-raise with a capi exception:
+        if (raise_stmt->arg0 && !raise_stmt->arg2) {
+            r = CAPI;
+            return r;
+        }
+    }
+
     AST_expr* expr = NULL;
 
     if (invoke->stmt->type == AST_TYPE::Assign) {
@@ -298,42 +305,6 @@ private:
         }
     }
 
-    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
-                                        bool double_check) override {
-        assert(!double_check); // need to call PyErr_Occurred
-
-        llvm::BasicBlock* normal_dest
-            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
-        normal_dest->moveAfter(curblock);
-
-        llvm::BasicBlock* exc_dest;
-        bool exc_caught;
-        if (unw_info.hasHandler()) {
-            assert(unw_info.capi_exc_dest);
-            exc_dest = unw_info.capi_exc_dest;
-            exc_caught = true;
-        } else {
-            exc_dest = llvm::BasicBlock::Create(g.context, curblock->getName() + "_exc", irstate->getLLVMFunction());
-            exc_dest->moveAfter(curblock);
-            exc_caught = false;
-        }
-
-        assert(returned_val->getType() == exc_val->getType());
-        llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
-        llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
-
-        setCurrentBasicBlock(exc_dest);
-        getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
-                                  embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr),
-                                  embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
-
-        if (!exc_caught) {
-            RELEASE_ASSERT(0, "need to implement this");
-        }
-
-        setCurrentBasicBlock(normal_dest);
-    }
-
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
                                   const std::vector<llvm::Value*>& ic_stackmap_args, const UnwindInfo& unw_info,
@@ -505,6 +476,42 @@ public:
 
         rtn.setCallingConv(pp->getCallingConvention());
         return rtn.getInstruction();
+    }
+
+    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
+                                        bool double_check = false) override {
+        assert(!double_check); // need to call PyErr_Occurred
+
+        llvm::BasicBlock* normal_dest
+            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+        normal_dest->moveAfter(curblock);
+
+        llvm::BasicBlock* exc_dest;
+        bool exc_caught;
+        if (unw_info.hasHandler()) {
+            assert(unw_info.capi_exc_dest);
+            exc_dest = unw_info.capi_exc_dest;
+            exc_caught = true;
+        } else {
+            exc_dest = llvm::BasicBlock::Create(g.context, curblock->getName() + "_exc", irstate->getLLVMFunction());
+            exc_dest->moveAfter(curblock);
+            exc_caught = false;
+        }
+
+        assert(returned_val->getType() == exc_val->getType());
+        llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
+        llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
+
+        setCurrentBasicBlock(exc_dest);
+        getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
+                                  embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr),
+                                  embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+
+        if (!exc_caught) {
+            RELEASE_ASSERT(0, "need to implement this");
+        }
+
+        setCurrentBasicBlock(normal_dest);
     }
 
     Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
@@ -2310,10 +2317,15 @@ private:
         // It looks like ommitting the second and third arguments are equivalent to passing None,
         // but ommitting the first argument is *not* the same as passing None.
 
+        ExceptionStyle target_exception_style = CXX;
+        if (unw_info.capi_exc_dest)
+            target_exception_style = CAPI;
+
         if (node->arg0 == NULL) {
             assert(!node->arg1);
             assert(!node->arg2);
 
+            assert(target_exception_style == CXX);
             emitter.createCall(unw_info, g.funcs.raise0, std::vector<llvm::Value*>());
             emitter.getBuilder()->CreateUnreachable();
 
@@ -2333,7 +2345,13 @@ private:
             }
         }
 
-        emitter.createCall(unw_info, g.funcs.raise3, args);
+        if (target_exception_style == CAPI) {
+            emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI);
+            emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                   getNullPtr(g.llvm_value_type_ptr));
+        } else {
+            emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
+        }
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);

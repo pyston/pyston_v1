@@ -272,6 +272,21 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     throw exc_info;
 }
 
+extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
+    bool reraise = arg2 != NULL && arg2 != None;
+
+    ExcInfo exc_info(NULL, NULL, NULL);
+    try {
+        exc_info = excInfoForRaise(arg0, arg1, arg2);
+        exc_info.reraise = reraise;
+    } catch (ExcInfo e) {
+        exc_info = e;
+    }
+
+    assert(!exc_info.reraise); // would get thrown away
+    PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
+}
+
 void raiseExcHelper(BoxedClass* cls, Box* arg) {
     Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
     raiseExc(exc_obj);
