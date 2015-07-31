@@ -488,15 +488,6 @@ Box* instanceGetitem(Box* _inst, Box* key) {
     return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
-Box* instanceReversed(Box* _inst) {
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-
-    static BoxedString* reversed_str = internStringImmortal("__reversed__");
-    Box* reversed_func = _instanceGetattribute(inst, reversed_str, true);
-    return runtimeCall(reversed_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-}
-
 Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -1301,15 +1292,6 @@ Box* instanceInvert(Box* _inst) {
     return runtimeCall(invert_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
-Box* instanceComplex(Box* _inst) {
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-
-    static BoxedString* complex_str = internStringImmortal("__complex__");
-    Box* complex_func = _instanceGetattribute(inst, complex_str, true);
-    return runtimeCall(complex_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-}
-
 Box* instanceInt(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -1360,22 +1342,13 @@ Box* instanceCoerce(Box* _inst, Box* other) {
     return _instanceBinary(_inst, other, attr_str);
 }
 
-Box* instanceEnter(Box* _inst) {
+Box* instanceIndex(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    static BoxedString* enter_str = internStringImmortal("__enter__");
-    Box* enter_func = _instanceGetattribute(inst, enter_str, true);
-    return runtimeCall(enter_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-}
-
-Box* instanceExit(Box* _inst, Box* _exc_type, Box* _exc_value, Box* traceback) {
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-
-    static BoxedString* exit_str = internStringImmortal("__exit__");
-    Box* exit_func = _instanceGetattribute(inst, exit_str, true);
-    return runtimeCall(exit_func, ArgPassSpec(3), _exc_type, _exc_value, traceback, NULL, NULL);
+    static BoxedString* index_str = internStringImmortal("__index__");
+    Box* index_func = _instanceGetattribute(inst, index_str, true);
+    return runtimeCall(index_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
@@ -1474,7 +1447,6 @@ void setupClassobj() {
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
     instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
-    instance_cls->giveAttr("__reversed__", new BoxedFunction(boxRTFunction((void*)instanceReversed, UNKNOWN, 1)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)instanceGetslice, UNKNOWN, 3)));
@@ -1541,16 +1513,13 @@ void setupClassobj() {
     instance_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)instancePos, UNKNOWN, 1)));
     instance_cls->giveAttr("__abs__", new BoxedFunction(boxRTFunction((void*)instanceAbs, UNKNOWN, 1)));
     instance_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)instanceInvert, UNKNOWN, 1)));
-    instance_cls->giveAttr("__complex__", new BoxedFunction(boxRTFunction((void*)instanceComplex, UNKNOWN, 1)));
     instance_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)instanceInt, UNKNOWN, 1)));
     instance_cls->giveAttr("__long__", new BoxedFunction(boxRTFunction((void*)instanceLong, UNKNOWN, 1)));
     instance_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)instanceFloat, UNKNOWN, 1)));
     instance_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)instanceOct, UNKNOWN, 1)));
     instance_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)instanceHex, UNKNOWN, 1)));
     instance_cls->giveAttr("__coerce__", new BoxedFunction(boxRTFunction((void*)instanceCoerce, UNKNOWN, 2)));
-
-    instance_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)instanceEnter, UNKNOWN, 1)));
-    instance_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)instanceExit, UNKNOWN, 4)));
+    instance_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)instanceIndex, UNKNOWN, 1)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
