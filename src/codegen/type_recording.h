@@ -33,11 +33,10 @@ class TypeRecorder;
 // The return value of this function is 'obj' for ease of use.
 extern "C" Box* recordType(TypeRecorder* recorder, Box* obj);
 class TypeRecorder {
-private:
+public:
     BoxedClass* last_seen;
     int64_t last_count;
 
-public:
     constexpr TypeRecorder() : last_seen(nullptr), last_count(0) {}
 
     BoxedClass* predict();
