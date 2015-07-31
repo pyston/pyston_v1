@@ -255,6 +255,17 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         have_stats = (stderr.count("Stats:") == 1 and stderr.count("(End of stats)") == 1)
 
         if code >= 0:
+            if not have_stats:
+                color = 31
+                msg = "no stats available"
+                if KEEP_GOING:
+                    failed.append(fn)
+                    if VERBOSE >= 1:
+                        return "\033[%dmFAILED\033[0m (%s)\n%s" % (color, msg, stderr)
+                    else:
+                        return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
+                else:
+                    raise Exception("%s\n%s" % (msg, stderr))
             assert have_stats
 
         if have_stats:
