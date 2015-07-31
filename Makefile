@@ -940,7 +940,7 @@ $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED):
 
 .PHONY: pyston_release_gcc_pgo_instrumented
 pyston_release_gcc_pgo_instrumented: $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) -f $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)/pyston $@
 
 PROFILE_TARGET := ./pyston $(SRC_DIR)/minibenchmarks/combined.py
