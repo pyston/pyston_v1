@@ -435,7 +435,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
       is_user_defined(is_user_defined),
       is_pyston_class(true),
       has___class__(false),
-      has_instancecheck(false) {
+      has_instancecheck(false),
+      tpp_call(NULL, NULL) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -3643,20 +3644,20 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
         // TODO: maybe eventually runtimeCallInternal should just be the default tpp_call?
-        if (obj->cls->tpp_call) {
-            if (S == CAPI) {
-                // TODO rewrite this
-                rewrite_args = NULL;
-
-                try {
-                    return obj->cls->tpp_call(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
-                } catch (ExcInfo e) {
-                    setCAPIException(e);
-                    return NULL;
-                }
-            } else {
-                return obj->cls->tpp_call(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        if (obj->cls->tpp_call.get(S)) {
+            return obj->cls->tpp_call.call<S>(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        } else if (S == CAPI && obj->cls->tpp_call.get<CXX>()) {
+            try {
+                return obj->cls->tpp_call.call<CXX>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            } catch (ExcInfo e) {
+                setCAPIException(e);
+                return NULL;
             }
+        } else if (S == CXX && obj->cls->tpp_call.get<CAPI>()) {
+            Box* r = obj->cls->tpp_call.call<CAPI>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            if (!r)
+                throwCAPIException();
+            return r;
         }
 
         STAT_TIMER(t0, "us_timer_slowpath_runtimecall_nonfunction", 20);

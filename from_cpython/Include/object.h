@@ -460,7 +460,8 @@ struct _typeobject {
     bool _flags[7];
     void* _tpp_descr_get;
     void* _tpp_hasnext;
-    void* _tpp_call;
+    void* _tpp_call_capi;
+    void* _tpp_call_cxx;
 };
 
 /* The *real* layout of a type object when allocated on the heap */
