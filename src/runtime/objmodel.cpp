@@ -4445,6 +4445,8 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
         sliceIndex(bslice->stop, &stop);
 
         adjustNegativeIndicesOnObject(target, &start, &stop);
+        if (PyErr_Occurred())
+            throwCAPIException();
 
         Box* boxedStart = boxInt(start);
         Box* boxedStop = boxInt(stop);

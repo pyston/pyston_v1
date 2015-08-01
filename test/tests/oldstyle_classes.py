@@ -63,6 +63,50 @@ class E():
         print "ne"
         return self.n != other.n
 
+    def __neg__(self):
+        print "neg"
+        return -self.n
+
+    def __pos__(self):
+        print "pos"
+        return +self.n
+
+    def __abs__(self):
+        print "abs"
+        return abs(self.n)
+
+    def __invert__(self):
+        print "invert"
+        return ~self.n
+
+    def __int__(self):
+        print "int"
+        return int(self.n)
+
+    def __long__(self):
+        print "long"
+        return long(self.n)
+
+    def __float__(self):
+        print "float"
+        return float(self.n)
+
+    def __oct__(self):
+        print "oct"
+        return oct(self.n)
+
+    def __hex__(self):
+        print "hex"
+        return hex(self.n)
+
+    def __coerce__(self, other):
+        print "coerce"
+        return (int(self.n), other)
+
+    def __index__(self):
+        print "index"
+        return self.n
+
 e = E(1)
 print e
 print e.n
@@ -73,6 +117,18 @@ print len(e)
 print e()("test")
 print e == E(1)
 print e != E(1)
+print -e
+print +e
+print abs(e)
+print ~e
+print int(e)
+print long(e)
+print float(e)
+print oct(e)
+print hex(e)
+print coerce(e, 10)
+test_list = ["abc", "efg", "hij"]
+print test_list[e]
 
 def str2():
     return "str2"

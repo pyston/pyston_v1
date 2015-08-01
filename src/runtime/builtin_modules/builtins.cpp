@@ -298,6 +298,18 @@ extern "C" Box* unichr(Box* arg) {
     return rtn;
 }
 
+Box* coerceFunc(Box* vv, Box* ww) {
+    Box* res;
+
+    if (PyErr_WarnPy3k("coerce() not supported in 3.x", 1) < 0)
+        throwCAPIException();
+
+    if (PyNumber_Coerce(&vv, &ww) < 0)
+        throwCAPIException();
+    res = PyTuple_Pack(2, vv, ww);
+    return res;
+}
+
 extern "C" Box* ord(Box* obj) {
     long ord;
     Py_ssize_t size;
@@ -1503,10 +1515,10 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "reversed",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false), "reversed"));
-
+    builtins_module->giveAttr("coerce", new BoxedBuiltinFunctionOrMethod(
+                                            boxRTFunction((void*)coerceFunc, UNKNOWN, 2, 0, false, false), "coerce"));
     builtins_module->giveAttr("divmod",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2), "divmod"));
-
     builtins_module->giveAttr("execfile",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1), "execfile"));
 
