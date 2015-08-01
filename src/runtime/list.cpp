@@ -65,13 +65,9 @@ extern "C" Box* listRepr(BoxedList* self) {
     int status = Py_ReprEnter((PyObject*)self);
 
     if (status != 0) {
-        try {
-            if (status < 0)
-                throwCAPIException();
-        } catch (ExcInfo e) {
-            Py_ReprLeave((PyObject*)self);
-            throw e;
-        }
+        if (status < 0)
+            throwCAPIException();
+
         chars.push_back('[');
         chars.push_back('.');
         chars.push_back('.');
@@ -79,22 +75,25 @@ extern "C" Box* listRepr(BoxedList* self) {
         chars.push_back(']');
         return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
-    chars.push_back('[');
+    try {
+        chars.push_back('[');
+        for (int i = 0; i < self->size; i++) {
 
-    for (int i = 0; i < self->size; i++) {
-
-        if (i > 0) {
-            chars.push_back(',');
-            chars.push_back(' ');
+            if (i > 0) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
+            Box* r = self->elts->elts[i]->reprICAsString();
+            assert(r->cls == str_cls);
+            BoxedString* s = static_cast<BoxedString*>(r);
+            chars.insert(chars.end(), s->s().begin(), s->s().end());
         }
-        Box* r = self->elts->elts[i]->reprICAsString();
-        assert(r->cls == str_cls);
-        BoxedString* s = static_cast<BoxedString*>(r);
-        chars.insert(chars.end(), s->s().begin(), s->s().end());
+        chars.push_back(']');
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)self);
+        throw e;
     }
-    chars.push_back(']');
     Py_ReprLeave((PyObject*)self);
-
     return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 

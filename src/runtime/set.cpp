@@ -99,13 +99,8 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
     int status = Py_ReprEnter((PyObject*)self);
 
     if (status != 0) {
-        try {
-            if (status < 0)
-                throwCAPIException();
-        } catch (ExcInfo e) {
-            Py_ReprLeave((PyObject*)self);
-            throw e;
-        }
+        if (status < 0)
+            throwCAPIException();
 
         std::string ty = std::string(type_name);
         chars.insert(chars.end(), ty.begin(), ty.end());
@@ -118,31 +113,31 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
 
-    std::string ty = std::string(type_name);
-    chars.insert(chars.end(), ty.begin(), ty.end());
+    try {
+        std::string ty = std::string(type_name);
+        chars.insert(chars.end(), ty.begin(), ty.end());
 
-    chars.push_back('(');
-    chars.push_back('[');
+        chars.push_back('(');
+        chars.push_back('[');
 
-    bool first = true;
-    for (Box* elt : self->s) {
+        bool first = true;
+        for (Box* elt : self->s) {
 
-        if (!first) {
-            chars.push_back(',');
-            chars.push_back(' ');
-        }
-        try {
+            if (!first) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
             BoxedString* str = static_cast<BoxedString*>(repr(elt));
             chars.insert(chars.end(), str->s().begin(), str->s().end());
-        } catch (ExcInfo e) {
-            Py_ReprLeave((PyObject*)self);
-            throw e;
-        }
 
-        first = false;
+            first = false;
+        }
+        chars.push_back(']');
+        chars.push_back(')');
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)self);
+        throw e;
     }
-    chars.push_back(']');
-    chars.push_back(')');
     Py_ReprLeave((PyObject*)self);
     return boxString(llvm::StringRef(&chars[0], chars.size()));
 }

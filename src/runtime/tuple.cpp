@@ -212,13 +212,8 @@ Box* tupleRepr(BoxedTuple* t) {
     }
 
     if (status != 0) {
-        try {
-            if (status < 0)
-                throwCAPIException();
-        } catch (ExcInfo e) {
-            Py_ReprLeave((PyObject*)t);
-            throw e;
-        }
+        if (status < 0)
+            throwCAPIException();
         chars.push_back('(');
         chars.push_back('.');
         chars.push_back('.');
@@ -227,26 +222,26 @@ Box* tupleRepr(BoxedTuple* t) {
 
         return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
-    chars.push_back('(');
 
-    for (int i = 0; i < n; i++) {
-        if (i) {
-            chars.push_back(',');
-            chars.push_back(' ');
-        }
-        try {
+    try {
+        chars.push_back('(');
+        for (int i = 0; i < n; i++) {
+            if (i) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
             BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
             chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
-        } catch (ExcInfo e) {
-            Py_ReprLeave((PyObject*)t);
-            throw e;
         }
+
+        if (n == 1)
+            chars.push_back(',');
+
+        chars.push_back(')');
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)t);
+        throw e;
     }
-
-    if (n == 1)
-        chars.push_back(',');
-
-    chars.push_back(')');
     Py_ReprLeave((PyObject*)t);
 
     return boxString(llvm::StringRef(&chars[0], chars.size()));
