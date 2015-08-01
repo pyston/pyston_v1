@@ -668,8 +668,13 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_emitPPCall(result, func_addr, args_vec, num_slots, slot_size); }, args,
               ActionType::NORMAL);
-    if (type_recorder)
-        return call(false, (void*)recordType, imm(type_recorder), result);
+    if (type_recorder) {
+        RewriterVar* type_recorder_var = imm(type_recorder);
+        RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
+        addAction([=]() { _emitRecordType(type_recorder_var, obj_cls_var); }, { type_recorder_var, obj_cls_var },
+                  ActionType::NORMAL);
+        return result;
+    }
     return result;
 #else
     assert(args_vec.size() < 7);
@@ -866,6 +871,26 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const 
     assertConsistent();
 
     result->releaseIfNoUses();
+}
+
+void JitFragmentWriter::_emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var) {
+    // This directly emits the instructions of the recordType() function.
+
+    assembler::Register obj_cls_reg = obj_cls_var->getInReg();
+    assembler::Register type_recorder_reg = type_recorder_var->getInReg(Location::any(), true, obj_cls_reg);
+    assembler::Indirect last_seen_count = assembler::Indirect(type_recorder_reg, offsetof(TypeRecorder, last_count));
+    assembler::Indirect last_seen_indirect = assembler::Indirect(type_recorder_reg, offsetof(TypeRecorder, last_seen));
+
+    assembler->cmp(last_seen_indirect, obj_cls_reg);
+    {
+        assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
+        assembler->mov(obj_cls_reg, last_seen_indirect);
+        assembler->movq(assembler::Immediate(0ul), last_seen_count);
+    }
+    assembler->incl(last_seen_count);
+
+    type_recorder_var->bumpUse();
+    obj_cls_var->bumpUse();
 }
 
 void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {

@@ -328,6 +328,7 @@ class SourceInfo {
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
+    ScopeInfo* scope_info;
     FutureFlags future_flags;
     AST* ast;
     CFG* cfg;

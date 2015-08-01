@@ -1188,8 +1188,8 @@ std::string getCurrentPythonLine() {
     if (frame_iter.get()) {
         std::ostringstream stream;
 
-        auto* cf = frame_iter->getCF();
-        auto source = cf->clfunc->source.get();
+        auto* clfunc = frame_iter->getCL();
+        auto source = clfunc->source.get();
 
         auto current_stmt = frame_iter->getCurrentStatement();
 

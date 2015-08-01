@@ -30,6 +30,9 @@ TypeRecorder* getTypeRecorderForNode(AST* node) {
 }
 
 Box* recordType(TypeRecorder* self, Box* obj) {
+    // The baseline JIT directly generates machine code for this function inside JitFragmentWriter::_emitRecordType.
+    // When changing this function one has to also change the bjit code.
+
     BoxedClass* cls = obj->cls;
     if (cls != self->last_seen) {
         self->last_seen = cls;

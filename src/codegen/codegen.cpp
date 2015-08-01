@@ -63,6 +63,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
                        std::vector<AST_stmt*> body, std::string fn)
     : parent_module(m),
       scoping(scoping),
+      scope_info(NULL),
       future_flags(future_flags),
       ast(ast),
       cfg(NULL),

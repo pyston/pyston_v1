@@ -296,6 +296,7 @@ private:
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
     void _emitPPCall(RewriterVar* result, void* func_addr, const RewriterVar::SmallVector& args, int num_slots,
                      int slot_size);
+    void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
 };
