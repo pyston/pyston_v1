@@ -337,6 +337,10 @@ public:
                               CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
+        ExceptionStyle target_exception_style = CXX;
+        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
+            target_exception_style = CAPI;
+
         bool do_patchpoint = ENABLE_ICGETITEMS;
         llvm::Value* rtn;
         if (do_patchpoint) {
@@ -346,13 +350,20 @@ public:
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getitem, llvm_args, info.unw_info);
+            llvm::Value* uncasted
+                = emitter.createIC(pp, (void*)(target_exception_style == CAPI ? pyston::getitem_capi : pyston::getitem),
+                                   llvm_args, info.unw_info, target_exception_style);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-            rtn = emitter.createCall2(info.unw_info, g.funcs.getitem, var->getValue(), converted_slice->getValue());
+            rtn = emitter.createCall2(info.unw_info,
+                                      target_exception_style == CAPI ? g.funcs.getitem_capi : g.funcs.getitem,
+                                      var->getValue(), converted_slice->getValue(), target_exception_style);
         }
-
         converted_slice->decvref(emitter);
+
+        if (target_exception_style == CAPI)
+            emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
+
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
@@ -490,7 +501,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     llvm::Value* rtn_val = NULL;
 
     ExceptionStyle target_exception_style = CXX;
-    if (info.unw_info.capi_exc_dest)
+    if (info.unw_info.capi_exc_dest || (!cls_only && FORCE_LLVM_CAPI))
         target_exception_style = CAPI;
 
     llvm::Value* llvm_func;
@@ -1494,7 +1505,7 @@ public:
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
-                ExceptionStyle exception_style = info.unw_info.capi_exc_dest ? CAPI : CXX;
+                ExceptionStyle exception_style = (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest) ? CAPI : CXX;
                 llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
                                                                  : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
@@ -1546,7 +1557,7 @@ public:
                                                   BoxedString* attr, bool clsonly, ArgPassSpec argspec,
                                                   const std::vector<CompilerVariable*>& args,
                                                   const std::vector<BoxedString*>* keyword_names,
-                                                  bool* no_attribute = NULL) {
+                                                  bool* no_attribute = NULL, ExceptionStyle exception_style = CXX) {
         if (!canStaticallyResolveGetattrs())
             return NULL;
 
@@ -1555,10 +1566,18 @@ public:
             if (no_attribute) {
                 *no_attribute = true;
             } else {
+                llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
+                                                                 : g.funcs.raiseAttributeErrorStrCapi;
+
                 llvm::CallSite call = emitter.createCall3(
-                    info.unw_info, g.funcs.raiseAttributeErrorStr, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
-                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64));
-                call.setDoesNotReturn();
+                    info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
+                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style);
+                if (exception_style == CAPI) {
+                    emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                           getNullPtr(g.llvm_value_type_ptr));
+                } else {
+                    call.setDoesNotReturn();
+                }
             }
             return undefVariable();
         }
@@ -1589,6 +1608,9 @@ public:
             cf = cl->versions[i];
             assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
 
+            if (cf->exception_style != exception_style)
+                continue;
+
             bool fits = true;
             for (int j = 0; j < args.size(); j++) {
                 if (!args[j]->canConvertTo(cf->spec->arg_types[j + 1])) {
@@ -1603,8 +1625,12 @@ public:
             break;
         }
 
-        assert(found);
-        assert(cf->code);
+        if (!found && exception_style == CAPI) {
+            std::string name = g.func_addr_registry.getFuncNameAtAddress(cl->versions[0]->code, true);
+            RELEASE_ASSERT(0, "Please define a capi variant for %s", name.c_str());
+        }
+        RELEASE_ASSERT(found, "");
+        RELEASE_ASSERT(cf->code, "");
 
         std::vector<llvm::Type*> arg_types;
         RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
@@ -1733,8 +1759,13 @@ public:
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         static BoxedString* attr = internStringImmortal("__getitem__");
         bool no_attribute = false;
+
+        ExceptionStyle exception_style = CXX;
+        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
+            exception_style = CAPI;
+
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(
-            emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute);
+            emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute, exception_style);
 
         if (no_attribute) {
             assert(called_constant->getType() == UNDEF);
@@ -2239,9 +2270,20 @@ public:
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
-                                                             embedConstantPtr("tuple", g.i8_ptr));
-                    call.setDoesNotReturn();
+                    ExceptionStyle target_exception_style = CXX;
+                    if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
+                        target_exception_style = CAPI;
+
+                    if (target_exception_style == CAPI) {
+                        llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,
+                                                                 embedConstantPtr("tuple", g.i8_ptr), CAPI);
+                        emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                               getNullPtr(g.llvm_value_type_ptr));
+                    } else {
+                        llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
+                                                                 embedConstantPtr("tuple", g.i8_ptr), CXX);
+                        call.setDoesNotReturn();
+                    }
                     return undefVariable();
                 }
             }

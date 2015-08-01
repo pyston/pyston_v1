@@ -35,6 +35,7 @@ class BoxedTuple;
 ExcInfo excInfoForRaise(Box*, Box*, Box*);
 extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
+extern "C" void raise3_capi(Box*, Box*, Box*) noexcept;
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 void _printStacktrace();
 
@@ -82,6 +83,7 @@ extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* getitem(Box* value, Box* slice);
+extern "C" Box* getitem_capi(Box* value, Box* slice) noexcept;
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, BoxedString* attr);
@@ -158,6 +160,7 @@ extern "C" void raiseAttributeErrorStrCapi(const char* typeName, llvm::StringRef
 extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept;
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
 extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
+extern "C" void raiseIndexErrorStrCapi(const char* typeName) noexcept;
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* type_new(BoxedClass* metatype, Box* args, Box* kwds) noexcept;

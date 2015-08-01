@@ -2216,7 +2216,15 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     return result;
 }
 
-extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
+template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
+    if (S == CAPI) {
+        try {
+            return strGetitem<CXX>(self, slice);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
     assert(PyString_Check(self));
 
     if (PyIndex_Check(slice)) {
@@ -2760,7 +2768,9 @@ void setupStr() {
     str_cls->giveAttr("center",
                       new BoxedFunction(boxRTFunction((void*)strCenter, UNKNOWN, 3, 1, false, false), { spaceChar }));
 
-    str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
+    auto str_getitem = boxRTFunction((void*)strGetitem<CXX>, STR, 2, ParamNames::empty(), CXX);
+    addRTFunction(str_getitem, (void*)strGetitem<CAPI>, STR, CAPI);
+    str_cls->giveAttr("__getitem__", new BoxedFunction(str_getitem));
 
     str_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)strGetslice, STR, 3)));
 

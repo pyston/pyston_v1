@@ -305,6 +305,10 @@ extern "C" void raiseIndexErrorStr(const char* typeName) {
     raiseExcHelper(IndexError, "%s index out of range", typeName);
 }
 
+extern "C" void raiseIndexErrorStrCapi(const char* typeName) noexcept {
+    PyErr_Format(IndexError, "%s index out of range", typeName);
+}
+
 extern "C" void raiseNotIterableError(const char* typeName) {
     raiseExcHelper(TypeError, "'%s' object is not iterable", typeName);
 }
@@ -1363,7 +1367,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
 }
 
 // Helper function: make sure that a capi function either returned a non-error value, or
-// it set an exception.
+// it set an exception.  This is only needed in specialized situations; usually the "error
+// return without exception set" state can just be passed up to the caller.
 static void ensureValidCapiReturn(Box* r) {
     if (!r)
         ensureCAPIExceptionSet();
@@ -3011,8 +3016,27 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
-        && !paramspec.takes_kwargs && argspec.num_args == paramspec.num_args) {
-        assert(num_output_args == num_passed_args);
+        && argspec.num_args == paramspec.num_args && (!paramspec.takes_kwargs || paramspec.kwargsIndex() < 3)) {
+
+        // TODO could also do this for empty varargs
+        if (paramspec.takes_kwargs) {
+            assert(num_output_args == num_passed_args + 1);
+            int idx = paramspec.kwargsIndex();
+            assert(idx < 3);
+            getArg(idx, arg1, arg2, arg3, NULL) = NULL; // pass NULL for kwargs
+            if (rewrite_args) {
+                if (idx == 0)
+                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0);
+                else if (idx == 1)
+                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0);
+                else if (idx == 2)
+                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0);
+                else
+                    abort();
+            }
+        } else {
+            assert(num_output_args == num_passed_args);
+        }
 
         // If the caller passed starargs, we can only pass those directly to the callee if it's a tuple,
         // since otherwise modifications by the callee would be visible to the caller (hence why varargs
@@ -4463,11 +4487,6 @@ Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_
 
 template <ExceptionStyle S>
 Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) noexcept(S == CAPI) {
-    if (S == CAPI) {
-        assert(!rewrite_args && "implement me");
-        rewrite_args = NULL;
-    }
-
     // The PyObject_GetItem logic is:
     // - call mp_subscript if it exists
     // - if tp_as_sequence exists, try using that (with a number of conditions)
@@ -4479,7 +4498,6 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
     PyMappingMethods* m = target->cls->tp_as_mapping;
     if (m && m->mp_subscript && m->mp_subscript != slot_mp_subscript) {
         if (rewrite_args) {
-            assert(S == CXX);
             RewriterVar* r_obj = rewrite_args->target;
             RewriterVar* r_slice = rewrite_args->slice;
             RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
@@ -4493,7 +4511,8 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             // support calling a RewriterVar (can only call fixed function addresses).
             r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
             RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
-            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            if (S == CXX)
+                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;
         }
@@ -4501,6 +4520,11 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
         if (S == CXX && !r)
             throwCAPIException();
         return r;
+    }
+
+    if (S == CAPI) {
+        // assert(!rewrite_args && "implement me");
+        rewrite_args = NULL;
     }
 
     static BoxedString* getitem_str = internStringImmortal("__getitem__");
@@ -4592,6 +4616,39 @@ extern "C" Box* getitem(Box* target, Box* slice) {
         rtn = getitemInternal<CXX>(target, slice, NULL);
     }
     assert(rtn);
+
+    return rtn;
+}
+
+// target[slice]
+extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
+    STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
+
+    // This possibly could just be represented as a single callattr; the only tricky part
+    // are the error messages.
+    // Ex "(1)[1]" and "(1).__getitem__(1)" give different error messages.
+
+    static StatCounter slowpath_getitem("slowpath_getitem");
+    slowpath_getitem.log();
+
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
+
+    Box* rtn;
+    if (rewriter.get()) {
+        GetitemRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
+                                        rewriter->getReturnDestination());
+
+        rtn = getitemInternal<CAPI>(target, slice, &rewrite_args);
+
+        if (!rewrite_args.out_success) {
+            rewriter.reset(NULL);
+        } else {
+            rewriter->commitReturning(rewrite_args.out_rtn);
+        }
+    } else {
+        rtn = getitemInternal<CAPI>(target, slice, NULL);
+    }
 
     return rtn;
 }

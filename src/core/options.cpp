@@ -44,6 +44,9 @@ bool ENABLE_PYPA_PARSER = true;
 bool USE_REGALLOC_BASIC = true;
 bool PAUSE_AT_ABORT = false;
 bool ENABLE_TRACEBACKS = true;
+// Forces the llvm jit to use capi exceptions whenever it can, as opposed to whenever it thinks
+// it is faster:
+bool FORCE_LLVM_CAPI = false;
 
 int OSR_THRESHOLD_INTERPRETER = 25;
 int REOPT_THRESHOLD_INTERPRETER = 25;

@@ -135,7 +135,16 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
     return 0;
 }
 
-Box* tupleGetitem(BoxedTuple* self, Box* slice) {
+template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
+    if (S == CAPI) {
+        try {
+            return tupleGetitem<CXX>(self, slice);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     assert(self->cls == tuple_cls);
 
     if (PyIndex_Check(slice)) {
@@ -555,7 +564,10 @@ void setupTuple() {
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
     addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, BOXED_INT });
     addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, SLICE });
-    addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
+    addRTFunction(getitem, (void*)tupleGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
+                  CXX);
+    addRTFunction(getitem, (void*)tupleGetitem<CAPI>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
+                  CAPI);
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));

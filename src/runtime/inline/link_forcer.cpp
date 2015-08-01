@@ -83,6 +83,7 @@ void force() {
     FORCE(augbinop);
     FORCE(unboxedLen);
     FORCE(getitem);
+    FORCE(getitem_capi);
     FORCE(getclsattr);
     FORCE(getGlobal);
     FORCE(delGlobal);
@@ -105,6 +106,7 @@ void force() {
     FORCE(raiseAttributeErrorCapi);
     FORCE(raiseAttributeErrorStrCapi);
     FORCE(raiseIndexErrorStr);
+    FORCE(raiseIndexErrorStrCapi);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
     FORCE(assertFailDerefNameDefined);
@@ -120,9 +122,11 @@ void force() {
 
     FORCE(raise0);
     FORCE(raise3);
+    FORCE(raise3_capi);
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
     FORCE(capiExcCaughtInJit);
+    FORCE(reraiseJitCapiExc);
     FORCE(deopt);
 
     FORCE(div_i64_i64);

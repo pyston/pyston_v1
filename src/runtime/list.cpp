@@ -224,7 +224,16 @@ extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     }
 }
 
-extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
+template <ExceptionStyle S> Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
+    if (S == CAPI) {
+        try {
+            return listGetitemSlice<CXX>(self, slice);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     assert(isSubclass(self->cls, list_cls));
     assert(slice->cls == slice_cls);
     i64 start, stop, step, length;
@@ -242,7 +251,16 @@ extern "C" Box* listGetslice(BoxedList* self, Box* boxedStart, Box* boxedStop) {
     return _listSlice(self, start, stop, 1, stop - start);
 }
 
-extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
+template <ExceptionStyle S> Box* listGetitem(BoxedList* self, Box* slice) {
+    if (S == CAPI) {
+        try {
+            return listGetitem<CXX>(self, slice);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     assert(isSubclass(self->cls, list_cls));
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
@@ -250,7 +268,7 @@ extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
             throwCAPIException();
         return listGetitemUnboxed(self, i);
     } else if (slice->cls == slice_cls) {
-        return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
+        return listGetitemSlice<CXX>(self, static_cast<BoxedSlice*>(slice));
     } else {
         raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice));
     }
@@ -799,13 +817,8 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
 extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     assert(isSubclass(a->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(a);
-    try {
-        // Lots of extra copies here; we can do better if we need to:
-        return listGetitemSlice(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    // Lots of extra copies here; we can do better if we need to:
+    return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
 }
 
 Box* listContains(BoxedList* self, Box* elt) {
@@ -1092,8 +1105,13 @@ void setupList() {
 
     CLFunction* getitem = createRTFunction(2, 0, false, false);
     addRTFunction(getitem, (void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
-    addRTFunction(getitem, (void*)listGetitemSlice, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
-    addRTFunction(getitem, (void*)listGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
+    addRTFunction(getitem, (void*)listGetitemSlice<CXX>, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, CXX);
+    addRTFunction(getitem, (void*)listGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
+                  CXX);
+    addRTFunction(getitem, (void*)listGetitemSlice<CAPI>, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE },
+                  CAPI);
+    addRTFunction(getitem, (void*)listGetitem<CAPI>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
+                  CAPI);
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     list_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)listGetslice, LIST, 3)));
