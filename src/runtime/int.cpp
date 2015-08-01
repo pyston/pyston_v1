@@ -960,7 +960,7 @@ static Box* _intNew(Box* val, Box* base) {
             raiseExcHelper(TypeError, "");
         }
 
-        if (!isSubclass(r->cls, int_cls) && !isSubclass(r->cls, long_cls)) {
+        if (!PyInt_Check(r) && !PyLong_Check(r)) {
             raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
         }
         return r;
