@@ -2578,7 +2578,8 @@ template <ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewr
 
     if (rtn == NULL) {
         if (S == CAPI) {
-            PyErr_Format(TypeError, "object of type '%s' has no len()", getTypeName(obj));
+            if (!PyErr_Occurred())
+                PyErr_Format(TypeError, "object of type '%s' has no len()", getTypeName(obj));
             return NULL;
         } else
             raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj));
@@ -3694,7 +3695,8 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         if (!rtn) {
             if (S == CAPI) {
-                PyErr_Format(TypeError, "'%s' object is not callable", getTypeName(obj));
+                if (!PyErr_Occurred())
+                    PyErr_Format(TypeError, "'%s' object is not callable", getTypeName(obj));
                 return NULL;
             } else
                 raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj));
@@ -4689,7 +4691,7 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else {
+        } else if (rtn) {
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {

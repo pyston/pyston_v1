@@ -36,9 +36,9 @@ inline void sliceIndex(Box* b, int64_t* out) {
         throwCAPIException();
 }
 
-bool isSliceIndex(Box* b);
+bool isSliceIndex(Box* b) noexcept;
 
-void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop);
+void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop) noexcept;
 
 // Adjust the start and stop bounds of the sequence we are slicing to its size.
 // Ensure stop >= start and remain within bounds.

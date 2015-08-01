@@ -143,7 +143,7 @@ template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
         }
     }
 
-    assert(self->cls == tuple_cls);
+    assert(isSubclass(self->cls, tuple_cls));
 
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);

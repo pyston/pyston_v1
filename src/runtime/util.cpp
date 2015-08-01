@@ -41,11 +41,11 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
         throwCAPIException();
 }
 
-bool isSliceIndex(Box* b) {
+bool isSliceIndex(Box* b) noexcept {
     return b->cls == none_cls || b->cls == int_cls || PyIndex_Check(b);
 }
 
-void adjustNegativeIndicesOnObject(Box* obj, i64* start_out, i64* stop_out) {
+void adjustNegativeIndicesOnObject(Box* obj, i64* start_out, i64* stop_out) noexcept {
     i64 start = *start_out;
     i64 stop = *stop_out;
     PySequenceMethods* m;
