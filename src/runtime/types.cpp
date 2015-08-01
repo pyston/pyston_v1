@@ -1719,6 +1719,48 @@ Box* sliceRepr(BoxedSlice* self) {
     return boxStringTwine(llvm::Twine("slice(") + start->s() + ", " + stop->s() + ", " + step->s() + ")");
 }
 
+Box* sliceHash(BoxedSlice* self) {
+    raiseExcHelper(TypeError, "unhashable type");
+    return boxLong(-1l);
+}
+
+Box* sliceReduce(BoxedSlice* self) {
+    return Py_BuildValue("O(OOO)", self->cls, self->start, self->stop, self->step);
+}
+
+Box* sliceIndices(BoxedSlice* self, Box* len) {
+    Py_ssize_t ilen, start, stop, step, slicelength;
+
+    ilen = PyNumber_AsSsize_t(len, PyExc_OverflowError);
+
+    if (ilen == -1 && PyErr_Occurred()) {
+        throwCAPIException();
+    }
+
+    if (PySlice_GetIndicesEx((PySliceObject*)self, ilen, &start, &stop, &step, &slicelength) < 0) {
+        throwCAPIException();
+    }
+    return BoxedTuple::create({ boxInt(start), boxInt(stop), boxInt(step) });
+}
+
+static int slice_compare(PySliceObject* v, PySliceObject* w) noexcept {
+    int result = 0;
+
+    if (v == w)
+        return 0;
+
+    if (PyObject_Cmp(v->start, w->start, &result) < 0)
+        return -2;
+    if (result != 0)
+        return result;
+    if (PyObject_Cmp(v->stop, w->stop, &result) < 0)
+        return -2;
+    if (result != 0)
+        return result;
+    if (PyObject_Cmp(v->step, w->step, &result) < 0)
+        return -2;
+    return result;
+}
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                   Py_ssize_t* step) noexcept {
     /* XXX support long ints */
@@ -3541,10 +3583,14 @@ void setupRuntime() {
     slice_cls->giveAttr("__new__",
                         new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1)));
+    slice_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)sliceHash, UNKNOWN, 1)));
+    slice_cls->giveAttr("indices", new BoxedFunction(boxRTFunction((void*)sliceIndices, BOXED_TUPLE, 2)));
+    slice_cls->giveAttr("__reduce__", new BoxedFunction(boxRTFunction((void*)sliceReduce, BOXED_TUPLE, 1)));
     slice_cls->giveAttr("start", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, start)));
     slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, stop)));
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, step)));
     slice_cls->freeze();
+    slice_cls->tp_compare = (cmpfunc)slice_compare;
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
