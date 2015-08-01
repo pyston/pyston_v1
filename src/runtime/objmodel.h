@@ -160,7 +160,8 @@ extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__nor
 extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
-Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
+Box* type_new(BoxedClass* metatype, Box* args, Box* kwds) noexcept;
+Box* typeNewGeneric(Box* cls, Box* arg1, Box* arg2, Box** _args);
 
 // These process a potential descriptor, differing in their behavior if the object was not a descriptor.
 // the OrNull variant returns NULL to signify it wasn't a descriptor, and the processDescriptor version

@@ -2,11 +2,22 @@
 
 from distutils.core import setup, Extension
 import os
+import sysconfig
 
 def relpath(fn):
     r =  os.path.join(os.path.dirname(__file__), fn)
     return r
 
+def unique(f):
+    # Use an array otherwise Python 2 gets confused about scoping.
+    cache = []
+    def wrapper(*args):
+        if len(cache) == 0:
+            cache.append(f(*args))
+        return cache[0]
+    return wrapper
+
+@unique
 def multiprocessing_ext():
     return Extension("_multiprocessing", sources = map(relpath, [
             "Modules/_multiprocessing/multiprocessing.c",
@@ -14,26 +25,58 @@ def multiprocessing_ext():
             "Modules/_multiprocessing/semaphore.c",
             ]))
 
+@unique
 def bz2_ext():
     return Extension("bz2", sources = map(relpath, [
             "Modules/bz2module.c",
             ]), libraries = ['bz2'])
 
+@unique
+def ctypes_ext():
+    ext = Extension("_ctypes", sources = map(relpath, [
+            "Modules/_ctypes/_ctypes.c",
+            "Modules/_ctypes/callbacks.c",
+            "Modules/_ctypes/callproc.c",
+            "Modules/_ctypes/stgdict.c",
+            "Modules/_ctypes/cfield.c"
+            ]))
+
+    # Hack: Just copy the values of ffi_inc and ffi_lib from CPython's setup.py
+    # May want something more robust later.
+    ffi_inc = ['/usr/include/x86_64-linux-gnu']
+    ffi_lib = "ffi_pic"
+    ext.include_dirs.extend(ffi_inc)
+    ext.libraries.append(ffi_lib)
+
+    return ext
+
+@unique
+def ctypes_test_ext():
+    # TODO: I'm not sure how to use the ctypes tests, I just copied it over
+    # from CPython's setup.py. For now we're only importing ctypes, not passing
+    # all its tests.
+    return Extension('_ctypes_test',
+                     sources= map(relpath, ['Modules/_ctypes/_ctypes_test.c']))
+
+@unique
 def grp_ext():
     return Extension("grp", sources = map(relpath, [
             "Modules/grpmodule.c",
             ]))
 
+@unique
 def curses_ext():
     return Extension("_curses", sources = map(relpath, [
             "Modules/_cursesmodule.c",
             ]), libraries = ['curses'])
 
+@unique
 def termios_ext():
     return Extension("termios", sources = map(relpath, [
             "Modules/termios.c",
             ]))
 
+@unique
 def pyexpat_ext():
     define_macros = [('HAVE_EXPAT_CONFIG_H', '1'),]
     expat_sources = map(relpath, ['Modules/expat/xmlparse.c',
@@ -60,6 +103,7 @@ def pyexpat_ext():
                       depends = expat_depends,
                     )
 
+@unique
 def elementtree_ext():
     # elementtree depends on expat
     pyexpat = pyexpat_ext()
@@ -71,10 +115,15 @@ def elementtree_ext():
                         sources = [relpath('Modules/_elementtree.c')],
                         depends = pyexpat.depends,
                       )
+ext_modules = [multiprocessing_ext(),
+               pyexpat_ext(),
+               elementtree_ext(),
+               bz2_ext(),
+               ctypes_ext(),
+               ctypes_test_ext(),
+               grp_ext(),
+               curses_ext(),
+               termios_ext()]
 
 
-setup(name="Pyston",
-        version="1.0",
-        description="Pyston shared modules",
-        ext_modules=[multiprocessing_ext(), pyexpat_ext(), elementtree_ext(), bz2_ext(), grp_ext(), curses_ext(), termios_ext()]
-    )
+setup(name="Pyston", version="1.0", description="Pyston shared modules", ext_modules=ext_modules)

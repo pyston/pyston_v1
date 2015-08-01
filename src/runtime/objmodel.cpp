@@ -442,6 +442,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
         tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
+    // From CPython: It's a new-style number unless it specifically inherits any
+    // old-style numeric behavior.
+    if (base) {
+        if ((base->tp_flags & Py_TPFLAGS_CHECKTYPES) || (base->tp_as_number == NULL))
+            tp_flags |= Py_TPFLAGS_CHECKTYPES;
+    }
+
     tp_base = base;
 
     if (tp_base) {
@@ -4882,34 +4889,7 @@ void assertValidSlotIdentifier(Box* s) {
     }
 }
 
-Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
-    STAT_TIMER(t0, "us_timer_typeNew", 10);
-
-    Box* arg3 = _args[0];
-
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls));
-
-    BoxedClass* metatype = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(metatype, type_cls))
-        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(metatype),
-                       getNameOfClass(metatype));
-
-    if (arg2 == NULL) {
-        assert(arg3 == NULL);
-        BoxedClass* rtn = arg1->cls;
-        return rtn;
-    }
-
-    RELEASE_ASSERT(PyDict_Check(arg3), "%s", getTypeName(arg3));
-    BoxedDict* attr_dict = static_cast<BoxedDict*>(arg3);
-
-    RELEASE_ASSERT(arg2->cls == tuple_cls, "");
-    BoxedTuple* bases = static_cast<BoxedTuple*>(arg2);
-
-    RELEASE_ASSERT(arg1->cls == str_cls, "");
-    BoxedString* name = static_cast<BoxedString*>(arg1);
-
+Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedDict* attr_dict) {
     if (bases->size() == 0) {
         bases = BoxedTuple::create({ object_cls });
     }
@@ -4939,7 +4919,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         if (getattr(winner, new_box) != getattr(type_cls, new_box)) {
             CallattrFlags callattr_flags
                 = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(4) };
-            return callattr(winner, new_box, callattr_flags, winner, arg1, arg2, _args, NULL);
+            Box* args[1] = { (Box*)attr_dict };
+            return callattr(winner, new_box, callattr_flags, winner, name, bases, args, NULL);
         }
         metatype = winner;
     }
@@ -5171,6 +5152,100 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     }
 
     return made;
+}
+
+// Analogous to CPython's type_new.
+// This is assigned directly to type_cls's (PyType_Type's) tp_new slot and skips
+// doing an attribute lookup for __new__.
+//
+// We need this to support some edge cases. For example, in ctypes, we have a function:
+// PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+// {
+//     ...
+//     result = (PyTypeObject *)PyType_Type.tp_new(type, args, kwds);
+//     ...
+// }
+//
+// Assigned to the tp_new of PyCSimpleType, a metaclass. By calling PyType_Type.tp_new,
+// we don't want to do an attribute lookup for __new__, because that would end up calling
+// the tp_new of the subclass PyCSimpleType (PyCSimpleType_new again) and end up in a loop.
+Box* type_new(BoxedClass* metatype, Box* args, Box* kwds) noexcept {
+    PyObject* name, *bases, *dict;
+    static const char* kwlist[] = { "name", "bases", "dict", 0 };
+
+    // Copied from CPython.
+    assert(args != NULL && PyTuple_Check(args));
+    assert(kwds == NULL || PyDict_Check(kwds));
+
+    /* Special case: type(x) should return x->ob_type */
+    {
+        const Py_ssize_t nargs = PyTuple_GET_SIZE(args);
+        const Py_ssize_t nkwds = kwds == NULL ? 0 : PyDict_Size(kwds);
+
+        if (PyType_CheckExact(metatype) && nargs == 1 && nkwds == 0) {
+            PyObject* x = PyTuple_GET_ITEM(args, 0);
+            Py_INCREF(Py_TYPE(x));
+            return (PyObject*)Py_TYPE(x);
+        }
+
+        /* SF bug 475327 -- if that didn't trigger, we need 3
+           arguments. but PyArg_ParseTupleAndKeywords below may give
+           a msg saying type() needs exactly 3. */
+        if (nargs + nkwds != 3) {
+            PyErr_SetString(PyExc_TypeError, "type() takes 1 or 3 arguments");
+            return NULL;
+        }
+    }
+
+    // Check arguments: (name, bases, dict)
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "SO!O!:type", const_cast<char**>(kwlist), &name, &PyTuple_Type, &bases,
+                                     &PyDict_Type, &dict))
+        return NULL;
+
+    try {
+        RELEASE_ASSERT(name->cls == str_cls, "");
+        RELEASE_ASSERT(bases->cls == tuple_cls, "");
+        RELEASE_ASSERT(dict->cls == dict_cls, "");
+
+        return _typeNew(metatype, static_cast<BoxedString*>(name), static_cast<BoxedTuple*>(bases),
+                        static_cast<BoxedDict*>(dict));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+// This is the function we want uses of __new__ to call.
+Box* typeNewGeneric(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
+    STAT_TIMER(t0, "us_timer_typeNew", 10);
+
+    Box* arg3 = _args[0];
+
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+
+    BoxedClass* metatype = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(metatype, type_cls))
+        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(metatype),
+                       getNameOfClass(metatype));
+
+    if (arg2 == NULL) {
+        assert(arg3 == NULL);
+        BoxedClass* rtn = arg1->cls;
+
+        return rtn;
+    }
+
+    RELEASE_ASSERT(PyDict_Check(arg3), "%s", getTypeName(arg3));
+    BoxedDict* attr_dict = static_cast<BoxedDict*>(arg3);
+
+    RELEASE_ASSERT(arg2->cls == tuple_cls, "");
+    BoxedTuple* bases = static_cast<BoxedTuple*>(arg2);
+
+    RELEASE_ASSERT(arg1->cls == str_cls, "");
+    BoxedString* name = static_cast<BoxedString*>(arg1);
+
+    return _typeNew(metatype, name, bases, attr_dict);
 }
 
 extern "C" void delGlobal(Box* globals, BoxedString* name) {

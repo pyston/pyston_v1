@@ -197,7 +197,7 @@ public:
     // Analogous to tp_dictoffset
     // A class should have at most of one attrs_offset and tp_dictoffset be nonzero.
     // (But having nonzero attrs_offset here would map to having nonzero tp_dictoffset in CPython)
-    const int attrs_offset;
+    int attrs_offset;
 
     bool instancesHaveHCAttrs() { return attrs_offset != 0; }
     bool instancesHaveDictAttrs() { return tp_dictoffset != 0; }

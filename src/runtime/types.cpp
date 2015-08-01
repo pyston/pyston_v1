@@ -3424,8 +3424,8 @@ void setupRuntime() {
     type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
-    type_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
+    type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNewGeneric, UNKNOWN, 4, 2, false, false),
+                                                    { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
@@ -3436,6 +3436,7 @@ void setupRuntime() {
     type_cls->tp_richcompare = type_richcompare;
     add_operators(type_cls);
     type_cls->freeze();
+    type_cls->tp_new = type_new;
     type_cls->tpp_call = &typeTppCall;
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));

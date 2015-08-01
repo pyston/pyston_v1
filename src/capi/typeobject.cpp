@@ -3235,11 +3235,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
                        | Py_TPFLAGS_TUPLE_SUBCLASS | Py_TPFLAGS_STRING_SUBCLASS | Py_TPFLAGS_UNICODE_SUBCLASS
                        | Py_TPFLAGS_DICT_SUBCLASS | Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
-    if (cls->tp_as_number) {
-        RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
-    }
 
-    RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del || cls->tp_free == PyObject_GC_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
@@ -3317,8 +3313,24 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;
 
-    // this should get automatically initialized to 0 on this path:
-    assert(cls->attrs_offset == 0);
+
+    if (!cls->instancesHaveHCAttrs() && cls->tp_base) {
+        // These doesn't get copied in inherit_slots like other slots do.
+        if (cls->tp_base->instancesHaveHCAttrs()) {
+            cls->attrs_offset = cls->tp_base->attrs_offset;
+        }
+
+        // Example of when this code path could be reached and needs to be:
+        // If this class is a metaclass defined in a C extension, chances are that some of its
+        // instances may be hardcoded in the C extension as well. Those instances will call
+        // PyType_Ready and expect their class (this metaclass) to have a place to put attributes.
+        // e.g. CTypes does this.
+        bool is_metaclass = PyType_IsSubtype(cls, type_cls);
+        assert(!is_metaclass || cls->instancesHaveHCAttrs() || cls->instancesHaveDictAttrs());
+    } else {
+        // this should get automatically initialized to 0 on this path:
+        assert(cls->attrs_offset == 0);
+    }
 
     if (Py_TPFLAGS_BASE_EXC_SUBCLASS & cls->tp_flags) {
         exception_types.push_back(cls);

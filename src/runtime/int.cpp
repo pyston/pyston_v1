@@ -184,6 +184,16 @@ extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
+#ifdef HAVE_LONG_LONG
+extern "C" unsigned PY_LONG_LONG PyInt_AsUnsignedLongLongMask(register PyObject* op) noexcept {
+    Py_FatalError("unimplemented");
+
+    unsigned PY_LONG_LONG val = 0;
+
+    return val;
+}
+#endif
+
 extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noexcept {
     char* end;
     long x;
