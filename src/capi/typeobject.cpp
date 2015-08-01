@@ -1068,8 +1068,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
         crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
 
-        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name, NULL,
-                               NULL, NULL, NULL);
+        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name,
+                                    NULL, NULL, NULL, NULL);
         assert(res);
 
         if (!crewrite_args.out_success)
@@ -1082,8 +1082,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         // the rewrite_args and non-rewrite_args case the same.
         // Actually, we might have gotten to the point that doing a runtimeCall on an instancemethod is as
         // fast as a callattr, but that hasn't typically been the case.
-        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
-                               NULL, NULL);
+        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
+                                    NULL, NULL);
         assert(res);
     }
 

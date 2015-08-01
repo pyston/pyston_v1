@@ -1063,8 +1063,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             srewrite_args.args_guarded = rewrite_args->args_guarded;
             srewrite_args.func_guarded = true;
 
-            // initrtn = callattrInternal(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
-            // keyword_names);
+            // initrtn = callattrInternal<CXX>(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3,
+            // args, keyword_names);
             initrtn
                 = runtimeCallInternal<CXX>(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
 
@@ -2319,8 +2319,8 @@ public:
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
         static BoxedString* eq_str = internStringImmortal("__eq__");
-        return callattrInternal(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL, NULL,
-                                NULL);
+        return callattrInternal<CXX>(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), _other, NULL, NULL,
+                                     NULL, NULL);
     }
 
     static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
