@@ -65,7 +65,7 @@ else()
 endif()
 
 # initial clang flags (set here so they're used when building llvm)
-set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics -Wno-profile-instr-unprofiled" CACHE STRING "Clang specific C and CXX flags")
+set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics" CACHE STRING "Clang specific C and CXX flags")
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CLANG_FLAGS}")
 endif()
