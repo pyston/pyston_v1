@@ -537,6 +537,11 @@ Box* floatNeg(BoxedFloat* self) {
     return boxFloat(-self->d);
 }
 
+Box* floatPos(BoxedFloat* self) {
+    assert(self->cls == float_cls);
+    return PyFloat_FromDouble(self->d);
+}
+
 bool floatNonzeroUnboxed(BoxedFloat* self) {
     assert(self->cls == float_cls);
     return self->d != 0.0;
@@ -1475,6 +1480,7 @@ void setupFloat() {
         "__new__", new BoxedFunction(boxRTFunction((void*)floatNew, UNKNOWN, 2, 1, false, false), { boxFloat(0.0) }));
 
     float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, BOXED_FLOAT, 1)));
+    float_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)floatPos, BOXED_FLOAT, 1)));
 
     CLFunction* nonzero = boxRTFunction((void*)floatNonzeroUnboxed, BOOL, 1);
     addRTFunction(nonzero, (void*)floatNonzero, UNKNOWN);

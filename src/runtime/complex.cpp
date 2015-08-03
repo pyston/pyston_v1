@@ -198,6 +198,11 @@ extern "C" Box* complexDiv(BoxedComplex* lhs, Box* rhs) {
     }
 }
 
+Box* complexPos(BoxedComplex* self) {
+    assert(self->cls == complex_cls);
+    return PyComplex_FromDoubles(self->real, self->imag);
+}
+
 // str and repr
 // For now, just print the same way as ordinary doubles.
 // TODO this is wrong, e.g. if real or imaginary part is an integer, there should
@@ -260,6 +265,60 @@ Box* complexNew(Box* _cls, Box* real, Box* imag) {
     return new BoxedComplex(real_f, imag_f);
 }
 
+static PyObject* complex_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* res;
+    int equal;
+
+    if (op != Py_EQ && op != Py_NE) {
+        /* for backwards compatibility, comparisons with non-numbers return
+         * NotImplemented.  Only comparisons with core numeric types raise
+         * TypeError.
+         */
+        if (PyInt_Check(w) || PyLong_Check(w) || PyFloat_Check(w) || PyComplex_Check(w)) {
+            PyErr_SetString(PyExc_TypeError, "no ordering relation is defined "
+                                             "for complex numbers");
+            return NULL;
+        }
+        return Py_NotImplemented;
+    }
+
+    assert(PyComplex_Check(v));
+    BoxedComplex* lhs = static_cast<BoxedComplex*>(v);
+
+    if (PyInt_Check(w) || PyLong_Check(w)) {
+        /* Check for 0->g0 imaginary part first to avoid the rich
+         * comparison when possible->g
+         */
+        if (lhs->imag == 0.0) {
+            PyObject* j, *sub_res;
+            j = PyFloat_FromDouble(lhs->real);
+            if (j == NULL)
+                return NULL;
+
+            sub_res = PyObject_RichCompare(j, w, op);
+            Py_DECREF(j);
+            return sub_res;
+        } else {
+            equal = 0;
+        }
+    } else if (PyFloat_Check(w)) {
+        equal = (lhs->real == PyFloat_AsDouble(w) && lhs->imag == 0.0);
+    } else if (PyComplex_Check(w)) {
+        BoxedComplex* rhs = static_cast<BoxedComplex*>(w);
+        equal = (lhs->real == rhs->real && lhs->imag == rhs->imag);
+    } else {
+        return Py_NotImplemented;
+    }
+
+    if (equal == (op == Py_EQ))
+        res = Py_True;
+    else
+        res = Py_False;
+
+    Py_INCREF(res);
+    return res;
+}
+
 void setupComplex() {
     complex_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)complexNew, UNKNOWN, 3, 2, false, false),
                                                        { boxInt(0), boxInt(0) }));
@@ -276,6 +335,7 @@ void setupComplex() {
     _addFunc("__div__", BOXED_COMPLEX, (void*)complexDivComplex, (void*)complexDivFloat, (void*)complexDivInt,
              (void*)complexDiv);
 
+    complex_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)complexPos, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)complexStr, STR, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",
@@ -283,6 +343,7 @@ void setupComplex() {
     complex_cls->giveAttr("imag",
                           new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, imag)));
     complex_cls->freeze();
+    complex_cls->tp_richcompare = complex_richcompare;
 }
 
 void teardownComplex() {
