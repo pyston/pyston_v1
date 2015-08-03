@@ -45,6 +45,7 @@ template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p) {
 namespace pyston {
 namespace gc {
 
+static __thread bool got_cache = false;
 bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced);
 
 // lots of linked lists around here, so let's just use template functions for operations on them.
@@ -414,6 +415,64 @@ void SmallArena::assertConsistent() {
 }
 #endif
 
+void SmallArena::getPtrs(std::vector<GCAllocation*>& ptrs, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            ptrs.push_back(al);
+        }
+
+        head = &b->next;
+    }
+}
+
+void SmallArena::move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
+    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
+        auto referencing = refmap.references[al];
+        assert(referencing->size() > 0);
+        // GCAllocation* new_al = realloc(al, size);
+    } else if (refmap.pinned.count(al) == 0) {
+        // Probably a leftover from the trick we did to keep classes around.
+        free(al);
+    }
+}
+
+void SmallArena::move_all(ReferenceMap& refmap) {
+    assert(got_cache);
+    thread_caches.forEachValue([this, &refmap](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPtrs(ptrs, &cache->cache_free_heads[bidx]);
+            getPtrs(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                move(refmap, al, sizes[bidx]);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPtrs(ptrs, &heads[bidx]);
+        getPtrs(ptrs, &full_heads[bidx]);
+        for (GCAllocation* al : ptrs) {
+            move(refmap, al, sizes[bidx]);
+        }
+    }
+}
+
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
 
@@ -593,8 +652,10 @@ GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
     Block** full_head = &full_heads[bucket_idx];
 
     static __thread ThreadBlockCache* cache = NULL;
-    if (!cache)
+    if (!cache) {
+        got_cache = true;
         cache = thread_caches.get();
+    }
 
     Block** cache_head = &cache->cache_free_heads[bucket_idx];
 

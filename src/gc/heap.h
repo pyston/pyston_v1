@@ -263,6 +263,8 @@ public:
         }
     }
 
+    void move_all(ReferenceMap& refmap);
+
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* al);
 
@@ -396,6 +398,8 @@ private:
     };
 
 
+    // These (along with a lot of other things in small arena) need to be renamed to be
+    // easier to understand...
     Block* heads[NUM_BUCKETS];
     Block* full_heads[NUM_BUCKETS];
 
@@ -405,6 +409,8 @@ private:
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
 
+    void getPtrs(std::vector<GCAllocation*>& ptrs, Block** head);
+    void move(ReferenceMap& refmap, GCAllocation* al, size_t size);
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
@@ -624,6 +630,8 @@ public:
 
         return NULL;
     }
+
+    void move_all(ReferenceMap& refmap) { small_arena.move_all(refmap); }
 
     // not thread safe:
     void freeUnmarked(std::vector<Box*>& weakly_referenced) {

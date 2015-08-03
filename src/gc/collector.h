@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core/types.h"
+#include "gc/gc.h"
 
 namespace pyston {
 namespace gc {
@@ -86,6 +87,7 @@ void invalidateOrderedFinalizerList();
 void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
 
+class TraceStack;
 class GCVisitorMarking : public GCVisitor {
 private:
     TraceStack* stack;
@@ -96,6 +98,26 @@ public:
 
     virtual void visit(void** p);
     virtual void visitPotential(void* p);
+};
+
+class ReferenceMapStack;
+class GCVisitorPinning : public GCVisitor {
+private:
+    ReferenceMapStack* stack;
+
+public:
+    GCVisitorPinning(ReferenceMapStack* stack) : stack(stack) {}
+    virtual ~GCVisitorPinning() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p);
+};
+
+class GCAllocation;
+class ReferenceMap {
+public:
+    std::unordered_set<GCAllocation*> pinned;
+    std::unordered_map<GCAllocation*, std::shared_ptr<std::vector<GCAllocation*>>> references;
 };
 }
 }

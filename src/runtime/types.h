@@ -179,6 +179,7 @@ Box* objectRepr(Box*);
 class BoxedClass : public BoxVar {
 public:
     typedef void (*gcvisit_func)(GCVisitor*, Box*);
+    typedef std::vector<void**>(*precise_ptrs_func)(Box*);
 
 public:
     PyTypeObject_BODY;
@@ -195,6 +196,7 @@ public:
     bool callNonzeroIC(Box* obj);
 
     gcvisit_func gc_visit;
+    precise_ptrs_func precise_ptrs;
 
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Negative offset is from the end of the class (useful for variable-size objects with the attrs at the end)

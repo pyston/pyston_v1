@@ -22,6 +22,7 @@ namespace gc {
 // to this file and only expose this header.
 
 class TraceStack;
+class ReferenceMapStack;
 class GCVisitor {
 private:
     bool isValid(void* p);

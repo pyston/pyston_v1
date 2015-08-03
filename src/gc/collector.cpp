@@ -69,6 +69,7 @@ enum TraceStackType {
     MarkPhase,
     FinalizationOrderingFindReachable,
     FinalizationOrderingRemoveTemporaries,
+    MapReferencesPhase,
 };
 
 class TraceStack {
@@ -113,8 +114,7 @@ protected:
 
 public:
     TraceStack(TraceStackType type) : visit_type(type) { get_chunk(); }
-    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : visit_type(type) {
-        get_chunk();
+    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : TraceStack(type) {
         for (void* p : roots) {
             ASSERT(!isMarked(GCAllocation::fromUserData(p)), "");
             push(p);
@@ -215,6 +215,46 @@ public:
     }
 };
 std::vector<void**> TraceStack::free_chunks;
+
+class ReferenceMapStack : public TraceStack {
+public:
+    ReferenceMapStack(ReferenceMap* refmap) : TraceStack(TraceStackType::MapReferencesPhase), refmap(refmap) {}
+    ReferenceMapStack(ReferenceMap* refmap, const std::unordered_set<void*>& roots)
+        : TraceStack(TraceStackType::MapReferencesPhase), refmap(refmap) {
+        for (void* p : roots) {
+            push_with_source(GCAllocation::fromUserData(p));
+        }
+    }
+
+    ReferenceMap* refmap;
+
+    void push_with_source(GCAllocation* al) {
+        GCAllocation* source = global_heap.getAllocationFromInteriorPointer(previous_pop);
+        assert(refmap);
+        auto it = refmap->references.find(al);
+        if (it == refmap->references.end()) {
+            auto vec = std::make_shared<std::vector<GCAllocation*>>();
+            refmap->references.emplace(al, vec);
+            if (source) {
+                vec->push_back(source);
+            } else {
+                refmap->pinned.emplace(al);
+            }
+
+            *cur++ = al->user_data;
+            if (cur == end) {
+                chunks.push_back(start);
+                get_chunk();
+            }
+        } else {
+            if (source) {
+                it->second->push_back(source);
+            } else {
+                refmap->pinned.emplace(al);
+            }
+        }
+    }
+};
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -382,6 +422,27 @@ void GCVisitorMarking::visitPotential(void* p) {
     }
 }
 
+void GCVisitorPinning::visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    ASSERT(al->user_data == p, "%p", p);
+    stack->push_with_source(al);
+}
+
+void GCVisitorPinning::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        // visit(a->user_data);
+        stack->refmap->pinned.emplace(a);
+        stack->push_with_source(a);
+    }
+}
+
 static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
 
@@ -416,7 +477,7 @@ static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& vis
     }
 }
 
-static void markRoots(GCVisitor& visitor) {
+static void visitRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
@@ -531,7 +592,8 @@ static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
             GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
 #endif
 
-        assert(isMarked(al));
+        // Doesn't work with reference mapping.
+        // assert(isMarked(al));
         visitByGCKind(p, visitor);
     }
 
@@ -650,7 +712,7 @@ static void markPhase() {
     TraceStack stack(TraceStackType::MarkPhase, roots);
     GCVisitorMarking visitor(&stack);
 
-    markRoots(visitor);
+    visitRoots(visitor);
 
     graphTraversalMarking(stack, visitor);
 
@@ -678,6 +740,18 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
 
     long us = _t.end();
     sc_us.log(us);
+}
+
+static void mapReferencesPhase(ReferenceMap& refmap) {
+    ReferenceMapStack stack(&refmap, roots);
+    GCVisitorPinning visitor(&stack);
+
+    visitRoots(visitor);
+    graphTraversalMarking(stack, visitor);
+}
+
+static void copyPhase(ReferenceMap& refmap) {
+    global_heap.move_all(refmap);
 }
 
 bool gcIsEnabled() {
@@ -763,14 +837,22 @@ void runCollection() {
         global_heap.free(GCAllocation::fromUserData(o));
     }
 
+    global_heap.cleanupAfterCollection();
+    global_heap.prepareForCollection();
+
+    ReferenceMap refmap;
+    mapReferencesPhase(refmap);
+
+    copyPhase(refmap);
+
+    global_heap.cleanupAfterCollection();
+
 #if TRACE_GC_MARKING
     fclose(trace_fp);
     trace_fp = NULL;
 #endif
 
     should_not_reenter_gc = false; // end non-reentrant section
-
-    global_heap.cleanupAfterCollection();
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
