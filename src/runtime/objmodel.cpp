@@ -4378,10 +4378,11 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     BoxedString* op_name = getOpName(op_type);
 
-    // TODO: this code looks very old and like it should be a callattr instead?
-    Box* attr_func = getclsattrInternal(operand, op_name, NULL);
-    RELEASE_ASSERT(attr_func, "%s.%s", getTypeName(operand), op_name->c_str());
-    Box* rtn = runtimeCallInternal<CXX>(attr_func, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* rtn = callattr(operand, op_name, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    if (rtn == NULL) {
+        raiseExcHelper(TypeError, "bad operand type for unary '%s': '%s'", op_name->c_str(), getTypeName(operand));
+    }
 
     return rtn;
 }
