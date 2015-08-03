@@ -230,3 +230,9 @@ while True:
     except StopIteration:
         break
 print sorted(l)
+
+#recursive printing test
+d = dict()
+d['one'] = '1'
+d['two'] = d
+print d

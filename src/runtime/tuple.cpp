@@ -16,8 +16,6 @@
 
 #include <algorithm>
 
-#include "llvm/Support/raw_ostream.h"
-
 #include "capi/typeobject.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -210,42 +208,52 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
 }
 
 Box* tupleRepr(BoxedTuple* t) {
+
     assert(isSubclass(t->cls, tuple_cls));
-
     int n;
-    std::string O("");
-    llvm::raw_string_ostream os(O);
-
+    std::vector<char> chars;
+    int status = Py_ReprEnter((PyObject*)t);
     n = t->size();
     if (n == 0) {
-        os << "()";
-        return boxString(os.str());
+        chars.push_back('(');
+        chars.push_back(')');
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
 
-    int status = Py_ReprEnter((PyObject*)t);
     if (status != 0) {
         if (status < 0)
-            return boxString(os.str());
+            throwCAPIException();
+        chars.push_back('(');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back('.');
+        chars.push_back(')');
 
-        os << "(...)";
-        return boxString(os.str());
+        return boxString(llvm::StringRef(&chars[0], chars.size()));
     }
 
-    os << "(";
+    try {
+        chars.push_back('(');
+        for (int i = 0; i < n; i++) {
+            if (i) {
+                chars.push_back(',');
+                chars.push_back(' ');
+            }
+            BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
+            chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
+        }
 
-    for (int i = 0; i < n; i++) {
-        if (i)
-            os << ", ";
+        if (n == 1)
+            chars.push_back(',');
 
-        BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
-        os << elt_repr->s();
+        chars.push_back(')');
+    } catch (ExcInfo e) {
+        Py_ReprLeave((PyObject*)t);
+        throw e;
     }
-    if (n == 1)
-        os << ",";
-    os << ")";
-
     Py_ReprLeave((PyObject*)t);
-    return boxString(os.str());
+
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* tupleNonzero(BoxedTuple* self) {
