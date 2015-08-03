@@ -455,5 +455,6 @@ void setupGenerator() {
     generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
 
     generator_cls->freeze();
+    generator_cls->tp_iter = PyObject_SelfIter;
 }
 }

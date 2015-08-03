@@ -597,6 +597,7 @@ void setupTuple() {
 
     tuple_cls->tp_as_sequence->sq_item = (ssizeargfunc)tupleitem;
     tuple_cls->tp_as_sequence->sq_length = (lenfunc)tuplelength;
+    tuple_cls->tp_iter = tupleIter;
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);

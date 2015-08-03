@@ -2311,7 +2311,7 @@ extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
     v->visit(it->s);
 }
 
-Box* strIter(BoxedString* self) {
+Box* strIter(BoxedString* self) noexcept {
     assert(PyString_Check(self));
     return new BoxedStringIterator(self);
 }
@@ -2791,6 +2791,7 @@ void setupStr() {
 
     str_cls->tp_as_sequence->sq_slice = str_slice;
     str_cls->tp_as_sequence->sq_length = str_length;
+    str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));

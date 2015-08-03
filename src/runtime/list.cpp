@@ -1181,6 +1181,7 @@ void setupList() {
 
     list_cls->tp_as_sequence->sq_slice = list_slice;
     list_cls->tp_as_sequence->sq_length = list_length;
+    list_cls->tp_iter = listIter;
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

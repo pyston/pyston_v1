@@ -29,7 +29,7 @@ Box* listIterIter(Box* s) {
     return s;
 }
 
-Box* listIter(Box* s) {
+Box* listIter(Box* s) noexcept {
     assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
     return new BoxedListIterator(self, 0);

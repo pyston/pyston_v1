@@ -158,7 +158,7 @@ Box* xrangeIterIter(Box* self) {
     return self;
 }
 
-Box* xrangeIter(Box* self) {
+Box* xrangeIter(Box* self) noexcept {
     assert(self->cls == xrange_cls);
 
     Box* rtn = new BoxedXrangeIterator(static_cast<BoxedXrange*>(self), false);
@@ -224,6 +224,8 @@ void setupXrange() {
     xrange_cls->giveAttr("__iterator_cls__", xrange_iterator_cls);
 
     xrange_cls->freeze();
+    xrange_cls->tp_iter = xrangeIter;
+
     xrange_iterator_cls->freeze();
     xrange_iterator_cls->tpp_hasnext = BoxedXrangeIterator::xrangeIteratorHasnextUnboxed;
 }
