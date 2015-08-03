@@ -26,7 +26,7 @@ Box* tupleIterIter(Box* s) {
     return s;
 }
 
-Box* tupleIter(Box* s) {
+Box* tupleIter(Box* s) noexcept {
     assert(isSubclass(s->cls, tuple_cls));
     BoxedTuple* self = static_cast<BoxedTuple*>(s);
     return new BoxedTupleIterator(self);

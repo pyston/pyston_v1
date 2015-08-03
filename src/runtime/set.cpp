@@ -214,7 +214,7 @@ Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
     return rtn;
 }
 
-Box* setIter(BoxedSet* self) {
+Box* setIter(BoxedSet* self) noexcept {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
     return new BoxedSetIterator(self);
 }
@@ -604,6 +604,9 @@ void setupSet() {
 
     set_cls->freeze();
     frozenset_cls->freeze();
+
+    set_cls->tp_iter = (decltype(set_cls->tp_iter))setIter;
+    frozenset_cls->tp_iter = (decltype(frozenset_cls->tp_iter))setIter;
 }
 
 void teardownSet() {

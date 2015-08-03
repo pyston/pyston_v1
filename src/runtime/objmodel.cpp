@@ -4912,8 +4912,14 @@ extern "C" Box* getiterHelper(Box* o) {
 
 Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
-    static BoxedString* iter_str = internStringImmortal("__iter__");
-    Box* r = callattrInternal0(o, iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
+    BoxedClass* type = o->cls;
+    Box* r = NULL;
+    if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_ITER) && type->tp_iter != slot_tp_iter && type->tp_iter) {
+        r = type->tp_iter(o);
+    } else {
+        static BoxedString* iter_str = internStringImmortal("__iter__");
+        r = callattrInternal0(o, iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
+    }
     if (r) {
         if (!PyIter_Check(r)) {
             raiseExcHelper(TypeError, "iter() returned non-iterator of type '%s'", r->cls->tp_name);

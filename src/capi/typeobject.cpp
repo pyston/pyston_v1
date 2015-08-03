@@ -807,7 +807,7 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
     return Py_NotImplemented;
 }
 
-static PyObject* slot_tp_iter(PyObject* self) noexcept {
+PyObject* slot_tp_iter(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpiter", SLOT_AVOIDABILITY(self));
 
     PyObject* func, *res;

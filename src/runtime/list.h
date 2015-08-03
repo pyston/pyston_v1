@@ -31,7 +31,7 @@ public:
     DEFAULT_CLASS(list_iterator_cls);
 };
 
-Box* listIter(Box* self);
+Box* listIter(Box* self) noexcept;
 Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);

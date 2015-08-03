@@ -30,7 +30,7 @@ public:
     DEFAULT_CLASS(tuple_iterator_cls);
 };
 
-Box* tupleIter(Box* self);
+Box* tupleIter(Box* self) noexcept;
 Box* tupleIterIter(Box* self);
 Box* tupleiterHasnext(Box* self);
 i1 tupleiterHasnextUnboxed(Box* self);
