@@ -473,6 +473,12 @@ extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
 
     try {
         if (op->cls == attrwrapper_cls) {
+            if (key->cls == str_cls) {
+                BoxedString* key_str = (BoxedString*)key;
+                internStringMortalInplace(key_str);
+                return unwrapAttrWrapper(op)->hasattr(key_str);
+            }
+
             Box* rtn = PyObject_CallMethod(op, "__contains__", "O", key);
             if (!rtn)
                 return -1;
