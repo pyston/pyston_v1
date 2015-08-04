@@ -117,9 +117,9 @@ void BoxedSeqIter::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
-    v->visit(si->b);
+    v->visit((void**)&si->b);
     if (si->next)
-        v->visit(si->next);
+        v->visit((void**)&si->next);
 }
 
 void BoxedIterWrapper::gcHandler(GCVisitor* v, Box* b) {
@@ -127,9 +127,9 @@ void BoxedIterWrapper::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
-    v->visit(iw->iter);
+    v->visit((void**)&iw->iter);
     if (iw->next)
-        v->visit(iw->next);
+        v->visit((void**)&iw->next);
 }
 
 bool iterwrapperHasnextUnboxed(Box* s) {

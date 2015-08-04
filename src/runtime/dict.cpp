@@ -708,9 +708,11 @@ void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedDict* d = (BoxedDict*)b;
 
-    for (auto p : *d) {
-        v->visit(p.first);
-        v->visit(p.second);
+    for (const auto& p : d->d) {
+        v->visit((void**)&p.first.value);
+        v->visit((void**)&p.second);
+        assert(d->d.isPointerIntoBucketsArray(&p.first.value));
+        assert(d->d.isPointerIntoBucketsArray(&p.second));
     }
 }
 
@@ -719,7 +721,7 @@ void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
-    v->visit(it->d);
+    v->visit((void**)&it->d);
 }
 
 void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
@@ -727,7 +729,7 @@ void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
-    v->visit(view->d);
+    v->visit((void**)&view->d);
 }
 
 static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {

@@ -94,7 +94,7 @@ public:
     GCVisitorMarking(TraceStack* stack) : stack(stack) {}
     virtual ~GCVisitorMarking() {}
 
-    virtual void visit(void* p);
+    virtual void visit(void** p);
     virtual void visitPotential(void* p);
 };
 }

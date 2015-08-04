@@ -29,13 +29,8 @@ private:
 public:
     virtual ~GCVisitor() {}
 
-    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
-    void visitIf(void* p) {
-        if (p)
-            visit(p);
-    }
-    virtual void visit(void* p) = 0;
-    virtual void visitRange(void* const* start, void* const* end);
+    virtual void visit(void** ptr_address) = 0;
+    virtual void visitRange(void** start, void** end);
     virtual void visitPotential(void* p) = 0;
     virtual void visitPotentialRange(void* const* start, void* const* end);
 };

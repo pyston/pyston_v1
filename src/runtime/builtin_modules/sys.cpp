@@ -234,10 +234,10 @@ public:
         Box::gcHandler(v, _b);
 
         BoxedSysFlags* self = static_cast<BoxedSysFlags*>(_b);
-        v->visit(self->division_warning);
-        v->visit(self->bytes_warning);
-        v->visit(self->no_user_site);
-        v->visit(self->optimize);
+        v->visit((void**)&self->division_warning);
+        v->visit((void**)&self->bytes_warning);
+        v->visit((void**)&self->no_user_site);
+        v->visit((void**)&self->optimize);
     }
 
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {

@@ -1740,11 +1740,11 @@ void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
     assert(isSubclass(b->cls, file_cls));
     BoxedFile* f = static_cast<BoxedFile*>(b);
 
-    v->visit(f->f_name);
-    v->visit(f->f_mode);
-    v->visit(f->f_encoding);
-    v->visit(f->f_errors);
-    v->visit(f->f_setbuf);
+    v->visit((void**)&f->f_name);
+    v->visit((void**)&f->f_mode);
+    v->visit((void**)&f->f_encoding);
+    v->visit((void**)&f->f_errors);
+    v->visit((void**)&f->f_setbuf);
 }
 
 void setupFile() {
