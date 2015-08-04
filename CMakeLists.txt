@@ -291,9 +291,9 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
   add_pyston_test(max_compilation_tier tests -a=-O -a=-x -t50)
 endif()
 add_pyston_test(defaults cpython --exit-code-only --skip-failing -t50)
-add_pyston_test(defaults integration --exit-code-only --skip-failing -t600)
+add_pyston_test(defaults testsuite/integration --exit-code-only --skip-failing -t600)
 if(ENABLE_EXTRA_TESTS)
-  add_pyston_test(defaults extra -t600 --exit-code-only)
+  add_pyston_test(defaults testsuite/extra -t600 --exit-code-only)
 endif()
 
 
