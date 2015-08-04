@@ -40,6 +40,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     errnomodule.c
     fcntlmodule.c
     fileio.c
+    future_builtins.c
     getpath.c
     iobase.c
     itertoolsmodule.c
@@ -114,6 +115,7 @@ add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_
 add_dependencies(FROM_CPYTHON copy_stdlib)
 
 add_custom_command(OUTPUT
+                       ${CMAKE_BINARY_DIR}/lib_pyston/future_builtins.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
@@ -141,6 +143,7 @@ add_custom_command(OUTPUT
                        Modules/expat/xmltok_impl.c
                        Modules/expat/xmltok_ns.c
                        Modules/pyexpat.c
+                       Modules/future_builtins.c
                        Modules/_elementtree.c
 		       Modules/bz2module.c
 		       Modules/grpmodule.c

@@ -1194,7 +1194,7 @@ TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 TEST_EXT_MODULE_SRCS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.c)
 TEST_EXT_MODULE_OBJS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.pyston.so)
 
-SHAREDMODS_NAMES := _multiprocessing pyexpat
+SHAREDMODS_NAMES := _multiprocessing pyexpat future_builtins
 SHAREDMODS_SRCS := \
 	_multiprocessing/multiprocessing.c \
 	_multiprocessing/semaphore.c \
@@ -1205,7 +1205,8 @@ SHAREDMODS_SRCS := \
 	expat/xmltok_impl.c \
 	expat/xmltok_ns.c \
  	pyexpat.c \
- 	_elementtree.c
+	_elementtree.c\
+	future_builtins.c
 SHAREDMODS_SRCS := $(SHAREDMODS_SRCS:%=from_cpython/Modules/%)
 SHAREDMODS_OBJS := $(SHAREDMODS_NAMES:%=lib_pyston/%.pyston.so)
 
