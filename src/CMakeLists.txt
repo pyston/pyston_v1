@@ -6,9 +6,9 @@ execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GITREV}")
 
 include_directories(${CMAKE_BINARY_DIR})
-include_directories(${CMAKE_BINARY_DIR}/libunwind/include)
-include_directories(${CMAKE_SOURCE_DIR}/libpypa/src)
-include_directories(${CMAKE_SOURCE_DIR}/lz4/lib)
+include_directories(${CMAKE_BINARY_DIR}/build_deps/libunwind/include)
+include_directories(${CMAKE_SOURCE_DIR}/build_deps/libpypa/src)
+include_directories(${CMAKE_SOURCE_DIR}/build_deps/lz4/lib)
 
 if(ENABLE_GPERFTOOLS)
   set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)

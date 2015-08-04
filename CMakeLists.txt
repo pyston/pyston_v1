@@ -113,10 +113,10 @@ add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 # jemalloc
 ExternalProject_Add(libjemalloc
                     PREFIX jemalloc-build
-                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/jemalloc
+                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/build_deps/jemalloc
                     DEPENDS gitsubmodules
                     UPDATE_COMMAND autoconf
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof-libunwind
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof-libunwind
                     INSTALL_COMMAND make install_bin install_lib
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
@@ -137,13 +137,13 @@ set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/9999-is-patched-marker.patch
 )
 
-add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
-                   COMMAND git submodule update libunwind
-                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py libunwind ${LIBUNWIND_PATCHES}
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched
+                   COMMAND git submodule update build_deps/libunwind
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py build_deps/libunwind ${LIBUNWIND_PATCHES}
                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                    DEPENDS ${LIBUNWIND_PATCHES}
                    DEPENDS gitsubmodules)
-add_custom_target(libunwind_patched DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched)
+add_custom_target(libunwind_patched DEPENDS ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched)
 
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
@@ -168,18 +168,18 @@ else()
   set(LIBUNWIND_CONSERVATIVE_CHECKS "--disable-conservative-checks")
 endif()
 ExternalProject_Add(libunwind
-                    PREFIX libunwind
-                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
+                    PREFIX build_deps/libunwind
+                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/build_deps/libunwind
                     DEPENDS libunwind_patched
                     UPDATE_COMMAND autoreconf -i
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/build_deps/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
                     LOG_INSTALL ON)
 # Tell CMake that patching libunwind means that we need to rebuild it:
 ExternalProject_Add_Step(libunwind forcebuild
-    DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+    DEPENDS ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched
     DEPENDERS build
 )
 # Tell CMake that rebuilding libunwind will touch the build files (why doesn't it know this??)
@@ -187,15 +187,15 @@ ExternalProject_Add_Step(libunwind forcebuild
 # it will take another build to realize that any source files that #include libunwind.h
 # need to get rebuilt.
 SET_SOURCE_FILES_PROPERTIES(
-    ${CMAKE_BINARY_DIR}/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/libunwind/pyston_patched
+    ${CMAKE_BINARY_DIR}/build_deps/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched
 )
 
 # libpypa
-add_subdirectory(libpypa EXCLUDE_FROM_ALL)
+add_subdirectory(build_deps/libpypa EXCLUDE_FROM_ALL)
 add_dependencies(pypa gitsubmodules)
 
 # lz4
-add_subdirectory(lz4/cmake_unofficial EXCLUDE_FROM_ALL)
+add_subdirectory(build_deps/lz4/cmake_unofficial EXCLUDE_FROM_ALL)
 add_dependencies(lz4 gitsubmodules)
 
 # valgrind
@@ -242,7 +242,7 @@ include_directories(${CMAKE_BINARY_DIR}/from_cpython/Include)
 include_directories(${LLVM_INCLUDE_DIRS})
 
 find_package(LibLZMA REQUIRED)
-link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
+link_directories(${CMAKE_BINARY_DIR}/build_deps/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
 ADD_PROFILE_FLAGS()

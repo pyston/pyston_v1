@@ -1,9 +1,9 @@
 [submodule "libunwind"]
-	path = libunwind
+	path = build_deps/libunwind
 	url = git://git.sv.gnu.org/libunwind.git
         ignore = all
 [submodule "libpypa"]
-	path = libpypa
+	path = build_deps/libpypa
 	url = git://github.com/vinzenz/libpypa.git
 [submodule "test/integration/django"]
 	path = test/integration/django
@@ -12,7 +12,7 @@
 	path = test/integration/virtualenv
 	url = https://github.com/dropbox/virtualenv
 [submodule "lz4"]
-	path = lz4
+	path = build_deps/lz4
 	url = git://github.com/Cyan4973/lz4.git
 [submodule "test/integration/pycrypto"]
 	path = test/integration/pycrypto
@@ -29,5 +29,5 @@
 	url = https://github.com/dropbox/pyxl.git
 	ignore = untracked
 [submodule "jemalloc"]
-	path = jemalloc
+	path = build_deps/jemalloc
 	url = git://github.com/jemalloc/jemalloc.git
