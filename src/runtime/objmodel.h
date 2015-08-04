@@ -46,7 +46,8 @@ void default_free(void*);
 void dealloc_null(Box* box);
 
 // helper function for raising from the runtime:
-void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
+void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__))
+__attribute__((format(printf, 2, 3)));
 void raiseExcHelper(BoxedClass*, Box* arg) __attribute__((__noreturn__));
 
 BoxedModule* getCurrentModule();

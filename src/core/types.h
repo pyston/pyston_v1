@@ -764,7 +764,8 @@ void addToSysArgv(const char* str);
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func);
-void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...);
+void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...)
+    __attribute__((format(printf, 4, 5)));
 
 struct LineInfo {
 public:
