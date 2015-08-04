@@ -363,10 +363,19 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstComplex& c) {
-        AST_Num* ptr = new AST_Num();
-        ptr->num_type = AST_Num::COMPLEX;
-        pypa::string_to_double(c.imag, ptr->n_float);
-        return ptr;
+        AST_Num* imag = new AST_Num();
+        location(imag, c);
+        imag->num_type = AST_Num::COMPLEX;
+        sscanf(c.imag.c_str(), "%lf", &imag->n_float);
+        if (!c.real)
+            return imag;
+
+        AST_BinOp* binop = new AST_BinOp();
+        location(binop, c);
+        binop->op_type = AST_TYPE::Add;
+        binop->right = readItem(c.real, interned_strings);
+        binop->left = imag;
+        return binop;
     }
 
     ResultPtr read(pypa::AstComprehension& c) {
