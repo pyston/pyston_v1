@@ -27,18 +27,17 @@ private:
     bool isValid(void* p);
 
 public:
-    TraceStack* stack;
-    GCVisitor(TraceStack* stack) : stack(stack) {}
+    virtual ~GCVisitor() {}
 
     // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
     void visitIf(void* p) {
         if (p)
             visit(p);
     }
-    void visit(void* p);
-    void visitRange(void* const* start, void* const* end);
-    void visitPotential(void* p);
-    void visitPotentialRange(void* const* start, void* const* end);
+    virtual void visit(void* p) = 0;
+    virtual void visitRange(void* const* start, void* const* end);
+    virtual void visitPotential(void* p) = 0;
+    virtual void visitPotentialRange(void* const* start, void* const* end);
 };
 
 enum class GCKind : uint8_t {

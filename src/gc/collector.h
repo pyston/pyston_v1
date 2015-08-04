@@ -85,6 +85,18 @@ void invalidateOrderedFinalizerList();
 // assert rather than delaying of the next GC.
 void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
+
+class GCVisitorMarking : public GCVisitor {
+private:
+    TraceStack* stack;
+
+public:
+    GCVisitorMarking(TraceStack* stack) : stack(stack) {}
+    virtual ~GCVisitorMarking() {}
+
+    virtual void visit(void* p);
+    virtual void visitPotential(void* p);
+};
 }
 }
 
