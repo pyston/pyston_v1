@@ -884,7 +884,7 @@ extern "C" Box* intIndex(BoxedInt* v) {
     return boxInt(v->n);
 }
 
-static Box* _intNew(Box* val, Box* base) {
+template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S == CAPI) {
     if (val->cls == int_cls) {
         RELEASE_ASSERT(!base, "");
         BoxedInt* n = static_cast<BoxedInt*>(val);
@@ -904,8 +904,12 @@ static Box* _intNew(Box* val, Box* base) {
 
         RELEASE_ASSERT(s->size() == strlen(s->data()), "");
         Box* r = PyInt_FromString(s->data(), NULL, base_n);
-        if (!r)
-            throwCAPIException();
+        if (!r) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
         return r;
     } else if (isSubclass(val->cls, unicode_cls)) {
         int base_n;
@@ -917,8 +921,12 @@ static Box* _intNew(Box* val, Box* base) {
         }
 
         Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
-        if (!r)
-            throwCAPIException();
+        if (!r) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
         return r;
     } else if (val->cls == float_cls) {
         RELEASE_ASSERT(!base, "");
@@ -952,39 +960,68 @@ static Box* _intNew(Box* val, Box* base) {
     } else {
         RELEASE_ASSERT(!base, "");
         static BoxedString* int_str = internStringImmortal("__int__");
-        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-        Box* r = callattr(val, int_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+        Box* r = callattrInternal<S>(val, int_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
-            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n", getTypeName(val));
-            raiseExcHelper(TypeError, "");
+            if (S == CAPI) {
+                if (!PyErr_Occurred())
+                    PyErr_Format(TypeError, "int() argument must be a string or a number, not '%s'\n",
+                                 getTypeName(val));
+                return NULL;
+            } else {
+                raiseExcHelper(TypeError, "int() argument must be a string or a number, not '%s'\n", getTypeName(val));
+            }
         }
 
         if (!PyInt_Check(r) && !PyLong_Check(r)) {
-            raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
+            if (S == CAPI) {
+                PyErr_Format(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
+                return NULL;
+            } else
+                raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
         }
         return r;
     }
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept(S == CAPI) {
+    if (!isSubclass(_cls->cls, type_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+    }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, int_cls))
-        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls),
-                       getNameOfClass(cls));
+    if (!isSubclass(cls, int_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls),
+                         getNameOfClass(cls));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls),
+                           getNameOfClass(cls));
+    }
 
     if (cls == int_cls)
-        return _intNew(val, base);
+        return _intNew<S>(val, base);
 
-    BoxedInt* n = (BoxedInt*)_intNew(val, base);
+    BoxedInt* n = (BoxedInt*)_intNew<S>(val, base);
+    if (!n) {
+        assert(S == CAPI);
+        return NULL;
+    }
+
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
-        raiseExcHelper(OverflowError, "Python int too large to convert to C long", getNameOfClass(cls),
-                       getNameOfClass(cls));
+
+        if (S == CAPI) {
+            PyErr_Format(OverflowError, "Python int too large to convert to C long");
+            return NULL;
+        } else
+            raiseExcHelper(OverflowError, "Python int too large to convert to C long");
     }
     return new (cls) BoxedInt(n->n);
 }
@@ -1138,9 +1175,10 @@ void setupInt() {
     int_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)intIndex, BOXED_INT, 1)));
     int_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
 
-    int_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false,
-                                                                 ParamNames({ "", "x", "base" }, "", "")),
-                                                   { boxInt(0), NULL }));
+    auto int_new
+        = boxRTFunction((void*)intNew<CXX>, UNKNOWN, 3, 2, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
+    addRTFunction(int_new, (void*)intNew<CAPI>, UNKNOWN, CAPI);
+    int_cls->giveAttr("__new__", new BoxedFunction(int_new, { boxInt(0), NULL }));
 
     int_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)intBitLength, BOXED_INT, 1)));
 
