@@ -30,7 +30,7 @@ sudo yum install cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake li
 
 ### Building and testing
 ```
-git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
+git clone https://github.com/dropbox/pyston.git ~/pyston
 
 git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
 git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
@@ -39,6 +39,7 @@ git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 
 cd ~/pyston
+git submodule update --init --recursive build_deps
 make llvm_up
 make
 make check

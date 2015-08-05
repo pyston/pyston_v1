@@ -984,7 +984,7 @@ $(eval \
 $1: nosearch_$1
 $1: $(TESTS_DIR)/nosearch_$1 ;
 $1: $(TEST_DIR)/cpython/nosearch_$1 ;
-$1: $(TEST_DIR)/integration/nosearch_$1 ;
+$1: $(TEST_DIR)/testsuite/integration/nosearch_$1 ;
 $1: $(TEST_DIR)/extra/nosearch_$1 ;
 $1: ./microbenchmarks/nosearch_$1 ;
 $1: ./minibenchmarks/nosearch_$1 ;
@@ -1001,7 +1001,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/testsuite/integration $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
