@@ -2506,8 +2506,13 @@ Box* objectRepr(Box* obj) {
     return boxString(buf);
 }
 
-Box* objectStr(Box* obj) {
-    return obj->reprIC();
+static Box* object_str(Box* obj) noexcept {
+    try {
+        return obj->reprIC();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* objectHash(Box* obj) {
@@ -3449,7 +3454,6 @@ void setupRuntime() {
     FROZENSET = typeFromClass(frozenset_cls);
 
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -3502,9 +3506,15 @@ void setupRuntime() {
         object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
     }
     object_cls->giveAttr("__class__", new (pyston_getset_cls) BoxedGetsetDescriptor(objectClass, objectSetClass, NULL));
+
+    object_cls->tp_str = object_str;
+    add_operators(object_cls);
+
     object_cls->freeze();
+
     assert(object_cls->tp_init == object_init);
     assert(object_cls->tp_new == object_new);
+    assert(object_cls->tp_str == object_str);
 
     setupBool();
     setupLong();
