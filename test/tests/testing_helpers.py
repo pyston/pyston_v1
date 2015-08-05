@@ -17,7 +17,7 @@ def call_function_far_up_the_stack(fn, num_calls_left=200):
 # It's useful to call the GC at different locations in the stack in case that it's the
 # call to the GC itself that left a lingering pointer (e.g. the pointer could be the
 # __del__ attribute of an object we'd like to collect).
-def call_gc_throughout_the_stack(number_of_gc_calls, num_calls_left=100):
+def call_gc_throughout_the_stack(number_of_gc_calls, num_calls_left=30):
     if num_calls_left > 0:
         call_gc_throughout_the_stack(number_of_gc_calls, num_calls_left - 1)
         if number_of_gc_calls >= num_calls_left:
