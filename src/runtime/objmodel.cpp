@@ -2046,6 +2046,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
         }
 
         getset_descr->set(obj, val, getset_descr->closure);
+        checkAndThrowCAPIException();
 
         return true;
     } else if (descr->cls == member_descriptor_cls) {
