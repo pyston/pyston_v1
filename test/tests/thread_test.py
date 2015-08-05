@@ -30,9 +30,13 @@ while not done:
     time.sleep(0)
 
 l = allocate_lock()
+print "locked:", l.locked()
 print l.acquire()
+print "locked:", l.locked()
 print l.acquire(0)
+print "locked:", l.locked()
 print l.release()
+print "locked:", l.locked()
 print l.acquire(0)
 
 

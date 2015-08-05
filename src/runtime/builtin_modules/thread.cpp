@@ -163,6 +163,17 @@ public:
             PyThread_free_lock(self->lock_lock);
         }
     }
+
+    static Box* locked(Box* _self) {
+        RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
+        BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
+
+        if (PyThread_acquire_lock(self->lock_lock, 0)) {
+            PyThread_release_lock(self->lock_lock);
+            return False;
+        }
+        return True;
+    }
 };
 
 
@@ -211,6 +222,9 @@ void setupThread() {
     thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr(internStringMortal("release")));
     thread_lock_cls->giveAttr("__enter__", thread_lock_cls->getattr(internStringMortal("acquire")));
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
+    thread_lock_cls->giveAttr("locked",
+                              new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::locked, BOXED_BOOL, 1)));
+    thread_lock_cls->giveAttr("locked_lock", thread_lock_cls->getattr(internStringMortal("locked")));
     thread_lock_cls->freeze();
 
     ThreadError = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset,
