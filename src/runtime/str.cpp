@@ -1526,6 +1526,10 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
         return self->hash;
 
     Py_ssize_t len = PyUnicode_GET_SIZE(self);
+
+    if (len == 0)
+        return 0;
+
     Py_UNICODE* p = PyUnicode_AS_UNICODE(self);
     pyston::StringHash<Py_UNICODE> H;
     return H(p, len);
@@ -1533,6 +1537,10 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
 
 extern "C" Box* strHash(BoxedString* self) {
     assert(PyString_Check(self));
+
+    // CPython set the hash empty string to 0 manually
+    if (self->size() == 0)
+        return boxInt(0);
 
     StringHash<char> H;
     return boxInt(H(self->data(), self->size()));

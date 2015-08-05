@@ -228,6 +228,33 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* com
     complex_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
+Box* complexHash(BoxedComplex* self) {
+    if (!isSubclass(self->cls, complex_cls))
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'complex' object but received a '%s'",
+                       getTypeName(self));
+    long hashreal, hashimag, combined;
+
+    hashreal = _Py_HashDouble(self->real);
+    if (hashreal == -1) {
+        throwCAPIException();
+    }
+
+    hashimag = _Py_HashDouble(self->imag);
+    if (hashimag == -1) {
+        throwCAPIException();
+    }
+    /* Note:  if the imaginary part is 0, hashimag is 0 now,
+     * so the following returns hashreal unchanged.  This is
+     * important because numbers of different types that
+     * compare equal must have the same hash value, so that
+     * hash(x + 0*j) must equal hash(x).
+     */
+    combined = hashreal + 1000003 * hashimag;
+    if (combined == -1)
+        combined = -2;
+    return boxInt(combined);
+}
+
 Box* complexStr(BoxedComplex* self) {
     assert(self->cls == complex_cls);
     return boxString(complexFmt(self->real, self->imag, 12, 'g'));
@@ -336,6 +363,7 @@ void setupComplex() {
              (void*)complexDiv);
 
     complex_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)complexPos, BOXED_COMPLEX, 1)));
+    complex_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)complexHash, BOXED_INT, 1)));
     complex_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)complexStr, STR, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",

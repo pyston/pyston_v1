@@ -661,7 +661,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             int r = mpz_init_set_str(rtn->n, s.data(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else if (val->cls == float_cls) {
-            mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
+            mpz_init_set_d(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
             static BoxedString* long_str = internStringImmortal("__long__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
