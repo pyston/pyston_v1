@@ -2144,8 +2144,22 @@ extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PyObject* res = NULL;
+    PyObject* index = PyNumber_Index(n);
+
+    if (!index)
+        return NULL;
+    if (PyLong_Check(index))
+        res = _PyLong_Format(index, base, 0, 1);
+    else if (PyInt_Check(index))
+        res = _PyInt_Format((PyIntObject*)index, base, 1);
+    else
+        /* It should not be possible to get here, as
+           PyNumber_Index already has a check for the same
+           condition */
+        PyErr_SetString(PyExc_ValueError, "PyNumber_ToBase: index not int or long");
+    Py_DECREF(index);
+    return res;
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* item, PyObject* err) noexcept {

@@ -18,6 +18,12 @@ def unique(f):
     return wrapper
 
 @unique
+def future_builtins_ext():
+    return Extension("future_builtins", sources = map(relpath, [
+        "Modules/future_builtins.c",
+    ]))
+
+@unique
 def multiprocessing_ext():
     return Extension("_multiprocessing", sources = map(relpath, [
             "Modules/_multiprocessing/multiprocessing.c",
@@ -115,7 +121,8 @@ def elementtree_ext():
                         sources = [relpath('Modules/_elementtree.c')],
                         depends = pyexpat.depends,
                       )
-ext_modules = [multiprocessing_ext(),
+ext_modules = [future_builtins_ext(),
+               multiprocessing_ext(),
                pyexpat_ext(),
                elementtree_ext(),
                bz2_ext(),
