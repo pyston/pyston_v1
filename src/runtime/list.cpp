@@ -121,10 +121,9 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
 
     if (n < 0 || n >= self->size) {
         if (self->size == 0)
-            fprintf(stderr, "IndexError: pop from empty list\n");
+            raiseExcHelper(IndexError, "pop from empty list");
         else
-            fprintf(stderr, "IndexError: pop index out of range\n");
-        raiseExcHelper(IndexError, "");
+            raiseExcHelper(IndexError, "pop index out of range");
     }
 
     Box* rtn = self->elts->elts[n];

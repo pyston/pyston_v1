@@ -256,7 +256,7 @@ extern "C" void assertFail(Box* assertion_type, Box* msg) {
         BoxedString* tostr = str(msg);
         raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "%s", tostr->data());
     } else {
-        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "");
+        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), (const char*)NULL);
     }
 }
 
