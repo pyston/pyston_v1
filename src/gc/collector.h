@@ -81,6 +81,8 @@ bool isNonheapRoot(void* p);
 void registerPythonObject(Box* b);
 void invalidateOrderedFinalizerList();
 
+void visitByGCKind(void* p, GCVisitor& visitor);
+
 // Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
 // use these functions to mark that.  This is different from disableGC/enableGC, since it causes an
 // assert rather than delaying of the next GC.
@@ -113,11 +115,26 @@ public:
     virtual void visitPotential(void* p);
 };
 
+class GCVisitorReplacing : public GCVisitor {
+private:
+    void* old_value;
+    void* new_value;
+
+public:
+    GCVisitorReplacing(void* old_value, void* new_value) : old_value(old_value), new_value(new_value) {}
+    virtual ~GCVisitorReplacing() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p){};
+    virtual void visitPotentialRange(void* const* start, void* const* end){};
+};
+
 class GCAllocation;
 class ReferenceMap {
 public:
     std::unordered_set<GCAllocation*> pinned;
     std::unordered_map<GCAllocation*, std::shared_ptr<std::vector<GCAllocation*>>> references;
+    std::unordered_map<GCAllocation*, GCAllocation*> moves;
 };
 }
 }

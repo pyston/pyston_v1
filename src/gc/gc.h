@@ -21,8 +21,6 @@ namespace gc {
 // GOAL: Eventually, move any declaration that needs to be visible outside the gc/ folder
 // to this file and only expose this header.
 
-class TraceStack;
-class ReferenceMapStack;
 class GCVisitor {
 private:
     bool isValid(void* p);

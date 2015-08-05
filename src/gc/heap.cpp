@@ -333,15 +333,15 @@ void dumpHeapStatistics(int level) {
 //////
 /// Small Arena
 
-GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
+GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes, bool force_copy) {
     Block* b = Block::forPointer(al);
 
     size_t size = b->size;
 
-    if (size >= bytes && size < bytes * 2)
+    if (!force_copy && size >= bytes && size < bytes * 2)
         return al;
 
-    GCAllocation* rtn = heap->alloc(bytes);
+    GCAllocation* rtn = heap->alloc(bytes, force_copy);
 
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
@@ -437,14 +437,45 @@ void SmallArena::getPtrs(std::vector<GCAllocation*>& ptrs, Block** head) {
     }
 }
 
-void SmallArena::move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
-    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
-        auto referencing = refmap.references[al];
+extern int ncollections;
+FILE* move_log = NULL;
+
+void SmallArena::move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
+    if (!move_log) {
+        move_log = fopen("movelog.txt", "w");
+    }
+
+    if (refmap.pinned.count(old_al) == 0 && refmap.references.count(old_al) > 0) {
+        auto referencing = refmap.references[old_al];
         assert(referencing->size() > 0);
-        // GCAllocation* new_al = realloc(al, size);
-    } else if (refmap.pinned.count(al) == 0) {
+
+        BoxedClass* old_class = ((Box*)old_al->user_data)->cls;
+
+        GCAllocation* new_al = realloc(old_al, size, true);
+        assert(new_al);
+        assert(old_al->user_data != new_al->user_data);
+
+        fprintf(move_log, "%d) %p -> %p\n",
+                ncollections,
+                old_al->user_data, new_al->user_data);
+
+        for (GCAllocation* referencer : *referencing) {
+            // Check if it's been moved already.
+            if (refmap.moves.count(referencer) > 0) {
+                referencer = refmap.moves[referencer];
+            }
+            fprintf(move_log, "    | referencer %p\n", referencer->user_data);
+
+            assert(referencer->kind_id == GCKind::PYTHON || referencer->kind_id == GCKind::PRECISE || referencer->kind_id == GCKind::RUNTIME);
+            GCVisitorReplacing replacer(old_al->user_data, new_al->user_data);
+            visitByGCKind(referencer->user_data, replacer);
+        }
+
+        assert(refmap.moves.count(old_al) == 0);
+        refmap.moves.emplace(old_al, new_al);
+    } else if (refmap.pinned.count(old_al) == 0) {
         // Probably a leftover from the trick we did to keep classes around.
-        free(al);
+        free(old_al);
     }
 }
 

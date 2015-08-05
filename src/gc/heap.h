@@ -247,8 +247,11 @@ public:
 #endif
     }
 
-    GCAllocation* alloc(size_t bytes) {
-        registerGCManagedBytes(bytes);
+    GCAllocation* alloc(size_t bytes, bool moving = false) {
+        if (!moving) {
+            // Don't register moves, they don't use more memory and they could trigger another GC...
+            registerGCManagedBytes(bytes);
+        }
         if (bytes <= 16)
             return _alloc(16, 0);
         else if (bytes <= 32)
@@ -265,7 +268,7 @@ public:
 
     void move_all(ReferenceMap& refmap);
 
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes, bool force_copy = false);
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
@@ -590,13 +593,13 @@ public:
         return rtn;
     }
 
-    GCAllocation* alloc(size_t bytes) {
+    GCAllocation* alloc(size_t bytes, bool moving = false) {
         if (bytes > LargeArena::ALLOC_SIZE_LIMIT)
             return huge_arena.alloc(bytes);
         else if (bytes > sizes[NUM_BUCKETS - 1])
             return large_arena.alloc(bytes);
         else
-            return small_arena.alloc(bytes);
+            return small_arena.alloc(bytes, moving);
     }
 
     void destructContents(GCAllocation* alloc);
