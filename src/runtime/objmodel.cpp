@@ -1316,13 +1316,28 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     }
 
     else if (descr->cls == property_cls) {
-        rewrite_args = NULL; // TODO
-        REWRITE_ABORTED("");
-
         BoxedProperty* prop = static_cast<BoxedProperty*>(descr);
         if (prop->prop_get == NULL || prop->prop_get == None) {
             raiseExcHelper(AttributeError, "unreadable attribute");
         }
+
+        if (rewrite_args) {
+            r_descr->addAttrGuard(offsetof(BoxedProperty, prop_get), (intptr_t)prop->prop_get);
+
+            RewriterVar* r_prop_get = r_descr->getAttr(offsetof(BoxedProperty, prop_get));
+            CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_prop_get, rewrite_args->destination);
+            crewrite_args.arg1 = rewrite_args->obj;
+
+            Box* rtn = runtimeCallInternal1<CXX>(prop->prop_get, &crewrite_args, ArgPassSpec(1), obj);
+            if (!crewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = crewrite_args.out_rtn;
+            }
+            return rtn;
+        }
+
         return runtimeCallInternal1<CXX>(prop->prop_get, NULL, ArgPassSpec(1), obj);
     }
 
