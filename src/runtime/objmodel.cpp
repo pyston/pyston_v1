@@ -3526,6 +3526,18 @@ static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closur
     return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
+// TODO: is it better to take the func_ptr last (requiring passing all the args), or is it better to put it
+// first (requiring moving all the args)?
+static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*), void* a, void* b, void* c, void* d,
+                              void* e) noexcept {
+    try {
+        return func_ptr(a, b, c, d, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 template <ExceptionStyle S>
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
@@ -3580,14 +3592,19 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
     ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
-    if (rewrite_args && chosen_cf->exception_style == S) {
+    if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
 
         assert(!generator);
 
         RewriterVar::SmallVector arg_vec;
-        // TODO this kind of embedded reference needs to be tracked by the GC somehow?
-        // Or maybe it's ok, since we've guarded on the function object?
+
+        void* func_ptr = (void*)chosen_cf->call;
+        if (S == CAPI && chosen_cf->exception_style == CXX) {
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)func_ptr, Location::forArg(0)));
+            func_ptr = (void*)capiCallCxxHelper;
+        }
+
         if (closure)
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(0)));
         if (num_output_args >= 1)
@@ -3599,8 +3616,10 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         if (num_output_args >= 4)
             arg_vec.push_back(rewrite_args->args);
 
-        assert(S == chosen_cf->exception_style);
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)chosen_cf->call, arg_vec);
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, func_ptr, arg_vec);
+        if (S == CXX && chosen_cf->exception_style == CAPI)
+            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
         rewrite_args->out_success = true;
     }
 
