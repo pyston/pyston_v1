@@ -879,6 +879,16 @@ private:
 
                 return getNone();
             }
+            case AST_LangPrimitive::PRINT_EXPR: {
+                assert(node->args.size() == 1);
+
+                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
+                ConcreteCompilerVariable* converted = obj->makeConverted(emitter, obj->getBoxType());
+
+                emitter.createCall(unw_info, g.funcs.printExprHelper, converted->getValue());
+
+                return getNone();
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

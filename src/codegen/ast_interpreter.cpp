@@ -875,6 +875,11 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
+    } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
+        abortJITing();
+        Value obj = visit_expr(node->args[0]);
+        printExprHelper(obj.o);
+        v = getNone();
     } else
         RELEASE_ASSERT(0, "unknown opcode %d", node->opcode);
     return v;
@@ -1868,6 +1873,13 @@ Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclo
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : None;
+}
+
+extern "C" void printExprHelper(Box* obj) {
+    Box* displayhook = PySys_GetObject("displayhook");
+    if (!displayhook)
+        raiseExcHelper(RuntimeError, "lost sys.displayhook");
+    runtimeCall(displayhook, ArgPassSpec(1), obj, 0, 0, 0, 0);
 }
 
 static ASTInterpreter* getInterpreterFromFramePtr(void* frame_ptr) {

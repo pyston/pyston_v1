@@ -29,6 +29,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/Scalar.h"
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/hooks.h"
@@ -233,6 +234,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(assertNameDefined);
     GET(assertFailDerefNameDefined);
     GET(assertFail);
+    GET(printExprHelper);
 
     GET(printFloat);
     GET(listAppendInternal);

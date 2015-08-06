@@ -1,4 +1,3 @@
-# expected: fail
 # requires:
 # - code.co_firstlineno
 # - sys.dysplayhook

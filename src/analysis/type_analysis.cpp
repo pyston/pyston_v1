@@ -381,6 +381,7 @@ private:
             case AST_LangPrimitive::NONE:
             case AST_LangPrimitive::SET_EXC_INFO:
             case AST_LangPrimitive::UNCACHE_EXC_INFO:
+            case AST_LangPrimitive::PRINT_EXPR:
                 return NONE;
             case AST_LangPrimitive::HASNEXT:
             case AST_LangPrimitive::NONZERO:
