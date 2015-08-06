@@ -379,7 +379,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 }
 
 void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedGenerator* g = (BoxedGenerator*)b;
 

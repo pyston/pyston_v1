@@ -228,7 +228,7 @@ public:
 
     static void gcHandler(GCVisitor* v, Box* _b) {
         assert(_b->cls == sys_flags_cls);
-        boxGCHandler(v, _b);
+        Box::gcHandler(v, _b);
 
         BoxedSysFlags* self = static_cast<BoxedSysFlags*>(_b);
         v->visit(self->division_warning);

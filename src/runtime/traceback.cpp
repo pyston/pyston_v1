@@ -45,7 +45,7 @@ void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
     if (self->tb_next)
         v->visit(self->tb_next);
 
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 }
 
 void printTraceback(Box* b) {

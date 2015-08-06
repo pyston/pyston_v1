@@ -332,6 +332,34 @@ Box* Box::hasnextOrNullIC() {
     return this->cls->callHasnextIC(this, true);
 }
 
+void Box::gcHandler(GCVisitor* v, Box* b) {
+    if (b->cls) {
+        v->visit(b->cls);
+
+        if (b->cls->instancesHaveHCAttrs()) {
+            HCAttrs* attrs = b->getHCAttrsPtr();
+
+            v->visit(attrs->hcls);
+            if (attrs->attr_list)
+                v->visit(attrs->attr_list);
+        }
+
+        if (b->cls->instancesHaveDictAttrs()) {
+            RELEASE_ASSERT(0, "Shouldn't all of these objects be conservatively scanned?");
+        }
+
+        if (b->cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+            BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(b->cls);
+            BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
+            for (int i = 0; i < heap_cls->nslots(); i++) {
+                v->visit(*((Box**)((char*)b + slotOffsets[i])));
+            }
+        }
+    } else {
+        assert(type_cls == NULL || b == type_cls);
+    }
+}
+
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
     if (f->source) {
@@ -409,7 +437,7 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
 }
 
 void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedFunction* f = (BoxedFunction*)b;
 
@@ -541,7 +569,7 @@ template <typename A, typename B, typename C> void visitContiguousMap(GCVisitor*
 }
 
 void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedModule* d = (BoxedModule*)b;
 
@@ -569,34 +597,6 @@ extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
-}
-
-extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
-    if (b->cls) {
-        v->visit(b->cls);
-
-        if (b->cls->instancesHaveHCAttrs()) {
-            HCAttrs* attrs = b->getHCAttrsPtr();
-
-            v->visit(attrs->hcls);
-            if (attrs->attr_list)
-                v->visit(attrs->attr_list);
-        }
-
-        if (b->cls->instancesHaveDictAttrs()) {
-            RELEASE_ASSERT(0, "Shouldn't all of these objects be conservatively scanned?");
-        }
-
-        if (b->cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
-            BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(b->cls);
-            BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
-            for (int i = 0; i < heap_cls->nslots(); i++) {
-                v->visit(*((Box**)((char*)b + slotOffsets[i])));
-            }
-        }
-    } else {
-        assert(type_cls == NULL || b == type_cls);
-    }
 }
 
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
@@ -1132,7 +1132,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
 }
 
 void BoxedHeapClass::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedClass* cls = (BoxedClass*)b;
 
@@ -1196,7 +1196,7 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
 Box* dict_descr = NULL;
 
 void BoxedInstanceMethod::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
@@ -1206,7 +1206,7 @@ void BoxedInstanceMethod::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedProperty* prop = (BoxedProperty*)b;
 
@@ -1221,7 +1221,7 @@ void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedStaticmethod::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
 
@@ -1230,7 +1230,7 @@ void BoxedStaticmethod::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedClassmethod::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedClassmethod* cm = (BoxedClassmethod*)b;
 
@@ -1241,7 +1241,7 @@ void BoxedClassmethod::gcHandler(GCVisitor* v, Box* b) {
 void BoxedSlice::gcHandler(GCVisitor* v, Box* b) {
     assert(b->cls == slice_cls);
 
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedSlice* sl = static_cast<BoxedSlice*>(b);
 
@@ -1259,7 +1259,7 @@ static int call_gc_visit(PyObject* val, void* arg) {
 }
 
 static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     assert(b->cls->tp_traverse);
     b->cls->tp_traverse(b, call_gc_visit, v);
@@ -1268,7 +1268,7 @@ static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
 void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
     assert(isSubclass(b->cls, closure_cls));
 
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedClosure* c = (BoxedClosure*)b;
     if (c->parent)
@@ -1981,7 +1981,7 @@ public:
     DEFAULT_CLASS(attrwrapperiter_cls);
 
     static void gcHandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
 
         AttrWrapperIter* self = (AttrWrapperIter*)b;
         v->visit(self->hcls);
@@ -2016,7 +2016,7 @@ public:
     Box* getUnderlying() { return b; }
 
     static void gcHandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
 
         AttrWrapper* aw = (AttrWrapper*)b;
         v->visit(aw->b);
@@ -3026,7 +3026,7 @@ out:
 }
 
 void unicode_visit(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     PyUnicodeObject* u = (PyUnicodeObject*)b;
     v->visit(u->str);
@@ -3193,7 +3193,7 @@ void setupRuntime() {
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
     void* mem = gc_alloc(sizeof(BoxedClass), gc::GCKind::PYTHON);
-    object_cls = ::new (mem) BoxedClass(NULL, &boxGCHandler, 0, 0, sizeof(Box), false);
+    object_cls = ::new (mem) BoxedClass(NULL, &Box::gcHandler, 0, 0, sizeof(Box), false);
     mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
     type_cls = ::new (mem) BoxedHeapClass(object_cls, &BoxedHeapClass::gcHandler, offsetof(BoxedClass, attrs),
                                           offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, NULL);

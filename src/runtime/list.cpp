@@ -1092,7 +1092,7 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 }
 
 void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
     BoxedListIterator* it = (BoxedListIterator*)b;
     v->visit(it->l);
 }
@@ -1100,7 +1100,7 @@ void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
 void BoxedList::gcHandler(GCVisitor* v, Box* b) {
     assert(isSubclass(b->cls, list_cls));
 
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedList* l = (BoxedList*)b;
     int size = l->size;

@@ -119,7 +119,7 @@ public:
     }
 
     static void gcHandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
 
         BoxedXrangeIterator* it = (BoxedXrangeIterator*)b;
         v->visit(it->xrange);

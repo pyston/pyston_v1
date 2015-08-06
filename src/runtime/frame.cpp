@@ -78,7 +78,7 @@ public:
     // ** = getter supported, but setter unsupported
 
     static void gchandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
 
         auto f = static_cast<BoxedFrame*>(b);
 

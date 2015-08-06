@@ -26,7 +26,7 @@ extern "C" Box* createSet() {
 }
 
 void BoxedSet::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedSet* s = (BoxedSet*)b;
 
@@ -60,7 +60,7 @@ public:
     }
 
     static void gcHandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
 
         BoxedSetIterator* it = (BoxedSetIterator*)b;
 

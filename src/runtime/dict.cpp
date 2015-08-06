@@ -685,7 +685,7 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
 void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
     assert(isSubclass(b->cls, dict_cls));
 
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedDict* d = (BoxedDict*)b;
 
@@ -701,7 +701,7 @@ void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
 
 void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
     assert(b->cls == dict_iterator_cls);
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
     v->visit(it->d);
@@ -709,7 +709,7 @@ void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
 
 void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
     assert(b->cls == dict_items_cls);
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
     v->visit(view->d);

@@ -39,7 +39,7 @@ public:
 
     static void gcHandler(GCVisitor* v, Box* b) {
         assert(b->cls == code_cls);
-        boxGCHandler(v, b);
+        Box::gcHandler(v, b);
     }
 
     static Box* name(Box* b, void*) {

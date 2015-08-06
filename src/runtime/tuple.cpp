@@ -559,14 +559,14 @@ static Py_ssize_t tuplelength(PyTupleObject* a) {
 }
 
 void BoxedTuple::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedTuple* t = (BoxedTuple*)b;
     v->visitRange((void* const*)&t->elts[0], (void* const*)&t->elts[t->size()]);
 }
 
 extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
     BoxedTupleIterator* it = (BoxedTupleIterator*)b;
     v->visit(it->t);
 }

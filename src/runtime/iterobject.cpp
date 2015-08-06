@@ -114,7 +114,7 @@ Box* seqiterNext(Box* s) {
 
 void BoxedSeqIter::gcHandler(GCVisitor* v, Box* b) {
     assert(b->cls == seqiter_cls || b->cls == seqreviter_cls);
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
     v->visit(si->b);
@@ -124,7 +124,7 @@ void BoxedSeqIter::gcHandler(GCVisitor* v, Box* b) {
 
 void BoxedIterWrapper::gcHandler(GCVisitor* v, Box* b) {
     assert(b->cls == iterwrapper_cls);
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
     v->visit(iw->iter);
