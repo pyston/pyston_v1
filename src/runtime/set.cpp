@@ -25,6 +25,21 @@ extern "C" Box* createSet() {
     return new BoxedSet();
 }
 
+void BoxedSet::gcHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedSet* s = (BoxedSet*)b;
+
+    // This feels like a cludge, but we need to find anything that
+    // the unordered_map might have allocated.
+    // Another way to handle this would be to rt_alloc the unordered_map
+    // as well, though that incurs extra memory dereferences which would
+    // be nice to avoid.
+    void** start = (void**)&s->s;
+    void** end = start + (sizeof(s->s) / 8);
+    v->visitPotentialRange(start, end);
+}
+
 namespace set {
 
 class BoxedSetIterator : public Box {
@@ -43,15 +58,15 @@ public:
         ++it;
         return rtn;
     }
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
+
+        BoxedSetIterator* it = (BoxedSetIterator*)b;
+
+        v->visit(it->s);
+    }
 };
-
-extern "C" void setIteratorGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-
-    BoxedSetIterator* it = (BoxedSetIterator*)b;
-
-    v->visit(it->s);
-}
 
 Box* setiteratorHasnext(BoxedSetIterator* self) {
     RELEASE_ASSERT(self->cls == set_iterator_cls, "");
@@ -509,7 +524,7 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
 using namespace pyston::set;
 
 void setupSet() {
-    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0,
+    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSetIterator::gcHandler, 0, 0,
                                               sizeof(BoxedSetIterator), false, "setiterator");
     set_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));

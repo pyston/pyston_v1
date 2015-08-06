@@ -2311,13 +2311,13 @@ public:
         ++self->it;
         return characters[c & UCHAR_MAX];
     }
-};
 
-extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-    BoxedStringIterator* it = (BoxedStringIterator*)b;
-    v->visit(it->s);
-}
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
+        BoxedStringIterator* it = (BoxedStringIterator*)b;
+        v->visit(it->s);
+    }
+};
 
 Box* strIter(BoxedString* self) noexcept {
     assert(PyString_Check(self));
@@ -2698,7 +2698,7 @@ static PyMethodDef string_methods[] = {
 void setupStr() {
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &strIteratorGCHandler, 0, 0,
+    str_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
                                               sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));

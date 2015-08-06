@@ -408,23 +408,7 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     }
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
-    : BoxedBuiltinFunctionOrMethod(f, name, {}) {
-
-    this->doc = doc ? boxString(doc) : None;
-}
-
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
-                                                           std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                                           const char* doc)
-    : BoxedFunctionBase(f, defaults, closure) {
-
-    assert(name);
-    this->name = static_cast<BoxedString*>(boxString(name));
-    this->doc = doc ? boxString(doc) : None;
-}
-
-extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
+void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedFunction* f = (BoxedFunction*)b;
@@ -454,6 +438,22 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
         v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults->elts[0]),
                                reinterpret_cast<void* const*>(&f->defaults->elts[f->ndefaults]));
     }
+}
+
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
+    : BoxedBuiltinFunctionOrMethod(f, name, {}) {
+
+    this->doc = doc ? boxString(doc) : None;
+}
+
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
+                                                           std::initializer_list<Box*> defaults, BoxedClosure* closure,
+                                                           const char* doc)
+    : BoxedFunctionBase(f, defaults, closure) {
+
+    assert(name);
+    this->name = static_cast<BoxedString*>(boxString(name));
+    this->doc = doc ? boxString(doc) : None;
 }
 
 static void functionDtor(Box* b) {
@@ -1131,7 +1131,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
 }
 
-extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
+void BoxedHeapClass::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedClass* cls = (BoxedClass*)b;
@@ -1195,7 +1195,7 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
 
 Box* dict_descr = NULL;
 
-extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
+void BoxedInstanceMethod::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
@@ -1205,7 +1205,7 @@ extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
     v->visit(im->im_class);
 }
 
-extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
+void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedProperty* prop = (BoxedProperty*)b;
@@ -1220,7 +1220,7 @@ extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
         v->visit(prop->prop_doc);
 }
 
-extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
+void BoxedStaticmethod::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
@@ -1229,7 +1229,7 @@ extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
         v->visit(sm->sm_callable);
 }
 
-extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
+void BoxedClassmethod::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedClassmethod* cm = (BoxedClassmethod*)b;
@@ -1238,40 +1238,12 @@ extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
         v->visit(cm->cm_callable);
 }
 
-// This probably belongs in list.cpp?
-extern "C" void listGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+void BoxedSlice::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == slice_cls);
 
-    BoxedList* l = (BoxedList*)b;
-    int size = l->size;
-    int capacity = l->capacity;
-    assert(capacity >= size);
-    if (capacity)
-        v->visit(l->elts);
-    if (size)
-        v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
-}
-
-extern "C" void setGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-
-    BoxedSet* s = (BoxedSet*)b;
-
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&s->s;
-    void** end = start + (sizeof(s->s) / 8);
-    v->visitPotentialRange(start, end);
-}
-
-extern "C" void sliceGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedSlice* sl = static_cast<BoxedSlice*>(b);
-    assert(sl->cls == slice_cls);
 
     v->visit(sl->start);
     v->visit(sl->stop);
@@ -1293,31 +1265,9 @@ static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
     b->cls->tp_traverse(b, call_gc_visit, v);
 }
 
-// This probably belongs in tuple.cpp?
-extern "C" void tupleGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
+    assert(isSubclass(b->cls, closure_cls));
 
-    BoxedTuple* t = (BoxedTuple*)b;
-    v->visitRange((void* const*)&t->elts[0], (void* const*)&t->elts[t->size()]);
-}
-
-// This probably belongs in dict.cpp?
-extern "C" void dictGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-
-    BoxedDict* d = (BoxedDict*)b;
-
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&d->d;
-    void** end = start + (sizeof(d->d) / 8);
-    v->visitPotentialRange(start, end);
-}
-
-extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedClosure* c = (BoxedClosure*)b;
@@ -3245,7 +3195,7 @@ void setupRuntime() {
     void* mem = gc_alloc(sizeof(BoxedClass), gc::GCKind::PYTHON);
     object_cls = ::new (mem) BoxedClass(NULL, &boxGCHandler, 0, 0, sizeof(Box), false);
     mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
-    type_cls = ::new (mem) BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs),
+    type_cls = ::new (mem) BoxedHeapClass(object_cls, &BoxedHeapClass::gcHandler, offsetof(BoxedClass, attrs),
                                           offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, NULL);
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
@@ -3297,20 +3247,21 @@ void setupRuntime() {
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
-    tuple_cls = new (0)
-        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, boxString("tuple"));
+    tuple_cls = new (0) BoxedHeapClass(object_cls, &BoxedTuple::gcHandler, 0, 0, sizeof(BoxedTuple) - sizeof(Box*),
+                                       false, boxString("tuple"));
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     gc::registerPermanentRoot(EmptyTuple);
-    list_cls = new (0) BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxString("list"));
+    list_cls = new (0)
+        BoxedHeapClass(object_cls, &BoxedList::gcHandler, 0, 0, sizeof(BoxedList), false, boxString("list"));
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     pyston_getset_cls = new (0)
         BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxString("getset_descriptor"));
     attrwrapper_cls = new (0) BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                              static_cast<BoxedString*>(boxString("attrwrapper")));
-    dict_cls = new (0) BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
+    dict_cls = new (0) BoxedHeapClass(object_cls, &BoxedDict::gcHandler, 0, 0, sizeof(BoxedDict), false,
                                       static_cast<BoxedString*>(boxString("dict")));
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
@@ -3327,11 +3278,11 @@ void setupRuntime() {
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false,
                                        static_cast<BoxedString*>(boxString("float")));
-    function_cls = new (0) BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
+    function_cls = new (0) BoxedHeapClass(object_cls, &BoxedFunction::gcHandler, offsetof(BoxedFunction, attrs),
                                           offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false,
                                           static_cast<BoxedString*>(boxString("function")));
     builtin_function_or_method_cls = new (0)
-        BoxedHeapClass(object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
+        BoxedHeapClass(object_cls, &BoxedFunction::gcHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
                        sizeof(BoxedBuiltinFunctionOrMethod), false,
                        static_cast<BoxedString*>(boxString("builtin_function_or_method")));
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
@@ -3455,24 +3406,25 @@ void setupRuntime() {
     type_cls->giveAttr("__dict__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, NULL, NULL));
 
 
-    instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &instancemethodGCHandler, 0,
+    instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstanceMethod::gcHandler, 0,
                                                 offsetof(BoxedInstanceMethod, in_weakreflist),
                                                 sizeof(BoxedInstanceMethod), false, "instancemethod");
 
-    slice_cls = BoxedHeapClass::create(type_cls, object_cls, &sliceGCHandler, 0, 0, sizeof(BoxedSlice), false, "slice");
-    set_cls = BoxedHeapClass::create(type_cls, object_cls, &setGCHandler, 0, offsetof(BoxedSet, weakreflist),
+    slice_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSlice::gcHandler, 0, 0, sizeof(BoxedSlice), false,
+                                       "slice");
+    set_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
                                      sizeof(BoxedSet), false, "set");
-    frozenset_cls = BoxedHeapClass::create(type_cls, object_cls, &setGCHandler, 0, offsetof(BoxedSet, weakreflist),
-                                           sizeof(BoxedSet), false, "frozenset");
+    frozenset_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0,
+                                           offsetof(BoxedSet, weakreflist), sizeof(BoxedSet), false, "frozenset");
     capi_getset_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
-    closure_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, 0, 0, sizeof(BoxedClosure), false, "closure");
-    property_cls = BoxedHeapClass::create(type_cls, object_cls, &propertyGCHandler, 0, 0, sizeof(BoxedProperty), false,
-                                          "property");
-    staticmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &staticmethodGCHandler, 0, 0,
+    closure_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClosure::gcHandler, 0, 0, sizeof(BoxedClosure),
+                                         false, "closure");
+    property_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedProperty::gcHandler, 0, 0, sizeof(BoxedProperty),
+                                          false, "property");
+    staticmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedStaticmethod::gcHandler, 0, 0,
                                               sizeof(BoxedStaticmethod), false, "staticmethod");
-    classmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &classmethodGCHandler, 0, 0,
+    classmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassmethod::gcHandler, 0, 0,
                                              sizeof(BoxedClassmethod), false, "classmethod");
     attrwrapperiter_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                                  sizeof(AttrWrapperIter), false, "attrwrapperiter");

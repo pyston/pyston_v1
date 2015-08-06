@@ -298,6 +298,8 @@ public:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined, llvm::StringRef name);
 
+    static void gcHandler(GCVisitor* v, Box* b);
+
 private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
@@ -471,6 +473,8 @@ public:
     : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
 
     DEFAULT_CLASS_SIMPLE(instancemethod_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class GCdArray {
@@ -505,6 +509,8 @@ public:
     static const int INITIAL_CAPACITY;
 
     DEFAULT_CLASS_SIMPLE(list_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
 static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");
@@ -639,6 +645,8 @@ public:
         return rtn;
     }
 
+    static void gcHandler(GCVisitor* v, Box* b);
+
 private:
     BoxedTuple() {}
 
@@ -697,6 +705,8 @@ public:
             return p->second;
         return NULL;
     }
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
@@ -737,6 +747,8 @@ public:
                   Box* globals = NULL);
 
     DEFAULT_CLASS(function_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
@@ -790,6 +802,8 @@ public:
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
 
     DEFAULT_CLASS_SIMPLE(slice_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
 static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
@@ -855,6 +869,8 @@ public:
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 
     DEFAULT_CLASS_SIMPLE(property_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedStaticmethod : public Box {
@@ -864,6 +880,8 @@ public:
     BoxedStaticmethod(Box* callable) : sm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedClassmethod : public Box {
@@ -873,6 +891,8 @@ public:
     BoxedClassmethod(Box* callable) : cm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 // TODO is there any particular reason to make this a Box, i.e. a python-level object?
@@ -896,6 +916,8 @@ public:
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedGenerator : public Box {
@@ -923,6 +945,8 @@ public:
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 struct wrapper_def {

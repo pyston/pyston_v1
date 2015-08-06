@@ -378,7 +378,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     context = makeContext(stack_begin, (void (*)(intptr_t))generatorEntry);
 }
 
-extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
+void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedGenerator* g = (BoxedGenerator*)b;
@@ -434,8 +434,8 @@ void generatorDestructor(Box* b) {
 
 void setupGenerator() {
     generator_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, 0, offsetof(BoxedGenerator, weakreflist),
-                                 sizeof(BoxedGenerator), false, "generator");
+        = BoxedHeapClass::create(type_cls, object_cls, &BoxedGenerator::gcHandler, 0,
+                                 offsetof(BoxedGenerator, weakreflist), sizeof(BoxedGenerator), false, "generator");
     generator_cls->tp_dealloc = generatorDestructor;
     generator_cls->has_safe_tp_dealloc = true;
     generator_cls->giveAttr("__iter__",

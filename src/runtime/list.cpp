@@ -917,12 +917,6 @@ Box* listRemove(BoxedList* self, Box* elt) {
 BoxedClass* list_iterator_cls = NULL;
 BoxedClass* list_reverse_iterator_cls = NULL;
 
-extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-    BoxedListIterator* it = (BoxedListIterator*)b;
-    v->visit(it->l);
-}
-
 Box* listNew(BoxedClass* cls, Box* container) {
     assert(isSubclass(cls->cls, type_cls));
     assert(isSubclass(cls, list_cls));
@@ -1097,10 +1091,31 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     }
 }
 
+void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+    BoxedListIterator* it = (BoxedListIterator*)b;
+    v->visit(it->l);
+}
+
+void BoxedList::gcHandler(GCVisitor* v, Box* b) {
+    assert(isSubclass(b->cls, list_cls));
+
+    boxGCHandler(v, b);
+
+    BoxedList* l = (BoxedList*)b;
+    int size = l->size;
+    int capacity = l->capacity;
+    assert(capacity >= size);
+    if (capacity)
+        v->visit(l->elts);
+    if (size)
+        v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
+}
+
 void setupList() {
-    list_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0, 0,
+    list_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
                                                sizeof(BoxedListIterator), false, "listiterator");
-    list_reverse_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0, 0,
+    list_reverse_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
                                                        sizeof(BoxedListIterator), false, "listreverseiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
