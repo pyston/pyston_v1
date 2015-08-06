@@ -1,6 +1,7 @@
 # CPython has a 2kloc version of this file
 
 from distutils.core import setup, Extension
+import glob
 import os
 import sysconfig
 
@@ -131,6 +132,11 @@ ext_modules = [future_builtins_ext(),
                grp_ext(),
                curses_ext(),
                termios_ext()]
+
+builtin_headers = map(relpath, glob.glob("Include/*.h"))
+
+for m in ext_modules:
+    m.depends += builtin_headers
 
 
 setup(name="Pyston", version="1.0", description="Pyston shared modules", ext_modules=ext_modules)
