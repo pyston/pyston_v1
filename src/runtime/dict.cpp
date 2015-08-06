@@ -27,6 +27,11 @@
 
 namespace pyston {
 
+BoxedClass* dict_iterator_cls = NULL;
+BoxedClass* dict_keys_cls = NULL;
+BoxedClass* dict_values_cls = NULL;
+BoxedClass* dict_items_cls = NULL;
+
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
@@ -677,18 +682,16 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
-BoxedClass* dict_iterator_cls = NULL;
-extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
+static void BoxedDictIterator:::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == dict_iterator_cls);
     boxGCHandler(v, b);
 
     BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
     v->visit(it->d);
 }
 
-BoxedClass* dict_keys_cls = NULL;
-BoxedClass* dict_values_cls = NULL;
-BoxedClass* dict_items_cls = NULL;
-extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
+static void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == dict_items_cls);
     boxGCHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
@@ -717,14 +720,14 @@ static Box* dict_repr(PyObject* self) noexcept {
 }
 
 void setupDict() {
-    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, 0,
+    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
                                                sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
 
-    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView), false,
+    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView), false,
                                            "dict_keys");
-    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
+    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
                                              false, "dict_values");
-    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
+    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
                                             false, "dict_items");
 
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));

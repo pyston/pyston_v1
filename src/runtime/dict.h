@@ -24,6 +24,7 @@ extern BoxedClass* dict_iterator_cls;
 extern BoxedClass* dict_keys_cls;
 extern BoxedClass* dict_values_cls;
 extern BoxedClass* dict_items_cls;
+
 class BoxedDictIterator : public Box {
 public:
     enum IteratorType { KeyIterator, ValueIterator, ItemIterator };
@@ -36,6 +37,8 @@ public:
     BoxedDictIterator(BoxedDict* d, IteratorType type);
 
     DEFAULT_CLASS(dict_iterator_cls);
+
+    static void gcHandler(GCVisitor* v, Box* self);
 };
 
 Box* dictGetitem(BoxedDict* self, Box* k);
@@ -52,6 +55,8 @@ class BoxedDictView : public Box {
 public:
     BoxedDict* d;
     BoxedDictView(BoxedDict* d);
+
+    static void gcHandler(GCVisitor* v, Box* self);
 };
 
 Box* dictViewKeysIter(Box* self);
