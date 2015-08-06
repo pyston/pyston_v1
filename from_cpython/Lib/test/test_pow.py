@@ -1,4 +1,3 @@
-# expected: fail
 import test.test_support, unittest
 
 class PowTest(unittest.TestCase):
