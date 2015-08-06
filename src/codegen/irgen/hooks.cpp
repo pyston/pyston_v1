@@ -366,13 +366,9 @@ static AST_Suite* parseExec(llvm::StringRef source, bool interactive = false) {
                 continue;
 
             AST_Expr* expr = (AST_Expr*)s;
-            AST_Print* print = new AST_Print;
-            print->lineno = expr->lineno;
-            print->col_offset = expr->col_offset;
-            print->dest = NULL;
-            print->nl = true;
-            print->values.push_back(expr->value);
-            parsedModule->body[i] = print;
+            AST_LangPrimitive* print_expr = new AST_LangPrimitive(AST_LangPrimitive::PRINT_EXPR);
+            print_expr->args.push_back(expr->value);
+            expr->value = print_expr;
         }
     }
 

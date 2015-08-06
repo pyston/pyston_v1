@@ -15,6 +15,7 @@
 // This file is for forcing the inclusion of function declarations into the stdlib.
 // This is so that the types of the functions are available to the compiler.
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "core/ast.h"
 #include "core/threading.h"
@@ -111,6 +112,7 @@ void force() {
     FORCE(assertNameDefined);
     FORCE(assertFailDerefNameDefined);
     FORCE(assertFail);
+    FORCE(printExprHelper);
 
     FORCE(strOrUnicode);
     FORCE(printFloat);

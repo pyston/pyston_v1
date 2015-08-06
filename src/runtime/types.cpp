@@ -1900,7 +1900,7 @@ static PyObject* typeModule(Box* _type, void* context) {
     PyObject* mod;
     const char* s;
 
-    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE && type->is_user_defined) {
         static BoxedString* module_str = internStringImmortal("__module__");
         mod = type->getattr(module_str);
         if (!mod)
@@ -3197,6 +3197,38 @@ static void setupDefaultClassGCParticipation() {
     gc::invalidateOrderedFinalizerList();
 }
 
+static Box* getsetGet(Box* self, Box* obj, Box* type) {
+    // TODO: should call the full descr_check instead
+    if (obj == NULL || obj == None)
+        return self;
+
+    BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+    if (isSubclass(self->cls, pyston_getset_cls)) {
+        return getset_descr->get(obj, getset_descr->closure);
+    } else {
+        RELEASE_ASSERT(isSubclass(self->cls, capi_getset_cls), "");
+        Box* r = getset_descr->get(obj, getset_descr->closure);
+        if (!r)
+            throwCAPIException();
+        return r;
+    }
+}
+
+static Box* getsetSet(Box* self, Box* obj, Box* val) {
+    assert(obj != NULL && obj != None);
+
+    BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+    if (isSubclass(self->cls, pyston_getset_cls)) {
+        getset_descr->set(obj, val, getset_descr->closure);
+        return None;
+    } else {
+        RELEASE_ASSERT(isSubclass(self->cls, capi_getset_cls), "");
+        getset_descr->set(obj, val, getset_descr->closure);
+        checkAndThrowCAPIException();
+        return None;
+    }
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -3275,7 +3307,7 @@ void setupRuntime() {
     list_cls = new (0) BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxString("list"));
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     pyston_getset_cls = new (0)
-        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxString("getset"));
+        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxString("getset_descriptor"));
     attrwrapper_cls = new (0) BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                              static_cast<BoxedString*>(boxString("attrwrapper")));
     dict_cls = new (0) BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
@@ -3446,6 +3478,10 @@ void setupRuntime() {
                                                  sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
     // TODO: add explicit __get__ and __set__ methods to these
+    pyston_getset_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)getsetGet, UNKNOWN, 3)));
+    capi_getset_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)getsetGet, UNKNOWN, 3)));
+    pyston_getset_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)getsetSet, UNKNOWN, 3)));
+    capi_getset_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)getsetSet, UNKNOWN, 3)));
     pyston_getset_cls->freeze();
     capi_getset_cls->freeze();
 

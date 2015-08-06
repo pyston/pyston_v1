@@ -1,4 +1,3 @@
-# expected: fail
 import unittest, operator, copy, pickle, random
 from test import test_support
 

@@ -30,3 +30,12 @@ print a, sorted(g.keys())
 print
 c = compile("a = 1; b = 2; a - b; b - a; c = a - b; c; print c", "test.py", "single")
 exec c
+
+exec compile("'hello world'", "test.py", "single")
+
+import sys
+def new_displayhook(arg):
+    print "my custom displayhook!"
+    print arg
+sys.displayhook = new_displayhook
+exec compile("'hello world'", "test.py", "single")

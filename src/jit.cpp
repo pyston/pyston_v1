@@ -484,20 +484,9 @@ static int main(int argc, char** argv) {
 
                     if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
                         AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
-                        AST_Call* c = new AST_Call();
-                        AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
-                        c->func = r;
-                        c->starargs = NULL;
-                        c->kwargs = NULL;
-                        c->args.push_back(e->value);
-                        c->lineno = 0;
-
-                        AST_Print* p = new AST_Print();
-                        p->dest = NULL;
-                        p->nl = true;
-                        p->values.push_back(c);
-                        p->lineno = 0;
-                        m->body[0] = p;
+                        AST_LangPrimitive* print_expr = new AST_LangPrimitive(AST_LangPrimitive::PRINT_EXPR);
+                        print_expr->args.push_back(e->value);
+                        e->value = print_expr;
                     }
 
                     compileAndRunModule(m, main_module);

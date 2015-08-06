@@ -397,12 +397,60 @@ static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {
     return Py_None;
 }
 
+static PyObject* sys_displayhook(PyObject* self, PyObject* o) noexcept {
+    PyObject* outf;
+
+    // Pyston change: we currently hardcode the builtins module
+    /*
+    PyInterpreterState* interp = PyThreadState_GET()->interp;
+    PyObject* modules = interp->modules;
+    PyObject* builtins = PyDict_GetItemString(modules, "__builtin__");
+
+    if (builtins == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "lost __builtin__");
+        return NULL;
+    }
+    */
+    PyObject* builtins = builtins_module;
+
+    /* Print value except if None */
+    /* After printing, also assign to '_' */
+    /* Before, set '_' to None to avoid recursion */
+    if (o == Py_None) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    if (PyObject_SetAttrString(builtins, "_", Py_None) != 0)
+        return NULL;
+    if (Py_FlushLine() != 0)
+        return NULL;
+    outf = PySys_GetObject("stdout");
+    if (outf == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
+        return NULL;
+    }
+    if (PyFile_WriteObject(o, outf, 0) != 0)
+        return NULL;
+    PyFile_SoftSpace(outf, 1);
+    if (Py_FlushLine() != 0)
+        return NULL;
+    if (PyObject_SetAttrString(builtins, "_", o) != 0)
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 PyDoc_STRVAR(excepthook_doc, "excepthook(exctype, value, traceback) -> None\n"
                              "\n"
                              "Handle an exception by displaying it with a traceback on sys.stderr.\n");
 
+PyDoc_STRVAR(displayhook_doc, "displayhook(object) -> None\n"
+                              "\n"
+                              "Print an object to sys.stdout and also save it in __builtin__._\n");
+
 static PyMethodDef sys_methods[] = {
     { "excepthook", sys_excepthook, METH_VARARGS, excepthook_doc },
+    { "displayhook", sys_displayhook, METH_O, displayhook_doc },
 };
 
 void setupSys() {
@@ -507,6 +555,7 @@ void setupSys() {
         sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
     }
 
+    sys_module->giveAttr("__displayhook__", sys_module->getattr(internStringMortal("displayhook")));
     sys_module->giveAttr("flags", new BoxedSysFlags());
 }
 
