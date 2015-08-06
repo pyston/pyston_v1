@@ -19,9 +19,9 @@
 
 #include "codegen/codegen.h"
 
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-#undef UNW_LOCAL_ONLY
+// Forward-declare libunwind's typedef'd unw_cursor_t:
+struct unw_cursor;
+typedef struct unw_cursor unw_cursor_t;
 
 namespace pyston {
 

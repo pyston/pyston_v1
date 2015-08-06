@@ -46,6 +46,8 @@
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
+#undef UNW_LOCAL_ONLY
+
 namespace {
 int _dummy_ = unw_set_caching_policy(unw_local_addr_space, UNW_CACHE_PER_THREAD);
 }

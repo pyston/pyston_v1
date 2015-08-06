@@ -87,7 +87,7 @@ foreach(BC_SRC ${BC_INLINE_SRCS})
   # generate the bitcode for this file
   add_custom_command(OUTPUT ${BC_SRC_BASENAME}.bc
                      COMMAND ${BC_CXX} ${BC_DEFINES} ${BC_CXX_FLAGS} ${BC_INCLUDES} -c ${BC_SRC_FULLPATH} -o ${BC_SRC_BASENAME}.bc -emit-llvm
-                     DEPENDS ${BC_SRC_FULLPATH} clang ${PYSTON_HEADERS} ${FROM_CPYTHON_HEADERS}
+                     DEPENDS ${BC_SRC_FULLPATH} clang ${PYSTON_HEADERS} ${FROM_CPYTHON_HEADERS} libunwind
                      COMMENT "Building LLVM bitcode ${BC_SRC_BASENAME}.bc"
                      VERBATIM)
   set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${BC_SRC_BASENAME}.bc)
