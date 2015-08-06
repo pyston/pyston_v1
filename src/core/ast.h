@@ -182,6 +182,8 @@ class AST_stmt : public AST {
 public:
     virtual void accept_stmt(StmtVisitor* v) = 0;
 
+    int cxx_exception_count = 0;
+
     AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
 };
 

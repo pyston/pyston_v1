@@ -332,6 +332,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
             throw e;
 
         auto source = getCL()->source.get();
+        stmt->cxx_exception_count++;
         exceptionCaughtInInterpreter(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);
 
         next_block = ((AST_Invoke*)stmt)->exc_dest;
@@ -764,6 +765,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         abortJITing();
 
         auto source = getCL()->source.get();
+        node->cxx_exception_count++;
         exceptionCaughtInInterpreter(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()), &e);
 
         next_block = node->exc_dest;

@@ -3488,8 +3488,6 @@ template <ExceptionStyle S>
 static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* oarg1,
                          Box* oarg2, Box* oarg3, Box** oargs) noexcept(S == CAPI) {
     if (S != chosen_cf->exception_style) {
-        static StatCounter sc("num_runtimecall_exc_mismatches");
-        sc.log();
         if (S == CAPI) {
             try {
                 return callChosenCF<CXX>(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
@@ -3604,6 +3602,21 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         assert(S == chosen_cf->exception_style);
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)chosen_cf->call, arg_vec);
         rewrite_args->out_success = true;
+    }
+
+    if (chosen_cf->exception_style != S) {
+        static StatCounter sc("num_runtimecall_exc_mismatches");
+        sc.log();
+
+        if (rewrite_args) {
+            static StatCounter sc2("num_runtimecall_exc_mismatches_rewriteable");
+            sc2.log();
+#if 0
+            StatCounter sc3("num_runtime_call_exc_mismatches_rewriteable."
+                            + g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL));
+            sc3.log();
+#endif
+        }
     }
 
     Box* r;

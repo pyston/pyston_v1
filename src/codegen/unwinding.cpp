@@ -536,6 +536,8 @@ public:
             exc_info.reraise = false;
             return;
         }
+        // TODO: shouldn't fetch this multiple times?
+        frame_iter.getCurrentStatement()->cxx_exception_count++;
         auto line_info = lineInfoForFrame(&frame_iter);
         BoxedTraceback::here(line_info, &exc_info.traceback);
     }
