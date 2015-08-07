@@ -27,6 +27,11 @@
 
 namespace pyston {
 
+BoxedClass* dict_iterator_cls = NULL;
+BoxedClass* dict_keys_cls = NULL;
+BoxedClass* dict_values_cls = NULL;
+BoxedClass* dict_items_cls = NULL;
+
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
@@ -677,19 +682,34 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
-BoxedClass* dict_iterator_cls = NULL;
-extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
+    assert(isSubclass(b->cls, dict_cls));
+
+    Box::gcHandler(v, b);
+
+    BoxedDict* d = (BoxedDict*)b;
+
+    // This feels like a cludge, but we need to find anything that
+    // the unordered_map might have allocated.
+    // Another way to handle this would be to rt_alloc the unordered_map
+    // as well, though that incurs extra memory dereferences which would
+    // be nice to avoid.
+    void** start = (void**)&d->d;
+    void** end = start + (sizeof(d->d) / 8);
+    v->visitPotentialRange(start, end);
+}
+
+void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == dict_iterator_cls);
+    Box::gcHandler(v, b);
 
     BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
     v->visit(it->d);
 }
 
-BoxedClass* dict_keys_cls = NULL;
-BoxedClass* dict_values_cls = NULL;
-BoxedClass* dict_items_cls = NULL;
-extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == dict_items_cls);
+    Box::gcHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
     v->visit(view->d);
@@ -717,15 +737,15 @@ static Box* dict_repr(PyObject* self) noexcept {
 }
 
 void setupDict() {
-    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, 0,
+    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
                                                sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
 
-    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView), false,
-                                           "dict_keys");
-    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
-                                             false, "dict_values");
-    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
-                                            false, "dict_items");
+    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+                                           false, "dict_keys");
+    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0,
+                                             sizeof(BoxedDictView), false, "dict_values");
+    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0,
+                                            sizeof(BoxedDictView), false, "dict_items");
 
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));

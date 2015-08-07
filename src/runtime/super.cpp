@@ -41,7 +41,7 @@ public:
         assert(_o->cls == super_cls);
         BoxedSuper* o = static_cast<BoxedSuper*>(_o);
 
-        boxGCHandler(v, o);
+        Box::gcHandler(v, o);
         if (o->type)
             v->visit(o->type);
         if (o->obj)

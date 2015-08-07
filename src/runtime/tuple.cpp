@@ -412,12 +412,6 @@ extern "C" PyObject* PyTuple_New(Py_ssize_t size) noexcept {
 
 
 BoxedClass* tuple_iterator_cls = NULL;
-extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
-    BoxedTupleIterator* it = (BoxedTupleIterator*)b;
-    v->visit(it->t);
-}
-
 static int64_t tuple_hash(BoxedTuple* v) noexcept {
     long x, y;
     Py_ssize_t len = Py_SIZE(v);
@@ -564,8 +558,21 @@ static Py_ssize_t tuplelength(PyTupleObject* a) {
     return Py_SIZE(a);
 }
 
+void BoxedTuple::gcHandler(GCVisitor* v, Box* b) {
+    Box::gcHandler(v, b);
+
+    BoxedTuple* t = (BoxedTuple*)b;
+    v->visitRange((void* const*)&t->elts[0], (void* const*)&t->elts[t->size()]);
+}
+
+extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
+    Box::gcHandler(v, b);
+    BoxedTupleIterator* it = (BoxedTupleIterator*)b;
+    v->visit(it->t);
+}
+
 void setupTuple() {
-    tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, 0,
+    tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedTupleIterator::gcHandler, 0, 0,
                                                 sizeof(BoxedTupleIterator), false, "tuple");
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));

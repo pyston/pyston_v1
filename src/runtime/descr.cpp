@@ -413,7 +413,7 @@ void BoxedMethodDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     assert(_o->cls == method_cls);
     BoxedMethodDescriptor* o = static_cast<BoxedMethodDescriptor*>(_o);
 
-    boxGCHandler(v, o);
+    Box::gcHandler(v, o);
     v->visit(o->type);
 }
 
@@ -452,7 +452,7 @@ void BoxedWrapperDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     assert(_o->cls == wrapperdescr_cls);
     BoxedWrapperDescriptor* o = static_cast<BoxedWrapperDescriptor*>(_o);
 
-    boxGCHandler(v, o);
+    Box::gcHandler(v, o);
     v->visit(o->type);
 }
 
@@ -570,7 +570,7 @@ void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
     assert(_o->cls == wrapperobject_cls);
     BoxedWrapperObject* o = static_cast<BoxedWrapperObject*>(_o);
 
-    boxGCHandler(v, o);
+    Box::gcHandler(v, o);
     v->visit(o->obj);
 }
 

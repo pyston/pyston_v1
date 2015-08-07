@@ -38,6 +38,8 @@ public:
     template <typename T> __attribute__((visibility("default"))) BoxedSet(T&& s) : s(std::forward<T>(s)) {}
 
     DEFAULT_CLASS(set_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 }
 

@@ -62,7 +62,7 @@ int _PyLong_DigitValue[256] = {
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
 void BoxedLong::gchandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     BoxedLong* l = (BoxedLong*)b;
 

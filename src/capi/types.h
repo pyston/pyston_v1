@@ -58,7 +58,7 @@ public:
         assert(_o->cls == capifunc_cls);
         BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
 
-        boxGCHandler(v, o);
+        Box::gcHandler(v, o);
         v->visit(o->passthrough);
         v->visit(o->module);
     }

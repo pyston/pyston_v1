@@ -603,6 +603,8 @@ public:
     Box* hasnextOrNullIC();
 
     friend class AttrWrapper;
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 

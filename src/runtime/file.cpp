@@ -1744,7 +1744,7 @@ void fileDestructor(Box* b) {
 }
 
 void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
-    boxGCHandler(v, b);
+    Box::gcHandler(v, b);
 
     assert(isSubclass(b->cls, file_cls));
     BoxedFile* f = static_cast<BoxedFile*>(b);

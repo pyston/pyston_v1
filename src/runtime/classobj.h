@@ -52,7 +52,7 @@ public:
         assert(_o->cls == classobj_cls);
         BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
 
-        boxGCHandler(v, o);
+        Box::gcHandler(v, o);
         if (o->bases)
             v->visit(o->bases);
         if (o->name)
@@ -76,7 +76,7 @@ public:
         assert(_o->cls == instance_cls);
         BoxedInstance* o = static_cast<BoxedInstance*>(_o);
 
-        boxGCHandler(v, o);
+        Box::gcHandler(v, o);
         if (o->inst_cls)
             v->visit(o->inst_cls);
     }
