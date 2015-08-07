@@ -495,6 +495,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
     typedef std::unordered_map<InternedString, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
     std::unordered_map<CFGBlock*, PHITable*> created_phis;
+    std::unordered_map<CFGBlock*, llvm::SmallVector<IRGenerator::ExceptionState, 2>> incoming_exception_state;
 
     CFGBlock* initial_block = NULL;
     if (entry_descriptor) {
@@ -759,6 +760,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
         }
 
+        auto exc_it = incoming_exception_state.find(block);
+        if (exc_it != incoming_exception_state.end()) {
+            generator->setIncomingExceptionState(exc_it->second);
+        }
+
         // Generate loop safepoints on backedges.
         for (CFGBlock* predecessor : block->predecessors) {
             if (predecessor->idx > block->idx) {
@@ -776,6 +782,15 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         ending_symbol_tables[block] = ending_st.symbol_table;
         phi_ending_symbol_tables[block] = ending_st.phi_symbol_table;
         llvm_exit_blocks[block] = ending_st.ending_block;
+
+        if (ending_st.exception_state.size()) {
+            AST_stmt* last_stmt = block->body.back();
+            assert(last_stmt->type == AST_TYPE::Invoke);
+            CFGBlock* exc_block = ast_cast<AST_Invoke>(last_stmt)->exc_dest;
+            assert(!incoming_exception_state.count(exc_block));
+
+            incoming_exception_state.insert(std::make_pair(exc_block, ending_st.exception_state));
+        }
 
         if (into_hax.count(block))
             ASSERT(ending_st.symbol_table->size() == 0, "%d", block->idx);

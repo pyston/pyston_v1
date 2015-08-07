@@ -72,8 +72,6 @@ private:
     llvm::Value* frame_info_arg;
     int scratch_size;
 
-    llvm::DenseMap<CFGBlock*, ExceptionStyle> landingpad_styles;
-
 public:
     IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
@@ -107,15 +105,19 @@ public:
     ParamNames* getParamNames() { return param_names; }
 
     void setFrameInfoArgument(llvm::Value* v) { frame_info_arg = v; }
-
-    ExceptionStyle getLandingpadStyle(AST_Invoke* invoke);
-    ExceptionStyle getLandingpadStyle(CFGBlock* block);
 };
 
 // turns CFGBlocks into LLVM IR
 class IRGenerator {
 private:
 public:
+    struct ExceptionState {
+        llvm::BasicBlock* from_block;
+        ConcreteCompilerVariable* exc_type, *exc_value, *exc_tb;
+        ExceptionState(llvm::BasicBlock* from_block, ConcreteCompilerVariable* exc_type,
+                       ConcreteCompilerVariable* exc_value, ConcreteCompilerVariable* exc_tb)
+            : from_block(from_block), exc_type(exc_type), exc_value(exc_value), exc_tb(exc_tb) {}
+    };
     struct EndingState {
         // symbol_table records which Python variables are bound to what CompilerVariables at the end of this block.
         // phi_symbol_table records the ones that will need to be `phi'd.
@@ -123,8 +125,14 @@ public:
         SymbolTable* symbol_table;
         ConcreteSymbolTable* phi_symbol_table;
         llvm::BasicBlock* ending_block;
-        EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table, llvm::BasicBlock* ending_block)
-            : symbol_table(symbol_table), phi_symbol_table(phi_symbol_table), ending_block(ending_block) {}
+        llvm::SmallVector<ExceptionState, 2> exception_state;
+
+        EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table, llvm::BasicBlock* ending_block,
+                    llvm::ArrayRef<ExceptionState> exception_state)
+            : symbol_table(symbol_table),
+              phi_symbol_table(phi_symbol_table),
+              ending_block(ending_block),
+              exception_state(exception_state.begin(), exception_state.end()) {}
     };
 
     virtual ~IRGenerator() {}
@@ -139,6 +147,10 @@ public:
     virtual void doSafePoint(AST_stmt* next_statement) = 0;
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
                                       std::vector<llvm::Value*>& stackmap_args) = 0;
+    virtual void addOutgoingExceptionState(ExceptionState exception_state) = 0;
+    virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
+    virtual llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) = 0;
+    virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* final_dest, AST_stmt* current_stmt) = 0;
 };
 
 class IREmitter;
