@@ -1610,14 +1610,12 @@ public:
                        "%d", info.unw_info.current_stmt->lineno);
 
         CompiledFunction* cf = NULL;
+        CompiledFunction* best_exception_mismatch = NULL;
         bool found = false;
         // TODO have to find the right version.. similar to resolveclfunc?
         for (int i = 0; i < cl->versions.size(); i++) {
             cf = cl->versions[i];
             assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
-
-            if (cf->exception_style != exception_style)
-                continue;
 
             bool fits = true;
             for (int j = 0; j < args.size(); j++) {
@@ -1629,14 +1627,22 @@ public:
             if (!fits)
                 continue;
 
+            if (cf->exception_style != exception_style) {
+                if (!best_exception_mismatch)
+                    best_exception_mismatch = cf;
+                continue;
+            }
+
             found = true;
             break;
         }
 
-        if (!found && exception_style == CAPI) {
-            std::string name = g.func_addr_registry.getFuncNameAtAddress(cl->versions[0]->code, true);
-            RELEASE_ASSERT(0, "Please define a capi variant for %s", name.c_str());
+        if (!found) {
+            assert(best_exception_mismatch);
+            cf = best_exception_mismatch;
+            found = true;
         }
+
         RELEASE_ASSERT(found, "");
         RELEASE_ASSERT(cf->code, "");
 
@@ -1708,7 +1714,6 @@ public:
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
                                CallattrFlags flags, const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
-        // XXX investigate
         ExceptionStyle exception_style = info.preferredExceptionStyle();
 
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(

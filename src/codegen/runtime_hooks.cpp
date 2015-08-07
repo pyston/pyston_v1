@@ -311,6 +311,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raise3_capi);
     GET(PyErr_Fetch);
     GET(PyErr_NormalizeException);
+    GET(PyErr_Restore);
     GET(capiExcCaughtInJit);
     GET(reraiseJitCapiExc);
     GET(deopt);

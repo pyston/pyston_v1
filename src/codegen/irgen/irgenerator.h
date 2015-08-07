@@ -80,6 +80,8 @@ public:
     CompiledFunction* getCurFunction() { return cf; }
     CLFunction* getCL() { return clfunc; }
 
+    ExceptionStyle getExceptionStyle() { return cf->exception_style; }
+
     llvm::Function* getLLVMFunction() { return cf->func; }
 
     EffortLevel getEffortLevel() { return cf->effort; }

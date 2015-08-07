@@ -262,6 +262,10 @@ extern "C" void dumpEx(void* p, int levels) {
             printf("Has %ld function versions\n", cl->versions.size());
             for (CompiledFunction* cf : cl->versions) {
                 bool got_name;
+                if (cf->exception_style == CXX)
+                    printf("CXX style: ");
+                else
+                    printf("CAPI style: ");
                 std::string name = g.func_addr_registry.getFuncNameAtAddress(cf->code, true, &got_name);
                 if (got_name)
                     printf("%s\n", name.c_str());

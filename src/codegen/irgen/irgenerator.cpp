@@ -95,7 +95,7 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
 }
 
 ExceptionStyle UnwindInfo::preferredExceptionStyle() const {
-    if (FORCE_LLVM_CAPI)
+    if (FORCE_LLVM_CAPI_CALLS)
         return CAPI;
 
     // TODO: I think this makes more sense as a relative percentage rather
@@ -253,11 +253,21 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
-        if (unw_info.hasHandler() && target_exception_style == CXX) {
+        if (target_exception_style == CXX && (unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI)) {
             // Create the invoke:
             llvm::BasicBlock* normal_dest
                 = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
-            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(unw_info.exc_dest);
+
+            llvm::BasicBlock* final_exc_dest;
+            if (unw_info.hasHandler()) {
+                final_exc_dest = unw_info.exc_dest;
+            } else {
+                assert(irstate->getExceptionStyle() == CAPI && "shoudn't have bothered creating an invoke");
+
+                final_exc_dest = NULL; // signal to reraise as a capi exception
+            }
+
+            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(final_exc_dest);
             normal_dest->moveAfter(curblock);
 
             llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
@@ -526,9 +536,9 @@ private:
     llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
     // These are the values that are outgoing of an invoke block:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
-    llvm::BasicBlock* cxx_exc_dest = NULL, * cxx_exc_final_dest = NULL;
-    llvm::BasicBlock* capi_exc_dest = NULL, * capi_exc_final_dest = NULL;
-    AST_stmt* capi_current_stmt = NULL;
+    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
+    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
+    llvm::DenseMap<llvm::BasicBlock*, AST_stmt*> capi_current_statements;
 
     enum State {
         RUNNING,  // normal
@@ -2777,20 +2787,22 @@ public:
         emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
     }
 
+    // Create a (or reuse an existing) block that will catch a CAPI exception, and then forward
+    // it to the "final_dest" block.  ie final_dest is a block corresponding to the IR level
+    // LANDINGPAD, and this function will createa  helper block that fetches the exception.
+    // As a special-case, a NULL value for final_dest means that this helper block should
+    // instead propagate the exception out of the function.
     llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* final_dest, AST_stmt* current_stmt) {
+        llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         if (capi_exc_dest) {
-            // We should only have one "final_dest"; we could support having multiple but
-            // for now it should be an invariante:
-            assert(capi_exc_final_dest == final_dest);
-            assert(capi_current_stmt == current_stmt);
+            assert(capi_current_statements[final_dest] == current_stmt);
             return capi_exc_dest;
         }
 
         llvm::BasicBlock* orig_block = curblock;
 
         capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-        capi_exc_final_dest = final_dest;
-        capi_current_stmt = current_stmt;
+        capi_current_statements[final_dest] = current_stmt;
 
         emitter.setCurrentBasicBlock(capi_exc_dest);
         emitter.getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
@@ -2798,9 +2810,15 @@ public:
                                           embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
         if (!final_dest) {
-            emitter.getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
-            emitter.getBuilder()->CreateUnreachable();
+            // Propagate the exception out of the function:
+            if (irstate->getExceptionStyle() == CXX) {
+                emitter.getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+                emitter.getBuilder()->CreateUnreachable();
+            } else {
+                emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+            }
         } else {
+            // Catch the exception and forward to final_dest:
             llvm::Value* exc_type_ptr
                 = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
                                        irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
@@ -2832,17 +2850,13 @@ public:
     }
 
     llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) {
-        if (cxx_exc_dest) {
-            // We should only have one "final_dest"; we could support having multiple but
-            // for now it should be an invariante:
-            assert(cxx_exc_final_dest == final_dest);
+        llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
+        if (cxx_exc_dest)
             return cxx_exc_dest;
-        }
 
         llvm::BasicBlock* orig_block = curblock;
 
         cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-        cxx_exc_final_dest = final_dest;
 
         emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
 
@@ -2872,11 +2886,22 @@ public:
         llvm::Value* exc_traceback
             = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
 
-        addOutgoingExceptionState(ExceptionState(cxx_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                                 new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                                 new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+        if (final_dest) {
+            // Catch the exception and forward to final_dest:
+            addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
 
-        builder->CreateBr(final_dest);
+            builder->CreateBr(final_dest);
+        } else {
+            // Propagate the exception out of the function.
+            // We shouldn't be hitting this case if the current function is CXX-style; then we should have
+            // just not created an Invoke and let the exception machinery propagate it for us.
+            assert(irstate->getExceptionStyle() == CAPI);
+            builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+        }
 
         emitter.setCurrentBasicBlock(orig_block);
 

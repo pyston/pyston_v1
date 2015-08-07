@@ -129,6 +129,7 @@ void force() {
     FORCE(raise3_capi);
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
+    FORCE(PyErr_Restore);
     FORCE(capiExcCaughtInJit);
     FORCE(reraiseJitCapiExc);
     FORCE(deopt);

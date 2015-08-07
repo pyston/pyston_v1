@@ -967,7 +967,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
 
 CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            FunctionSpecialization* spec, std::string nameprefix) {
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
     long irgen_us = 0;
@@ -1030,8 +1030,7 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
         }
     }
 
-
-    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, ExceptionStyle::CXX, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, exception_style, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real

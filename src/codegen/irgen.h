@@ -113,7 +113,7 @@ bool isIsDefinedName(llvm::StringRef name);
 
 CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            FunctionSpecialization* spec, std::string nameprefix);
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, std::string nameprefix);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is
 // potentially-undefined.  If it is potentially-undefined, we have to generate control-flow

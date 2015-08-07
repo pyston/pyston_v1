@@ -197,6 +197,10 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
+    ExceptionStyle exception_style = CXX;
+    if (FORCE_LLVM_CAPI_THROWS)
+        exception_style = CAPI;
+
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
         llvm::raw_string_ostream ss(s);
@@ -223,7 +227,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << source->fn << ":"
                << name << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
-        ss << " at effort level " << (int)effort << '\n';
+        ss << " at effort level " << (int)effort << " with exception style "
+           << (exception_style == CXX ? "C++" : "CAPI") << '\n';
 
         if (entry_descriptor && VERBOSITY("irgen") >= 2) {
             for (const auto& p : entry_descriptor->args) {
@@ -241,8 +246,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     }
 
 
-
-    CompiledFunction* cf = doCompile(f, source, &f->param_names, entry_descriptor, effort, spec, name);
+    CompiledFunction* cf = doCompile(f, source, &f->param_names, entry_descriptor, effort, exception_style, spec, name);
     compileIR(cf, effort);
 
     f->addVersion(cf);
@@ -822,7 +826,9 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
 
 
 extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
-    return (char*)reoptCompiledFuncInternal(cf)->code;
+    CompiledFunction* new_cf = reoptCompiledFuncInternal(cf);
+    assert(new_cf->exception_style == cf->exception_style);
+    return (char*)new_cf->code;
 }
 
 CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,

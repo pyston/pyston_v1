@@ -743,12 +743,19 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
     CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
+
     auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
     Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                                 std::get<3>(arg_tuple));
 
-    assert(r);
-    return r;
+    if (partial_func->exception_style == CXX) {
+        assert(r);
+        return r;
+    } else {
+        if (!r)
+            throwCAPIException();
+        return r;
+    }
 }
 
 Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
@@ -1725,14 +1732,24 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
         clfunc->dependent_interp_callsites.invalidateAll();
 
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
+        Box* r;
         if (closure && generator)
-            return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
-                                                     arg3, args);
+            r = optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3,
+                                                  args);
         else if (closure)
-            return optimized->closure_call((BoxedClosure*)closure, arg1, arg2, arg3, args);
+            r = optimized->closure_call((BoxedClosure*)closure, arg1, arg2, arg3, args);
         else if (generator)
-            return optimized->generator_call((BoxedGenerator*)generator, arg1, arg2, arg3, args);
-        return optimized->call(arg1, arg2, arg3, args);
+            r = optimized->generator_call((BoxedGenerator*)generator, arg1, arg2, arg3, args);
+        else
+            r = optimized->call(arg1, arg2, arg3, args);
+
+        if (optimized->exception_style == CXX)
+            return r;
+        else {
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
     }
 
     Box** vregs = NULL;
