@@ -54,6 +54,14 @@ public:
         return None;
     }
 
+    static Box* doc(Box* b, void*) {
+        RELEASE_ASSERT(b->cls == capifunc_cls, "");
+        const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_doc;
+        if (s)
+            return boxString(s);
+        return None;
+    }
+
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == capifunc_cls);
         BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
