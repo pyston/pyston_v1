@@ -1321,13 +1321,28 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     }
 
     else if (descr->cls == property_cls) {
-        rewrite_args = NULL; // TODO
-        REWRITE_ABORTED("");
-
         BoxedProperty* prop = static_cast<BoxedProperty*>(descr);
         if (prop->prop_get == NULL || prop->prop_get == None) {
             raiseExcHelper(AttributeError, "unreadable attribute");
         }
+
+        if (rewrite_args) {
+            r_descr->addAttrGuard(offsetof(BoxedProperty, prop_get), (intptr_t)prop->prop_get);
+
+            RewriterVar* r_prop_get = r_descr->getAttr(offsetof(BoxedProperty, prop_get));
+            CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_prop_get, rewrite_args->destination);
+            crewrite_args.arg1 = rewrite_args->obj;
+
+            Box* rtn = runtimeCallInternal1<CXX>(prop->prop_get, &crewrite_args, ArgPassSpec(1), obj);
+            if (!crewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = crewrite_args.out_rtn;
+            }
+            return rtn;
+        }
+
         return runtimeCallInternal1<CXX>(prop->prop_get, NULL, ArgPassSpec(1), obj);
     }
 
@@ -4451,12 +4466,23 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     BoxedString* op_name = getOpName(op_type);
 
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* rtn = callattr(operand, op_name, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unaryop"));
+
+    Box* rtn = NULL;
+    if (rewriter) {
+        CallRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
+        if (srewrite_args.out_success && rtn)
+            rewriter->commitReturning(srewrite_args.out_rtn);
+        else
+            rewriter.reset();
+    } else
+        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, NULL, ArgPassSpec(0));
+
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "bad operand type for unary '%s': '%s'", op_name->c_str(), getTypeName(operand));
     }
-
     return rtn;
 }
 
