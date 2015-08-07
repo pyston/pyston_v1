@@ -31,6 +31,7 @@
 #include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/util.h"
+#include "runtime/code.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -39,25 +40,55 @@ DS_DEFINE_RWLOCK(codegen_rwlock);
 
 CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                        std::unique_ptr<SourceInfo> source)
-    : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+    : code_obj(NULL),
+      paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
       source(std::move(source)),
       param_names(this->source->ast, this->source->getInternedStrings()),
       always_use_version(NULL),
-      code_obj(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
     assert(num_args >= num_defaults);
 }
+
 CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
                        const ParamNames& param_names)
-    : paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+    : code_obj(NULL),
+      paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
       source(nullptr),
       param_names(param_names),
       always_use_version(NULL),
-      code_obj(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
     assert(num_args >= num_defaults);
+}
+
+BoxedCode* CLFunction::getCode() {
+    if (!code_obj) {
+        code_obj = new BoxedCode(this);
+        // CLFunctions don't currently participate in GC.  They actually never get freed currently.
+        gc::registerPermanentRoot(code_obj);
+    }
+    return code_obj;
+}
+
+void CLFunction::addVersion(CompiledFunction* compiled) {
+    assert(compiled);
+    assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
+    assert(compiled->clfunc == NULL);
+    assert(compiled->code);
+    compiled->clfunc = this;
+
+    if (compiled->entry_descriptor == NULL) {
+        bool could_have_speculations = (source.get() != NULL);
+        if (!could_have_speculations && versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL
+            && compiled->spec->accepts_all_inputs && compiled->spec->boxed_return_value)
+            always_use_version = compiled;
+
+        assert(compiled->spec->arg_types.size() == paramspec.totalReceived());
+        versions.push_back(compiled);
+    } else {
+        osr_versions[compiled->entry_descriptor] = compiled;
+    }
 }
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,

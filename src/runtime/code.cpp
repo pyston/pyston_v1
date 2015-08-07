@@ -11,12 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+#include "runtime/code.h"
 
 #include <sstream>
-
-#include "Python.h"
-
-#include "code.h"
 
 #include "core/ast.h"
 #include "gc/collector.h"
@@ -29,96 +27,78 @@ extern "C" {
 BoxedClass* code_cls;
 }
 
-class BoxedCode : public Box {
-public:
-    CLFunction* f;
+void BoxedCode::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == code_cls);
+    Box::gcHandler(v, b);
+}
 
-    BoxedCode(CLFunction* f) : f(f) {}
+Box* BoxedCode::name(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
+    return static_cast<BoxedCode*>(b)->f->source->getName();
+}
 
-    DEFAULT_CLASS(code_cls);
+Box* BoxedCode::filename(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
+    return static_cast<BoxedCode*>(b)->f->source->getFn();
+}
 
-    static void gcHandler(GCVisitor* v, Box* b) {
-        assert(b->cls == code_cls);
-        Box::gcHandler(v, b);
+Box* BoxedCode::firstlineno(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
+    BoxedCode* code = static_cast<BoxedCode*>(b);
+    CLFunction* cl = code->f;
+
+    if (!cl->source) {
+        // I don't think it really matters what we return here;
+        // in CPython, builtin functions don't have code objects.
+        return boxInt(-1);
     }
 
-    static Box* name(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
-        return static_cast<BoxedCode*>(b)->f->source->getName();
-    }
+    if (cl->source->ast->lineno == (uint32_t)-1)
+        return boxInt(-1);
 
-    static Box* filename(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
-        return static_cast<BoxedCode*>(b)->f->source->getFn();
-    }
+    return boxInt(cl->source->ast->lineno);
+}
 
-    static Box* firstlineno(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
-        BoxedCode* code = static_cast<BoxedCode*>(b);
-        CLFunction* cl = code->f;
+Box* BoxedCode::argcount(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
 
-        if (!cl->source) {
-            // I don't think it really matters what we return here;
-            // in CPython, builtin functions don't have code objects.
-            return boxInt(-1);
-        }
+    return boxInt(static_cast<BoxedCode*>(b)->f->paramspec.num_args);
+}
 
-        if (cl->source->ast->lineno == (uint32_t)-1)
-            return boxInt(-1);
+Box* BoxedCode::varnames(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
+    BoxedCode* code = static_cast<BoxedCode*>(b);
 
-        return boxInt(cl->source->ast->lineno);
-    }
+    auto& param_names = code->f->param_names;
+    if (!param_names.takes_param_names)
+        return EmptyTuple;
 
-    static Box* argcount(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
+    std::vector<Box*, StlCompatAllocator<Box*>> elts;
+    for (auto sr : param_names.args)
+        elts.push_back(boxString(sr));
+    if (param_names.vararg.size())
+        elts.push_back(boxString(param_names.vararg));
+    if (param_names.kwarg.size())
+        elts.push_back(boxString(param_names.kwarg));
+    return BoxedTuple::create(elts.size(), &elts[0]);
+}
 
-        return boxInt(static_cast<BoxedCode*>(b)->f->paramspec.num_args);
-    }
+Box* BoxedCode::flags(Box* b, void*) {
+    RELEASE_ASSERT(b->cls == code_cls, "");
+    BoxedCode* code = static_cast<BoxedCode*>(b);
 
-    static Box* varnames(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
-        BoxedCode* code = static_cast<BoxedCode*>(b);
-
-        auto& param_names = code->f->param_names;
-        if (!param_names.takes_param_names)
-            return EmptyTuple;
-
-        std::vector<Box*, StlCompatAllocator<Box*>> elts;
-        for (auto sr : param_names.args)
-            elts.push_back(boxString(sr));
-        if (param_names.vararg.size())
-            elts.push_back(boxString(param_names.vararg));
-        if (param_names.kwarg.size())
-            elts.push_back(boxString(param_names.kwarg));
-        return BoxedTuple::create(elts.size(), &elts[0]);
-    }
-
-    static Box* flags(Box* b, void*) {
-        RELEASE_ASSERT(b->cls == code_cls, "");
-        BoxedCode* code = static_cast<BoxedCode*>(b);
-
-        int flags = 0;
-        if (code->f->param_names.vararg.size())
-            flags |= CO_VARARGS;
-        if (code->f->param_names.kwarg.size())
-            flags |= CO_VARKEYWORDS;
-        if (code->f->isGenerator())
-            flags |= CO_GENERATOR;
-        return boxInt(flags);
-    }
-};
-
-Box* codeForCLFunction(CLFunction* f) {
-    if (!f->code_obj) {
-        f->code_obj = new BoxedCode(f);
-        // CLFunctions don't currently participate in GC.  They actually never get freed currently.
-        gc::registerPermanentRoot(f->code_obj);
-    }
-    return f->code_obj;
+    int flags = 0;
+    if (code->f->param_names.vararg.size())
+        flags |= CO_VARARGS;
+    if (code->f->param_names.kwarg.size())
+        flags |= CO_VARKEYWORDS;
+    if (code->f->isGenerator())
+        flags |= CO_GENERATOR;
+    return boxInt(flags);
 }
 
 Box* codeForFunction(BoxedFunction* f) {
-    return codeForCLFunction(f->f);
+    return f->f->getCode();
 }
 
 CLFunction* clfunctionFromCode(Box* code) {

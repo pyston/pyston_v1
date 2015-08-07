@@ -531,7 +531,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
     }
 
-    return codeForCLFunction(cl);
+    return (Box*)cl->getCode();
 }
 
 static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {

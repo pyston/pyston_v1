@@ -343,6 +343,8 @@ typedef std::vector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
 class BoxedCode;
 class CLFunction {
+    BoxedCode* code_obj;
+
 public:
     ParamReceiveSpec paramspec;
 
@@ -353,9 +355,6 @@ public:
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
     CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
-
-    // Please use codeForFunction() to access this:
-    BoxedCode* code_obj;
 
     int propagated_cxx_exceptions = 0;
 
@@ -379,25 +378,9 @@ public:
 
     int numReceivedArgs() { return paramspec.totalReceived(); }
 
-    void addVersion(CompiledFunction* compiled) {
-        assert(compiled);
-        assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
-        assert(compiled->clfunc == NULL);
-        assert(compiled->code);
-        compiled->clfunc = this;
+    BoxedCode* getCode();
 
-        if (compiled->entry_descriptor == NULL) {
-            bool could_have_speculations = (source.get() != NULL);
-            if (!could_have_speculations && versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL
-                && compiled->spec->accepts_all_inputs && compiled->spec->boxed_return_value)
-                always_use_version = compiled;
-
-            assert(compiled->spec->arg_types.size() == paramspec.totalReceived());
-            versions.push_back(compiled);
-        } else {
-            osr_versions[compiled->entry_descriptor] = compiled;
-        }
-    }
+    void addVersion(CompiledFunction* compiled);
 
     bool isGenerator() const {
         if (source)
