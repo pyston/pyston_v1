@@ -855,6 +855,8 @@ private:
         return rtn;
     }
 
+    AST_expr* remapEllipsis(AST_Ellipsis* node) { return node; }
+
     AST_expr* remapExtSlice(AST_ExtSlice* node) {
         AST_ExtSlice* rtn = new AST_ExtSlice();
         rtn->lineno = node->lineno;
@@ -1182,6 +1184,9 @@ private:
                 break;
             case AST_TYPE::DictComp:
                 rtn = remapScopedComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                break;
+            case AST_TYPE::Ellipsis:
+                rtn = remapEllipsis(ast_cast<AST_Ellipsis>(node));
                 break;
             case AST_TYPE::ExtSlice:
                 rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));

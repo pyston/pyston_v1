@@ -384,6 +384,12 @@ AST_DictComp* read_dictcomp(BufferedReader* reader) {
     return rtn;
 }
 
+AST_Ellipsis* read_ellipsis(BufferedReader* reader) {
+    AST_Ellipsis* rtn = new AST_Ellipsis();
+    rtn->col_offset = -1;
+    rtn->lineno = -1;
+    return rtn;
+}
 
 AST_ExceptHandler* read_excepthandler(BufferedReader* reader) {
     AST_ExceptHandler* rtn = new AST_ExceptHandler();
@@ -822,6 +828,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_dict(reader);
         case AST_TYPE::DictComp:
             return read_dictcomp(reader);
+        case AST_TYPE::Ellipsis:
+            return read_ellipsis(reader);
         case AST_TYPE::ExtSlice:
             return read_extslice(reader);
         case AST_TYPE::GeneratorExp:

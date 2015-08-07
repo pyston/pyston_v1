@@ -524,6 +524,7 @@ public:
     // bool visit_classdef(AST_ClassDef *node) override { return false; }
     bool visit_continue(AST_Continue* node) override { return false; }
     bool visit_dict(AST_Dict* node) override { return false; }
+    bool visit_ellipsis(AST_Ellipsis* node) override { return false; }
     bool visit_excepthandler(AST_ExceptHandler* node) override { return false; }
     bool visit_expr(AST_Expr* node) override { return false; }
     bool visit_extslice(AST_ExtSlice* node) override { return false; }
