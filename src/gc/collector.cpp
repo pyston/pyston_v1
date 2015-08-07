@@ -243,6 +243,13 @@ extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     return obj;
 }
 
+extern "C" PyObject* PyGC_AddNonHeapRoot(PyObject* obj, int size) noexcept {
+    if (obj) {
+        registerNonheapRootObject(obj, size);
+    }
+    return obj;
+}
+
 void registerNonheapRootObject(void* obj, int size) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
