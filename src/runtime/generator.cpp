@@ -120,6 +120,9 @@ Box* generatorIter(Box* s) {
 static void generatorSendInternal(BoxedGenerator* self, Box* v) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
+    if (!self->returnContext && v != None)
+        raiseExcHelper(TypeError, "can't send non-None value to a just-started generator");
+
     if (self->running)
         raiseExcHelper(ValueError, "generator already executing");
 
@@ -153,7 +156,6 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
 
     // propagate exception to the caller
     if (self->exception.type) {
-        assert(self->entryExited);
         freeGeneratorStack(self);
         // don't raise StopIteration exceptions because those are handled specially.
         if (!self->exception.matches(StopIteration))
@@ -205,19 +207,22 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
-    if (self->iterated_from__hasnext__)
+    if (self->iterated_from__hasnext__ && !self->entryExited)
         Py_FatalError(".throw called on generator last advanced with __hasnext__");
 
-    // don't overwrite self->exception if the generator already exited
-    // because it will contain the StopIteration exception to throw.
-    if (!self->entryExited) {
-        Box* exc_tb = args ? nullptr : args[0];
-        if (!exc_val)
-            exc_val = None;
-        if (!exc_tb)
-            exc_tb = None;
-        self->exception = excInfoForRaise(exc_cls, exc_val, exc_tb);
-    }
+    Box* exc_tb = args ? args[0] : nullptr;
+    if (exc_tb && exc_tb != None && !PyTraceBack_Check(exc_tb))
+        raiseExcHelper(TypeError, "throw() third argument must be a traceback object");
+    if (!exc_val)
+        exc_val = None;
+    if (!exc_tb)
+        exc_tb = None;
+
+    ExcInfo exc_info = excInfoForRaise(exc_cls, exc_val, exc_tb);
+    if (self->entryExited)
+        throw exc_info;
+
+    self->exception = exc_info;
     return generatorSend(self, None);
 }
 
@@ -229,7 +234,15 @@ Box* generatorClose(Box* s) {
     if (self->entryExited)
         return None;
 
-    return generatorThrow(self, GeneratorExit, nullptr, nullptr);
+    try {
+        generatorThrow(self, GeneratorExit, nullptr, nullptr);
+        raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
+    } catch (ExcInfo e) {
+        if (e.matches(StopIteration) || e.matches(GeneratorExit))
+            return None;
+        throw e;
+    }
+    assert(0); // unreachable
 }
 
 Box* generatorNext(Box* s) {
