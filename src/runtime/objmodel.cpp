@@ -4472,13 +4472,13 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     Box* rtn = NULL;
     if (rewriter) {
         CallRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
+        rtn = callattrInternal0<CXX>(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
         if (srewrite_args.out_success && rtn)
             rewriter->commitReturning(srewrite_args.out_rtn);
         else
             rewriter.reset();
     } else
-        rtn = callattrInternal0(operand, op_name, CLASS_ONLY, NULL, ArgPassSpec(0));
+        rtn = callattrInternal0<CXX>(operand, op_name, CLASS_ONLY, NULL, ArgPassSpec(0));
 
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "bad operand type for unary '%s': '%s'", op_name->c_str(), getTypeName(operand));
