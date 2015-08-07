@@ -107,13 +107,23 @@ ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
 
     r = CXX; // default
 
+    assert(invoke->stmt->cxx_exception_count == 0); // could be ok but would be unexpected
+
+    // First, check if we think it makes sense:
+    bool should = (invoke->cxx_exception_count >= 10 || invoke->stmt->type == AST_TYPE::Raise);
+    if (!should)
+        return r;
+
+    // Second, check if we are able to do it:
+    // (not all code paths support capi exceptions yet)
     if (invoke->stmt->type == AST_TYPE::Raise) {
         AST_Raise* raise_stmt = ast_cast<AST_Raise>(invoke->stmt);
         // Currently can't do a re-raise with a capi exception:
-        if (raise_stmt->arg0 && !raise_stmt->arg2) {
+        if (raise_stmt->arg0 && !raise_stmt->arg2)
             r = CAPI;
-            return r;
-        }
+        else
+            r = CXX;
+        return r;
     }
 
     AST_expr* expr = NULL;
@@ -127,21 +137,18 @@ ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
     if (!expr)
         return r;
 
-    if (0 && expr->type == AST_TYPE::Call) {
-        AST_Call* call = ast_cast<AST_Call>(expr);
-        if (call->func->type != AST_TYPE::Attribute && call->func->type != AST_TYPE::ClsAttribute) {
-            r = CAPI;
-            // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
-        }
+    if (expr->type == AST_TYPE::Call) {
+        r = CAPI;
         return r;
     }
 
     if (expr->type == AST_TYPE::Attribute || expr->type == AST_TYPE::Subscript) {
         r = CAPI;
-        // printf("Doing a capi exception to %d\n", invoke->exc_dest->idx);
         return r;
     }
 
+    // Some expression type we haven't added yet -- might be worth looking into.
+    r = CXX;
     return r;
 }
 
@@ -488,8 +495,7 @@ public:
 
         llvm::BasicBlock* exc_dest;
         bool exc_caught;
-        if (unw_info.hasHandler()) {
-            assert(unw_info.capi_exc_dest);
+        if (unw_info.capi_exc_dest) {
             exc_dest = unw_info.capi_exc_dest;
             exc_caught = true;
         } else {
@@ -508,7 +514,13 @@ public:
                                   embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
         if (!exc_caught) {
-            getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+            if (unw_info.cxx_exc_dest) {
+                // TODO: I'm not sure this gets the tracebacks quite right.  this is only for testing though:
+                assert(FORCE_LLVM_CAPI && "this shouldn't happen in non-FORCE mode");
+                createCall(unw_info, g.funcs.reraiseJitCapiExc);
+            } else {
+                getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+            }
             getBuilder()->CreateUnreachable();
         }
 
@@ -2429,8 +2441,11 @@ private:
 
                 if (landingpad_style == CXX)
                     doStmt(invoke->stmt, UnwindInfo(node, NULL, entry_blocks[invoke->exc_dest]));
-                else
+                else {
+                    // print_ast(invoke);
+                    // printf(" (%d exceptions)\n", invoke->cxx_exception_count);
                     doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest], NULL));
+                }
 
                 assert(state == RUNNING || state == DEAD);
                 if (state == RUNNING) {

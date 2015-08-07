@@ -457,11 +457,23 @@ Box* delattrFunc(Box* obj, Box* _str) {
     return None;
 }
 
-Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
-    _str = coerceUnicodeToStr(_str);
+template <ExceptionStyle S> Box* getattrFunc(Box* obj, Box* _str, Box* default_value) noexcept(S == CAPI) {
+    try {
+        _str = coerceUnicodeToStr(_str);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else
+            throw e;
+    }
 
     if (!isSubclass(_str->cls, str_cls)) {
-        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+        if (S == CAPI) {
+            PyErr_SetString(TypeError, "getattr(): attribute name must be string");
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 
     Box* rtn = PyObject_GetAttr(obj, _str);
@@ -470,7 +482,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         return default_value;
     }
 
-    if (!rtn)
+    if (S == CXX && !rtn)
         throwCAPIException();
     return rtn;
 }
@@ -1437,9 +1449,9 @@ void setupBuiltins() {
     builtins_module->giveAttr("delattr",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)delattrFunc, NONE, 2), "delattr"));
 
-    builtins_module->giveAttr(
-        "getattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false),
-                                                    "getattr", { NULL }));
+    auto getattr_func = boxRTFunction((void*)getattrFunc<CXX>, UNKNOWN, 3, 1, false, false, ParamNames::empty(), CXX);
+    addRTFunction(getattr_func, (void*)getattrFunc<CAPI>, UNKNOWN, CAPI);
+    builtins_module->giveAttr("getattr", new BoxedBuiltinFunctionOrMethod(getattr_func, "getattr", { NULL }));
 
     builtins_module->giveAttr(
         "setattr",

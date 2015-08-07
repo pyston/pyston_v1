@@ -627,9 +627,17 @@ std::string floatFmt(double x, int precision, char code) {
     return std::string(buf, n);
 }
 
-BoxedFloat* _floatNew(Box* a) {
+template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == CAPI) {
     // FIXME CPython uses PyUnicode_EncodeDecimal:
-    a = coerceUnicodeToStr(a);
+    try {
+        a = coerceUnicodeToStr(a);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            throwCAPIException();
+            return NULL;
+        }
+        throw e;
+    }
 
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
@@ -653,40 +661,70 @@ BoxedFloat* _floatNew(Box* a) {
         assert(s.data()[s.size()] == '\0');
         const char* startptr = s.data();
         double r = strtod(startptr, &endptr);
-        if (endptr != startptr + s.size())
-            raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
+        if (endptr != startptr + s.size()) {
+            if (S == CAPI) {
+                PyErr_Format(ValueError, "could not convert string to float: %s", s.data());
+                return NULL;
+            } else
+                raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
+        }
         return new BoxedFloat(r);
     } else {
         static BoxedString* float_str = internStringImmortal("__float__");
-        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-        Box* r = callattr(a, float_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+        Box* r = callattrInternal<S>(a, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
-            fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n", getTypeName(a));
-            raiseExcHelper(TypeError, "");
+            if (S == CAPI) {
+                if (!PyErr_Occurred())
+                    PyErr_Format(TypeError, "float() argument must be a string or a number, not '%s'\n",
+                                 getTypeName(a));
+                return NULL;
+            } else {
+                raiseExcHelper(TypeError, "float() argument must be a string or a number, not '%s'\n", getTypeName(a));
+            }
         }
 
         if (!isSubclass(r->cls, float_cls)) {
-            raiseExcHelper(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
+            if (S == CAPI) {
+                PyErr_Format(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
+                return NULL;
+            } else
+                raiseExcHelper(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
         }
         return static_cast<BoxedFloat*>(r);
     }
 }
 
-Box* floatNew(BoxedClass* _cls, Box* a) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S == CAPI) {
+    if (!isSubclass(_cls->cls, type_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+    }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, float_cls))
-        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls),
-                       getNameOfClass(cls));
+    if (!isSubclass(cls, float_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls),
+                         getNameOfClass(cls));
+            return NULL;
+        } else {
+            raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls),
+                           getNameOfClass(cls));
+        }
+    }
 
 
     if (cls == float_cls)
-        return _floatNew(a);
+        return _floatNew<S>(a);
 
-    BoxedFloat* f = _floatNew(a);
+    BoxedFloat* f = _floatNew<S>(a);
+    if (!f) {
+        assert(S == CAPI);
+        return NULL;
+    }
 
     return new (cls) BoxedFloat(f->d);
 }
@@ -1476,8 +1514,9 @@ void setupFloat() {
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);
     _addFunc("__rsub__", BOXED_FLOAT, (void*)floatRSubFloat, (void*)floatRSubInt, (void*)floatRSub);
 
-    float_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)floatNew, UNKNOWN, 2, 1, false, false), { boxFloat(0.0) }));
+    auto float_new = boxRTFunction((void*)floatNew<CXX>, UNKNOWN, 2, 1, false, false, ParamNames::empty(), CXX);
+    addRTFunction(float_new, (void*)floatNew<CAPI>, UNKNOWN, CAPI);
+    float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
 
     float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, BOXED_FLOAT, 1)));
     float_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)floatPos, BOXED_FLOAT, 1)));

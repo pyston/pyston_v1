@@ -65,7 +65,10 @@ extern "C" void delattrMaybeNonstring(Box* obj, Box* attr);
 extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
+extern "C" Box* runtimeCallCapi(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*) noexcept;
 extern "C" Box* callattr(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
+extern "C" Box* callattrCapi(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**,
+                             const std::vector<BoxedString*>*) noexcept;
 extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);
 extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
@@ -132,9 +135,10 @@ enum LookupScope {
     INST_ONLY = 2,
     CLASS_OR_INST = 3,
 };
-extern "C" Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallRewriteArgs* rewrite_args,
-                                 ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                 const std::vector<BoxedString*>* keyword_names);
+template <ExceptionStyle S>
+Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+                      Box* arg1, Box* arg2, Box* arg3, Box** args,
+                      const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 extern "C" void delattr_internal(Box* obj, BoxedString* attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);

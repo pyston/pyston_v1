@@ -230,11 +230,23 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
 // TODO this should be auto-generated as a slot wrapper:
 Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
     BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
-    return BoxedMethodDescriptor::tppCall(self, NULL, ArgPassSpec(1, 0, true, true), obj, varargs, kwargs, NULL, NULL);
+    return BoxedMethodDescriptor::tppCall<CXX>(self, NULL, ArgPassSpec(1, 0, true, true), obj, varargs, kwargs, NULL,
+                                               NULL);
 }
 
+template <ExceptionStyle S>
 Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                                    Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                                    Box* arg2, Box* arg3, Box** args,
+                                    const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    if (S == CAPI) {
+        try {
+            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
 
     assert(_self->cls == method_cls);
@@ -489,8 +501,19 @@ Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds
     return rtn;
 }
 
+template <ExceptionStyle S>
 Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                                 Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                                 Box* arg3, Box** args,
+                                 const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    if (S == CAPI) {
+        try {
+            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == wrapperobject_cls);
@@ -617,7 +640,8 @@ void setupDescr() {
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
     method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
-    method_cls->tpp_call = BoxedMethodDescriptor::tppCall;
+    method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
+    method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
@@ -632,7 +656,8 @@ void setupDescr() {
 
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
-    wrapperobject_cls->tpp_call = BoxedWrapperObject::tppCall;
+    wrapperobject_cls->tpp_call.capi_val = BoxedWrapperObject::tppCall<CAPI>;
+    wrapperobject_cls->tpp_call.cxx_val = BoxedWrapperObject::tppCall<CXX>;
     wrapperobject_cls->freeze();
 }
 

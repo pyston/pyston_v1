@@ -1476,11 +1476,23 @@ Box* BoxedCApiFunction::__call__(BoxedCApiFunction* self, BoxedTuple* varargs, B
     // Kind of silly to have asked callFunc to rearrange the arguments for us, just to pass things
     // off to tppCall, but this case should be very uncommon (people explicitly asking for __call__)
 
-    return BoxedCApiFunction::tppCall(self, NULL, ArgPassSpec(0, 0, true, true), varargs, kwargs, NULL, NULL, NULL);
+    return BoxedCApiFunction::tppCall<CXX>(self, NULL, ArgPassSpec(0, 0, true, true), varargs, kwargs, NULL, NULL,
+                                           NULL);
 }
 
+template <ExceptionStyle S>
 Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                                Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                                Box* arg3, Box** args,
+                                const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    if (S == CAPI) {
+        try {
+            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
     STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", 10);
 
     assert(_self->cls == capifunc_cls);
@@ -1634,7 +1646,8 @@ void setupCAPI() {
 
     auto capi_call = new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true));
     capifunc_cls->giveAttr("__call__", capi_call);
-    capifunc_cls->tpp_call = BoxedCApiFunction::tppCall;
+    capifunc_cls->tpp_call.capi_val = BoxedCApiFunction::tppCall<CAPI>;
+    capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;
     capifunc_cls->giveAttr("__name__",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::getname, NULL, NULL));
     capifunc_cls->giveAttr("__doc__",

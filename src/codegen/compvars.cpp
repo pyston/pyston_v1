@@ -613,7 +613,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     // for (auto a : llvm_args)
     // a->dump();
 
-    bool do_patchpoint = ENABLE_ICCALLSITES && (func_addr == runtimeCall || func_addr == pyston::callattr);
+    bool do_patchpoint = ENABLE_ICCALLSITES && (func_addr == runtimeCall || func_addr == runtimeCallCapi
+                                                || func_addr == pyston::callattr || func_addr == callattrCapi);
     if (do_patchpoint) {
         assert(func_addr);
 
@@ -655,26 +656,32 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
     bool pass_keywords = (argspec.num_keywords != 0);
     int npassed_args = argspec.totalPassed();
 
+    ExceptionStyle exception_style = ((FORCE_LLVM_CAPI && !info.unw_info.cxx_exc_dest) || info.unw_info.capi_exc_dest)
+                                         ? ExceptionStyle::CAPI
+                                         : ExceptionStyle::CXX;
+
     llvm::Value* func;
     if (pass_keywords)
-        func = g.funcs.runtimeCall;
+        func = g.funcs.runtimeCall.get(exception_style);
     else if (npassed_args == 0)
-        func = g.funcs.runtimeCall0;
+        func = g.funcs.runtimeCall0.get(exception_style);
     else if (npassed_args == 1)
-        func = g.funcs.runtimeCall1;
+        func = g.funcs.runtimeCall1.get(exception_style);
     else if (npassed_args == 2)
-        func = g.funcs.runtimeCall2;
+        func = g.funcs.runtimeCall2.get(exception_style);
     else if (npassed_args == 3)
-        func = g.funcs.runtimeCall3;
+        func = g.funcs.runtimeCall3.get(exception_style);
     else
-        func = g.funcs.runtimeCallN;
+        func = g.funcs.runtimeCallN.get(exception_style);
+
+    void* func_ptr = (exception_style == ExceptionStyle::CXX) ? (void*)runtimeCall : (void*)runtimeCallCapi;
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
 
     llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
     other_args.push_back(llvm_argspec);
-    return _call(emitter, info, func, CXX, (void*)runtimeCall, other_args, argspec, args, keyword_names, UNKNOWN);
+    return _call(emitter, info, func, exception_style, func_ptr, other_args, argspec, args, keyword_names, UNKNOWN);
 }
 
 CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -684,25 +691,35 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     bool pass_keywords = (flags.argspec.num_keywords != 0);
     int npassed_args = flags.argspec.totalPassed();
 
+    ExceptionStyle exception_style = ((FORCE_LLVM_CAPI && !info.unw_info.cxx_exc_dest && !flags.null_on_nonexistent)
+                                      || info.unw_info.capi_exc_dest)
+                                         ? ExceptionStyle::CAPI
+                                         : ExceptionStyle::CXX;
+
+    if (exception_style == CAPI)
+        assert(!flags.null_on_nonexistent); // Will conflict with CAPI's null-on-exception
+
     llvm::Value* func;
     if (pass_keywords)
-        func = g.funcs.callattr;
+        func = g.funcs.callattr.get(exception_style);
     else if (npassed_args == 0)
-        func = g.funcs.callattr0;
+        func = g.funcs.callattr0.get(exception_style);
     else if (npassed_args == 1)
-        func = g.funcs.callattr1;
+        func = g.funcs.callattr1.get(exception_style);
     else if (npassed_args == 2)
-        func = g.funcs.callattr2;
+        func = g.funcs.callattr2.get(exception_style);
     else if (npassed_args == 3)
-        func = g.funcs.callattr3;
+        func = g.funcs.callattr3.get(exception_style);
     else
-        func = g.funcs.callattrN;
+        func = g.funcs.callattrN.get(exception_style);
+
+    void* func_ptr = (exception_style == ExceptionStyle::CXX) ? (void*)pyston::callattr : (void*)callattrCapi;
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
     other_args.push_back(embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr));
     other_args.push_back(getConstantInt(flags.asInt(), g.i64));
-    return _call(emitter, info, func, CXX, (void*)pyston::callattr, other_args, flags.argspec, args, keyword_names,
+    return _call(emitter, info, func, exception_style, func_ptr, other_args, flags.argspec, args, keyword_names,
                  UNKNOWN);
 }
 
@@ -1700,8 +1717,14 @@ public:
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
                                CallattrFlags flags, const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
-        ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, flags.argspec, args, keyword_names);
+        ExceptionStyle exception_style = CXX;
+        // Not safe to force-capi here since most of the functions won't have capi variants:
+        if (/*FORCE_LLVM_CAPI ||*/ info.unw_info.capi_exc_dest)
+            exception_style = CAPI;
+
+        ConcreteCompilerVariable* called_constant = tryCallattrConstant(
+            emitter, info, var, attr, flags.cls_only, flags.argspec, args, keyword_names, NULL, exception_style);
+
         if (called_constant)
             return called_constant;
 

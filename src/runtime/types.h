@@ -242,9 +242,8 @@ public:
 
     pyston_inquiry tpp_hasnext;
 
-    typedef Box* (*pyston_call)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                const std::vector<BoxedString*>*);
-    pyston_call tpp_call;
+    ExceptionSwitchableFunction<Box*, Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+                                const std::vector<BoxedString*>*> tpp_call;
 
     bool hasGenericGetattr() {
         if (tp_getattr || tp_getattro != object_cls->tp_getattro)
@@ -985,8 +984,9 @@ public:
     DEFAULT_CLASS(wrapperobject_cls);
 
     static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds);
+    template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names);
+                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
     static void gcHandler(GCVisitor* v, Box* _o);
 };
 
@@ -1001,12 +1001,12 @@ public:
 
     static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner);
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
+    template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names);
+                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
     static void gcHandler(GCVisitor* v, Box* _o);
 };
 
-Box* objectNewNoArgs(BoxedClass* cls);
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* unwrapAttrWrapper(Box* b);

@@ -1068,8 +1068,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
         crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
 
-        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name, NULL,
-                               NULL, NULL, NULL);
+        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name,
+                                    NULL, NULL, NULL, NULL);
         assert(res);
 
         if (!crewrite_args.out_success)
@@ -1082,8 +1082,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         // the rewrite_args and non-rewrite_args case the same.
         // Actually, we might have gotten to the point that doing a runtimeCall on an instancemethod is as
         // fast as a callattr, but that hasn't typically been the case.
-        res = callattrInternal(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
-                               NULL, NULL);
+        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
+                                    NULL, NULL);
         assert(res);
     }
 
@@ -3184,8 +3184,10 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
     // We don't cache anything yet that would need to be invalidated:
 }
 
+template <ExceptionStyle S>
 static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                             Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                             Box* arg3, Box** args,
+                             const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     ParamReceiveSpec paramspec(0, 0, true, true);
     if (!argspec.has_kwargs && argspec.num_keywords == 0) {
         paramspec.takes_kwargs = false;
@@ -3193,8 +3195,16 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 
     bool rewrite_success = false;
     Box* oarg1, * oarg2 = NULL, *oarg3, ** oargs = NULL;
-    rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                       keyword_names, oarg1, oarg2, oarg3, oargs);
+    try {
+        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
+                           keyword_names, oarg1, oarg2, oarg3, oargs);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else
+            throw e;
+    }
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -3213,12 +3223,13 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
                                                              rewrite_args->arg1, rewrite_args->arg2);
-        rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+        if (S == CXX)
+            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
         rewrite_args->out_success = true;
     }
 
     Box* r = self->cls->tp_call(self, oarg1, oarg2);
-    if (!r)
+    if (!r && S == CXX)
         throwCAPIException();
     return r;
 }
@@ -3267,8 +3278,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     assert(cls->tp_name);
 
-    if (cls->tp_call)
-        cls->tpp_call = tppProxyToTpCall;
+    if (cls->tp_call) {
+        cls->tpp_call.capi_val = tppProxyToTpCall<CAPI>;
+        cls->tpp_call.cxx_val = tppProxyToTpCall<CXX>;
+    }
 
     try {
         add_operators(cls);

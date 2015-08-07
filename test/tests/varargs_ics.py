@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: 1 <= noninit_count("slowpath_runtimecall") < 20
+# statcheck: 1 <= noninit_count("slowpath_runtimecall") + noninit_count("slowpath_runtimecall_capi") < 20
 
 # Make sure we can patch some basic varargs cases
 

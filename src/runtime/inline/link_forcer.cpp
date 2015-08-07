@@ -120,7 +120,9 @@ void force() {
     FORCE(getSysStdout);
 
     FORCE(runtimeCall);
+    FORCE(runtimeCallCapi);
     FORCE(callattr);
+    FORCE(callattrCapi);
 
     FORCE(raise0);
     FORCE(raise3);
