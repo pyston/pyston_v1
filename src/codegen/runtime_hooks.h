@@ -51,7 +51,7 @@ struct GlobalFuncs {
 
     llvm::Value* __cxa_end_catch;
     llvm::Value* raise0, *raise3, *raise3_capi;
-    llvm::Value* PyErr_Fetch, *PyErr_NormalizeException, *capiExcCaughtInJit, *reraiseJitCapiExc;
+    llvm::Value* PyErr_Fetch, *PyErr_NormalizeException, *PyErr_Restore, *capiExcCaughtInJit, *reraiseJitCapiExc;
     llvm::Value* deopt;
 
     llvm::Value* div_float_float, *floordiv_float_float, *mod_float_float, *pow_float_float;

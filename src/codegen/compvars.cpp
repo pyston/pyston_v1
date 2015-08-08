@@ -337,9 +337,7 @@ public:
                               CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
-        ExceptionStyle target_exception_style = CXX;
-        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
-            target_exception_style = CAPI;
+        ExceptionStyle target_exception_style = info.preferredExceptionStyle();
 
         bool do_patchpoint = ENABLE_ICGETITEMS;
         llvm::Value* rtn;
@@ -500,9 +498,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     llvm::Value* rtn_val = NULL;
 
-    ExceptionStyle target_exception_style = CXX;
-    if (info.unw_info.capi_exc_dest || (!cls_only && FORCE_LLVM_CAPI))
-        target_exception_style = CAPI;
+    ExceptionStyle target_exception_style = cls_only ? CXX : info.preferredExceptionStyle();
 
     llvm::Value* llvm_func;
     void* raw_func;
@@ -656,9 +652,7 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
     bool pass_keywords = (argspec.num_keywords != 0);
     int npassed_args = argspec.totalPassed();
 
-    ExceptionStyle exception_style = ((FORCE_LLVM_CAPI && !info.unw_info.cxx_exc_dest) || info.unw_info.capi_exc_dest)
-                                         ? ExceptionStyle::CAPI
-                                         : ExceptionStyle::CXX;
+    ExceptionStyle exception_style = info.preferredExceptionStyle();
 
     llvm::Value* func;
     if (pass_keywords)
@@ -691,10 +685,7 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     bool pass_keywords = (flags.argspec.num_keywords != 0);
     int npassed_args = flags.argspec.totalPassed();
 
-    ExceptionStyle exception_style = ((FORCE_LLVM_CAPI && !info.unw_info.cxx_exc_dest && !flags.null_on_nonexistent)
-                                      || info.unw_info.capi_exc_dest)
-                                         ? ExceptionStyle::CAPI
-                                         : ExceptionStyle::CXX;
+    ExceptionStyle exception_style = flags.null_on_nonexistent ? CXX : info.preferredExceptionStyle();
 
     if (exception_style == CAPI)
         assert(!flags.null_on_nonexistent); // Will conflict with CAPI's null-on-exception
@@ -1522,7 +1513,7 @@ public:
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = typeLookup(cls, attr, nullptr);
             if (rtattr == NULL) {
-                ExceptionStyle exception_style = (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest) ? CAPI : CXX;
+                ExceptionStyle exception_style = info.preferredExceptionStyle();
                 llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr
                                                                  : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
@@ -1619,14 +1610,12 @@ public:
                        "%d", info.unw_info.current_stmt->lineno);
 
         CompiledFunction* cf = NULL;
+        CompiledFunction* best_exception_mismatch = NULL;
         bool found = false;
         // TODO have to find the right version.. similar to resolveclfunc?
         for (int i = 0; i < cl->versions.size(); i++) {
             cf = cl->versions[i];
             assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
-
-            if (cf->exception_style != exception_style)
-                continue;
 
             bool fits = true;
             for (int j = 0; j < args.size(); j++) {
@@ -1638,14 +1627,22 @@ public:
             if (!fits)
                 continue;
 
+            if (cf->exception_style != exception_style) {
+                if (!best_exception_mismatch)
+                    best_exception_mismatch = cf;
+                continue;
+            }
+
             found = true;
             break;
         }
 
-        if (!found && exception_style == CAPI) {
-            std::string name = g.func_addr_registry.getFuncNameAtAddress(cl->versions[0]->code, true);
-            RELEASE_ASSERT(0, "Please define a capi variant for %s", name.c_str());
+        if (!found) {
+            assert(best_exception_mismatch);
+            cf = best_exception_mismatch;
+            found = true;
         }
+
         RELEASE_ASSERT(found, "");
         RELEASE_ASSERT(cf->code, "");
 
@@ -1717,10 +1714,7 @@ public:
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
                                CallattrFlags flags, const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
-        ExceptionStyle exception_style = CXX;
-        // Not safe to force-capi here since most of the functions won't have capi variants:
-        if (/*FORCE_LLVM_CAPI ||*/ info.unw_info.capi_exc_dest)
-            exception_style = CAPI;
+        ExceptionStyle exception_style = info.preferredExceptionStyle();
 
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(
             emitter, info, var, attr, flags.cls_only, flags.argspec, args, keyword_names, NULL, exception_style);
@@ -1783,9 +1777,7 @@ public:
         static BoxedString* attr = internStringImmortal("__getitem__");
         bool no_attribute = false;
 
-        ExceptionStyle exception_style = CXX;
-        if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
-            exception_style = CAPI;
+        ExceptionStyle exception_style = info.preferredExceptionStyle();
 
         ConcreteCompilerVariable* called_constant = tryCallattrConstant(
             emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute, exception_style);
@@ -2293,9 +2285,7 @@ public:
                     rtn->incvref();
                     return rtn;
                 } else {
-                    ExceptionStyle target_exception_style = CXX;
-                    if (FORCE_LLVM_CAPI || info.unw_info.capi_exc_dest)
-                        target_exception_style = CAPI;
+                    ExceptionStyle target_exception_style = info.preferredExceptionStyle();
 
                     if (target_exception_style == CAPI) {
                         llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,

@@ -20,6 +20,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
 
+#include "core/options.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -33,18 +34,18 @@ struct UnwindInfo {
 public:
     AST_stmt* current_stmt;
 
-    llvm::BasicBlock* capi_exc_dest;
-    llvm::BasicBlock* cxx_exc_dest;
+    llvm::BasicBlock* exc_dest;
 
-    bool hasHandler() const { return cxx_exc_dest != NULL || capi_exc_dest != NULL; }
+    bool hasHandler() const { return exc_dest != NULL; }
 
-    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* capi_exc_dest, llvm::BasicBlock* cxx_exc_dest)
-        : current_stmt(current_stmt), capi_exc_dest(capi_exc_dest), cxx_exc_dest(cxx_exc_dest) {}
+    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest) : current_stmt(current_stmt), exc_dest(exc_dest) {}
+
+    ExceptionStyle preferredExceptionStyle() const;
 
     // Risky!  This means that we can't unwind from this location, and should be used in the
     // rare case that there are language-specific reasons that the statement should not unwind
     // (ex: loading function arguments into the appropriate scopes).
-    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL, NULL); }
+    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL); }
 };
 
 // TODO get rid of this
@@ -112,7 +113,7 @@ bool isIsDefinedName(llvm::StringRef name);
 
 CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            FunctionSpecialization* spec, std::string nameprefix);
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, std::string nameprefix);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is
 // potentially-undefined.  If it is potentially-undefined, we have to generate control-flow
@@ -146,6 +147,8 @@ public:
         : effort(effort), type_recorder(type_recorder), unw_info(unw_info) {}
 
     TypeRecorder* getTypeRecorder() const { return type_recorder; }
+
+    ExceptionStyle preferredExceptionStyle() const { return unw_info.preferredExceptionStyle(); }
 };
 }
 

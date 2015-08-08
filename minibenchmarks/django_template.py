@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "../test/integration/django"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "../test/testsuite/lib/django"))
 
 from django.template.base import Origin, Template, Context, TemplateDoesNotExist
 from django.conf import settings

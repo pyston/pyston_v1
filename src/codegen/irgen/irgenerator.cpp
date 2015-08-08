@@ -94,67 +94,24 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     return scratch_space;
 }
 
-// This function is where we decide whether to have a certain operation use CAPI or CXX exceptions.
-// FIXME It's a bit messy at the moment because this requires coordinating between a couple different
-// parts: we need to make sure that the associated landingpad will catch the right kind of exception,
-// and we need to make sure that we can actually emit this statement using capi-exceptions.
-// It doesn't really belong on the IRGenState, but it's here so that we can access this state from
-// separate basic blocks (the IRGenerator only exists for a single bb).
-ExceptionStyle IRGenState::getLandingpadStyle(AST_Invoke* invoke) {
-    assert(!landingpad_styles.count(invoke->exc_dest));
-    ExceptionStyle& r = landingpad_styles[invoke->exc_dest];
-    // printf("Added %d\n", invoke->exc_dest->idx);
+ExceptionStyle UnwindInfo::preferredExceptionStyle() const {
+    if (FORCE_LLVM_CAPI_CALLS)
+        return CAPI;
 
-    r = CXX; // default
+    // TODO: I think this makes more sense as a relative percentage rather
+    // than an absolute threshold, but currently we don't count how many
+    // times a statement was executed but didn't throw.
+    //
+    // In theory this means that eventually anything that throws will be viewed
+    // as a highly-throwing statement, but I think that this is less bad than
+    // it might be because the denominator will be roughly fixed since we will
+    // tend to run this check after executing the statement a somewhat-fixed
+    // number of times.
+    // We might want to zero these out after we are done compiling, though.
+    if (current_stmt->cxx_exception_count >= 10)
+        return CAPI;
 
-    assert(invoke->stmt->cxx_exception_count == 0); // could be ok but would be unexpected
-
-    // First, check if we think it makes sense:
-    bool should = (invoke->cxx_exception_count >= 10 || invoke->stmt->type == AST_TYPE::Raise);
-    if (!should)
-        return r;
-
-    // Second, check if we are able to do it:
-    // (not all code paths support capi exceptions yet)
-    if (invoke->stmt->type == AST_TYPE::Raise) {
-        AST_Raise* raise_stmt = ast_cast<AST_Raise>(invoke->stmt);
-        // Currently can't do a re-raise with a capi exception:
-        if (raise_stmt->arg0 && !raise_stmt->arg2)
-            r = CAPI;
-        else
-            r = CXX;
-        return r;
-    }
-
-    AST_expr* expr = NULL;
-
-    if (invoke->stmt->type == AST_TYPE::Assign) {
-        expr = ast_cast<AST_Assign>(invoke->stmt)->value;
-    } else if (invoke->stmt->type == AST_TYPE::Expr) {
-        expr = ast_cast<AST_Expr>(invoke->stmt)->value;
-    }
-
-    if (!expr)
-        return r;
-
-    if (expr->type == AST_TYPE::Call) {
-        r = CAPI;
-        return r;
-    }
-
-    if (expr->type == AST_TYPE::Attribute || expr->type == AST_TYPE::Subscript) {
-        r = CAPI;
-        return r;
-    }
-
-    // Some expression type we haven't added yet -- might be worth looking into.
-    r = CXX;
-    return r;
-}
-
-ExceptionStyle IRGenState::getLandingpadStyle(CFGBlock* block) {
-    ASSERT(landingpad_styles.count(block), "%d", block->idx);
-    return landingpad_styles[block];
+    return CXX;
 }
 
 static llvm::Value* getClosureParentGep(IREmitter& emitter, llvm::Value* closure) {
@@ -296,13 +253,26 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
-        if (unw_info.hasHandler() && target_exception_style == CXX) {
-            assert(unw_info.cxx_exc_dest);
+        if (target_exception_style == CXX && (unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI)) {
+            // Create the invoke:
             llvm::BasicBlock* normal_dest
                 = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+
+            llvm::BasicBlock* final_exc_dest;
+            if (unw_info.hasHandler()) {
+                final_exc_dest = unw_info.exc_dest;
+            } else {
+                assert(irstate->getExceptionStyle() == CAPI && "shoudn't have bothered creating an invoke");
+
+                final_exc_dest = NULL; // signal to reraise as a capi exception
+            }
+
+            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(final_exc_dest);
             normal_dest->moveAfter(curblock);
 
-            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, unw_info.cxx_exc_dest, args);
+            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
+
+            // Normal case:
             getBuilder()->SetInsertPoint(normal_dest);
             curblock = normal_dest;
             return rtn;
@@ -493,36 +463,11 @@ public:
             = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
         normal_dest->moveAfter(curblock);
 
-        llvm::BasicBlock* exc_dest;
-        bool exc_caught;
-        if (unw_info.capi_exc_dest) {
-            exc_dest = unw_info.capi_exc_dest;
-            exc_caught = true;
-        } else {
-            exc_dest = llvm::BasicBlock::Create(g.context, curblock->getName() + "_exc", irstate->getLLVMFunction());
-            exc_dest->moveAfter(curblock);
-            exc_caught = false;
-        }
+        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(unw_info.exc_dest, unw_info.current_stmt);
 
         assert(returned_val->getType() == exc_val->getType());
         llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
         llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
-
-        setCurrentBasicBlock(exc_dest);
-        getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
-                                  embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr),
-                                  embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
-
-        if (!exc_caught) {
-            if (unw_info.cxx_exc_dest) {
-                // TODO: I'm not sure this gets the tracebacks quite right.  this is only for testing though:
-                assert(FORCE_LLVM_CAPI && "this shouldn't happen in non-FORCE mode");
-                createCall(unw_info, g.funcs.reraiseJitCapiExc);
-            } else {
-                getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
-            }
-            getBuilder()->CreateUnreachable();
-        }
 
         setCurrentBasicBlock(normal_dest);
     }
@@ -581,6 +526,19 @@ private:
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
     CFGBlock* myblock;
     TypeAnalysis* types;
+
+    // These are some special values used for passing exception data between blocks;
+    // this transfer is not explicitly represented in the CFG which is why it has special
+    // handling here.  ie these variables are how we handle the special "invoke->landingpad"
+    // value transfer, which doesn't involve the normal symbol name handling.
+    //
+    // These are the values that are incoming to a landingpad block:
+    llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
+    // These are the values that are outgoing of an invoke block:
+    llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
+    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
+    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
+    llvm::DenseMap<llvm::BasicBlock*, AST_stmt*> capi_current_statements;
 
     enum State {
         RUNNING,  // normal
@@ -645,7 +603,7 @@ private:
 
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
-        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL, NULL), g.funcs.deopt,
+        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
                                              embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
         emitter.getBuilder()->CreateRet(v);
 
@@ -695,62 +653,46 @@ private:
                 return boolFromI1(emitter, v);
             }
             case AST_LangPrimitive::LANDINGPAD: {
-                llvm::Value* exc_type;
-                llvm::Value* exc_value;
-                llvm::Value* exc_traceback;
-                if (irstate->getLandingpadStyle(myblock) == CXX) {
-                    // llvm::Function* _personality_func = g.stdlib_module->getFunction("__py_personality_v0");
-                    llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
-                    assert(_personality_func);
-                    llvm::Value* personality_func = g.cur_module->getOrInsertFunction(
-                        _personality_func->getName(), _personality_func->getFunctionType());
-                    assert(personality_func);
-                    llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
-                        llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
-                    landing_pad->addClause(getNullPtr(g.i8_ptr));
+                ConcreteCompilerVariable* exc_type;
+                ConcreteCompilerVariable* exc_value;
+                ConcreteCompilerVariable* exc_tb;
 
-                    llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
-
-                    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
-                    auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
-                                                                              std_module_catch->getFunctionType());
-                    assert(begin_catch_func);
-
-                    llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
-                    llvm::Value* excinfo_pointer_casted
-                        = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
-
-                    auto* builder = emitter.getBuilder();
-                    exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-                    exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
-                    exc_traceback
-                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+                if (this->incoming_exc_state.size()) {
+                    if (incoming_exc_state.size() == 1) {
+                        exc_type = this->incoming_exc_state[0].exc_type;
+                        exc_value = this->incoming_exc_state[0].exc_value;
+                        exc_tb = this->incoming_exc_state[0].exc_tb;
+                    } else {
+                        llvm::PHINode* phi_exc_type
+                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                        llvm::PHINode* phi_exc_value
+                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                        llvm::PHINode* phi_exc_tb
+                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                        for (auto e : this->incoming_exc_state) {
+                            phi_exc_type->addIncoming(e.exc_type->getValue(), e.from_block);
+                            phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
+                            phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
+                        }
+                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type, true);
+                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value, true);
+                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb, true);
+                    }
                 } else {
-                    llvm::Value* exc_type_ptr
-                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
-                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-                    llvm::Value* exc_value_ptr
-                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_value",
-                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-                    llvm::Value* exc_traceback_ptr
-                        = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
-                                               irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-                    emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr,
-                                                      exc_traceback_ptr);
-                    // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
-                    emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
-                                                      exc_traceback_ptr);
-                    exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
-                    exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
-                    exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
+                    // There can be no incoming exception if the irgenerator was able to prove that
+                    // an exception would not get thrown.
+                    // For example, the cfg code will conservatively assume that any name-access can
+                    // trigger an exception, but the irgenerator will know that definitely-defined
+                    // local symbols will not throw.
+                    exc_type = undefVariable();
+                    exc_value = undefVariable();
+                    exc_tb = undefVariable();
                 }
 
-                assert(exc_type->getType() == g.llvm_value_type_ptr);
-                assert(exc_value->getType() == g.llvm_value_type_ptr);
-                assert(exc_traceback->getType() == g.llvm_value_type_ptr);
-                return makeTuple({ new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                   new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                   new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true) });
+                // clear this out to signal that we consumed them:
+                this->incoming_exc_state.clear();
+
+                return makeTuple({ exc_type, exc_value, exc_tb });
             }
             case AST_LangPrimitive::LOCALS: {
                 return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar(), true);
@@ -2355,7 +2297,7 @@ private:
         // but ommitting the first argument is *not* the same as passing None.
 
         ExceptionStyle target_exception_style = CXX;
-        if (unw_info.capi_exc_dest || (FORCE_LLVM_CAPI && node->arg0 && !node->arg2))
+        if (unw_info.preferredExceptionStyle() == CAPI && (node->arg0 && !node->arg2))
             target_exception_style = CAPI;
 
         if (node->arg0 == NULL) {
@@ -2451,15 +2393,7 @@ private:
                 assert(!unw_info.hasHandler());
                 AST_Invoke* invoke = ast_cast<AST_Invoke>(node);
 
-                ExceptionStyle landingpad_style = irstate->getLandingpadStyle(invoke);
-
-                if (landingpad_style == CXX)
-                    doStmt(invoke->stmt, UnwindInfo(node, NULL, entry_blocks[invoke->exc_dest]));
-                else {
-                    // print_ast(invoke);
-                    // printf(" (%d exceptions)\n", invoke->cxx_exception_count);
-                    doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest], NULL));
-                }
+                doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest]));
 
                 assert(state == RUNNING || state == DEAD);
                 if (state == RUNNING) {
@@ -2634,17 +2568,20 @@ public:
         SymbolTable* st = new SymbolTable(symbol_table);
         ConcreteSymbolTable* phi_st = new ConcreteSymbolTable();
 
+        // This should have been consumed:
+        assert(incoming_exc_state.empty());
+
         if (myblock->successors.size() == 0) {
             for (auto& p : *st) {
                 p.second->decvref(emitter);
             }
             st->clear();
             symbol_table.clear();
-            return EndingState(st, phi_st, curblock);
+            return EndingState(st, phi_st, curblock, outgoing_exc_state);
         } else if (myblock->successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,
             // so there won't be any required phis.
-            return EndingState(st, phi_st, curblock);
+            return EndingState(st, phi_st, curblock, outgoing_exc_state);
         }
 
         assert(myblock->successors.size() == 1); // other cases should have been handled
@@ -2654,7 +2591,7 @@ public:
             // If the next block has a single predecessor, don't have to
             // emit any phis.
             // Should probably not emit no-op jumps like this though.
-            return EndingState(st, phi_st, curblock);
+            return EndingState(st, phi_st, curblock, outgoing_exc_state);
         }
 
         // We have one successor, but they have more than one predecessor.
@@ -2687,7 +2624,7 @@ public:
                 ++it;
             }
         }
-        return EndingState(st, phi_st, curblock);
+        return EndingState(st, phi_st, curblock, outgoing_exc_state);
     }
 
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
@@ -2834,7 +2771,7 @@ public:
                 doSafePoint(block->body[i]);
 #endif
 
-            doStmt(block->body[i], UnwindInfo(block->body[i], NULL, NULL));
+            doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
@@ -2847,7 +2784,137 @@ public:
     void doSafePoint(AST_stmt* next_statement) override {
         // Unwind info is always needed in allowGLReadPreemption if it has any chance of
         // running arbitrary code like finalizers.
-        emitter.createCall(UnwindInfo(next_statement, NULL, NULL), g.funcs.allowGLReadPreemption);
+        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
+    }
+
+    // Create a (or reuse an existing) block that will catch a CAPI exception, and then forward
+    // it to the "final_dest" block.  ie final_dest is a block corresponding to the IR level
+    // LANDINGPAD, and this function will createa  helper block that fetches the exception.
+    // As a special-case, a NULL value for final_dest means that this helper block should
+    // instead propagate the exception out of the function.
+    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* final_dest, AST_stmt* current_stmt) {
+        llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
+        if (capi_exc_dest) {
+            assert(capi_current_statements[final_dest] == current_stmt);
+            return capi_exc_dest;
+        }
+
+        llvm::BasicBlock* orig_block = curblock;
+
+        capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        capi_current_statements[final_dest] = current_stmt;
+
+        emitter.setCurrentBasicBlock(capi_exc_dest);
+        emitter.getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
+                                          embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr),
+                                          embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+
+        if (!final_dest) {
+            // Propagate the exception out of the function:
+            if (irstate->getExceptionStyle() == CXX) {
+                emitter.getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+                emitter.getBuilder()->CreateUnreachable();
+            } else {
+                emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+            }
+        } else {
+            // Catch the exception and forward to final_dest:
+            llvm::Value* exc_type_ptr
+                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
+                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+            llvm::Value* exc_value_ptr
+                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_value",
+                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+            llvm::Value* exc_traceback_ptr
+                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
+                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+            emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr, exc_traceback_ptr);
+            // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
+            emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
+                                              exc_traceback_ptr);
+            llvm::Value* exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
+            llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
+            llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
+
+            addOutgoingExceptionState(
+                IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                            new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                            new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+
+            emitter.getBuilder()->CreateBr(final_dest);
+        }
+
+        emitter.setCurrentBasicBlock(orig_block);
+
+        return capi_exc_dest;
+    }
+
+    llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) {
+        llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
+        if (cxx_exc_dest)
+            return cxx_exc_dest;
+
+        llvm::BasicBlock* orig_block = curblock;
+
+        cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+
+        emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
+
+        llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+        assert(_personality_func);
+        llvm::Value* personality_func
+            = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
+        assert(personality_func);
+        llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
+            llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+        landing_pad->addClause(getNullPtr(g.i8_ptr));
+
+        llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
+
+        llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+        auto begin_catch_func
+            = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
+        assert(begin_catch_func);
+
+        llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
+        llvm::Value* excinfo_pointer_casted
+            = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+
+        auto* builder = emitter.getBuilder();
+        llvm::Value* exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+        llvm::Value* exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+        llvm::Value* exc_traceback
+            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+
+        if (final_dest) {
+            // Catch the exception and forward to final_dest:
+            addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+
+            builder->CreateBr(final_dest);
+        } else {
+            // Propagate the exception out of the function.
+            // We shouldn't be hitting this case if the current function is CXX-style; then we should have
+            // just not created an Invoke and let the exception machinery propagate it for us.
+            assert(irstate->getExceptionStyle() == CAPI);
+            builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+        }
+
+        emitter.setCurrentBasicBlock(orig_block);
+
+        return cxx_exc_dest;
+    }
+
+    void addOutgoingExceptionState(ExceptionState exception_state) override {
+        this->outgoing_exc_state.push_back(exception_state);
+    }
+
+    void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) override {
+        assert(this->incoming_exc_state.empty());
+        this->incoming_exc_state = std::move(exc_state);
     }
 };
 
