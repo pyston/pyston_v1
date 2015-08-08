@@ -220,14 +220,14 @@ void logException(ExcInfo* exc_info) {
 #endif
 }
 
-extern "C" void capiExcCaughtInJit(AST_stmt* stmt, void* _source_info) {
+extern "C" void caughtCapiException(AST_stmt* stmt, void* _source_info) {
     SourceInfo* source = static_cast<SourceInfo*>(_source_info);
     PyThreadState* tstate = PyThreadState_GET();
 
     exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &tstate->curexc_traceback);
 }
 
-extern "C" void reraiseJitCapiExc() {
+extern "C" void reraiseCapiExcAsCxx() {
     ensureCAPIExceptionSet();
     // TODO: we are normalizing to many times?
     ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
@@ -237,7 +237,7 @@ extern "C" void reraiseJitCapiExc() {
     throw e;
 }
 
-void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+void caughtCxxException(LineInfo line_info, ExcInfo* exc_info) {
     static StatCounter frames_unwound("num_frames_unwound_python");
     frames_unwound.log();
 

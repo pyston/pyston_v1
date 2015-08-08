@@ -2805,14 +2805,14 @@ public:
         capi_current_statements[final_dest] = current_stmt;
 
         emitter.setCurrentBasicBlock(capi_exc_dest);
-        emitter.getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
+        emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException,
                                           embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr),
                                           embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
         if (!final_dest) {
             // Propagate the exception out of the function:
             if (irstate->getExceptionStyle() == CXX) {
-                emitter.getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+                emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                 emitter.getBuilder()->CreateUnreachable();
             } else {
                 emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
