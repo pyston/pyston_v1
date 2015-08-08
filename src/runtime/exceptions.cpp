@@ -25,27 +25,7 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-#undef UNW_LOCAL_ONLY
-
 namespace pyston {
-
-// from http://www.nongnu.org/libunwind/man/libunwind(3).html
-void showBacktrace() {
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, sp;
-
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
-
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_get_reg(&cursor, UNW_REG_SP, &sp);
-        printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-    }
-}
 
 void raiseExc(Box* exc_obj) {
     assert(!PyErr_Occurred());
@@ -87,96 +67,6 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
     //    from __future__ import rvalue_references # should cause syntax error
     raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
 }
-
-void _printStacktrace() {
-    static bool recursive = false;
-
-    if (recursive) {
-        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
-        return;
-    }
-
-    recursive = true;
-    printTraceback(getTraceback());
-    recursive = false;
-}
-
-// where should this go...
-extern "C" void abort() {
-    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
-
-    // In case displaying the traceback recursively calls abort:
-    static bool recursive = false;
-
-    if (!recursive) {
-        recursive = true;
-        Stats::dump();
-        fprintf(stderr, "Someone called abort!\n");
-
-        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
-        if (traceback_cls) {
-
-            // If we call abort(), things may be seriously wrong.  Set an alarm() to
-            // try to handle cases that we would just hang.
-            // (Ex if we abort() from a static constructor, and _printStackTrace uses
-            // that object, _printStackTrace will hang waiting for the first construction
-            // to finish.)
-            alarm(1);
-            try {
-                _printStacktrace();
-            } catch (ExcInfo) {
-                fprintf(stderr, "error printing stack trace during abort()");
-            }
-
-            // Cancel the alarm.
-            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
-            // abort and let you investigate, but the alarm will still come back to kill the program.
-            alarm(0);
-        }
-    }
-
-    if (PAUSE_AT_ABORT) {
-        fprintf(stderr, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
-
-        // Sometimes stderr isn't available (or doesn't immediately appear), so write out a file
-        // just in case:
-        FILE* f = fopen("pausing.txt", "w");
-        if (f) {
-            fprintf(f, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
-            fclose(f);
-        }
-
-        while (true) {
-            sleep(1);
-        }
-    }
-    libc_abort();
-    __builtin_unreachable();
-}
-
-#if 0
-extern "C" void exit(int code) {
-    static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
-
-    if (code == 0) {
-        libc_exit(0);
-        __builtin_unreachable();
-    }
-
-    fprintf(stderr, "Someone called exit with code=%d!\n", code);
-
-    // In case something calls exit down the line:
-    static bool recursive = false;
-    if (!recursive) {
-        recursive = true;
-
-        _printStacktrace();
-    }
-
-    libc_exit(code);
-    __builtin_unreachable();
-}
-#endif
 
 extern "C" void raise0() {
     ExcInfo* exc_info = getFrameExcInfo();

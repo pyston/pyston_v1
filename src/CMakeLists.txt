@@ -90,6 +90,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/cxx_unwind.cpp
 		runtime/descr.cpp
 		runtime/dict.cpp
+		runtime/exceptions.cpp
 		runtime/file.cpp
 		runtime/float.cpp
 		runtime/frame.cpp
@@ -104,7 +105,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/long.cpp
 		runtime/objmodel.cpp
 		runtime/set.cpp
-		runtime/stacktrace.cpp
 		runtime/str.cpp
 		runtime/super.cpp
 		runtime/traceback.cpp
