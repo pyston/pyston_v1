@@ -493,29 +493,52 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
+class PythonStackExtractor {
+private:
+    bool skip_next_pythonlike_frame = false;
+
+public:
+    bool handleCFrame(unw_cursor_t* cursor, PythonFrameIteratorImpl* frame_iter) {
+        unw_word_t ip = get_cursor_ip(cursor);
+        unw_word_t bp = get_cursor_bp(cursor);
+
+        bool rtn = false;
+
+        if (isDeopt(ip)) {
+            assert(!skip_next_pythonlike_frame);
+            skip_next_pythonlike_frame = true;
+        } else if (frameIsPythonFrame(ip, bp, cursor, frame_iter)) {
+            if (!skip_next_pythonlike_frame)
+                rtn = true;
+
+            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+            bool was_osr = (frame_iter->getId().type == PythonFrameId::COMPILED) && (frame_iter->cf->entry_descriptor);
+            skip_next_pythonlike_frame = was_osr;
+        }
+        return rtn;
+    }
+};
+
 class PythonUnwindSession : public Box {
     ExcInfo exc_info;
-    bool skip;
+    PythonStackExtractor pystack_extractor;
     bool is_active;
     Timer t;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false), t(/*min_usec=*/10000) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), is_active(false), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() {
         RELEASE_ASSERT(is_active, "");
         return &exc_info;
     }
-    bool shouldSkipFrame() const { return skip; }
-    void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
     bool isActive() const { return is_active; }
 
     void begin() {
         RELEASE_ASSERT(!is_active, "");
         exc_info = ExcInfo(NULL, NULL, NULL);
-        skip = false;
         is_active = true;
         t.restart();
 
@@ -557,6 +580,16 @@ public:
         logByCurrentPythonLine(stat_name);
 #endif
 #endif
+    }
+
+    void handleCFrame(unw_cursor_t* cursor) {
+        unw_word_t ip = get_cursor_ip(cursor);
+        unw_word_t bp = get_cursor_bp(cursor);
+
+        PythonFrameIteratorImpl frame_iter;
+        bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
+        if (found_frame)
+            addTraceback(frame_iter);
     }
 
     static void gcHandler(GCVisitor* v, Box* _o) {
@@ -650,24 +683,7 @@ void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
 }
 
 void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor) {
-    unw_word_t ip = get_cursor_ip(cursor);
-    unw_word_t bp = get_cursor_bp(cursor);
-
-    PythonFrameIteratorImpl frame_iter;
-    if (isDeopt(ip)) {
-        assert(!unwind_session->shouldSkipFrame());
-        unwind_session->setShouldSkipNextFrame(true);
-    } else if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
-        static StatCounter frames_unwound("num_frames_unwound_python");
-        frames_unwound.log();
-
-        if (!unwind_session->shouldSkipFrame())
-            unwind_session->addTraceback(frame_iter);
-
-        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-        bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
-        unwind_session->setShouldSkipNextFrame(was_osr);
-    }
+    unwind_session->handleCFrame(cursor);
 }
 
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
@@ -675,14 +691,12 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    PythonUnwindSession* unwind_session = new PythonUnwindSession();
-
-    unwind_session->begin();
-
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
     unw_init_local(&cursor, &ctx);
+
+    PythonStackExtractor pystack_extractor;
 
     while (true) {
         int r = unw_step(&cursor);
@@ -691,29 +705,19 @@ template <typename Func> void unwindPythonStack(Func func) {
         if (r == 0)
             break;
 
-        unw_word_t ip = get_cursor_ip(&cursor);
-        unw_word_t bp = get_cursor_bp(&cursor);
-        // TODO: this should probably just call unwindingThroughFrame?
-
-        bool stop_unwinding = false;
-
         PythonFrameIteratorImpl frame_iter;
-        if (isDeopt(ip)) {
-            assert(!unwind_session->shouldSkipFrame());
-            unwind_session->setShouldSkipNextFrame(true);
-        } else if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
-            if (!unwind_session->shouldSkipFrame())
-                stop_unwinding = func(&frame_iter);
+        bool found_frame = pystack_extractor.handleCFrame(&cursor, &frame_iter);
 
-            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-            bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
-            unwind_session->setShouldSkipNextFrame(was_osr);
+        if (found_frame) {
+            bool stop_unwinding = func(&frame_iter);
+            if (stop_unwinding)
+                break;
         }
 
-        if (stop_unwinding)
-            break;
-
+        unw_word_t ip = get_cursor_ip(&cursor);
         if (inGeneratorEntry(ip)) {
+            unw_word_t bp = get_cursor_bp(&cursor);
+
             // for generators continue unwinding in the context in which the generator got called
             Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
             // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
@@ -731,8 +735,6 @@ template <typename Func> void unwindPythonStack(Func func) {
 
         // keep unwinding
     }
-
-    unwind_session->end();
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
