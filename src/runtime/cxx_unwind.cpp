@@ -688,7 +688,7 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     pyston::StatTimer::overrideCounter(unwinding_stattimer);
 #endif
     // let unwinding.cpp know we've started unwinding
-    pyston::throwingException(pyston::getActivePythonUnwindSession());
+    pyston::logException(exc_data);
     pyston::unwind(exc_data);
 }
 

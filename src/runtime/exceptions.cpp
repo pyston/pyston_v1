@@ -76,16 +76,10 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
-    exc_info->reraise = true;
+    startReraise();
     assert(!PyErr_Occurred());
     throw * exc_info;
 }
-
-#ifndef NDEBUG
-ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback)
-    : type(type), value(value), traceback(traceback), reraise(false) {
-}
-#endif
 
 void ExcInfo::printExcAndTraceback() const {
     PyErr_Display(type, value, traceback);
@@ -158,7 +152,9 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
-    exc_info.reraise = reraise;
+    if (reraise)
+        startReraise();
+
     assert(!PyErr_Occurred());
     throw exc_info;
 }
@@ -169,12 +165,11 @@ extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
     ExcInfo exc_info(NULL, NULL, NULL);
     try {
         exc_info = excInfoForRaise(arg0, arg1, arg2);
-        exc_info.reraise = reraise;
     } catch (ExcInfo e) {
         exc_info = e;
     }
 
-    assert(!exc_info.reraise); // would get thrown away
+    assert(!reraise); // would get thrown away
     PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
 }
 
@@ -205,5 +200,72 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     }
+}
+
+
+void logException(ExcInfo* exc_info) {
+#if STAT_EXCEPTIONS
+    static StatCounter num_exceptions("num_exceptions");
+    num_exceptions.log();
+
+    std::string stat_name;
+    if (PyType_Check(exc_info->type))
+        stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(exc_info->type)->tp_name);
+    else
+        stat_name = "num_exceptions_" + std::string(exc_info->value->cls->tp_name);
+    Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_EXCEPTIONS_LOCATION
+    logByCurrentPythonLine(stat_name);
+#endif
+#endif
+}
+
+extern "C" void capiExcCaughtInJit(AST_stmt* stmt, void* _source_info) {
+    SourceInfo* source = static_cast<SourceInfo*>(_source_info);
+    PyThreadState* tstate = PyThreadState_GET();
+
+    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &tstate->curexc_traceback);
+}
+
+extern "C" void reraiseJitCapiExc() {
+    ensureCAPIExceptionSet();
+    // TODO: we are normalizing to many times?
+    ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
+                                cur_thread_state.curexc_traceback);
+    PyErr_Clear();
+    startReraise();
+    throw e;
+}
+
+void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
+    static StatCounter frames_unwound("num_frames_unwound_python");
+    frames_unwound.log();
+
+    exceptionAtLine(line_info, &exc_info->traceback);
+}
+
+
+
+struct ExcState {
+    bool is_reraise;
+    constexpr ExcState() : is_reraise(false) {}
+} static __thread exc_state;
+
+bool exceptionAtLineCheck() {
+    if (exc_state.is_reraise) {
+        exc_state.is_reraise = false;
+        return false;
+    }
+    return true;
+}
+
+void exceptionAtLine(LineInfo line_info, Box** traceback) {
+    if (exceptionAtLineCheck())
+        BoxedTraceback::here(line_info, traceback);
+}
+
+void startReraise() {
+    assert(!exc_state.is_reraise);
+    exc_state.is_reraise = true;
 }
 }
