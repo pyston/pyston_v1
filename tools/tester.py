@@ -518,7 +518,7 @@ def main(orig_dir):
     patterns = opts.pattern
 
     if not patterns and not TESTS_TO_SKIP:
-        TESTS_TO_SKIP = ["t", "t2"]
+        TESTS_TO_SKIP = ["t", "t2", "t3"]
 
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
 

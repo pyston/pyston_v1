@@ -32,6 +32,7 @@ pystontmp*/
 *.cache
 tests/t.py
 tests/t2.py
+tests/t3.py
 *.bc
 stdlib.ll
 *.o
