@@ -2296,17 +2296,26 @@ private:
         // It looks like ommitting the second and third arguments are equivalent to passing None,
         // but ommitting the first argument is *not* the same as passing None.
 
-        ExceptionStyle target_exception_style = CXX;
-        if (unw_info.preferredExceptionStyle() == CAPI && (node->arg0 && !node->arg2))
+        ExceptionStyle target_exception_style;
+
+        if (unw_info.hasHandler())
             target_exception_style = CAPI;
+        else
+            target_exception_style = irstate->getExceptionStyle();
 
         if (node->arg0 == NULL) {
             assert(!node->arg1);
             assert(!node->arg2);
 
-            assert(target_exception_style == CXX);
-            emitter.createCall(unw_info, g.funcs.raise0, std::vector<llvm::Value*>());
-            emitter.getBuilder()->CreateUnreachable();
+            if (target_exception_style == CAPI) {
+                emitter.createCall(unw_info, g.funcs.raise0_capi, std::vector<llvm::Value*>(), CAPI);
+                emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
+                                                       getNullPtr(g.llvm_value_type_ptr));
+                emitter.getBuilder()->CreateUnreachable();
+            } else {
+                emitter.createCall(unw_info, g.funcs.raise0, std::vector<llvm::Value*>());
+                emitter.getBuilder()->CreateUnreachable();
+            }
 
             endBlock(DEAD);
             return;

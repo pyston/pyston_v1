@@ -202,6 +202,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         exception_style = CAPI;
     if (name == "next")
         exception_style = CAPI;
+    if (f->propagated_cxx_exceptions >= 100)
+        exception_style = CAPI;
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;

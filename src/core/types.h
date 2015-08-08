@@ -376,6 +376,8 @@ public:
     // Please use codeForFunction() to access this:
     BoxedCode* code_obj;
 
+    int propagated_cxx_exceptions = 0;
+
     // For use by the interpreter/baseline jit:
     int times_interpreted;
     std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;

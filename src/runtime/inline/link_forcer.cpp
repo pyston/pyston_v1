@@ -125,6 +125,7 @@ void force() {
     FORCE(callattrCapi);
 
     FORCE(raise0);
+    FORCE(raise0_capi);
     FORCE(raise3);
     FORCE(raise3_capi);
     FORCE(PyErr_Fetch);
