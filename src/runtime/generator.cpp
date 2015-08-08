@@ -117,19 +117,33 @@ Box* generatorIter(Box* s) {
 }
 
 // called from both generatorHasNext and generatorSend/generatorNext (but only if generatorHasNext hasn't been called)
-static void generatorSendInternal(BoxedGenerator* self, Box* v) {
+template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* self, Box* v) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
-    if (!self->returnContext && v != None)
-        raiseExcHelper(TypeError, "can't send non-None value to a just-started generator");
+    if (!self->returnContext && v != None) {
+        if (S == CAPI) {
+            PyErr_SetString(TypeError, "can't send non-None value to a just-started generator");
+            return true;
+        } else
+            raiseExcHelper(TypeError, "can't send non-None value to a just-started generator");
+    }
 
-    if (self->running)
-        raiseExcHelper(ValueError, "generator already executing");
+    if (self->running) {
+        if (S == CAPI) {
+            PyErr_SetString(ValueError, "generator already executing");
+            return true;
+        } else
+            raiseExcHelper(ValueError, "generator already executing");
+    }
 
     // check if the generator already exited
     if (self->entryExited) {
         freeGeneratorStack(self);
-        raiseExcHelper(StopIteration, (const char*)nullptr);
+        if (S == CAPI) {
+            PyErr_SetObject(StopIteration, None);
+            return true;
+        } else
+            raiseExcHelper(StopIteration, (const char*)nullptr);
     }
 
     self->returnValue = v;
@@ -158,9 +172,14 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
     if (self->exception.type) {
         freeGeneratorStack(self);
         // don't raise StopIteration exceptions because those are handled specially.
-        if (!self->exception.matches(StopIteration))
-            throw self->exception;
-        return;
+        if (!self->exception.matches(StopIteration)) {
+            if (S == CAPI) {
+                setCAPIException(self->exception);
+                return true;
+            } else
+                throw self->exception;
+        }
+        return false;
     }
 
     if (self->entryExited) {
@@ -169,18 +188,21 @@ static void generatorSendInternal(BoxedGenerator* self, Box* v) {
         // We could directly create the StopIteration exception but we delay creating it because often the caller is not
         // interested in the exception (=generatorHasnext). If we really need it we will create it inside generatorSend.
         self->exception = ExcInfo(NULL, NULL, NULL);
-        return;
+        return false;
     }
+    return false;
 }
 
-Box* generatorSend(Box* s, Box* v) {
+template <ExceptionStyle S> static Box* generatorSend(Box* s, Box* v) noexcept(S == CAPI) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
     if (self->iterated_from__hasnext__)
         Py_FatalError(".throw called on generator last advanced with __hasnext__");
 
-    generatorSendInternal(self, v);
+    bool exc = generatorSendInternal<S>(self, v);
+    if (S == CAPI && exc)
+        return NULL;
 
     // throw StopIteration if the generator exited
     if (self->entryExited) {
@@ -195,9 +217,19 @@ Box* generatorSend(Box* s, Box* v) {
         ExcInfo old_exc = self->exception;
         // Clear the exception for GC purposes:
         self->exception = ExcInfo(nullptr, nullptr, nullptr);
-        if (old_exc.type == NULL)
-            raiseExcHelper(StopIteration, (const char*)nullptr);
-        throw old_exc;
+        if (old_exc.type == NULL) {
+            if (S == CAPI) {
+                PyErr_SetObject(StopIteration, None);
+                return NULL;
+            } else
+                raiseExcHelper(StopIteration, (const char*)nullptr);
+        } else {
+            if (S == CAPI) {
+                setCAPIException(old_exc);
+                return NULL;
+            } else
+                throw old_exc;
+        }
     }
 
     return self->returnValue;
@@ -223,7 +255,7 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
         throw exc_info;
 
     self->exception = exc_info;
-    return generatorSend(self, None);
+    return generatorSend<CXX>(self, None);
 }
 
 Box* generatorClose(Box* s) {
@@ -245,7 +277,7 @@ Box* generatorClose(Box* s) {
     assert(0); // unreachable
 }
 
-Box* generatorNext(Box* s) {
+template <ExceptionStyle S> static Box* generatorNext(Box* s) noexcept(S == CAPI) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
@@ -254,7 +286,7 @@ Box* generatorNext(Box* s) {
         return self->returnValue;
     }
 
-    return generatorSend(s, None);
+    return generatorSend<S>(s, None);
 }
 
 i1 generatorHasnextUnboxed(Box* s) {
@@ -262,7 +294,7 @@ i1 generatorHasnextUnboxed(Box* s) {
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
     if (!self->iterated_from__hasnext__) {
-        generatorSendInternal(self, None);
+        generatorSendInternal<CXX>(self, None);
         self->iterated_from__hasnext__ = true;
     }
 
@@ -455,13 +487,16 @@ void setupGenerator() {
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
     generator_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)generatorClose, UNKNOWN, 1)));
-    generator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)generatorNext, UNKNOWN, 1)));
+
+    auto generator_next = boxRTFunction((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
+    addRTFunction(generator_next, (void*)generatorNext<CAPI>, UNKNOWN, CAPI);
+    generator_cls->giveAttr("next", new BoxedFunction(generator_next));
 
     CLFunction* hasnext = boxRTFunction((void*)generatorHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)generatorHasnext, BOXED_BOOL);
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
+    generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend<CXX>, UNKNOWN, 2)));
     auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, 2, false, false), { NULL, NULL });
     generator_cls->giveAttr("throw", gthrow);
 
