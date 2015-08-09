@@ -493,84 +493,82 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
+// A class that converts a C stack trace to a Python stack trace.
+// It allows for different ways of driving the C stack trace; it just needs
+// to have handleCFrame called once per frame.
+// If you want to do a normal (non-destructive) stack walk, use unwindPythonStack
+// which will use this internally.
+class PythonStackExtractor {
+private:
+    bool skip_next_pythonlike_frame = false;
+
+public:
+    bool handleCFrame(unw_cursor_t* cursor, PythonFrameIteratorImpl* frame_iter) {
+        unw_word_t ip = get_cursor_ip(cursor);
+        unw_word_t bp = get_cursor_bp(cursor);
+
+        bool rtn = false;
+
+        if (isDeopt(ip)) {
+            assert(!skip_next_pythonlike_frame);
+            skip_next_pythonlike_frame = true;
+        } else if (frameIsPythonFrame(ip, bp, cursor, frame_iter)) {
+            if (!skip_next_pythonlike_frame)
+                rtn = true;
+
+            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
+            bool was_osr = (frame_iter->getId().type == PythonFrameId::COMPILED) && (frame_iter->cf->entry_descriptor);
+            skip_next_pythonlike_frame = was_osr;
+        }
+        return rtn;
+    }
+};
+
 class PythonUnwindSession : public Box {
     ExcInfo exc_info;
-    bool skip;
-    bool is_active;
+    PythonStackExtractor pystack_extractor;
+
     Timer t;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    PythonUnwindSession() : exc_info(NULL, NULL, NULL), skip(false), is_active(false), t(/*min_usec=*/10000) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), t(/*min_usec=*/10000) {}
 
-    ExcInfo* getExcInfoStorage() {
-        RELEASE_ASSERT(is_active, "");
-        return &exc_info;
-    }
-    bool shouldSkipFrame() const { return skip; }
-    void setShouldSkipNextFrame(bool skip) { this->skip = skip; }
-    bool isActive() const { return is_active; }
+    ExcInfo* getExcInfoStorage() { return &exc_info; }
 
     void begin() {
-        RELEASE_ASSERT(!is_active, "");
         exc_info = ExcInfo(NULL, NULL, NULL);
-        skip = false;
-        is_active = true;
         t.restart();
 
         static StatCounter stat("unwind_sessions");
         stat.log();
     }
     void end() {
-        RELEASE_ASSERT(is_active, "");
-        is_active = false;
-
         static StatCounter stat("us_unwind_session");
         stat.log(t.end());
     }
 
-    void addTraceback(PythonFrameIteratorImpl& frame_iter) {
-        RELEASE_ASSERT(is_active, "");
-        if (exc_info.reraise) {
-            exc_info.reraise = false;
-            return;
+    void handleCFrame(unw_cursor_t* cursor) {
+        unw_word_t ip = get_cursor_ip(cursor);
+        unw_word_t bp = get_cursor_bp(cursor);
+
+        PythonFrameIteratorImpl frame_iter;
+        bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
+        if (found_frame) {
+            if (exceptionAtLineCheck()) {
+                // TODO: shouldn't fetch this multiple times?
+                frame_iter.getCurrentStatement()->cxx_exception_count++;
+                auto line_info = lineInfoForFrame(&frame_iter);
+                exceptionAtLine(line_info, &exc_info.traceback);
+            }
         }
-        // TODO: shouldn't fetch this multiple times?
-        frame_iter.getCurrentStatement()->cxx_exception_count++;
-        auto line_info = lineInfoForFrame(&frame_iter);
-        BoxedTraceback::here(line_info, &exc_info.traceback);
-    }
-
-    void logException() {
-#if STAT_EXCEPTIONS
-        static StatCounter num_exceptions("num_exceptions");
-        num_exceptions.log();
-
-        std::string stat_name;
-        if (PyType_Check(exc_info.type))
-            stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(exc_info.type)->tp_name);
-        else
-            stat_name = "num_exceptions_" + std::string(exc_info.value->cls->tp_name);
-        Stats::log(Stats::getStatCounter(stat_name));
-#if STAT_EXCEPTIONS_LOCATION
-        logByCurrentPythonLine(stat_name);
-#endif
-#endif
     }
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == unwind_session_cls);
 
         PythonUnwindSession* o = static_cast<PythonUnwindSession*>(_o);
-
-        // this is our hack for eventually collecting
-        // exceptions/tracebacks after the exception has been caught.
-        // If a collection happens and a given thread's
-        // PythonUnwindSession isn't active, its exception info can be
-        // collected.
-        if (!o->is_active)
-            return;
 
         v->visitIf(o->exc_info.type);
         v->visitIf(o->exc_info.value);
@@ -579,17 +577,22 @@ public:
 };
 static __thread PythonUnwindSession* cur_unwind;
 
-PythonUnwindSession* beginPythonUnwindSession() {
+static PythonUnwindSession* getUnwindSession() {
     if (!cur_unwind) {
         cur_unwind = new PythonUnwindSession();
         pyston::gc::registerPermanentRoot(cur_unwind);
     }
+    return cur_unwind;
+}
+
+PythonUnwindSession* beginPythonUnwindSession() {
+    getUnwindSession();
     cur_unwind->begin();
     return cur_unwind;
 }
 
 PythonUnwindSession* getActivePythonUnwindSession() {
-    RELEASE_ASSERT(cur_unwind && cur_unwind->isActive(), "");
+    ASSERT(cur_unwind, "");
     return cur_unwind;
 }
 
@@ -597,77 +600,15 @@ void endPythonUnwindSession(PythonUnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
     unwind->end();
 }
+
 void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind) {
     RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
     PythonUnwindSession* state = static_cast<PythonUnwindSession*>(unwind);
     return state->getExcInfoStorage();
 }
 
-void throwingException(PythonUnwindSession* unwind) {
-    RELEASE_ASSERT(unwind && unwind == cur_unwind, "");
-    unwind->logException();
-}
-
-extern "C" void capiExcCaughtInJit(AST_stmt* stmt, void* _source_info) {
-    SourceInfo* source = static_cast<SourceInfo*>(_source_info);
-    // TODO: handle reraise (currently on the ExcInfo object)
-    PyThreadState* tstate = PyThreadState_GET();
-    BoxedTraceback::here(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()),
-                         &tstate->curexc_traceback);
-}
-
-extern "C" void reraiseJitCapiExc() {
-    ensureCAPIExceptionSet();
-    // TODO: we are normalizing to many times?
-    ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
-                                cur_thread_state.curexc_traceback);
-    PyErr_Clear();
-    e.reraise = true;
-    throw e;
-}
-
-void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info) {
-    static StatCounter frames_unwound("num_frames_unwound_python");
-    frames_unwound.log();
-
-    // basically the same as PythonUnwindSession::addTraceback, but needs to
-    // be callable after an PythonUnwindSession has ended.  The interpreter
-    // will call this from catch blocks if it needs to ensure that a
-    // line is added.  Right now this only happens in
-    // ASTInterpreter::visit_invoke.
-
-    // It's basically the same except for one thing: we don't have to
-    // worry about the 'skip' (osr) state that PythonUnwindSession handles
-    // here, because the only way we could have gotten into the ast
-    // interpreter is if the exception wasn't caught, and if there was
-    // the osr frame for the one the interpreter is running, it would
-    // have already caught it.
-    if (exc_info->reraise) {
-        exc_info->reraise = false;
-        return;
-    }
-    BoxedTraceback::here(line_info, &exc_info->traceback);
-}
-
 void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor) {
-    unw_word_t ip = get_cursor_ip(cursor);
-    unw_word_t bp = get_cursor_bp(cursor);
-
-    PythonFrameIteratorImpl frame_iter;
-    if (isDeopt(ip)) {
-        assert(!unwind_session->shouldSkipFrame());
-        unwind_session->setShouldSkipNextFrame(true);
-    } else if (frameIsPythonFrame(ip, bp, cursor, &frame_iter)) {
-        static StatCounter frames_unwound("num_frames_unwound_python");
-        frames_unwound.log();
-
-        if (!unwind_session->shouldSkipFrame())
-            unwind_session->addTraceback(frame_iter);
-
-        // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-        bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
-        unwind_session->setShouldSkipNextFrame(was_osr);
-    }
+    unwind_session->handleCFrame(cursor);
 }
 
 // While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
@@ -675,14 +616,12 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
 template <typename Func> void unwindPythonStack(Func func) {
-    PythonUnwindSession* unwind_session = new PythonUnwindSession();
-
-    unwind_session->begin();
-
     unw_context_t ctx;
     unw_cursor_t cursor;
     unw_getcontext(&ctx);
     unw_init_local(&cursor, &ctx);
+
+    PythonStackExtractor pystack_extractor;
 
     while (true) {
         int r = unw_step(&cursor);
@@ -691,29 +630,19 @@ template <typename Func> void unwindPythonStack(Func func) {
         if (r == 0)
             break;
 
-        unw_word_t ip = get_cursor_ip(&cursor);
-        unw_word_t bp = get_cursor_bp(&cursor);
-        // TODO: this should probably just call unwindingThroughFrame?
-
-        bool stop_unwinding = false;
-
         PythonFrameIteratorImpl frame_iter;
-        if (isDeopt(ip)) {
-            assert(!unwind_session->shouldSkipFrame());
-            unwind_session->setShouldSkipNextFrame(true);
-        } else if (frameIsPythonFrame(ip, bp, &cursor, &frame_iter)) {
-            if (!unwind_session->shouldSkipFrame())
-                stop_unwinding = func(&frame_iter);
+        bool found_frame = pystack_extractor.handleCFrame(&cursor, &frame_iter);
 
-            // frame_iter->cf->entry_descriptor will be non-null for OSR frames.
-            bool was_osr = (frame_iter.getId().type == PythonFrameId::COMPILED) && (frame_iter.cf->entry_descriptor);
-            unwind_session->setShouldSkipNextFrame(was_osr);
+        if (found_frame) {
+            bool stop_unwinding = func(&frame_iter);
+            if (stop_unwinding)
+                break;
         }
 
-        if (stop_unwinding)
-            break;
-
+        unw_word_t ip = get_cursor_ip(&cursor);
         if (inGeneratorEntry(ip)) {
+            unw_word_t bp = get_cursor_bp(&cursor);
+
             // for generators continue unwinding in the context in which the generator got called
             Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
             // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
@@ -731,8 +660,6 @@ template <typename Func> void unwindPythonStack(Func func) {
 
         // keep unwinding
     }
-
-    unwind_session->end();
 }
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
@@ -1218,6 +1145,95 @@ void logByCurrentPythonLine(const std::string& stat_name) {
     std::string stat = stat_name + "<" + getCurrentPythonLine() + ">";
     Stats::log(Stats::getStatCounter(stat));
 }
+
+void _printStacktrace() {
+    static bool recursive = false;
+
+    if (recursive) {
+        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
+        return;
+    }
+
+    recursive = true;
+    printTraceback(getTraceback());
+    recursive = false;
+}
+
+extern "C" void abort() {
+    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
+
+    // In case displaying the traceback recursively calls abort:
+    static bool recursive = false;
+
+    if (!recursive) {
+        recursive = true;
+        Stats::dump();
+        fprintf(stderr, "Someone called abort!\n");
+
+        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
+        if (traceback_cls) {
+
+            // If we call abort(), things may be seriously wrong.  Set an alarm() to
+            // try to handle cases that we would just hang.
+            // (Ex if we abort() from a static constructor, and _printStackTrace uses
+            // that object, _printStackTrace will hang waiting for the first construction
+            // to finish.)
+            alarm(1);
+            try {
+                _printStacktrace();
+            } catch (ExcInfo) {
+                fprintf(stderr, "error printing stack trace during abort()");
+            }
+
+            // Cancel the alarm.
+            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
+            // abort and let you investigate, but the alarm will still come back to kill the program.
+            alarm(0);
+        }
+    }
+
+    if (PAUSE_AT_ABORT) {
+        fprintf(stderr, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+
+        // Sometimes stderr isn't available (or doesn't immediately appear), so write out a file
+        // just in case:
+        FILE* f = fopen("pausing.txt", "w");
+        if (f) {
+            fprintf(f, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+            fclose(f);
+        }
+
+        while (true) {
+            sleep(1);
+        }
+    }
+    libc_abort();
+    __builtin_unreachable();
+}
+
+#if 0
+extern "C" void exit(int code) {
+    static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
+
+    if (code == 0) {
+        libc_exit(0);
+        __builtin_unreachable();
+    }
+
+    fprintf(stderr, "Someone called exit with code=%d!\n", code);
+
+    // In case something calls exit down the line:
+    static bool recursive = false;
+    if (!recursive) {
+        recursive = true;
+
+        _printStacktrace();
+    }
+
+    libc_exit(code);
+    __builtin_unreachable();
+}
+#endif
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();

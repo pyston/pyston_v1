@@ -131,8 +131,8 @@ static llvm::Value* getClosureElementGep(IREmitter& emitter, llvm::Value* closur
 
 static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    static_assert(sizeof(ExcInfo) == 32, "");
-    static_assert(offsetof(FrameInfo, boxedLocals) == 32, "");
+    static_assert(sizeof(ExcInfo) == 24, "");
+    static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 1);
 }
 
@@ -143,9 +143,9 @@ static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v
 
 static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    static_assert(sizeof(ExcInfo) == 32, "");
+    static_assert(sizeof(ExcInfo) == 24, "");
     static_assert(sizeof(Box*) == 8, "");
-    static_assert(offsetof(FrameInfo, frame_obj) == 40, "");
+    static_assert(offsetof(FrameInfo, frame_obj) == 32, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 2);
     // TODO: this could be made more resilient by doing something like
     // gep->accumulateConstantOffset(g.tm->getDataLayout(), ap_offset)
@@ -2805,14 +2805,14 @@ public:
         capi_current_statements[final_dest] = current_stmt;
 
         emitter.setCurrentBasicBlock(capi_exc_dest);
-        emitter.getBuilder()->CreateCall2(g.funcs.capiExcCaughtInJit,
+        emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException,
                                           embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr),
                                           embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
         if (!final_dest) {
             // Propagate the exception out of the function:
             if (irstate->getExceptionStyle() == CXX) {
-                emitter.getBuilder()->CreateCall(g.funcs.reraiseJitCapiExc);
+                emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                 emitter.getBuilder()->CreateUnreachable();
             } else {
                 emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));

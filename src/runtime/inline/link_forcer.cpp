@@ -130,8 +130,8 @@ void force() {
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
     FORCE(PyErr_Restore);
-    FORCE(capiExcCaughtInJit);
-    FORCE(reraiseJitCapiExc);
+    FORCE(caughtCapiException);
+    FORCE(reraiseCapiExcAsCxx);
     FORCE(deopt);
 
     FORCE(div_i64_i64);

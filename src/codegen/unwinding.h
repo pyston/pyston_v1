@@ -44,12 +44,19 @@ Box* getTraceback();
 class PythonUnwindSession;
 PythonUnwindSession* beginPythonUnwindSession();
 PythonUnwindSession* getActivePythonUnwindSession();
-void throwingException(PythonUnwindSession* unwind_session);
 void endPythonUnwindSession(PythonUnwindSession* unwind_session);
 void* getPythonUnwindSessionExceptionStorage(PythonUnwindSession* unwind_session);
 void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cursor);
 
-void exceptionCaughtInInterpreter(LineInfo line_info, ExcInfo* exc_info);
+// TODO move these to exceptions.h
+void logException(ExcInfo* exc_info);
+void startReraise();
+bool exceptionAtLineCheck();
+void exceptionAtLine(LineInfo line_info, Box** traceback);
+void caughtCxxException(LineInfo line_info, ExcInfo* exc_info);
+extern "C" void caughtCapiException(AST_stmt* current_stmt, void* source_info);
+extern "C" void reraiseCapiExcAsCxx() __attribute__((noreturn));
+
 
 CLFunction* getTopPythonFunction();
 

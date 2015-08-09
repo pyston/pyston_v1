@@ -25,27 +25,7 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-#undef UNW_LOCAL_ONLY
-
 namespace pyston {
-
-// from http://www.nongnu.org/libunwind/man/libunwind(3).html
-void showBacktrace() {
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, sp;
-
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
-
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-        unw_get_reg(&cursor, UNW_REG_SP, &sp);
-        printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-    }
-}
 
 void raiseExc(Box* exc_obj) {
     assert(!PyErr_Occurred());
@@ -88,96 +68,6 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
     raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
 }
 
-void _printStacktrace() {
-    static bool recursive = false;
-
-    if (recursive) {
-        fprintf(stderr, "_printStacktrace ran into an issue; refusing to try it again!\n");
-        return;
-    }
-
-    recursive = true;
-    printTraceback(getTraceback());
-    recursive = false;
-}
-
-// where should this go...
-extern "C" void abort() {
-    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
-
-    // In case displaying the traceback recursively calls abort:
-    static bool recursive = false;
-
-    if (!recursive) {
-        recursive = true;
-        Stats::dump();
-        fprintf(stderr, "Someone called abort!\n");
-
-        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
-        if (traceback_cls) {
-
-            // If we call abort(), things may be seriously wrong.  Set an alarm() to
-            // try to handle cases that we would just hang.
-            // (Ex if we abort() from a static constructor, and _printStackTrace uses
-            // that object, _printStackTrace will hang waiting for the first construction
-            // to finish.)
-            alarm(1);
-            try {
-                _printStacktrace();
-            } catch (ExcInfo) {
-                fprintf(stderr, "error printing stack trace during abort()");
-            }
-
-            // Cancel the alarm.
-            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
-            // abort and let you investigate, but the alarm will still come back to kill the program.
-            alarm(0);
-        }
-    }
-
-    if (PAUSE_AT_ABORT) {
-        fprintf(stderr, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
-
-        // Sometimes stderr isn't available (or doesn't immediately appear), so write out a file
-        // just in case:
-        FILE* f = fopen("pausing.txt", "w");
-        if (f) {
-            fprintf(f, "PID %d about to call libc abort; pausing for a debugger...\n", getpid());
-            fclose(f);
-        }
-
-        while (true) {
-            sleep(1);
-        }
-    }
-    libc_abort();
-    __builtin_unreachable();
-}
-
-#if 0
-extern "C" void exit(int code) {
-    static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
-
-    if (code == 0) {
-        libc_exit(0);
-        __builtin_unreachable();
-    }
-
-    fprintf(stderr, "Someone called exit with code=%d!\n", code);
-
-    // In case something calls exit down the line:
-    static bool recursive = false;
-    if (!recursive) {
-        recursive = true;
-
-        _printStacktrace();
-    }
-
-    libc_exit(code);
-    __builtin_unreachable();
-}
-#endif
-
 extern "C" void raise0() {
     ExcInfo* exc_info = getFrameExcInfo();
     assert(exc_info->type);
@@ -186,16 +76,10 @@ extern "C" void raise0() {
     if (exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
-    exc_info->reraise = true;
+    startReraise();
     assert(!PyErr_Occurred());
     throw * exc_info;
 }
-
-#ifndef NDEBUG
-ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback)
-    : type(type), value(value), traceback(traceback), reraise(false) {
-}
-#endif
 
 void ExcInfo::printExcAndTraceback() const {
     PyErr_Display(type, value, traceback);
@@ -268,7 +152,9 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
-    exc_info.reraise = reraise;
+    if (reraise)
+        startReraise();
+
     assert(!PyErr_Occurred());
     throw exc_info;
 }
@@ -279,12 +165,11 @@ extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
     ExcInfo exc_info(NULL, NULL, NULL);
     try {
         exc_info = excInfoForRaise(arg0, arg1, arg2);
-        exc_info.reraise = reraise;
     } catch (ExcInfo e) {
         exc_info = e;
     }
 
-    assert(!exc_info.reraise); // would get thrown away
+    assert(!reraise); // would get thrown away
     PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
 }
 
@@ -315,5 +200,72 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     }
+}
+
+
+void logException(ExcInfo* exc_info) {
+#if STAT_EXCEPTIONS
+    static StatCounter num_exceptions("num_exceptions");
+    num_exceptions.log();
+
+    std::string stat_name;
+    if (PyType_Check(exc_info->type))
+        stat_name = "num_exceptions_" + std::string(static_cast<BoxedClass*>(exc_info->type)->tp_name);
+    else
+        stat_name = "num_exceptions_" + std::string(exc_info->value->cls->tp_name);
+    Stats::log(Stats::getStatCounter(stat_name));
+#if STAT_EXCEPTIONS_LOCATION
+    logByCurrentPythonLine(stat_name);
+#endif
+#endif
+}
+
+extern "C" void caughtCapiException(AST_stmt* stmt, void* _source_info) {
+    SourceInfo* source = static_cast<SourceInfo*>(_source_info);
+    PyThreadState* tstate = PyThreadState_GET();
+
+    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &tstate->curexc_traceback);
+}
+
+extern "C" void reraiseCapiExcAsCxx() {
+    ensureCAPIExceptionSet();
+    // TODO: we are normalizing to many times?
+    ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
+                                cur_thread_state.curexc_traceback);
+    PyErr_Clear();
+    startReraise();
+    throw e;
+}
+
+void caughtCxxException(LineInfo line_info, ExcInfo* exc_info) {
+    static StatCounter frames_unwound("num_frames_unwound_python");
+    frames_unwound.log();
+
+    exceptionAtLine(line_info, &exc_info->traceback);
+}
+
+
+
+struct ExcState {
+    bool is_reraise;
+    constexpr ExcState() : is_reraise(false) {}
+} static __thread exc_state;
+
+bool exceptionAtLineCheck() {
+    if (exc_state.is_reraise) {
+        exc_state.is_reraise = false;
+        return false;
+    }
+    return true;
+}
+
+void exceptionAtLine(LineInfo line_info, Box** traceback) {
+    if (exceptionAtLineCheck())
+        BoxedTraceback::here(line_info, traceback);
+}
+
+void startReraise() {
+    assert(!exc_state.is_reraise);
+    exc_state.is_reraise = true;
 }
 }

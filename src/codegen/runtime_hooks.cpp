@@ -312,8 +312,8 @@ void initGlobalFuncs(GlobalState& g) {
     GET(PyErr_Fetch);
     GET(PyErr_NormalizeException);
     GET(PyErr_Restore);
-    GET(capiExcCaughtInJit);
-    GET(reraiseJitCapiExc);
+    GET(caughtCapiException);
+    GET(reraiseCapiExcAsCxx);
     GET(deopt);
 
     GET(div_float_float);
