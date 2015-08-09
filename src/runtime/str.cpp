@@ -1584,7 +1584,11 @@ extern "C" size_t strHashUnboxed(BoxedString* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
-    return boxLong(strHashUnboxed(self));
+    return boxInt(strHashUnboxed(self));
+}
+
+size_t str_hash(BoxedString* self) noexcept {
+    return strHashUnboxed(self);
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
@@ -1827,8 +1831,14 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     int max_replaces = static_cast<BoxedInt*>(_maxreplace)->n;
     size_t start_pos = 0;
     std::string s = self->s();
+
+    bool single_char = old->size() == 1;
     for (int num_replaced = 0; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
-        start_pos = s.find(old->s(), start_pos);
+        if (single_char)
+            start_pos = s.find(old->s()[0], start_pos);
+        else
+            start_pos = s.find(old->s(), start_pos);
+
         if (start_pos == std::string::npos)
             break;
         s.replace(start_pos, old->size(), new_->s());
@@ -1841,7 +1851,11 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
     RELEASE_ASSERT(PyString_Check(self), "");
     RELEASE_ASSERT(PyString_Check(sep), "");
 
-    size_t found_idx = self->s().find(sep->s());
+    size_t found_idx;
+    if (sep->size() == 1)
+        found_idx = self->s().find(sep->s()[0]);
+    else
+        found_idx = self->s().find(sep->s());
     if (found_idx == std::string::npos)
         return BoxedTuple::create({ self, EmptyString, EmptyString });
 
@@ -2063,7 +2077,12 @@ Box* strContains(BoxedString* self, Box* elt) {
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
-    size_t found_idx = self->s().find(sub->s());
+    size_t found_idx;
+    if (sub->size() == 1)
+        // Call the much-faster single-character find():
+        found_idx = self->s().find(sub->s()[0]);
+    else
+        found_idx = self->s().find(sub->s());
     if (found_idx == std::string::npos)
         return False;
     return True;
@@ -2841,6 +2860,7 @@ void setupStr() {
     str_cls->tp_as_sequence->sq_slice = str_slice;
     str_cls->tp_as_sequence->sq_length = str_length;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
+    str_cls->tp_hash = (hashfunc)str_hash;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));

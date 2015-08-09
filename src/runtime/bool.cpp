@@ -39,8 +39,12 @@ extern "C" Box* boolRepr(BoxedBool* v) {
     return false_str;
 }
 
-extern "C" Box* boolHash(BoxedBool* v) {
-    return boxInt(v == True);
+size_t bool_hash(BoxedBool* v) {
+    return v == True;
+}
+
+Box* boolHash(BoxedBool* v) {
+    return boxInt(bool_hash(v));
 }
 
 extern "C" Box* boolNew(Box* cls, Box* val) {
@@ -96,6 +100,7 @@ void setupBool() {
     bool_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)boolXor, BOXED_BOOL, 2)));
 
     bool_cls->freeze();
+    bool_cls->tp_hash = (hashfunc)bool_hash;
 }
 
 void teardownBool() {
