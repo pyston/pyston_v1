@@ -92,7 +92,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     std::unique_ptr<PhiAnalysis> phis;
 
     if (is_osr) {
-        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge);
+        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge, CXX);
         entry_descriptor->args[i_str] = NULL;
         if (i_maybe_undefined)
             entry_descriptor->args[idi_str] = NULL;

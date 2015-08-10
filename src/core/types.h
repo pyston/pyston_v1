@@ -440,7 +440,8 @@ CLFunction* unboxRTFunction(Box*);
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
-                                  const OSREntryDescriptor* entry);
+                                  const OSREntryDescriptor* entry, bool force_exception_style = false,
+                                  ExceptionStyle forced_exception_style = CXX);
 EffortLevel initialEffort();
 
 typedef bool i1;

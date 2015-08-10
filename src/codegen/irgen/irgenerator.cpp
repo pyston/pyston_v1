@@ -2140,7 +2140,7 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCL(), osr_key);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCL(), osr_key, irstate->getExceptionStyle());
         OSRExit* exit = new OSRExit(entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedRelocatablePtr(exit, g.i8->getPointerTo()));

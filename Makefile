@@ -985,6 +985,7 @@ $1: nosearch_$1
 $1: $(TESTS_DIR)/nosearch_$1 ;
 $1: $(TEST_DIR)/cpython/nosearch_$1 ;
 $1: $(TEST_DIR)/testsuite/integration/nosearch_$1 ;
+$1: $(TEST_DIR)/testsuite/extra/nosearch_$1 ;
 $1: $(TEST_DIR)/extra/nosearch_$1 ;
 $1: ./microbenchmarks/nosearch_$1 ;
 $1: ./minibenchmarks/nosearch_$1 ;

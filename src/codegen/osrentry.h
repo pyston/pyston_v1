@@ -31,16 +31,20 @@ struct StackMap;
 
 class OSREntryDescriptor {
 private:
-    OSREntryDescriptor(CLFunction* clfunc, AST_Jump* backedge) : clfunc(clfunc), backedge(backedge) { assert(clfunc); }
+    OSREntryDescriptor(CLFunction* clfunc, AST_Jump* backedge, ExceptionStyle exception_style)
+        : clfunc(clfunc), backedge(backedge), exception_style(exception_style) {
+        assert(clfunc);
+    }
 
 public:
     CLFunction* clfunc;
     AST_Jump* const backedge;
+    ExceptionStyle exception_style;
     typedef std::map<InternedString, ConcreteCompilerType*> ArgMap;
     ArgMap args;
 
-    static OSREntryDescriptor* create(CLFunction* clfunc, AST_Jump* backedge) {
-        return new OSREntryDescriptor(clfunc, backedge);
+    static OSREntryDescriptor* create(CLFunction* clfunc, AST_Jump* backedge, ExceptionStyle exception_style) {
+        return new OSREntryDescriptor(clfunc, backedge, exception_style);
     }
 };
 
