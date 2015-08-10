@@ -661,7 +661,7 @@ struct PyLt {
 
 class BoxedDict : public Box {
 public:
-    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*>>> DictMap;
+    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq> DictMap;
 
     DictMap d;
 

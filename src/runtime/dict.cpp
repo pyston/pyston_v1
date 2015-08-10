@@ -689,14 +689,10 @@ void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedDict* d = (BoxedDict*)b;
 
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&d->d;
-    void** end = start + (sizeof(d->d) / 8);
-    v->visitPotentialRange(start, end);
+    for (auto p : d->d) {
+        v->visit(p.first);
+        v->visit(p.second);
+    }
 }
 
 void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
