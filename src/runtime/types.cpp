@@ -1185,7 +1185,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 PyErr_SetString(TypeError, objectNewParameterTypeErrorMsg());
                 return NULL;
             } else
-                raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
+                raiseExcHelper(TypeError, "%s", objectNewParameterTypeErrorMsg());
         }
     }
 

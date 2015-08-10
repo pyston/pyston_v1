@@ -668,9 +668,8 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             Box* r = callattr(val, long_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
 
             if (!r) {
-                fprintf(stderr, "TypeError: long() argument must be a string or a number, not '%s'\n",
-                        getTypeName(val));
-                raiseExcHelper(TypeError, "");
+                raiseExcHelper(TypeError, "TypeError: long() argument must be a string or a number, not '%s'\n",
+                               getTypeName(val));
             }
 
             if (isSubclass(r->cls, int_cls)) {

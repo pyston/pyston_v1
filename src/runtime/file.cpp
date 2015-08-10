@@ -433,8 +433,7 @@ static PyObject* get_line(BoxedFile* f, int n) noexcept {
 Box* fileRead(BoxedFile* self, Box* _size) {
     assert(self->cls == file_cls);
     if (_size->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExcHelper(TypeError, "");
+        raiseExcHelper(TypeError, "an integer is required");
     }
     int64_t size = static_cast<BoxedInt*>(_size)->n;
 
@@ -943,12 +942,10 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m, Box** args) {
         m = _PyUnicode_AsDefaultEncodedString(m, NULL);
 
     if (s->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(s));
-        raiseExcHelper(TypeError, "");
+        raiseExcHelper(TypeError, "coercing to Unicode: need string of buffer, %s found", getTypeName(s));
     }
     if (m->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(m));
-        raiseExcHelper(TypeError, "");
+        raiseExcHelper(TypeError, "coercing to Unicode: need string of buffer, %s found", getTypeName(m));
     }
 
     if (!PyInt_Check(buffering))
@@ -1111,7 +1108,7 @@ Box* fileIterNext(BoxedFile* s) {
     Box* rtn = fileReadline1(s);
     assert(!rtn || rtn->cls == str_cls);
     if (!rtn || ((BoxedString*)rtn)->s().empty())
-        raiseExcHelper(StopIteration, "");
+        raiseExcHelper(StopIteration, (const char*)NULL);
     return rtn;
 }
 

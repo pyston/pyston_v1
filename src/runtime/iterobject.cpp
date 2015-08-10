@@ -103,7 +103,7 @@ Box* seqiterNext(Box* s) {
         else
             RELEASE_ASSERT(0, "");
         if (hasnext == False)
-            raiseExcHelper(StopIteration, "");
+            raiseExcHelper(StopIteration, (const char*)NULL);
     }
 
     RELEASE_ASSERT(self->next, "");

@@ -604,14 +604,14 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
         if (element->cls == list_cls) {
             BoxedList* list = static_cast<BoxedList*>(element);
             if (list->size != 2)
-                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", idx,
+                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %ld; 2 is required", idx,
                                list->size);
 
             self->d[list->elts->elts[0]] = list->elts->elts[1];
         } else if (element->cls == tuple_cls) {
             BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
             if (tuple->size() != 2)
-                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", idx,
+                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %ld; 2 is required", idx,
                                tuple->size());
 
             self->d[tuple->elts[0]] = tuple->elts[1];

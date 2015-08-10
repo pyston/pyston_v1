@@ -256,7 +256,7 @@ extern "C" void assertFail(Box* assertion_type, Box* msg) {
         BoxedString* tostr = str(msg);
         raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "%s", tostr->data());
     } else {
-        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), "");
+        raiseExcHelper(static_cast<BoxedClass*>(assertion_type), (const char*)NULL);
     }
 }
 
@@ -1222,7 +1222,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
                 if (rtn == NULL) {
-                    raiseExcHelper(AttributeError, "%.*s", attr_name->size(), attr_name->data());
+                    assert(attr_name->data()[attr_name->size()] == '\0');
+                    raiseExcHelper(AttributeError, "%s", attr_name->data());
                 }
                 return rtn;
             }
@@ -1356,8 +1357,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         // is of that type.
 
         if (getset_descr->get == NULL) {
-            raiseExcHelper(AttributeError, "attribute '%.*s' of '%s' object is not readable", attr_name->size(),
-                           attr_name->data(), getTypeName(getset_descr));
+            assert(attr_name->data()[attr_name->size()] == '\0');
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not readable", attr_name->data(),
+                           getTypeName(getset_descr));
         }
 
         // Abort because right now we can't call twice in a rewrite
@@ -2041,8 +2043,9 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 
         // TODO type checking goes here
         if (getset_descr->set == NULL) {
-            raiseExcHelper(AttributeError, "attribute '%.*s' of '%s' objects is not writable", attr_name->size(),
-                           attr_name->data(), getTypeName(obj));
+            assert(attr_name->data()[attr_name->size()] == '\0');
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' objects is not writable", attr_name->data(),
+                           getTypeName(obj));
         }
 
         if (rewrite_args) {
@@ -3235,7 +3238,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
@@ -3335,7 +3338,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%d given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name, paramspec.num_args,
                        argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
@@ -4902,8 +4905,8 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
     } else {
         // the exception cpthon throws is different when the class contains the attribute
         if (clsAttr != NULL) {
-            raiseExcHelper(AttributeError, "'%s' object attribute '%.*s' is read-only", getTypeName(obj), attr->size(),
-                           attr->data());
+            assert(attr->data()[attr->size()] == '\0');
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj), attr->data());
         } else {
             assert(attr->data()[attr->size()] == '\0');
             raiseAttributeError(obj, attr->s());
