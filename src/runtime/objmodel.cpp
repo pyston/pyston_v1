@@ -1375,8 +1375,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
             if (descr->cls == capi_getset_cls)
-                // TODO I think we are supposed to check the return value?
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
             rewrite_args->out_success = true;
         }
@@ -1434,7 +1433,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
 
                 if (S == CXX)
-                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
                 else
                     rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
 
@@ -3658,7 +3657,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, func_ptr, arg_vec);
         if (S == CXX && chosen_cf->exception_style == CAPI)
-            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
         rewrite_args->out_success = true;
     }
@@ -4649,7 +4648,7 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
             RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
             if (S == CXX)
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;
         }

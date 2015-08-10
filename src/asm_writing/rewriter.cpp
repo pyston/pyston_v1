@@ -19,6 +19,7 @@
 #include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -1519,6 +1520,29 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     first_elem->bumpUse();
 
     result->releaseIfNoUses();
+    assertConsistent();
+}
+
+void Rewriter::checkAndThrowCAPIException(RewriterVar* r) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    addAction([=]() { this->_checkAndThrowCAPIException(r); }, { r }, ActionType::MUTATION);
+}
+
+void Rewriter::_checkAndThrowCAPIException(RewriterVar* r) {
+    assembler->comment("_checkAndThrowCAPIException");
+
+    assembler::Register var_reg = r->getInReg();
+    assembler->test(var_reg, var_reg);
+
+    {
+        assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
+        assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);
+        assembler->callq(assembler::R11);
+    }
+
+    r->bumpUse();
+
     assertConsistent();
 }
 
