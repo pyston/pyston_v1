@@ -185,7 +185,9 @@ extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
         exc_info = e;
     }
 
-    assert(!reraise); // would get thrown away
+    if (reraise)
+        startReraise();
+
     PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
 }
 
