@@ -86,7 +86,7 @@ public:
 
 class NonzeroIC : public RuntimeIC {
 public:
-    NonzeroIC() : RuntimeIC((void*)nonzero, 1, 40) {}
+    NonzeroIC() : RuntimeIC((void*)nonzero, 1, 512) {}
 
     bool call(Box* obj) { return call_bool(obj); }
 };
