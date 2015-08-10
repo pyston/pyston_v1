@@ -333,7 +333,7 @@ ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder) {
 }
 
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 2, 64, ICSetupInfo::Nonzero, type_recorder);
+    return ICSetupInfo::initialize(true, 2, 512, ICSetupInfo::Nonzero, type_recorder);
 }
 
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder) {

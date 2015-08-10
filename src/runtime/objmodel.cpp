@@ -2275,12 +2275,28 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     }
 }
 
+static bool nonzeroHelper(Box* r) {
+    // I believe this behavior is handled by the slot wrappers in CPython:
+    if (r->cls == bool_cls) {
+        BoxedBool* b = static_cast<BoxedBool*>(r);
+        bool rtn = b->n;
+        return rtn;
+    } else if (r->cls == int_cls) {
+        BoxedInt* b = static_cast<BoxedInt*>(r);
+        bool rtn = b->n != 0;
+        return rtn;
+    } else {
+        raiseExcHelper(TypeError, "__nonzero__ should return bool or int, returned %s", getTypeName(r));
+    }
+}
+
 extern "C" bool nonzero(Box* obj) {
     STAT_TIMER(t0, "us_timer_slowpath_nonzero", 10);
 
     assert(gc::isValidGCObject(obj));
 
     static StatCounter slowpath_nonzero("slowpath_nonzero");
+    slowpath_nonzero.log();
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "nonzero"));
@@ -2374,40 +2390,47 @@ extern "C" bool nonzero(Box* obj) {
         return r;
     }
 
-    // TODO: rewrite these.
     static BoxedString* nonzero_str = internStringImmortal("__nonzero__");
     static BoxedString* len_str = internStringImmortal("__len__");
-    // go through descriptor logic
-    Box* func = getclsattrInternal(obj, nonzero_str, NULL);
-    if (!func)
-        func = getclsattrInternal(obj, len_str, NULL);
 
-    if (func == NULL) {
-        ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
-                   || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
-                   || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
-                   || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
-                   || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
-                   || obj->cls == wrapperdescr_cls,
-               "%s.__nonzero__", getTypeName(obj)); // TODO
+    // try __nonzero__
+    GetattrRewriteArgs grewrite_args(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
+    Box* func = getclsattrInternal(obj, nonzero_str, rewriter ? &grewrite_args : NULL);
+    if (!grewrite_args.out_success)
+        rewriter.reset();
 
-        // TODO should rewrite these?
-        return true;
+    if (!func) {
+        // try __len__
+        grewrite_args
+            = GetattrRewriteArgs(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
+        func = getclsattrInternal(obj, len_str, rewriter ? &grewrite_args : NULL);
+        if (!grewrite_args.out_success)
+            rewriter.reset();
+
+        if (func == NULL) {
+            ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
+                       || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
+                       || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
+                       || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
+                       || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
+                       || obj->cls == wrapperdescr_cls,
+                   "%s.__nonzero__", getTypeName(obj)); // TODO
+
+            if (rewriter.get()) {
+                RewriterVar* b = rewriter->loadConst(1, rewriter->getReturnDestination());
+                rewriter->commitReturning(b);
+            }
+            return true;
+        }
     }
-
-    Box* r = runtimeCallInternal<CXX>(func, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    // I believe this behavior is handled by the slot wrappers in CPython:
-    if (r->cls == bool_cls) {
-        BoxedBool* b = static_cast<BoxedBool*>(r);
-        bool rtn = b->n;
-        return rtn;
-    } else if (r->cls == int_cls) {
-        BoxedInt* b = static_cast<BoxedInt*>(r);
-        bool rtn = b->n != 0;
-        return rtn;
-    } else {
-        raiseExcHelper(TypeError, "__nonzero__ should return bool or int, returned %s", getTypeName(r));
+    CallRewriteArgs cargs(rewriter.get(), grewrite_args.out_rtn,
+                          rewriter ? rewriter->getReturnDestination() : Location());
+    Box* rtn = runtimeCallInternal0<CXX>(func, rewriter ? &cargs : NULL, ArgPassSpec(0));
+    if (cargs.out_success) {
+        RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, cargs.out_rtn);
+        rewriter->commitReturning(b);
     }
+    return nonzeroHelper(rtn);
 }
 
 extern "C" BoxedString* str(Box* obj) {
