@@ -221,7 +221,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (isSubclass(b->cls, dict_cls)) {
             BoxedDict* d = static_cast<BoxedDict*>(b);
-            printf("%ld elements\n", d->d.size());
+            printf("%d elements\n", d->d.size());
 
             if (levels > 0) {
                 int i = 0;

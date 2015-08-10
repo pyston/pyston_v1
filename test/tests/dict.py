@@ -233,6 +233,5 @@ print sorted(l)
 
 #recursive printing test
 d = dict()
-d['one'] = '1'
 d['two'] = d
 print d

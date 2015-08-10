@@ -479,7 +479,7 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
     if (it != self->d.end())
         return it->second;
 
-    self->d.insert(it, std::make_pair(k, v));
+    self->d.insert(std::make_pair(k, v));
     return v;
 }
 

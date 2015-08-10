@@ -659,9 +659,22 @@ struct PyLt {
     bool operator()(Box*, Box*) const;
 };
 
+struct PythonLevelEq {
+    static bool isEqual(Box* lhs, Box* rhs) {
+        if (lhs == rhs)
+            return true;
+        if (rhs == getEmptyKey() || rhs == getTombstoneKey())
+            return false;
+        return PyEq()(lhs, rhs);
+    }
+    static Box* getEmptyKey() { return (Box*)-1; }
+    static Box* getTombstoneKey() { return (Box*)-2; }
+    static unsigned getHashValue(Box* val) { return PyHasher()(val); }
+};
+
 class BoxedDict : public Box {
 public:
-    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq> DictMap;
+    typedef llvm::DenseMap<Box*, Box*, PythonLevelEq> DictMap;
 
     DictMap d;
 
