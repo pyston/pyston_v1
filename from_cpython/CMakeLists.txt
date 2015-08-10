@@ -102,6 +102,7 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     mystrtoul.c
     pyctype.c
     pystrtod.c
+    random.c
     structmember.c
     )
 

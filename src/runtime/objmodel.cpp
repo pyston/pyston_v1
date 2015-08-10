@@ -130,9 +130,8 @@ size_t PyHasher::operator()(Box* b) const {
     ScopedStatTimer _st(pyhasher_timer_counter, 10);
 #endif
     if (b->cls == str_cls) {
-        StringHash<char> H;
         auto s = static_cast<BoxedString*>(b);
-        return H(s->data(), s->size());
+        return strHashUnboxed(s);
     }
 
     return hashUnboxed(b);

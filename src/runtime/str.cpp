@@ -1522,28 +1522,69 @@ failed:
 }
 
 extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
+    Py_ssize_t len;
+    Py_UNICODE* p;
+    long x;
+
+#ifdef Py_DEBUG
+    assert(_Py_HashSecret_Initialized);
+#endif
     if (self->hash != -1)
         return self->hash;
-
-    Py_ssize_t len = PyUnicode_GET_SIZE(self);
-
-    if (len == 0)
+    len = PyUnicode_GET_SIZE(self);
+    /*
+      We make the hash of the empty string be 0, rather than using
+      (prefix ^ suffix), since this slightly obfuscates the hash secret
+    */
+    if (len == 0) {
+        self->hash = 0;
         return 0;
+    }
+    p = PyUnicode_AS_UNICODE(self);
+    x = _Py_HashSecret.prefix;
+    x ^= *p << 7;
+    while (--len >= 0)
+        x = (1000003 * x) ^ *p++;
+    x ^= PyUnicode_GET_SIZE(self);
+    x ^= _Py_HashSecret.suffix;
+    if (x == -1)
+        x = -2;
+    self->hash = x;
+    return x;
+}
 
-    Py_UNICODE* p = PyUnicode_AS_UNICODE(self);
-    pyston::StringHash<Py_UNICODE> H;
-    return H(p, len);
+extern "C" size_t strHashUnboxed(BoxedString* self) {
+    assert(PyString_Check(self));
+    const char* p;
+    long x;
+
+#ifdef Py_DEBUG
+    assert(_Py_HashSecret_Initialized);
+#endif
+
+    long len = Py_SIZE(self);
+    /*
+      We make the hash of the empty string be 0, rather than using
+      (prefix ^ suffix), since this slightly obfuscates the hash secret
+    */
+    if (len == 0) {
+        return 0;
+    }
+    p = self->s().data();
+    x = _Py_HashSecret.prefix;
+    x ^= *p << 7;
+    while (--len >= 0)
+        x = (1000003 * x) ^ *p++;
+    x ^= Py_SIZE(self);
+    x ^= _Py_HashSecret.suffix;
+    if (x == -1)
+        x = -2;
+
+    return x;
 }
 
 extern "C" Box* strHash(BoxedString* self) {
-    assert(PyString_Check(self));
-
-    // CPython set the hash empty string to 0 manually
-    if (self->size() == 0)
-        return boxInt(0);
-
-    StringHash<char> H;
-    return boxInt(H(self->data(), self->size()));
+    return boxLong(strHashUnboxed(self));
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
@@ -2714,7 +2755,7 @@ void setupStr() {
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
     str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
-    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1)));
+    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, UNKNOWN, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
 
     str_cls->giveAttr("isalnum", new BoxedFunction(boxRTFunction((void*)strIsAlnum, BOXED_BOOL, 1)));

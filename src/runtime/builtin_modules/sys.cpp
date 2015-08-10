@@ -39,6 +39,7 @@ BoxedDict* sys_modules_dict;
 extern "C" {
 // supposed to be exposed through sys.flags
 int Py_BytesWarningFlag = 0;
+int Py_HashRandomizationFlag = 0;
 }
 
 Box* sysExcInfo() {

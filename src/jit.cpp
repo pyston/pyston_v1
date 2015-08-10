@@ -301,7 +301,7 @@ static int main(int argc, char** argv) {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEac:FuPTGm:")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsRSvnxEac:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;
@@ -311,6 +311,9 @@ static int main(int argc, char** argv) {
                 assert(optarg);
                 module = optarg;
                 // no more option parsing; the rest of our arguments go into sys.argv.
+                break;
+            } else if (code == 'R') {
+                Py_HashRandomizationFlag = 1;
                 break;
             } else if (code == ':') {
                 fprintf(stderr, "Argument expected for the -%c option\n", optopt);
@@ -324,7 +327,13 @@ static int main(int argc, char** argv) {
                     return r;
             }
         }
+        /* The variable is only tested for existence here; _PyRandom_Init will
+           check its value further. */
+        char* p;
+        if (!Py_HashRandomizationFlag && (p = Py_GETENV("PYTHONHASHSEED")) && *p != '\0')
+            Py_HashRandomizationFlag = 1;
 
+        _PyRandom_Init();
         Stats::startEstimatingCPUFreq();
 
         const char* fn = NULL;
