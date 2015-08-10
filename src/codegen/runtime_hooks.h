@@ -50,7 +50,7 @@ struct GlobalFuncs {
     llvm::Value* boxedLocalsSet, *boxedLocalsGet, *boxedLocalsDel;
 
     llvm::Value* __cxa_end_catch;
-    llvm::Value* raise0, *raise3, *raise3_capi;
+    llvm::Value* raise0, *raise0_capi, *raise3, *raise3_capi;
     llvm::Value* PyErr_Fetch, *PyErr_NormalizeException, *PyErr_Restore, *caughtCapiException, *reraiseCapiExcAsCxx;
     llvm::Value* deopt;
 

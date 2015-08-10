@@ -34,6 +34,7 @@ class BoxedTuple;
 // user-level raise functions that implement python-level semantics
 ExcInfo excInfoForRaise(Box*, Box*, Box*);
 extern "C" void raise0() __attribute__((__noreturn__));
+extern "C" void raise0_capi() noexcept;
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 extern "C" void raise3_capi(Box*, Box*, Box*) noexcept;
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));

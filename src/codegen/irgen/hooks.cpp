@@ -184,7 +184,8 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
-                                  const OSREntryDescriptor* entry_descriptor) {
+                                  const OSREntryDescriptor* entry_descriptor, bool force_exception_style,
+                                  ExceptionStyle forced_exception_style) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_compileFunction");
     Timer _t("for compileFunction()", 1000);
 
@@ -197,11 +198,17 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
-    ExceptionStyle exception_style = CXX;
-    if (FORCE_LLVM_CAPI_THROWS)
+    ExceptionStyle exception_style;
+    if (force_exception_style)
+        exception_style = forced_exception_style;
+    else if (FORCE_LLVM_CAPI_THROWS)
         exception_style = CAPI;
-    if (name == "next")
+    else if (name == "next")
         exception_style = CAPI;
+    else if (f->propagated_cxx_exceptions >= 100)
+        exception_style = CAPI;
+    else
+        exception_style = CXX;
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
@@ -764,9 +771,8 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) 
         if (versions[i] == cf) {
             versions.erase(versions.begin() + i);
 
-            CompiledFunction* new_cf
-                = compileFunction(clfunc, cf->spec, new_effort,
-                                  NULL); // this pushes the new CompiledVersion to the back of the version list
+            // this pushes the new CompiledVersion to the back of the version list
+            CompiledFunction* new_cf = compileFunction(clfunc, cf->spec, new_effort, NULL, true, cf->exception_style);
 
             cf->dependent_callsites.invalidateAll();
 
@@ -797,7 +803,8 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     CompiledFunction*& new_cf = clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
         EffortLevel new_effort = EffortLevel::MAXIMAL;
-        CompiledFunction* compiled = compileFunction(clfunc, NULL, new_effort, exit->entry);
+        CompiledFunction* compiled
+            = compileFunction(clfunc, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
         assert(compiled == new_cf);
 
         stat_osr_compiles.log();
@@ -807,7 +814,9 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
 }
 
 void* compilePartialFunc(OSRExit* exit) {
-    return compilePartialFuncInternal(exit)->code;
+    CompiledFunction* new_cf = compilePartialFuncInternal(exit);
+    assert(new_cf->exception_style == exit->entry->exception_style);
+    return new_cf->code;
 }
 
 

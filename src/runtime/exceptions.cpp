@@ -68,19 +68,6 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
     raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
 }
 
-extern "C" void raise0() {
-    ExcInfo* exc_info = getFrameExcInfo();
-    assert(exc_info->type);
-
-    // TODO need to clean up when we call normalize, do_raise, etc
-    if (exc_info->type == None)
-        raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
-
-    startReraise();
-    assert(!PyErr_Occurred());
-    throw * exc_info;
-}
-
 void ExcInfo::printExcAndTraceback() const {
     PyErr_Display(type, value, traceback);
 }
@@ -148,6 +135,35 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     return ExcInfo(type, value, tb);
 }
 
+extern "C" void raise0() {
+    ExcInfo* exc_info = getFrameExcInfo();
+    assert(exc_info->type);
+
+    // TODO need to clean up when we call normalize, do_raise, etc
+    if (exc_info->type == None)
+        raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
+
+    startReraise();
+    assert(!PyErr_Occurred());
+    throw * exc_info;
+}
+
+extern "C" void raise0_capi() noexcept {
+    ExcInfo exc_info = *getFrameExcInfo();
+    assert(exc_info.type);
+
+    // TODO need to clean up when we call normalize, do_raise, etc
+    if (exc_info.type == None) {
+        exc_info.type = TypeError;
+        exc_info.value = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");
+        exc_info.traceback = None;
+        PyErr_NormalizeException(&exc_info.type, &exc_info.value, &exc_info.traceback);
+    }
+
+    startReraise();
+    PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
+}
+
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
@@ -169,7 +185,9 @@ extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
         exc_info = e;
     }
 
-    assert(!reraise); // would get thrown away
+    if (reraise)
+        startReraise();
+
     PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
 }
 

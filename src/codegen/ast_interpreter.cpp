@@ -714,7 +714,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
 
     if (found_entry == nullptr) {
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(clfunc, node);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(clfunc, node, CXX);
 
         for (auto& it : sorted_symbol_table) {
             if (isIsDefinedName(it.first))

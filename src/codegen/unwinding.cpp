@@ -556,6 +556,8 @@ public:
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
         if (found_frame) {
+            frame_iter.getCL()->propagated_cxx_exceptions++;
+
             if (exceptionAtLineCheck()) {
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
