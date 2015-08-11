@@ -708,7 +708,7 @@ void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == dict_items_cls);
+    assert(b->cls == dict_items_cls || b->cls == dict_values_cls || b->cls == dict_keys_cls);
     Box::gcHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);

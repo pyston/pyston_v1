@@ -1508,7 +1508,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assert(getSymVRegMap()[node->id] == node->vreg);
             Box* val = vregs[node->vreg];
             if (val) {
-                assert(gc::isValidGCObject(val));
+                ASSERT(gc::isValidGCObject(val), "%s is %p", node->id.c_str(), val);
                 v.o = val;
                 return v;
             }

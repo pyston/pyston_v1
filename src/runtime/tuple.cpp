@@ -128,6 +128,7 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
 
     BoxedTuple* resized = new (newsize) BoxedTuple();
     memmove(resized->elts, t->elts, sizeof(Box*) * t->size());
+    memset(resized->elts + t->size(), 0, sizeof(Box*) * (newsize - t->size()));
 
     *pv = resized;
     return 0;

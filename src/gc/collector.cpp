@@ -682,11 +682,6 @@ static void markPhase() {
     // pending finalization list.
     orderFinalizers();
 
-#if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
-#endif
-
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
