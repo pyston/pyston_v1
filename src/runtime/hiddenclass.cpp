@@ -27,6 +27,20 @@
 
 namespace pyston {
 
+void HiddenClass::gc_visit(GCVisitor* visitor) {
+    // Visit children even for the dict-backed case, since children will just be empty
+    visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
+    visitor->visit(attrwrapper_child);
+
+    // We don't need to visit the keys of the 'children' map, since the children should have those as entries
+    // in the attr_offssets map.
+    // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
+    // of our child's map.
+    if (children.empty())
+        for (auto p : attr_offsets)
+            visitor->visit(p.first);
+}
+
 void HiddenClass::appendAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
     assert(type == SINGLETON);

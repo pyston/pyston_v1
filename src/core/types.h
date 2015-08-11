@@ -29,6 +29,7 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/stringpool.h"
+#include "gc/gc.h"
 
 namespace llvm {
 class Function;
@@ -38,29 +39,6 @@ class Value;
 
 namespace pyston {
 
-namespace gc {
-
-class TraceStack;
-class GCVisitor {
-private:
-    bool isValid(void* p);
-
-public:
-    TraceStack* stack;
-    GCVisitor(TraceStack* stack) : stack(stack) {}
-
-    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
-    void visitIf(void* p) {
-        if (p)
-            visit(p);
-    }
-    void visit(void* p);
-    void visitRange(void* const* start, void* const* end);
-    void visitPotential(void* p);
-    void visitPotentialRange(void* const* start, void* const* end);
-};
-
-} // namespace gc
 using gc::GCVisitor;
 
 enum class EffortLevel {
@@ -459,33 +437,14 @@ class BinopIC;
 
 class Box;
 
-namespace gc {
-
-enum class GCKind : uint8_t {
-    PYTHON = 1,
-    CONSERVATIVE = 2,
-    PRECISE = 3,
-    UNTRACKED = 4,
-    HIDDEN_CLASS = 5,
-    CONSERVATIVE_PYTHON = 6,
-};
-
-extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
-extern "C" void gc_free(void* ptr);
-}
-
-template <gc::GCKind gc_kind> class GCAllocated {
-public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc::gc_alloc(size, gc_kind); }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { gc::gc_free(ptr); }
-};
-
-class BoxIteratorImpl : public GCAllocated<gc::GCKind::CONSERVATIVE> {
+class BoxIteratorImpl : public gc::GCAllocatedRuntime {
 public:
     virtual ~BoxIteratorImpl() = default;
     virtual void next() = 0;
     virtual Box* getValue() = 0;
     virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+
+    virtual void gc_visit(GCVisitor* v) = 0;
 };
 
 class BoxIterator {

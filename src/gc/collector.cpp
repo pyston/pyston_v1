@@ -404,9 +404,9 @@ static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& vis
             ASSERT(cls->gc_visit, "%s", getTypeName(b));
             cls->gc_visit(&visitor, b);
         }
-    } else if (kind_id == GCKind::HIDDEN_CLASS) {
-        HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
-        hcls->gc_visit(&visitor);
+    } else if (kind_id == GCKind::RUNTIME) {
+        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(p);
+        runtime_obj->gc_visit(&visitor);
     } else {
         RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
     }

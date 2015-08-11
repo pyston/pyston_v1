@@ -154,7 +154,12 @@ extern "C" void dumpEx(void* p, int levels) {
     }
 
     if (al->kind_id == gc::GCKind::PRECISE) {
-        printf("precise gc array\n");
+        printf("pyston precise object\n");
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::RUNTIME) {
+        printf("pyston runtime object\n");
         return;
     }
 
@@ -288,11 +293,6 @@ extern "C" void dumpEx(void* p, int levels) {
         }
         */
 
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::HIDDEN_CLASS) {
-        printf("Hidden class object\n");
         return;
     }
 
