@@ -62,6 +62,13 @@ public:
         static BoxIteratorGeneric _end(nullptr);
         return &_end;
     }
+
+    void gc_visit(GCVisitor* v) {
+        if (iterator)
+            v->visit(iterator);
+        if (value)
+            v->visit(value);
+    }
 };
 
 template <typename T> class BoxIteratorIndex : public BoxIteratorImpl {
@@ -106,6 +113,11 @@ public:
     static BoxIteratorIndex* end() {
         static BoxIteratorIndex _end(nullptr);
         return &_end;
+    }
+
+    void gc_visit(GCVisitor* v) {
+        if (obj)
+            v->visit(obj);
     }
 };
 }

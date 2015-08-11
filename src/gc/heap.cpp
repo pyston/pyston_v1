@@ -234,7 +234,7 @@ struct HeapStatistics {
     int num_hcls_by_attrs[HCLS_ATTRS_STAT_MAX + 1];
     int num_hcls_by_attrs_exceed;
 
-    TypeStats python, conservative, conservative_python, untracked, hcls, precise;
+    TypeStats python, conservative, conservative_python, untracked, runtime, precise;
     TypeStats total;
 
     HeapStatistics(bool collect_cls_stats, bool collect_hcls_stats)
@@ -287,18 +287,9 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     } else if (al->kind_id == GCKind::UNTRACKED) {
         stats->untracked.nallocs++;
         stats->untracked.nbytes += nbytes;
-    } else if (al->kind_id == GCKind::HIDDEN_CLASS) {
-        stats->hcls.nallocs++;
-        stats->hcls.nbytes += nbytes;
-
-        if (stats->collect_hcls_stats) {
-            HiddenClass* hcls = (HiddenClass*)al->user_data;
-            int numattrs = hcls->attributeArraySize();
-            if (numattrs <= HCLS_ATTRS_STAT_MAX)
-                stats->num_hcls_by_attrs[numattrs]++;
-            else
-                stats->num_hcls_by_attrs_exceed++;
-        }
+    } else if (al->kind_id == GCKind::RUNTIME) {
+        stats->runtime.nallocs++;
+        stats->runtime.nbytes += nbytes;
     } else if (al->kind_id == GCKind::PRECISE) {
         stats->precise.nallocs++;
         stats->precise.nbytes += nbytes;
@@ -327,7 +318,7 @@ void Heap::dumpHeapStatistics(int level) {
     stats.conservative.print("conservative");
     stats.conservative_python.print("conservative_python");
     stats.untracked.print("untracked");
-    stats.hcls.print("hcls");
+    stats.runtime.print("runtime");
     stats.precise.print("precise");
 
     if (collect_cls_stats) {
@@ -337,16 +328,6 @@ void Heap::dumpHeapStatistics(int level) {
     }
 
     stats.total.print("Total");
-
-    if (collect_hcls_stats) {
-        fprintf(stderr, "%ld hidden classes currently alive\n", stats.hcls.nallocs);
-        fprintf(stderr, "%ld have at least one Box that uses them\n", stats.hcls_uses.size());
-
-        for (int i = 0; i <= HCLS_ATTRS_STAT_MAX; i++) {
-            fprintf(stderr, "With % 3d attributes: %d\n", i, stats.num_hcls_by_attrs[i]);
-        }
-        fprintf(stderr, "With >% 2d attributes: %d\n", HCLS_ATTRS_STAT_MAX, stats.num_hcls_by_attrs_exceed);
-    }
 
     fprintf(stderr, "\n");
 }

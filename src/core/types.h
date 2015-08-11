@@ -466,26 +466,35 @@ enum class GCKind : uint8_t {
     CONSERVATIVE = 2,
     PRECISE = 3,
     UNTRACKED = 4,
-    HIDDEN_CLASS = 5,
+    RUNTIME = 5,
     CONSERVATIVE_PYTHON = 6,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
+extern "C" void* gc_realloc(void* ptr, size_t bytes);
 extern "C" void gc_free(void* ptr);
 }
 
-template <gc::GCKind gc_kind> class GCAllocated {
+class GCAllocatedRuntime {
 public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc::gc_alloc(size, gc_kind); }
+    virtual ~GCAllocatedRuntime() {}
+
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        return gc::gc_alloc(size, gc::GCKind::RUNTIME);
+    }
     void operator delete(void* ptr) __attribute__((visibility("default"))) { gc::gc_free(ptr); }
+
+    virtual void gc_visit(GCVisitor* visitor) = 0;
 };
 
-class BoxIteratorImpl : public GCAllocated<gc::GCKind::CONSERVATIVE> {
+class BoxIteratorImpl : public GCAllocatedRuntime {
 public:
     virtual ~BoxIteratorImpl() = default;
     virtual void next() = 0;
     virtual Box* getValue() = 0;
     virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+
+    virtual void gc_visit(GCVisitor* v) = 0;
 };
 
 class BoxIterator {
