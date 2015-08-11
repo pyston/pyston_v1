@@ -581,8 +581,7 @@ private:
 
     OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) { return OpInfo(irstate->getEffortLevel(), NULL, unw_info); }
 
-    void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, llvm::Value* node_value,
-                             AST_stmt* current_statement) {
+    void createExprTypeGuard(llvm::Value* check_val, AST* node, llvm::Value* node_value, AST_stmt* current_statement) {
         assert(check_val->getType() == g.i1);
 
         llvm::Metadata* md_vals[]
@@ -1266,7 +1265,7 @@ private:
     CompilerVariable* evalExtSlice(AST_ExtSlice* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
         for (auto* e : node->dims) {
-            elts.push_back(evalExpr(e, unw_info));
+            elts.push_back(evalSlice(e, unw_info));
         }
 
         // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
@@ -1295,7 +1294,7 @@ private:
 
     CompilerVariable* evalSubscript(AST_Subscript* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
-        CompilerVariable* slice = evalExpr(node->slice, unw_info);
+        CompilerVariable* slice = evalSlice(node->slice, unw_info);
 
         CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
         value->decvref(emitter);
@@ -1529,6 +1528,68 @@ private:
         return new ConcreteCompilerVariable(t, v, grabbed);
     }
 
+    template <typename AstType>
+    CompilerVariable* evalSliceExprPost(AstType* node, const UnwindInfo& unw_info, CompilerVariable* rtn) {
+        assert(rtn);
+
+        // Out-guarding:
+        BoxedClass* speculated_class = types->speculatedExprClass(node);
+        if (speculated_class != NULL) {
+            assert(rtn);
+
+            ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
+            if (VERBOSITY("irgen") >= 2) {
+                printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
+                       speculated_type->debugName().c_str());
+                PrintVisitor printer;
+                node->accept(&printer);
+                printf("\n");
+            }
+
+            // That's not really a speculation.... could potentially handle this here, but
+            // I think it's better to just not generate bad speculations:
+            assert(!rtn->canConvertTo(speculated_type));
+
+            ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
+            rtn->decvref(emitter);
+
+            llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
+            assert(guard_check->getType() == g.i1);
+            createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
+
+            rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+        }
+
+        assert(rtn);
+
+        return rtn;
+    }
+
+    CompilerVariable* evalSlice(AST_slice* node, const UnwindInfo& unw_info) {
+        // printf("%d expr: %d\n", node->type, node->lineno);
+        if (node->lineno) {
+            emitter.getBuilder()->SetCurrentDebugLocation(
+                llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+        }
+
+        CompilerVariable* rtn = NULL;
+        switch (node->type) {
+            case AST_TYPE::ExtSlice:
+                rtn = evalExtSlice(ast_cast<AST_ExtSlice>(node), unw_info);
+                break;
+            case AST_TYPE::Index:
+                rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
+                break;
+            case AST_TYPE::Slice:
+                rtn = evalSlice(ast_cast<AST_Slice>(node), unw_info);
+                break;
+            default:
+                printf("Unhandled slice type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
+                exit(1);
+        }
+        return evalSliceExprPost(node, unw_info, rtn);
+    }
+
     CompilerVariable* evalExpr(AST_expr* node, const UnwindInfo& unw_info) {
         // printf("%d expr: %d\n", node->type, node->lineno);
         if (node->lineno) {
@@ -1556,12 +1617,6 @@ private:
             case AST_TYPE::Dict:
                 rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
                 break;
-            case AST_TYPE::ExtSlice:
-                rtn = evalExtSlice(ast_cast<AST_ExtSlice>(node), unw_info);
-                break;
-            case AST_TYPE::Index:
-                rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
-                break;
             case AST_TYPE::Lambda:
                 rtn = evalLambda(ast_cast<AST_Lambda>(node), unw_info);
                 break;
@@ -1579,9 +1634,6 @@ private:
                 break;
             case AST_TYPE::Set:
                 rtn = evalSet(ast_cast<AST_Set>(node), unw_info);
-                break;
-            case AST_TYPE::Slice:
-                rtn = evalSlice(ast_cast<AST_Slice>(node), unw_info);
                 break;
             case AST_TYPE::Str:
                 rtn = evalStr(ast_cast<AST_Str>(node), unw_info);
@@ -1616,40 +1668,7 @@ private:
                 printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
                 exit(1);
         }
-
-        assert(rtn);
-
-        // Out-guarding:
-        BoxedClass* speculated_class = types->speculatedExprClass(node);
-        if (speculated_class != NULL) {
-            assert(rtn);
-
-            ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
-            if (VERBOSITY("irgen") >= 2) {
-                printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
-                       speculated_type->debugName().c_str());
-                PrintVisitor printer;
-                node->accept(&printer);
-                printf("\n");
-            }
-
-            // That's not really a speculation.... could potentially handle this here, but
-            // I think it's better to just not generate bad speculations:
-            assert(!rtn->canConvertTo(speculated_type));
-
-            ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
-            rtn->decvref(emitter);
-
-            llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
-            assert(guard_check->getType() == g.i1);
-            createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
-
-            rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
-        }
-
-        assert(rtn);
-
-        return rtn;
+        return evalSliceExprPost(node, unw_info, rtn);
     }
 
     void _setFake(InternedString name, CompilerVariable* val) {
@@ -1740,7 +1759,7 @@ private:
 
     void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         CompilerVariable* tget = evalExpr(target->value, unw_info);
-        CompilerVariable* slice = evalExpr(target->slice, unw_info);
+        CompilerVariable* slice = evalSlice(target->slice, unw_info);
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
@@ -1871,7 +1890,7 @@ private:
     // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
     void _doDelitem(AST_Subscript* target, const UnwindInfo& unw_info) {
         CompilerVariable* tget = evalExpr(target->value, unw_info);
-        CompilerVariable* slice = evalExpr(target->slice, unw_info);
+        CompilerVariable* slice = evalSlice(target->slice, unw_info);
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());

@@ -100,6 +100,22 @@ private:
         }
     }
 
+    void writeSlice(AST_slice* e) {
+        if (!e) {
+            writeByte(0x00);
+        } else {
+            writeByte(e->type);
+            writeByte(0xae); // check byte
+            e->accept(this);
+        }
+    }
+    void writeSliceVector(const std::vector<AST_slice*>& vec) {
+        writeShort(vec.size());
+        for (auto* e : vec) {
+            writeSlice(e);
+        }
+    }
+
     void writeExprVector(const std::vector<AST_expr*>& vec) {
         writeShort(vec.size());
         for (auto* e : vec) {
@@ -301,7 +317,7 @@ private:
         return true;
     }
     virtual bool visit_extslice(AST_ExtSlice* node) {
-        writeExprVector(node->dims);
+        writeSliceVector(node->dims);
         return true;
     }
     virtual bool visit_for(AST_For* node) {
@@ -494,7 +510,7 @@ private:
         writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeLineno(node->lineno);
-        writeExpr(node->slice);
+        writeSlice(node->slice);
         writeExpr(node->value);
         return true;
     }

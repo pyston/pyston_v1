@@ -549,7 +549,7 @@ private:
 
             AST_Subscript* s_target = new AST_Subscript();
             s_target->value = remapExpr(s->value);
-            s_target->slice = remapExpr(s->slice);
+            s_target->slice = remapSlice(s->slice);
             s_target->ctx_type = AST_TYPE::Store;
             s_target->col_offset = s->col_offset;
             s_target->lineno = s->lineno;
@@ -645,6 +645,47 @@ private:
         return rtn;
     }
 
+    AST_slice* _dup(AST_slice* val) {
+        if (val == nullptr) {
+            return nullptr;
+        } else if (val->type == AST_TYPE::Ellipsis) {
+            AST_Ellipsis* orig = ast_cast<AST_Ellipsis>(val);
+            AST_Ellipsis* made = new AST_Ellipsis();
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            return made;
+        } else if (val->type == AST_TYPE::ExtSlice) {
+            AST_ExtSlice* orig = ast_cast<AST_ExtSlice>(val);
+            AST_ExtSlice* made = new AST_ExtSlice();
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            made->dims.reserve(orig->dims.size());
+            for (AST_slice* item : orig->dims) {
+                made->dims.push_back(_dup(item));
+            }
+            return made;
+        } else if (val->type == AST_TYPE::Index) {
+            AST_Index* orig = ast_cast<AST_Index>(val);
+            AST_Index* made = new AST_Index();
+            made->value = _dup(orig->value);
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            return made;
+        } else if (val->type == AST_TYPE::Slice) {
+            AST_Slice* orig = ast_cast<AST_Slice>(val);
+            AST_Slice* made = new AST_Slice();
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            made->lower = _dup(orig->lower);
+            made->upper = _dup(orig->upper);
+            made->step = _dup(orig->step);
+            return made;
+        } else {
+            RELEASE_ASSERT(0, "%d", val->type);
+        }
+        return nullptr;
+    }
+
     // Sometimes we want to refer to the same object twice,
     // but we require that no AST* object gets reused.
     // So instead, just create a copy of it.
@@ -672,13 +713,6 @@ private:
             AST_Str* made = new AST_Str();
             made->str_type = orig->str_type;
             made->str_data = orig->str_data;
-            made->col_offset = orig->col_offset;
-            made->lineno = orig->lineno;
-            return made;
-        } else if (val->type == AST_TYPE::Index) {
-            AST_Index* orig = ast_cast<AST_Index>(val);
-            AST_Index* made = new AST_Index();
-            made->value = _dup(orig->value);
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
@@ -855,15 +889,15 @@ private:
         return rtn;
     }
 
-    AST_expr* remapEllipsis(AST_Ellipsis* node) { return node; }
+    AST_slice* remapEllipsis(AST_Ellipsis* node) { return node; }
 
-    AST_expr* remapExtSlice(AST_ExtSlice* node) {
+    AST_slice* remapExtSlice(AST_ExtSlice* node) {
         AST_ExtSlice* rtn = new AST_ExtSlice();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
         for (auto* e : node->dims)
-            rtn->dims.push_back(remapExpr(e));
+            rtn->dims.push_back(remapSlice(e));
         return rtn;
     }
 
@@ -1014,7 +1048,7 @@ private:
         return makeLoad(rtn_name, node);
     }
 
-    AST_expr* remapIndex(AST_Index* node) {
+    AST_slice* remapIndex(AST_Index* node) {
         AST_Index* rtn = new AST_Index();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
@@ -1088,7 +1122,7 @@ private:
         return rtn;
     }
 
-    AST_expr* remapSlice(AST_Slice* node) {
+    AST_slice* remapSlice(AST_Slice* node) {
         AST_Slice* rtn = new AST_Slice();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
@@ -1120,7 +1154,7 @@ private:
         rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
         rtn->value = remapExpr(node->value);
-        rtn->slice = remapExpr(node->slice);
+        rtn->slice = remapSlice(node->slice);
         return rtn;
     }
 
@@ -1148,6 +1182,32 @@ private:
             raiseExcHelper(SyntaxError, "'yield' outside function");
 
         return makeLoad(node_name, node);
+    }
+
+    AST_slice* remapSlice(AST_slice* node) {
+        if (node == nullptr)
+            return nullptr;
+
+        AST_slice* rtn = nullptr;
+        switch (node->type) {
+            case AST_TYPE::Ellipsis:
+                rtn = remapEllipsis(ast_cast<AST_Ellipsis>(node));
+                break;
+            case AST_TYPE::ExtSlice:
+                rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));
+                break;
+            case AST_TYPE::Index:
+                if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
+                    return node;
+                rtn = remapIndex(ast_cast<AST_Index>(node));
+                break;
+            case AST_TYPE::Slice:
+                rtn = remapSlice(ast_cast<AST_Slice>(node));
+                break;
+            default:
+                RELEASE_ASSERT(0, "%d", node->type);
+        }
+        return rtn;
     }
 
     // Flattens a nested expression into a flat one, emitting instructions &
@@ -1185,22 +1245,11 @@ private:
             case AST_TYPE::DictComp:
                 rtn = remapScopedComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
                 break;
-            case AST_TYPE::Ellipsis:
-                rtn = remapEllipsis(ast_cast<AST_Ellipsis>(node));
-                break;
-            case AST_TYPE::ExtSlice:
-                rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));
-                break;
             case AST_TYPE::GeneratorExp:
                 rtn = remapGeneratorExp(ast_cast<AST_GeneratorExp>(node));
                 break;
             case AST_TYPE::IfExp:
                 rtn = remapIfExp(ast_cast<AST_IfExp>(node));
-                break;
-            case AST_TYPE::Index:
-                if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
-                    return node;
-                rtn = remapIndex(ast_cast<AST_Index>(node));
                 break;
             case AST_TYPE::Lambda:
                 rtn = remapLambda(ast_cast<AST_Lambda>(node));
@@ -1227,9 +1276,6 @@ private:
                 break;
             case AST_TYPE::SetComp:
                 rtn = remapScopedComprehension<AST_Set>(ast_cast<AST_SetComp>(node));
-                break;
-            case AST_TYPE::Slice:
-                rtn = remapSlice(ast_cast<AST_Slice>(node));
                 break;
             case AST_TYPE::Str:
                 return node;
@@ -1683,7 +1729,7 @@ public:
 
                 AST_Subscript* s_target = new AST_Subscript();
                 s_target->value = remapExpr(s->value);
-                s_target->slice = remapExpr(s->slice);
+                s_target->slice = remapSlice(s->slice);
                 s_target->ctx_type = AST_TYPE::Store;
                 s_target->col_offset = s->col_offset;
                 s_target->lineno = s->lineno;
@@ -1757,7 +1803,7 @@ public:
                     AST_Subscript* s = static_cast<AST_Subscript*>(t);
                     AST_Subscript* astsubs = new AST_Subscript();
                     astsubs->value = remapExpr(s->value);
-                    astsubs->slice = remapExpr(s->slice);
+                    astsubs->slice = remapSlice(s->slice);
                     astsubs->ctx_type = AST_TYPE::Del;
                     target = astsubs;
                     break;

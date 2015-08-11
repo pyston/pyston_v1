@@ -481,7 +481,7 @@ void AST_Ellipsis::accept(ASTVisitor* v) {
         return;
 }
 
-void* AST_Ellipsis::accept_expr(ExprVisitor* v) {
+void* AST_Ellipsis::accept_slice(SliceVisitor* v) {
     return v->visit_ellipsis(this);
 }
 
@@ -534,7 +534,7 @@ void AST_ExtSlice::accept(ASTVisitor* v) {
     visitVector(dims, v);
 }
 
-void* AST_ExtSlice::accept_expr(ExprVisitor* v) {
+void* AST_ExtSlice::accept_slice(SliceVisitor* v) {
     return v->visit_extslice(this);
 }
 
@@ -653,7 +653,7 @@ void AST_Index::accept(ASTVisitor* v) {
     this->value->accept(v);
 }
 
-void* AST_Index::accept_expr(ExprVisitor* v) {
+void* AST_Index::accept_slice(SliceVisitor* v) {
     return v->visit_index(this);
 }
 
@@ -875,7 +875,7 @@ void AST_Slice::accept(ASTVisitor* v) {
         step->accept(v);
 }
 
-void* AST_Slice::accept_expr(ExprVisitor* v) {
+void* AST_Slice::accept_slice(SliceVisitor* v) {
     return v->visit_slice(this);
 }
 
