@@ -59,10 +59,6 @@ enum class GCKind : uint8_t {
     // because it contains pointers into our heap or our heap points to these
     // objects. These objects inherit from GCAllocatedRuntime.
     RUNTIME = 5,
-
-    // A Python object where we don't have a way to visit precisely with a GC
-    // handler function. These are usually Python objects allocated in C extensions.
-    CONSERVATIVE_PYTHON = 6,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
