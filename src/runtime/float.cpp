@@ -225,154 +225,306 @@ extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
     }
 }
 
-extern "C" Box* floatEqFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d == rhs->d);
-}
+/* Comparison is pretty much a nightmare.  When comparing float to float,
+ * we do it as straightforwardly (and long-windedly) as conceivable, so
+ * that, e.g., Python x == y delivers the same result as the platform
+ * C x == y when x and/or y is a NaN.
+ * When mixing float with an integer type, there's no good *uniform* approach.
+ * Converting the double to an integer obviously doesn't work, since we
+ * may lose info from fractional bits.  Converting the integer to a double
+ * also has two failure modes:  (1) a long int may trigger overflow (too
+ * large to fit in the dynamic range of a C double); (2) even a C long may have
+ * more bits than fit in a C double (e.g., on a a 64-bit box long may have
+ * 63 bits of precision, but a C double probably has only 53), and then
+ * we can falsely claim equality when low-order integer bits are lost by
+ * coercion to double.  So this part is painful too.
+ */
 
-extern "C" Box* floatEqInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d == rhs->n);
+static PyObject* float_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    double i, j;
+    int r = 0;
+
+    assert(PyFloat_Check(v));
+    i = PyFloat_AS_DOUBLE(v);
+
+    /* Switch on the type of w.  Set i and j to doubles to be compared,
+     * and op to the richcomp to use.
+     */
+    if (PyFloat_Check(w))
+        j = PyFloat_AS_DOUBLE(w);
+
+    else if (!std::isfinite(i)) {
+        if (PyInt_Check(w) || PyLong_Check(w))
+            /* If i is an infinity, its magnitude exceeds any
+             * finite integer, so it doesn't matter which int we
+             * compare i with.  If i is a NaN, similarly.
+             */
+            j = 0.0;
+        else
+            goto Unimplemented;
+    }
+
+    else if (PyInt_Check(w)) {
+        long jj = PyInt_AS_LONG(w);
+/* In the worst realistic case I can imagine, C double is a
+ * Cray single with 48 bits of precision, and long has 64
+ * bits.
+ */
+#if SIZEOF_LONG > 6
+        unsigned long abs = (unsigned long)(jj < 0 ? -jj : jj);
+        if (abs >> 48) {
+            /* Needs more than 48 bits.  Make it take the
+             * PyLong path.
+             */
+            PyObject* result;
+            PyObject* ww = PyLong_FromLong(jj);
+
+            if (ww == NULL)
+                return NULL;
+            result = float_richcompare(v, ww, op);
+            Py_DECREF(ww);
+            return result;
+        }
+#endif
+        j = (double)jj;
+        assert((long)j == jj);
+    }
+
+    else if (PyLong_Check(w)) {
+        int vsign = i == 0.0 ? 0 : i < 0.0 ? -1 : 1;
+        int wsign = _PyLong_Sign(w);
+        size_t nbits;
+        int exponent;
+
+        if (vsign != wsign) {
+            /* Magnitudes are irrelevant -- the signs alone
+             * determine the outcome.
+             */
+            i = (double)vsign;
+            j = (double)wsign;
+            goto Compare;
+        }
+        /* The signs are the same. */
+        /* Convert w to a double if it fits.  In particular, 0 fits. */
+        nbits = mpz_sizeinbase(static_cast<BoxedLong*>(w)->n, 2);
+        if (nbits == (size_t)-1 && PyErr_Occurred()) {
+            /* This long is so large that size_t isn't big enough
+             * to hold the # of bits.  Replace with little doubles
+             * that give the same outcome -- w is so large that
+             * its magnitude must exceed the magnitude of any
+             * finite float.
+             */
+            PyErr_Clear();
+            i = (double)vsign;
+            assert(wsign != 0);
+            j = wsign * 2.0;
+            goto Compare;
+        }
+        if (nbits <= 48) {
+            j = PyLong_AsDouble(w);
+            /* It's impossible that <= 48 bits overflowed. */
+            assert(j != -1.0 || !PyErr_Occurred());
+            goto Compare;
+        }
+        assert(wsign != 0); /* else nbits was 0 */
+        assert(vsign != 0); /* if vsign were 0, then since wsign is
+                             * not 0, we would have taken the
+                             * vsign != wsign branch at the start */
+        /* We want to work with non-negative numbers. */
+        if (vsign < 0) {
+            /* "Multiply both sides" by -1; this also swaps the
+             * comparator.
+             */
+            i = -i;
+            op = _Py_SwappedOp[op];
+        }
+        assert(i > 0.0);
+        (void)frexp(i, &exponent);
+        /* exponent is the # of bits in v before the radix point;
+         * we know that nbits (the # of bits in w) > 48 at this point
+         */
+        if (exponent < 0 || (size_t)exponent < nbits) {
+            i = 1.0;
+            j = 2.0;
+            goto Compare;
+        }
+        if ((size_t)exponent > nbits) {
+            i = 2.0;
+            j = 1.0;
+            goto Compare;
+        }
+        /* v and w have the same number of bits before the radix
+         * point.  Construct two longs that have the same comparison
+         * outcome.
+         */
+        {
+            double fracpart;
+            double intpart;
+            PyObject* result = NULL;
+            PyObject* one = NULL;
+            PyObject* vv = NULL;
+            PyObject* ww = w;
+
+            if (wsign < 0) {
+                ww = PyNumber_Negative(w);
+                if (ww == NULL)
+                    goto Error;
+            } else
+                Py_INCREF(ww);
+
+            fracpart = modf(i, &intpart);
+            vv = PyLong_FromDouble(intpart);
+            if (vv == NULL)
+                goto Error;
+
+            if (fracpart != 0.0) {
+                /* Shift left, and or a 1 bit into vv
+                 * to represent the lost fraction.
+                 */
+                PyObject* temp;
+
+                one = PyInt_FromLong(1);
+                if (one == NULL)
+                    goto Error;
+
+                temp = PyNumber_Lshift(ww, one);
+                if (temp == NULL)
+                    goto Error;
+                Py_DECREF(ww);
+                ww = temp;
+
+                temp = PyNumber_Lshift(vv, one);
+                if (temp == NULL)
+                    goto Error;
+                Py_DECREF(vv);
+                vv = temp;
+
+                temp = PyNumber_Or(vv, one);
+                if (temp == NULL)
+                    goto Error;
+                Py_DECREF(vv);
+                vv = temp;
+            }
+
+            r = PyObject_RichCompareBool(vv, ww, op);
+            if (r < 0)
+                goto Error;
+            result = PyBool_FromLong(r);
+        Error:
+            Py_XDECREF(vv);
+            Py_XDECREF(ww);
+            Py_XDECREF(one);
+            return result;
+        }
+    } /* else if (PyLong_Check(w)) */
+
+    else /* w isn't float, int, or long */
+        goto Unimplemented;
+
+Compare:
+    PyFPE_START_PROTECT("richcompare", return NULL) switch (op) {
+        case Py_EQ:
+            r = i == j;
+            break;
+        case Py_NE:
+            r = i != j;
+            break;
+        case Py_LE:
+            r = i <= j;
+            break;
+        case Py_GE:
+            r = i >= j;
+            break;
+        case Py_LT:
+            r = i < j;
+            break;
+        case Py_GT:
+            r = i > j;
+            break;
+    }
+    PyFPE_END_PROTECT(r) return PyBool_FromLong(r);
+
+Unimplemented:
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
 }
 
 extern "C" Box* floatEq(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatEqInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatEqFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d == PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
     }
-}
+    Box* res = float_richcompare(lhs, rhs, Py_EQ);
+    if (!res) {
+        throwCAPIException();
+    }
 
-extern "C" Box* floatNeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d != rhs->d);
-}
-
-extern "C" Box* floatNeInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d != rhs->n);
+    return res;
 }
 
 extern "C" Box* floatNe(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatNeInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatNeFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d != PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
     }
-}
-
-extern "C" Box* floatLtFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d < rhs->d);
-}
-
-extern "C" Box* floatLtInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d < rhs->n);
-}
-
-extern "C" Box* floatLt(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatLtInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatLtFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d < PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    Box* res = float_richcompare(lhs, rhs, Py_NE);
+    if (!res) {
+        throwCAPIException();
     }
-}
 
-extern "C" Box* floatLeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d <= rhs->d);
-}
-
-extern "C" Box* floatLeInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d <= rhs->n);
+    return res;
 }
 
 extern "C" Box* floatLe(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatLeInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatLeFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d <= PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
     }
-}
-
-extern "C" Box* floatGtFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d > rhs->d);
-}
-
-extern "C" Box* floatGtInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d > rhs->n);
-}
-
-extern "C" Box* floatGt(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatGtInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatGtFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d > PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    Box* res = float_richcompare(lhs, rhs, Py_LE);
+    if (!res) {
+        throwCAPIException();
     }
+
+    return res;
 }
 
-extern "C" Box* floatGeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
-    return boxBool(lhs->d >= rhs->d);
-}
+extern "C" Box* floatLt(BoxedFloat* lhs, Box* rhs) {
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
+    }
+    Box* res = float_richcompare(lhs, rhs, Py_LT);
+    if (!res) {
+        throwCAPIException();
+    }
 
-extern "C" Box* floatGeInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
-    return boxBool(lhs->d >= rhs->n);
+    return res;
 }
 
 extern "C" Box* floatGe(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatGeInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatGeFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxBool(lhs->d >= PyLong_AsDouble(rhs));
-    } else {
-        return NotImplemented;
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
     }
+    Box* res = float_richcompare(lhs, rhs, Py_GE);
+    if (!res) {
+        throwCAPIException();
+    }
+
+    return res;
+}
+
+extern "C" Box* floatGt(BoxedFloat* lhs, Box* rhs) {
+    if (!isSubclass(lhs->cls, float_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'float' object but received a '%s'",
+                       getTypeName(lhs));
+    }
+    Box* res = float_richcompare(lhs, rhs, Py_GT);
+    if (!res) {
+        throwCAPIException();
+    }
+
+    return res;
 }
 
 extern "C" Box* floatModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
@@ -1498,13 +1650,6 @@ void setupFloat() {
     _addFunc("__floordiv__", BOXED_FLOAT, (void*)floatFloorDivFloat, (void*)floatFloorDivInt, (void*)floatFloorDiv);
     _addFunc("__truediv__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatTruediv);
 
-    _addFunc("__eq__", BOXED_BOOL, (void*)floatEqFloat, (void*)floatEqInt, (void*)floatEq);
-    _addFunc("__ge__", BOXED_BOOL, (void*)floatGeFloat, (void*)floatGeInt, (void*)floatGe);
-    _addFunc("__gt__", BOXED_BOOL, (void*)floatGtFloat, (void*)floatGtInt, (void*)floatGt);
-    _addFunc("__le__", BOXED_BOOL, (void*)floatLeFloat, (void*)floatLeInt, (void*)floatLe);
-    _addFunc("__lt__", BOXED_BOOL, (void*)floatLtFloat, (void*)floatLtInt, (void*)floatLt);
-    _addFunc("__ne__", BOXED_BOOL, (void*)floatNeFloat, (void*)floatNeInt, (void*)floatNe);
-
     _addFunc("__mod__", BOXED_FLOAT, (void*)floatModFloat, (void*)floatModInt, (void*)floatMod);
     _addFunc("__rmod__", BOXED_FLOAT, (void*)floatRModFloat, (void*)floatRModInt, (void*)floatRMod);
     _addFunc("__mul__", BOXED_FLOAT, (void*)floatMulFloat, (void*)floatMulInt, (void*)floatMul);
@@ -1518,6 +1663,12 @@ void setupFloat() {
     addRTFunction(float_new, (void*)floatNew<CAPI>, UNKNOWN, CAPI);
     float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
 
+    float_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)floatEq, UNKNOWN, 2)));
+    float_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)floatNe, UNKNOWN, 2)));
+    float_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)floatLe, UNKNOWN, 2)));
+    float_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)floatLt, UNKNOWN, 2)));
+    float_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)floatGe, UNKNOWN, 2)));
+    float_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)floatGt, UNKNOWN, 2)));
     float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, BOXED_FLOAT, 1)));
     float_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)floatPos, BOXED_FLOAT, 1)));
 
