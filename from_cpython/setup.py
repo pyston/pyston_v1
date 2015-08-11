@@ -3,6 +3,7 @@
 from distutils.core import setup, Extension
 import glob
 import os
+import platform
 import sysconfig
 
 def relpath(fn):
@@ -52,6 +53,10 @@ def ctypes_ext():
     # May want something more robust later.
     ffi_inc = ['/usr/include/x86_64-linux-gnu']
     ffi_lib = "ffi_pic"
+
+    if platform.linux_distribution()[0] == "Fedora":
+        ffi_lib = "ffi"
+
     ext.include_dirs.extend(ffi_inc)
     ext.libraries.append(ffi_lib)
 

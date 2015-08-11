@@ -142,7 +142,6 @@
 #define HAVE_MMAP 1
 #define HAVE_MREMAP 1
 #define HAVE_NICE 1
-// #define HAVE_OPENPTY 1 // pyston change: turned this off for now to avoid -lutil dependency
 #define HAVE_PATHCONF 1
 #define HAVE_PAUSE 1
 #define HAVE_POLL 1
@@ -272,6 +271,8 @@
 #cmakedefine HAVE_UNISTD_H 1
 #cmakedefine HAVE_UTIME_H 1
 #cmakedefine HAVE_WCHAR_H 1
+
+#cmakedefine HAVE_OPENPTY 1
 
 #define SIZEOF_UNORDEREDMAP @SIZEOF_UNORDEREDMAP@
 

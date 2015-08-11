@@ -260,7 +260,7 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} -L${CMAKE_BINARY_DIR}/jemalloc/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/jemalloc/lib jemalloc)
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} -L${CMAKE_BINARY_DIR}/jemalloc/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/jemalloc/lib jemalloc)
 add_dependencies(pyston libjemalloc)
 
 # copy src/codegen/parse_ast.py to the build directory

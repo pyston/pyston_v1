@@ -538,6 +538,7 @@ quick_check:
 Makefile.local:
 	echo "Creating default Makefile.local"
 	python -c 'import sys; v = sys.version_info; print "PYTHON_MAJOR_VERSION:=%d\nPYTHON_MINOR_VERSION:=%d\nPYTHON_MICRO_VERSION:=%d" % (v[0], v[1], v[2])' > Makefile.local || (rm $@; false)
+	which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local
 
 #################
 # LLVM rules:
@@ -874,7 +875,7 @@ clang_check:
 
 cmake_check:
 	@cmake --version >/dev/null || (echo "cmake not available"; false)
-	@ninja --version >/dev/null || (echo "ninja not available"; false)
+	@$(NINJA) --version >/dev/null || (echo "ninja not available"; false)
 
 .PHONY: cmake_check clang_check
 $(CMAKE_SETUP_DBG):
