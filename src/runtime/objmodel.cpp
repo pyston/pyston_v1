@@ -3606,7 +3606,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         if (rewrite_args) {
             RewriterVar::SmallVector arg_vec;
 
-            rewrite_args->rewriter->addDependenceOn(f->dependent_interp_callsites);
+            rewrite_args->rewriter->addDependenceOn(&f->dependent_interp_callsites);
 
             // TODO this kind of embedded reference needs to be tracked by the GC somehow?
             // Or maybe it's ok, since we've guarded on the function object?
@@ -3653,7 +3653,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
     if (rewrite_args) {
-        rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+        rewrite_args->rewriter->addDependenceOn(&chosen_cf->dependent_callsites);
 
         assert(!generator);
 

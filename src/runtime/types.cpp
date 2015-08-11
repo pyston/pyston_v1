@@ -376,6 +376,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
         this->doc = None;
     }
 
+    dependent_ics = new ICInvalidator();
+
     assert(f->paramspec.num_defaults == ndefaults);
 }
 
@@ -421,6 +423,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->doc = None;
     }
 
+    dependent_ics = new ICInvalidator();
+
     assert(f->paramspec.num_defaults == ndefaults);
 }
 
@@ -459,6 +463,9 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
     if (f->globals)
         v->visit((void**)&f->globals);
 
+    if (f->dependent_ics)
+        v->visit((void**)&f->dependent_ics);
+
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunctionBase constructor
     if (f->ndefaults) {
@@ -490,8 +497,6 @@ static void functionDtor(Box* b) {
     assert(isSubclass(b->cls, function_cls) || isSubclass(b->cls, builtin_function_or_method_cls));
 
     BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
-    self->dependent_ics.invalidateAll();
-    self->dependent_ics.~ICInvalidator();
 }
 
 std::string BoxedModule::name() {

@@ -38,7 +38,11 @@ public:
     static HiddenClass* dict_backed;
 
 private:
-    HiddenClass(HCType type) : type(type) {}
+    HiddenClass(HCType type) : type(type) {
+        if (type == HCType::SINGLETON) {
+            dependent_getattrs = new ICInvalidator();
+        }
+    }
     HiddenClass(HiddenClass* parent)
         : type(NORMAL), attr_offsets(parent->attr_offsets), attrwrapper_offset(parent->attrwrapper_offset) {
         assert(parent->type == NORMAL);
@@ -54,7 +58,7 @@ private:
     HiddenClass* attrwrapper_child = NULL;
 
     // Only for SINGLETON hidden classes:
-    ICInvalidator dependent_getattrs;
+    ICInvalidator* dependent_getattrs;
 
 public:
     static HiddenClass* makeSingleton() { return new HiddenClass(SINGLETON); }

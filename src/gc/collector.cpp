@@ -241,6 +241,12 @@ public:
                 refmap->pinned.emplace(al);
             }
 
+            // Don't move these for now, too likely that an object that we don't track
+            // points to them.
+            if (al->kind_id == GCKind::RUNTIME) {
+                refmap->pinned.emplace(al);
+            }
+
             *cur++ = al->user_data;
             if (cur == end) {
                 chunks.push_back(start);

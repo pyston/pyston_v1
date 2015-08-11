@@ -129,8 +129,8 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     llvm::sys::Memory::InvalidateInstructionCache(slot_start, ic->getSlotSize());
 }
 
-void ICSlotRewrite::addDependenceOn(ICInvalidator& invalidator) {
-    dependencies.push_back(std::make_pair(&invalidator, invalidator.version()));
+void ICSlotRewrite::addDependenceOn(ICInvalidator* invalidator) {
+    dependencies.push_back(std::make_pair(invalidator, invalidator->version()));
 }
 
 int ICSlotRewrite::getSlotSize() {

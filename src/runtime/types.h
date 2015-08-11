@@ -753,7 +753,7 @@ public:
     int ndefaults;
     GCdArray* defaults;
 
-    ICInvalidator dependent_ics;
+    ICInvalidator* dependent_ics;
 
     // Accessed via member descriptor
     Box* modname;      // __module__

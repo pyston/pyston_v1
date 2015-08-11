@@ -223,7 +223,7 @@ struct ParamReceiveSpec {
     int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
 };
 
-class ICInvalidator {
+class ICInvalidator : public gc::GCAllocatedRuntime {
 private:
     int64_t cur_version;
     std::unordered_set<ICSlotInfo*> dependents;
@@ -234,6 +234,8 @@ public:
     void addDependent(ICSlotInfo* icentry);
     int64_t version();
     void invalidateAll();
+
+    virtual void gc_visit(GCVisitor* visitor) {};
 };
 
 // Codegen types:

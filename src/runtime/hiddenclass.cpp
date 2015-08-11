@@ -32,6 +32,9 @@ void HiddenClass::gc_visit(GCVisitor* visitor) {
     visitor->visitRange((void**)&children.vector()[0], (void**)&children.vector()[children.size()]);
     visitor->visit((void**)&attrwrapper_child);
 
+    if (dependent_getattrs)
+        visitor->visit((void**)&dependent_getattrs);
+
     // We don't need to visit the keys of the 'children' map, since the children should have those as entries
     // in the attr_offssets map.
     // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
@@ -43,8 +46,10 @@ void HiddenClass::gc_visit(GCVisitor* visitor) {
 
 void HiddenClass::appendAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
+
     assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
+    dependent_getattrs->invalidateAll();
+
     assert(attr_offsets.count(attr) == 0);
     int n = this->attributeArraySize();
     attr_offsets[attr] = n;
@@ -52,17 +57,19 @@ void HiddenClass::appendAttribute(BoxedString* attr) {
 
 void HiddenClass::appendAttrwrapper() {
     assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
+    dependent_getattrs->invalidateAll();
+
     assert(attrwrapper_offset == -1);
     attrwrapper_offset = this->attributeArraySize();
 }
 
 void HiddenClass::delAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr));
 
+    assert(type == SINGLETON);
+    dependent_getattrs->invalidateAll();
+
+    assert(attr_offsets.count(attr));
     int prev_idx = attr_offsets[attr];
     attr_offsets.erase(attr);
 

@@ -81,7 +81,7 @@ public:
 
     ICSlotInfo* prepareEntry();
 
-    void addDependenceOn(ICInvalidator&);
+    void addDependenceOn(ICInvalidator*);
     void commit(CommitHook* hook);
     void abort();
 

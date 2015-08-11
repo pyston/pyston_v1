@@ -583,7 +583,7 @@ public:
     void commit();
     void commitReturning(RewriterVar* rtn);
 
-    void addDependenceOn(ICInvalidator&);
+    void addDependenceOn(ICInvalidator*);
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 
