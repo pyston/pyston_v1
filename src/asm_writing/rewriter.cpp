@@ -1523,17 +1523,20 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     assertConsistent();
 }
 
-void Rewriter::checkAndThrowCAPIException(RewriterVar* r) {
+void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    addAction([=]() { this->_checkAndThrowCAPIException(r); }, { r }, ActionType::MUTATION);
+    addAction([=]() { this->_checkAndThrowCAPIException(r, exc_val); }, { r }, ActionType::MUTATION);
 }
 
-void Rewriter::_checkAndThrowCAPIException(RewriterVar* r) {
+void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
     assembler->comment("_checkAndThrowCAPIException");
 
     assembler::Register var_reg = r->getInReg();
-    assembler->test(var_reg, var_reg);
+    if (exc_val == 0)
+        assembler->test(var_reg, var_reg);
+    else
+        assembler->cmp(var_reg, assembler::Immediate(exc_val));
 
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);

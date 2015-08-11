@@ -712,22 +712,7 @@ void Assembler::cmp(Register reg1, Register reg2) {
 }
 
 void Assembler::cmp(Register reg, Immediate imm) {
-    int64_t val = imm.val;
-    assert((-1L << 31) <= val && val < (1L << 31) - 1);
-
-    int reg_idx = reg.regnum;
-
-    int rex = REX_W;
-    if (reg_idx >= 8) {
-        rex |= REX_B;
-        reg_idx -= 8;
-    }
-    assert(0 <= reg_idx && reg_idx < 8);
-
-    emitRex(rex);
-    emitByte(0x81);
-    emitModRM(0b11, 7, reg_idx);
-    emitInt(val, 4);
+    emitArith(imm, reg, OPCODE_CMP);
 }
 
 void Assembler::cmp(Indirect mem, Immediate imm) {

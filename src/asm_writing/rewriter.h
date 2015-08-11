@@ -430,7 +430,7 @@ protected:
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
-    void _checkAndThrowCAPIException(RewriterVar* r);
+    void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val);
 
     // The public versions of these are in RewriterVar
     void _addGuard(RewriterVar* var, RewriterVar* val_constant);
@@ -515,8 +515,8 @@ public:
     RewriterVar* allocateAndCopy(RewriterVar* array, int n);
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
-    // This emits `if (!r) throwCAPIException()`
-    void checkAndThrowCAPIException(RewriterVar* r);
+    // This emits `if (r == exc_val) throwCAPIException()`
+    void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val = 0);
 
     void abort();
     void commit();
