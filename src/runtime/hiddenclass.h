@@ -25,7 +25,7 @@
 
 namespace pyston {
 
-class HiddenClass : public GCAllocatedRuntime {
+class HiddenClass : public gc::GCAllocatedRuntime {
 public:
     // We have a couple different storage strategies for attributes, which
     // are distinguished by having a different hidden class type.
