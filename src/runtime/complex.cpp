@@ -87,13 +87,13 @@ extern "C" Box* complexAddFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* complexAddInt(BoxedComplex* lhs, BoxedInt* rhs) {
     assert(lhs->cls == complex_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxComplex(lhs->real + (double)rhs->n, lhs->imag);
 }
 
 extern "C" Box* complexAdd(BoxedComplex* lhs, Box* rhs) {
     assert(lhs->cls == complex_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return complexAddInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return complexAddFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -120,13 +120,13 @@ extern "C" Box* complexSubFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* complexSubInt(BoxedComplex* lhs, BoxedInt* rhs) {
     assert(lhs->cls == complex_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxComplex(lhs->real - (double)rhs->n, lhs->imag);
 }
 
 extern "C" Box* complexSub(BoxedComplex* lhs, Box* rhs) {
     assert(lhs->cls == complex_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return complexSubInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return complexSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -153,13 +153,13 @@ extern "C" Box* complexMulFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* complexMulInt(BoxedComplex* lhs, BoxedInt* rhs) {
     assert(lhs->cls == complex_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxComplex(lhs->real * (double)rhs->n, lhs->imag * (double)rhs->n);
 }
 
 extern "C" Box* complexMul(BoxedComplex* lhs, Box* rhs) {
     assert(lhs->cls == complex_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return complexMulInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return complexMulFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -190,7 +190,7 @@ extern "C" Box* complexDivFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* complexDivInt(BoxedComplex* lhs, BoxedInt* rhs) {
     assert(lhs->cls == complex_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     if (rhs->n == 0) {
         raiseDivZeroExc();
     }
@@ -199,7 +199,7 @@ extern "C" Box* complexDivInt(BoxedComplex* lhs, BoxedInt* rhs) {
 
 extern "C" Box* complexDiv(BoxedComplex* lhs, Box* rhs) {
     assert(lhs->cls == complex_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return complexDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return complexDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -287,7 +287,7 @@ Box* complexNew(Box* _cls, Box* real, Box* imag) {
     RELEASE_ASSERT(_cls == complex_cls, "");
 
     double real_f;
-    if (isSubclass(real->cls, int_cls)) {
+    if (PyInt_Check(real)) {
         real_f = static_cast<BoxedInt*>(real)->n;
     } else if (real->cls == float_cls) {
         real_f = static_cast<BoxedFloat*>(real)->d;
@@ -297,7 +297,7 @@ Box* complexNew(Box* _cls, Box* real, Box* imag) {
     }
 
     double imag_f;
-    if (isSubclass(imag->cls, int_cls)) {
+    if (PyInt_Check(imag)) {
         imag_f = static_cast<BoxedInt*>(imag)->n;
     } else if (imag->cls == float_cls) {
         imag_f = static_cast<BoxedFloat*>(imag)->d;

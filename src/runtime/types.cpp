@@ -130,7 +130,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
             // old-style classes are always pyston classes:
             if (b->cls == classobj_cls)
                 continue;
-            assert(isSubclass(b->cls, type_cls));
+            assert(PyType_Check(b));
             ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
                    static_cast<BoxedClass*>(b)->tp_name);
         }
@@ -712,7 +712,7 @@ static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, B
 }
 
 static Box* objectNewNoArgs(BoxedClass* cls) noexcept {
-    assert(isSubclass(cls->cls, type_cls));
+    assert(PyType_Check(cls));
 #ifndef NDEBUG
     static BoxedString* new_str = internStringImmortal("__new__");
     static BoxedString* init_str = internStringImmortal("__init__");
@@ -732,7 +732,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     assert(argspec.num_args >= 1);
     Box* _cls = arg1;
 
-    if (!isSubclass(_cls->cls, type_cls)) {
+    if (!PyType_Check(_cls)) {
         if (S == CAPI)
             PyErr_Format(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
                          getTypeName(_cls));
@@ -1421,7 +1421,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
             msg = getattr(e.value, message_str);
         }
 
-        if (isSubclass(msg->cls, str_cls)) {
+        if (PyString_Check(msg)) {
             auto newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
                                               "    %s",
                                               PyString_AS_STRING(msg));
@@ -1586,7 +1586,7 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
     if (v == None)
         v = EmptyTuple;
 
-    if (!isSubclass(v->cls, tuple_cls)) {
+    if (!PyTuple_Check(v)) {
         raiseExcHelper(TypeError, "__defaults__ must be set to a tuple object");
     }
 
@@ -1973,7 +1973,7 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
 
 
 Box* typeHash(BoxedClass* self) {
-    assert(isSubclass(self->cls, type_cls));
+    assert(PyType_Check(self));
     return boxInt(_Py_HashPointer(self));
 }
 
@@ -2004,14 +2004,14 @@ static PyObject* type_subclasses(PyTypeObject* type, PyObject* args_ignored) noe
 }
 
 Box* typeSubclasses(BoxedClass* self) {
-    assert(isSubclass(self->cls, type_cls));
+    assert(PyType_Check(self));
     Box* rtn = type_subclasses(self, 0);
     checkAndThrowCAPIException();
     return rtn;
 }
 
 Box* typeMro(BoxedClass* self) {
-    assert(isSubclass(self->cls, type_cls));
+    assert(PyType_Check(self));
 
     Box* r = mro_external(self);
     if (!r)
@@ -2020,7 +2020,7 @@ Box* typeMro(BoxedClass* self) {
 }
 
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
-    RELEASE_ASSERT(isSubclass(self->cls, module_cls), "");
+    RELEASE_ASSERT(PyModule_Check(self), "");
     RELEASE_ASSERT(name->cls == str_cls, "");
     RELEASE_ASSERT(!doc || doc->cls == str_cls, "");
 
@@ -2035,7 +2035,7 @@ Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
 }
 
 Box* moduleRepr(BoxedModule* m) {
-    RELEASE_ASSERT(isSubclass(m->cls, module_cls), "");
+    RELEASE_ASSERT(PyModule_Check(m), "");
 
     std::string O("");
     llvm::raw_string_ostream os(O);
@@ -2372,12 +2372,12 @@ public:
                 // The update rules are too complicated to be worth duplicating here;
                 // just create a new dict object and defer to dictUpdate.
                 // Hopefully this does not happen very often.
-                if (!isSubclass(_container->cls, dict_cls)) {
+                if (!PyDict_Check(_container)) {
                     BoxedDict* new_container = new BoxedDict();
                     dictUpdate(new_container, BoxedTuple::create({ _container }), new BoxedDict());
                     _container = new_container;
                 }
-                assert(isSubclass(_container->cls, dict_cls));
+                assert(PyDict_Check(_container));
                 BoxedDict* container = static_cast<BoxedDict*>(_container);
 
                 for (const auto& p : container->d) {
@@ -2872,7 +2872,7 @@ static Box* objectClass(Box* obj, void* context) {
 }
 
 static void objectSetClass(Box* obj, Box* val, void* context) {
-    if (!isSubclass(val->cls, type_cls))
+    if (!PyType_Check(val))
         raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
 
     auto new_cls = static_cast<BoxedClass*>(val);
@@ -2914,7 +2914,7 @@ static PyMethodDef object_methods[] = {
 };
 
 static Box* typeName(Box* b, void*) {
-    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    RELEASE_ASSERT(PyType_Check(b), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
@@ -2961,7 +2961,7 @@ static void typeSetName(Box* b, Box* v, void*) {
 }
 
 static Box* typeBases(Box* b, void*) {
-    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    RELEASE_ASSERT(PyType_Check(b), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
     assert(type->tp_bases);
@@ -2969,7 +2969,7 @@ static Box* typeBases(Box* b, void*) {
 }
 
 static void typeSetBases(Box* b, Box* v, void* c) {
-    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    RELEASE_ASSERT(PyType_Check(b), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
     if (type_set_bases(type, v, c) == -1)
         throwCAPIException();
@@ -3781,7 +3781,7 @@ BoxedModule* createModule(const std::string& name, const char* fn, const char* d
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
     Box* existing = d->getOrNull(b_name);
-    if (existing && isSubclass(existing->cls, module_cls)) {
+    if (existing && PyModule_Check(existing)) {
         return static_cast<BoxedModule*>(existing);
     }
 

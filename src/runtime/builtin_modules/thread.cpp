@@ -122,7 +122,7 @@ public:
         RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
         BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
 
-        RELEASE_ASSERT(isSubclass(_waitflag->cls, int_cls), "");
+        RELEASE_ASSERT(PyInt_Check(_waitflag), "");
         int waitflag = static_cast<BoxedInt*>(_waitflag)->n;
 
         int rtn;

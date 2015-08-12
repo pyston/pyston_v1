@@ -449,14 +449,14 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         if (!fn)
             throwCAPIException();
     }
-    RELEASE_ASSERT(isSubclass(fn->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(fn), "");
 
     if (isSubclass(type->cls, unicode_cls)) {
         type = _PyUnicode_AsDefaultEncodedString(type, NULL);
         if (!type)
             throwCAPIException();
     }
-    RELEASE_ASSERT(isSubclass(type->cls, str_cls), "");
+    RELEASE_ASSERT(PyString_Check(type), "");
 
     llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s();
     llvm::StringRef type_str = static_cast<BoxedString*>(type)->s();
@@ -489,7 +489,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     if (PyAST_Check(source)) {
         parsed = unboxAst(source);
     } else {
-        RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
+        RELEASE_ASSERT(PyString_Check(source), "");
         llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
 
         if (type_str == "exec") {
@@ -585,7 +585,7 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
 }
 
 Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
-    if (isSubclass(boxedCode->cls, tuple_cls)) {
+    if (PyTuple_Check(boxedCode)) {
         RELEASE_ASSERT(!globals, "");
         RELEASE_ASSERT(!locals, "");
 

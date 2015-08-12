@@ -74,7 +74,7 @@ void ExcInfo::printExcAndTraceback() const {
 
 bool ExcInfo::matches(BoxedClass* cls) const {
     assert(this->type);
-    RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
+    RELEASE_ASSERT(PyType_Check(this->type), "throwing old-style objects not supported yet (%s)",
                    getTypeName(this->type));
     return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }

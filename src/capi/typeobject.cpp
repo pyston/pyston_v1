@@ -2002,7 +2002,7 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
 }
 
 static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
-    RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
+    RELEASE_ASSERT(PyType_Check(self), "");
 
     // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
 
@@ -2011,7 +2011,7 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     RELEASE_ASSERT(args->size() >= 1, "");
 
     BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
-    RELEASE_ASSERT(isSubclass(subtype->cls, type_cls), "");
+    RELEASE_ASSERT(PyType_Check(subtype), "");
     RELEASE_ASSERT(isSubclass(subtype, self), "");
 
     BoxedTuple* new_args = BoxedTuple::create(args->size() - 1, &args->elts[1]);

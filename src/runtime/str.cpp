@@ -1141,7 +1141,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
     int n;
-    if (isSubclass(rhs->cls, int_cls))
+    if (PyInt_Check(rhs))
         n = static_cast<BoxedInt*>(rhs)->n;
     else
         return NotImplemented;
@@ -1602,7 +1602,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
 
     if (cls != str_cls) {
         Box* tmp = strNew(str_cls, obj);
-        assert(isSubclass(tmp->cls, str_cls));
+        assert(PyString_Check(tmp));
         BoxedString* tmp_s = static_cast<BoxedString*>(tmp);
 
         return new (cls, tmp_s->size()) BoxedString(tmp_s->s());
@@ -1826,7 +1826,7 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     BoxedString* new_ = static_cast<BoxedString*>(_new);
 
     Box* _maxreplace = _args[0];
-    if (!isSubclass(_maxreplace->cls, int_cls))
+    if (!PyInt_Check(_maxreplace))
         raiseExcHelper(TypeError, "an integer is required");
 
     int max_replaces = static_cast<BoxedInt*>(_maxreplace)->n;
@@ -2134,7 +2134,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             throwCAPIException();
     }
 
-    if (isSubclass(elt->cls, tuple_cls)) {
+    if (PyTuple_Check(elt)) {
         for (auto e : *static_cast<BoxedTuple*>(elt)) {
             auto b = strStartswith(self, e, start, _args);
             assert(b->cls == bool_cls);
@@ -2205,7 +2205,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return boxBool(r);
     }
 
-    if (isSubclass(elt->cls, tuple_cls)) {
+    if (PyTuple_Check(elt)) {
         for (auto e : *static_cast<BoxedTuple*>(elt)) {
             auto b = strEndswith(self, e, start, _args);
             assert(b->cls == bool_cls);
@@ -2340,7 +2340,7 @@ template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
 }
 
 extern "C" Box* strGetslice(BoxedString* self, Box* boxedStart, Box* boxedStop) {
-    assert(isSubclass(self->cls, str_cls));
+    assert(PyString_Check(self));
 
     i64 start, stop;
     sliceIndex(boxedStart, &start);

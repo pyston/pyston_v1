@@ -27,7 +27,7 @@ Box* tupleIterIter(Box* s) {
 }
 
 Box* tupleIter(Box* s) noexcept {
-    assert(isSubclass(s->cls, tuple_cls));
+    assert(PyTuple_Check(s));
     BoxedTuple* self = static_cast<BoxedTuple*>(s);
     return new BoxedTupleIterator(self);
 }

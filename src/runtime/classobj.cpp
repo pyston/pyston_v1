@@ -67,7 +67,7 @@ extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
 }
 
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
-    if (!isSubclass(_cls->cls, type_cls))
+    if (!PyType_Check(_cls))
         raiseExcHelper(TypeError, "classobj.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);

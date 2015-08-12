@@ -183,7 +183,7 @@ extern "C" void dumpEx(void* p, int levels) {
             printf("The %s object\n", b == True ? "True" : "False");
         }
 
-        if (isSubclass(b->cls, type_cls)) {
+        if (PyType_Check(b)) {
             auto cls = static_cast<BoxedClass*>(b);
             printf("Type name: %s\n", getFullNameOfClass(cls).c_str());
 
@@ -201,11 +201,11 @@ extern "C" void dumpEx(void* p, int levels) {
             printf("\n");
         }
 
-        if (isSubclass(b->cls, str_cls)) {
+        if (PyString_Check(b)) {
             printf("String value: %s\n", static_cast<BoxedString*>(b)->data());
         }
 
-        if (isSubclass(b->cls, tuple_cls)) {
+        if (PyTuple_Check(b)) {
             BoxedTuple* t = static_cast<BoxedTuple*>(b);
             printf("%ld elements\n", t->size());
 
@@ -219,7 +219,7 @@ extern "C" void dumpEx(void* p, int levels) {
             }
         }
 
-        if (isSubclass(b->cls, dict_cls)) {
+        if (PyDict_Check(b)) {
             BoxedDict* d = static_cast<BoxedDict*>(b);
             printf("%d elements\n", d->d.size());
 
@@ -234,11 +234,11 @@ extern "C" void dumpEx(void* p, int levels) {
             }
         }
 
-        if (isSubclass(b->cls, int_cls)) {
+        if (PyInt_Check(b)) {
             printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
         }
 
-        if (isSubclass(b->cls, list_cls)) {
+        if (PyList_Check(b)) {
             auto l = static_cast<BoxedList*>(b);
             printf("%ld elements\n", l->size);
 
@@ -276,7 +276,7 @@ extern "C" void dumpEx(void* p, int levels) {
             }
         }
 
-        if (isSubclass(b->cls, module_cls)) {
+        if (PyModule_Check(b)) {
             printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
         }
 

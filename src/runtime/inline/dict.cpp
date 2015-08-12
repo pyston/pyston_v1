@@ -24,19 +24,19 @@ BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
 }
 
 Box* dictIterKeys(Box* s) {
-    assert(isSubclass(s->cls, dict_cls));
+    assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::KeyIterator);
 }
 
 Box* dictIterValues(Box* s) {
-    assert(isSubclass(s->cls, dict_cls));
+    assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::ValueIterator);
 }
 
 Box* dictIterItems(Box* s) {
-    assert(isSubclass(s->cls, dict_cls));
+    assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::ItemIterator);
 }

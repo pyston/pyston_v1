@@ -376,7 +376,7 @@ public:
         if (!globals)
             return NULL;
 
-        if (isSubclass(globals->cls, module_cls))
+        if (PyModule_Check(globals))
             return globals->getAttrWrapper();
         return globals;
     }

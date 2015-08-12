@@ -136,12 +136,12 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
 }
 
 extern "C" Py_ssize_t PyList_Size(PyObject* self) noexcept {
-    RELEASE_ASSERT(isSubclass(self->cls, list_cls), "");
+    RELEASE_ASSERT(PyList_Check(self), "");
     return static_cast<BoxedList*>(self)->size;
 }
 
 extern "C" Box* listLen(BoxedList* self) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     return boxInt(self->size);
 }
 
@@ -201,7 +201,7 @@ static Box* list_slice(Box* o, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
 }
 
 static inline Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     if (n < 0)
         n = self->size + n;
 
@@ -213,7 +213,7 @@ static inline Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
 }
 
 extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
-    assert(isSubclass(slice->cls, int_cls));
+    assert(PyInt_Check(slice));
     return listGetitemUnboxed(self, slice->n);
 }
 
@@ -237,7 +237,7 @@ template <ExceptionStyle S> Box* listGetitemSlice(BoxedList* self, BoxedSlice* s
         }
     }
 
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     assert(slice->cls == slice_cls);
     i64 start, stop, step, length;
     parseSlice(slice, self->size, &start, &stop, &step, &length);
@@ -245,7 +245,7 @@ template <ExceptionStyle S> Box* listGetitemSlice(BoxedList* self, BoxedSlice* s
 }
 
 extern "C" Box* listGetslice(BoxedList* self, Box* boxedStart, Box* boxedStop) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     i64 start, stop, step;
     sliceIndex(boxedStart, &start);
     sliceIndex(boxedStop, &stop);
@@ -275,7 +275,7 @@ template <ExceptionStyle S> Box* listGetitem(BoxedList* self, Box* slice) {
         }
     }
 
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
@@ -300,13 +300,13 @@ static void _listSetitem(BoxedList* self, int64_t n, Box* v) {
 }
 
 extern "C" Box* listSetitemUnboxed(BoxedList* self, int64_t n, Box* v) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     _listSetitem(self, n, v);
     return None;
 }
 
 extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
-    assert(isSubclass(slice->cls, int_cls));
+    assert(PyInt_Check(slice));
     return listSetitemUnboxed(self, slice->n, v);
 }
 
@@ -520,7 +520,7 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
 }
 
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     assert(slice->cls == slice_cls);
 
     i64 start = 0, stop = self->size, step = 1;
@@ -561,7 +561,7 @@ extern "C" Box* listSetslice(BoxedList* self, Box* boxedStart, Box* boxedStop, B
 }
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
@@ -726,7 +726,7 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
 }
 
 Box* listReverse(BoxedList* self) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
     for (int i = 0, j = self->size - 1; i < j; i++, j--) {
         Box* e = self->elts->elts[i];
         self->elts->elts[i] = self->elts->elts[j];
@@ -759,14 +759,14 @@ public:
     PyCmpComparer(Box* cmp) : cmp(cmp) {}
     bool operator()(Box* lhs, Box* rhs) {
         Box* r = runtimeCallInternal<CXX>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
-        if (!isSubclass(r->cls, int_cls))
+        if (!PyInt_Check(r))
             raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
         return static_cast<BoxedInt*>(r)->n < 0;
     }
 };
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
 
     if (cmp == None)
         cmp = NULL;
@@ -851,14 +851,14 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
 }
 
 extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
-    assert(isSubclass(a->cls, list_cls));
+    assert(PyList_Check(a));
     BoxedList* self = static_cast<BoxedList*>(a);
     // Lots of extra copies here; we can do better if we need to:
     return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
 }
 
 static inline int list_contains_shared(BoxedList* self, Box* elt) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
 
     int size = self->size;
     for (int i = 0; i < size; i++) {
@@ -939,7 +939,7 @@ Box* listIndex(BoxedList* self, Box* elt, BoxedInt* _start, Box** args) {
 }
 
 Box* listRemove(BoxedList* self, Box* elt) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
 
     for (int i = 0; i < self->size; i++) {
         Box* e = self->elts->elts[i];
@@ -962,13 +962,13 @@ BoxedClass* list_iterator_cls = NULL;
 BoxedClass* list_reverse_iterator_cls = NULL;
 
 Box* listNew(BoxedClass* cls, Box* container) {
-    assert(isSubclass(cls->cls, type_cls));
+    assert(PyType_Check(cls));
     assert(isSubclass(cls, list_cls));
     return new (cls) BoxedList();
 }
 
 Box* listInit(BoxedList* self, Box* container) {
-    assert(isSubclass(self->cls, list_cls));
+    assert(PyList_Check(self));
 
     if (container != None) {
         for (Box* e : container->pyElements()) {
@@ -1054,7 +1054,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 }
 
 Box* listEq(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1062,7 +1062,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 }
 
 Box* listNe(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1070,7 +1070,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 }
 
 Box* listLt(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1078,7 +1078,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
 }
 
 Box* listLe(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1086,7 +1086,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
 }
 
 Box* listGt(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1094,7 +1094,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
 }
 
 Box* listGe(BoxedList* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, list_cls)) {
+    if (!PyList_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -1103,7 +1103,7 @@ Box* listGe(BoxedList* self, Box* rhs) {
 
 extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
     BoxedList* l = (BoxedList*)self;
-    assert(isSubclass(l->cls, list_cls));
+    assert(PyList_Check(l));
 
     try {
         return listIAdd(l, b);
@@ -1120,7 +1120,7 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     }
 
     BoxedList* l = (BoxedList*)a;
-    ASSERT(isSubclass(l->cls, list_cls), "%s", l->cls->tp_name);
+    ASSERT(PyList_Check(l), "%s", l->cls->tp_name);
 
     try {
         BoxedSlice* slice = (BoxedSlice*)createSlice(boxInt(ilow), boxInt(ihigh), None);
@@ -1142,7 +1142,7 @@ void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedList::gcHandler(GCVisitor* v, Box* b) {
-    assert(isSubclass(b->cls, list_cls));
+    assert(PyList_Check(b));
 
     Box::gcHandler(v, b);
 

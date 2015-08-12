@@ -50,7 +50,7 @@ extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
 extern "C" long PyInt_AsLong(PyObject* op) noexcept {
     // This method should do quite a bit more, including checking tp_as_number->nb_int (or calling __int__?)
 
-    if (isSubclass(op->cls, int_cls))
+    if (PyInt_Check(op))
         return static_cast<BoxedInt*>(op)->n;
 
     if (op->cls == long_cls)
@@ -111,7 +111,7 @@ static Box* int_to_decimal_string(BoxedInt* v) noexcept {
 
 extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) noexcept {
     BoxedInt* bint = reinterpret_cast<BoxedInt*>(v);
-    RELEASE_ASSERT(isSubclass(bint->cls, int_cls), "");
+    RELEASE_ASSERT(PyInt_Check(bint), "");
 
     /* There are no doubt many, many ways to optimize this, using code
        similar to _PyLong_Format */
@@ -390,22 +390,22 @@ extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs) {
 
 
 extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return add_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n + rhs->d);
 }
 
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return add_i64_i64(lhs->n, rhs_int->n);
     } else if (rhs->cls == float_cls) {
@@ -417,16 +417,16 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return boxInt(lhs->n & rhs->n);
 }
 
 extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -434,16 +434,16 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intOrInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return boxInt(lhs->n | rhs->n);
 }
 
 extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -451,16 +451,16 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intXorInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return boxInt(lhs->n ^ rhs->n);
 }
 
 extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -468,13 +468,13 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return div_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -484,10 +484,10 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -497,13 +497,13 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intFloordivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return div_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -513,11 +513,11 @@ extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -527,8 +527,8 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
 
     if (rhs->n == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -537,7 +537,7 @@ extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -547,11 +547,11 @@ extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return intTruedivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -561,8 +561,8 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
 
     if (rhs->n < 0)
         raiseExcHelper(ValueError, "negative shift count");
@@ -577,14 +577,14 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
         return longLshift(boxLong(lhs->n), rhs);
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -592,16 +592,16 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return boxInt(mod_i64_i64(lhs->n, rhs->n));
 }
 
 extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -609,7 +609,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
@@ -631,22 +631,22 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
 
 
 extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return mul_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n * rhs->d);
 }
 
 extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intMulInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
@@ -668,14 +668,14 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
 }
 
 extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, long_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyLong_Check(rhs));
     BoxedLong* lhs_long = boxLong(lhs->n);
     return longPow(lhs_long, rhs, mod);
 }
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
 
     if (mod != None) {
@@ -685,14 +685,14 @@ extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
 }
 
 extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, long_cls))
+    if (PyLong_Check(rhs))
         return intPowLong(lhs, static_cast<BoxedLong*>(rhs), mod);
-    else if (isSubclass(rhs->cls, float_cls))
+    else if (PyFloat_Check(rhs))
         return intPowFloat(lhs, static_cast<BoxedFloat*>(rhs), mod);
-    else if (!isSubclass(rhs->cls, int_cls))
+    else if (!PyInt_Check(rhs))
         return NotImplemented;
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -702,7 +702,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
         if (rhs_int->n < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
-        if (!isSubclass(mod->cls, int_cls)) {
+        if (!PyInt_Check(mod)) {
             return NotImplemented;
         } else if (mod_int->n == 0) {
             raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
@@ -710,14 +710,14 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     }
 
     Box* rtn = pow_i64_i64(lhs->n, rhs_int->n, mod);
-    if (isSubclass(rtn->cls, long_cls))
+    if (PyLong_Check(rtn))
         return longInt(rtn);
     return rtn;
 }
 
 extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
 
     if (rhs->n < 0)
         raiseExcHelper(ValueError, "negative shift count");
@@ -726,14 +726,14 @@ extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
         return longRshift(boxLong(lhs->n), rhs);
 
-    if (!isSubclass(rhs->cls, int_cls)) {
+    if (!PyInt_Check(rhs)) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -741,22 +741,22 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
+    assert(PyInt_Check(rhs));
     return sub_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, int_cls));
+    assert(PyInt_Check(lhs));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n - rhs->d);
 }
 
 extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, int_cls))
+    if (!PyInt_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intSubInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
@@ -768,7 +768,7 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intInvert(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'int' object but received a '%s'",
                        getTypeName(v));
 
@@ -776,7 +776,7 @@ extern "C" Box* intInvert(BoxedInt* v) {
 }
 
 extern "C" Box* intPos(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->cls == int_cls)
@@ -785,7 +785,7 @@ extern "C" Box* intPos(BoxedInt* v) {
 }
 
 extern "C" Box* intNeg(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'int' object but received a '%s'", getTypeName(v));
 
 
@@ -802,7 +802,7 @@ extern "C" Box* intNeg(BoxedInt* v) {
 }
 
 extern "C" Box* intNonzero(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor '__nonzero__' requires a 'int' object but received a '%s'",
                        getTypeName(v));
 
@@ -810,7 +810,7 @@ extern "C" Box* intNonzero(BoxedInt* v) {
 }
 
 extern "C" BoxedString* intRepr(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     char buf[80];
@@ -819,7 +819,7 @@ extern "C" BoxedString* intRepr(BoxedInt* v) {
 }
 
 extern "C" Box* intHash(BoxedInt* self) {
-    if (!isSubclass(self->cls, int_cls))
+    if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
@@ -829,7 +829,7 @@ extern "C" Box* intHash(BoxedInt* self) {
 }
 
 extern "C" Box* intHex(BoxedInt* self) {
-    if (!isSubclass(self->cls, int_cls))
+    if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
@@ -844,7 +844,7 @@ extern "C" Box* intHex(BoxedInt* self) {
 }
 
 extern "C" Box* intOct(BoxedInt* self) {
-    if (!isSubclass(self->cls, int_cls))
+    if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
@@ -859,7 +859,7 @@ extern "C" Box* intOct(BoxedInt* self) {
 }
 
 extern "C" Box* intTrunc(BoxedInt* self) {
-    if (!isSubclass(self->cls, int_cls))
+    if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
@@ -869,7 +869,7 @@ extern "C" Box* intTrunc(BoxedInt* self) {
 }
 
 extern "C" Box* intInt(BoxedInt* self) {
-    if (!isSubclass(self->cls, int_cls))
+    if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__int__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
@@ -891,7 +891,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
-    } else if (isSubclass(val->cls, str_cls)) {
+    } else if (PyString_Check(val)) {
         int base_n;
         if (!base)
             base_n = 10;
@@ -985,7 +985,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
 }
 
 template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept(S == CAPI) {
-    if (!isSubclass(_cls->cls, type_cls)) {
+    if (!PyType_Check(_cls)) {
         if (S == CAPI) {
             PyErr_Format(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
             return NULL;
@@ -1040,7 +1040,7 @@ static int bits_in_ulong(unsigned long d) noexcept {
 }
 
 extern "C" Box* intBitLength(BoxedInt* v) {
-    if (!isSubclass(v->cls, int_cls))
+    if (!PyInt_Check(v))
         raiseExcHelper(TypeError, "descriptor 'bit_length' requires a 'int' object but received a '%s'",
                        getTypeName(v));
 

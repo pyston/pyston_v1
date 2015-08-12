@@ -105,7 +105,7 @@ Box* getSysStdout() {
 Box* sysGetFrame(Box* val) {
     int depth = 0;
     if (val) {
-        if (!isSubclass(val->cls, int_cls)) {
+        if (!PyInt_Check(val)) {
             raiseExcHelper(TypeError, "TypeError: an integer is required");
         }
         depth = static_cast<BoxedInt*>(val)->n;

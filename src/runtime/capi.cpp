@@ -807,7 +807,7 @@ void checkAndThrowCAPIException() {
 
     if (_type) {
         BoxedClass* type = static_cast<BoxedClass*>(_type);
-        assert(isSubclass(_type->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
+        assert(PyType_Check(_type) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
 
         Box* value = cur_thread_state.curexc_value;
