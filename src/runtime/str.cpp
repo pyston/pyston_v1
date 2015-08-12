@@ -1660,6 +1660,7 @@ static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
     return PyString_FromStringAndSize(a->data() + i, j - i);
 }
 
+// Analoguous to CPython's, used for sq_ slots.
 static Py_ssize_t str_length(Box* a) {
     return Py_SIZE(a);
 }
@@ -2062,14 +2063,14 @@ Box* strSwapcase(BoxedString* self) {
     return rtn;
 }
 
-Box* strContains(BoxedString* self, Box* elt) {
+static inline int string_contains_shared(BoxedString* self, Box* elt) {
     assert(PyString_Check(self));
 
     if (PyUnicode_Check(elt)) {
         int r = PyUnicode_Contains(self, elt);
         if (r < 0)
             throwCAPIException();
-        return boxBool(r);
+        return r;
     }
 
     if (!PyString_Check(elt))
@@ -2083,9 +2084,16 @@ Box* strContains(BoxedString* self, Box* elt) {
         found_idx = self->s().find(sub->s()[0]);
     else
         found_idx = self->s().find(sub->s());
-    if (found_idx == std::string::npos)
-        return False;
-    return True;
+    return (found_idx != std::string::npos);
+}
+
+// Analoguous to CPython's, used for sq_ slots.
+static int string_contains(PyObject* str_obj, PyObject* sub_obj) {
+    return string_contains_shared((BoxedString*)str_obj, sub_obj);
+}
+
+Box* strContains(BoxedString* self, Box* elt) {
+    return boxBool(string_contains_shared(self, elt));
 }
 
 // compares (a+a_pos, len) with (str)
@@ -2282,6 +2290,17 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
                                            error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
+}
+
+static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) {
+    BoxedString* boxedString = (BoxedString*)self;
+
+    if (i < 0 || i >= boxedString->size()) {
+        raiseExcHelper(IndexError, "string index out of range");
+    }
+
+    char c = boxedString->s()[i];
+    return characters[c & UCHAR_MAX];
 }
 
 template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
@@ -2857,10 +2876,12 @@ void setupStr() {
     add_operators(str_cls);
     str_cls->freeze();
 
-    str_cls->tp_as_sequence->sq_slice = str_slice;
-    str_cls->tp_as_sequence->sq_length = str_length;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
+    str_cls->tp_as_sequence->sq_length = str_length;
+    str_cls->tp_as_sequence->sq_item = (ssizeargfunc)string_item;
+    str_cls->tp_as_sequence->sq_slice = str_slice;
+    str_cls->tp_as_sequence->sq_contains = (objobjproc)string_contains;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));

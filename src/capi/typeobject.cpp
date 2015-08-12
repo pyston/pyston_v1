@@ -3270,7 +3270,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
                        | Py_TPFLAGS_DICT_SUBCLASS | Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
 
-    RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del || cls->tp_free == PyObject_GC_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
     RELEASE_ASSERT(cls->tp_cache == NULL, "");
@@ -3300,6 +3299,19 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->tp_dict = cls->getAttrWrapper();
 
     assert(cls->tp_name);
+
+    // Inherit some special protocols. Normally methods are automatically inherited,
+    // when a Python class is declared, but that may not be the case with C extensions.
+    if (base != NULL) {
+        if (cls->tp_as_number == NULL)
+            cls->tp_as_number = base->tp_as_number;
+        if (cls->tp_as_sequence == NULL)
+            cls->tp_as_sequence = base->tp_as_sequence;
+        if (cls->tp_as_mapping == NULL)
+            cls->tp_as_mapping = base->tp_as_mapping;
+        if (cls->tp_as_buffer == NULL)
+            cls->tp_as_buffer = base->tp_as_buffer;
+    }
 
     if (cls->tp_call) {
         cls->tpp_call.capi_val = tppProxyToTpCall<CAPI>;

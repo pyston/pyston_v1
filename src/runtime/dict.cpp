@@ -174,6 +174,11 @@ Box* dictViewItems(BoxedDict* self) {
     return rtn;
 }
 
+// Analoguous to CPython's, used for sq_ slots.
+static Py_ssize_t dict_length(PyDictObject* mp) {
+    return ((BoxedDict*)mp)->d.size();
+}
+
 Box* dictLen(BoxedDict* self) {
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor '__len__' requires a 'dict' object but received a '%s'",
@@ -374,9 +379,7 @@ extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexc
 }
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
-    // printf("Starting setitem\n");
     Box*& pos = self->d[k];
-    // printf("Got the pos\n");
 
     if (pos != NULL) {
         pos = v;
@@ -400,6 +403,22 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
     self->d.erase(it);
 
     return None;
+}
+
+// Analoguous to CPython's, used for sq_ slots.
+static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
+    try {
+        Box* res;
+        if (w == NULL) {
+            res = dictDelitem((BoxedDict*)mp, v);
+        } else {
+            res = dictSetitem((BoxedDict*)mp, v, w);
+        }
+        assert(res == None);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+    }
+    return 0;
 }
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
@@ -820,7 +839,11 @@ void setupDict() {
     dict_cls->tp_init = dict_init;
     dict_cls->tp_repr = dict_repr;
 
+    dict_cls->tp_as_mapping->mp_length = (lenfunc)dict_length;
     dict_cls->tp_as_mapping->mp_subscript = (binaryfunc)dictGetitem<CAPI>;
+    dict_cls->tp_as_mapping->mp_ass_subscript = (objobjargproc)dict_ass_sub;
+
+    dict_cls->tp_as_sequence->sq_contains = (objobjproc)PyDict_Contains;
 
     dict_keys_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));

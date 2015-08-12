@@ -277,6 +277,7 @@ private:
         writeExpr(node->value);
         return true;
     }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) { return true; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) {
         writeStmtVector(node->body);
         writeColOffset(node->col_offset);

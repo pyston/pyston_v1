@@ -31,6 +31,8 @@
 
 namespace pyston {
 
+static int list_ass_slice(PyListObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject* v);
+
 extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     RELEASE_ASSERT(PyList_Check(op), "");
     try {
@@ -198,7 +200,7 @@ static Box* list_slice(Box* o, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     return (PyObject*)np;
 }
 
-extern "C" Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
+static inline Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
     assert(isSubclass(self->cls, list_cls));
     if (n < 0)
         n = self->size + n;
@@ -252,6 +254,17 @@ extern "C" Box* listGetslice(BoxedList* self, Box* boxedStart, Box* boxedStop) {
     return _listSlice(self, start, stop, 1, stop - start);
 }
 
+// Analoguous to CPython's, used for sq_ slots.
+static PyObject* list_item(PyListObject* a, Py_ssize_t i) noexcept {
+    try {
+        BoxedList* self = (BoxedList*)a;
+        return listGetitemUnboxed(self, i);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 template <ExceptionStyle S> Box* listGetitem(BoxedList* self, Box* slice) {
     if (S == CAPI) {
         try {
@@ -295,6 +308,22 @@ extern "C" Box* listSetitemUnboxed(BoxedList* self, int64_t n, Box* v) {
 extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
     assert(isSubclass(slice->cls, int_cls));
     return listSetitemUnboxed(self, slice->n, v);
+}
+
+// Analoguous to CPython's, used for sq_ slots.
+static int list_ass_item(PyListObject* a, Py_ssize_t i, PyObject* v) {
+    PyObject* old_value;
+    if (i < 0 || i >= Py_SIZE(a)) {
+        PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
+        return -1;
+    }
+    if (v == NULL)
+        return list_ass_slice(a, i, i + 1, v);
+    Py_INCREF(v);
+    old_value = a->ob_item[i];
+    a->ob_item[i] = v;
+    Py_DECREF(old_value);
+    return 0;
 }
 
 extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
@@ -449,7 +478,7 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
     }
 }
 
-Box* listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i64 step, Box* v) {
+static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i64 step, Box* v) {
     RELEASE_ASSERT(step == 1, "step sizes must be 1 in this code path");
 
     boundSliceWithLength(&start, &stop, start, stop, self->size);
@@ -488,8 +517,6 @@ Box* listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i64 step, Box* 
     }
 
     self->size += delts;
-
-    return None;
 }
 
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
@@ -511,7 +538,14 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         return None;
     }
 
-    return listSetitemSliceInt64(self, start, stop, step, v);
+    listSetitemSliceInt64(self, start, stop, step, v);
+    return None;
+}
+
+// Analoguous to CPython's, used for sq_ slots.
+static int list_ass_slice(PyListObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject* v) {
+    listSetitemSliceInt64((BoxedList*)a, ilow, ihigh, 1, v);
+    return 0;
 }
 
 extern "C" Box* listSetslice(BoxedList* self, Box* boxedStart, Box* boxedStop, Box** args) {
@@ -522,7 +556,8 @@ extern "C" Box* listSetslice(BoxedList* self, Box* boxedStart, Box* boxedStop, B
     sliceIndex(boxedStart, &start);
     sliceIndex(boxedStop, &stop);
 
-    return listSetitemSliceInt64(self, start, stop, 1, value);
+    listSetitemSliceInt64(self, start, stop, 1, value);
+    return None;
 }
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
@@ -822,23 +857,33 @@ extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) 
     return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
 }
 
-Box* listContains(BoxedList* self, Box* elt) {
+static inline int list_contains_shared(BoxedList* self, Box* elt) {
+    assert(isSubclass(self->cls, list_cls));
+
     int size = self->size;
     for (int i = 0; i < size; i++) {
         Box* e = self->elts->elts[i];
 
         bool identity_eq = e == elt;
         if (identity_eq)
-            return True;
+            return true;
 
         int r = PyObject_RichCompareBool(e, elt, Py_EQ);
         if (r == -1)
             throwCAPIException();
 
         if (r)
-            return True;
+            return true;
     }
-    return False;
+    return false;
+}
+
+static int list_contains(PyListObject* a, PyObject* el) {
+    return list_contains_shared((BoxedList*)a, el);
+}
+
+Box* listContains(BoxedList* self, Box* elt) {
+    return boxBool(list_contains_shared(self, elt));
 }
 
 Box* listCount(BoxedList* self, Box* elt) {
@@ -1195,9 +1240,13 @@ void setupList() {
     list_cls->giveAttr("__hash__", None);
     list_cls->freeze();
 
-    list_cls->tp_as_sequence->sq_slice = list_slice;
-    list_cls->tp_as_sequence->sq_length = list_length;
     list_cls->tp_iter = listIter;
+    list_cls->tp_as_sequence->sq_length = list_length;
+    list_cls->tp_as_sequence->sq_item = (ssizeargfunc)list_item;
+    list_cls->tp_as_sequence->sq_slice = list_slice;
+    list_cls->tp_as_sequence->sq_ass_item = (ssizeobjargproc)list_ass_item;
+    list_cls->tp_as_sequence->sq_ass_slice = (ssizessizeobjargproc)list_ass_slice;
+    list_cls->tp_as_sequence->sq_contains = (objobjproc)list_contains;
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

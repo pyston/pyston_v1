@@ -2034,6 +2034,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) {
         output->push_back(node);
         return false;

@@ -134,6 +134,13 @@ PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
 //      PyGC_AddRoot(obj);
 // to reduce any chances of compiler reorderings or a GC somehow happening between the assignment
 // to the static slot and the call to PyGC_AddRoot.
+//
+
+// Similarly, some extension modules have static non-type objects that our GC thinks are errors
+// since they are not in the heap, unless we root them. This function should be used purely as
+// a temporary patching mechanism - we want to have a better way of dealing with such objects
+// in the future (even if it's an invalid use of CPython APIs).
+PyObject* PyGC_AddNonHeapRoot(PyObject* obj, int size) PYSTON_NOEXCEPT;
 
 // Pyston change : expose these type objects
 extern PyTypeObject Pattern_Type;
