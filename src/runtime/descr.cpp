@@ -292,9 +292,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
 
-    Box* oarg1 = NULL;
-    Box* oarg2 = NULL;
-    Box* oarg3 = NULL;
     Box** oargs = NULL;
 
     Box* oargs_array[1];
@@ -305,32 +302,31 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+                       arg2, arg3, args, oargs, keyword_names);
 
     if (!rewrite_success)
         rewrite_args = NULL;
 
     if (ml_flags & METH_CLASS) {
         rewrite_args = NULL;
-        if (!isSubclass(oarg1->cls, type_cls))
+        if (!isSubclass(arg1->cls, type_cls))
             raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
-                           getFullTypeName(oarg1).c_str());
+                           getFullTypeName(arg1).c_str());
     } else {
-        if (!isSubclass(oarg1->cls, self->type))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' oarg1 but received a '%s'",
-                           self->method->ml_name, getFullNameOfClass(self->type).c_str(),
-                           getFullTypeName(oarg1).c_str());
+        if (!isSubclass(arg1->cls, self->type))
+            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' arg1 but received a '%s'", self->method->ml_name,
+                           getFullNameOfClass(self->type).c_str(), getFullTypeName(arg1).c_str());
     }
 
     if (rewrite_args) {
-        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)oarg1->cls);
+        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
     }
 
     Box* rtn;
     if (call_flags == METH_NOARGS) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(oarg1, NULL);
+            rtn = (Box*)self->method->ml_meth(arg1, NULL);
         }
         if (rewrite_args)
             rewrite_args->out_rtn
@@ -339,7 +335,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     } else if (call_flags == METH_VARARGS) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+            rtn = (Box*)self->method->ml_meth(arg1, arg2);
         }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
@@ -347,7 +343,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(oarg1, oarg2, oarg3);
+            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(arg1, arg2, arg3);
         }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
@@ -355,7 +351,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     } else if (call_flags == METH_O) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(oarg1, oarg2);
+            rtn = (Box*)self->method->ml_meth(arg1, arg2);
         }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
@@ -363,7 +359,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(oarg1, oarg2, oarg3, oargs);
+            rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(arg1, arg2, arg3, oargs);
         }
         if (rewrite_args) {
             if (paramspec.totalReceived() == 2)
@@ -536,20 +532,16 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
         RELEASE_ASSERT(0, "%d", flags);
     }
 
-    Box* oarg1 = NULL;
-    Box* oarg2 = NULL;
-    Box* oarg3 = NULL;
     Box** oargs = NULL;
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+                       arg1, arg2, arg3, args, oargs, keyword_names);
 
-    assert(oarg1 && oarg1->cls == tuple_cls);
+    assert(arg1 && arg1->cls == tuple_cls);
     if (!paramspec.takes_kwargs)
-        assert(oarg2 == NULL);
-    assert(oarg3 == NULL);
-    assert(oargs == NULL);
+        assert(arg2 == NULL);
+    assert(arg3 == NULL);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -557,7 +549,7 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
     Box* rtn;
     if (flags == PyWrapperFlag_KEYWORDS) {
         wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-        rtn = (*wk)(self->obj, oarg1, self->descr->wrapped, oarg2);
+        rtn = (*wk)(self->obj, arg1, self->descr->wrapped, arg2);
 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;
@@ -569,7 +561,7 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
             rewrite_args->out_success = true;
         }
     } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
-        rtn = (*wrapper)(self->obj, oarg1, self->descr->wrapped);
+        rtn = (*wrapper)(self->obj, arg1, self->descr->wrapped);
 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;

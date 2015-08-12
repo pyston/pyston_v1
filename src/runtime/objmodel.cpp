@@ -3052,8 +3052,8 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteA
 
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
-                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs) {
+                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
+                        const std::vector<BoxedString*>* keyword_names) {
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3066,11 +3066,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     int num_passed_args = argspec.totalPassed();
 
     if (num_passed_args >= 1)
-        assert(gc::isValidGCObject(arg1) || !arg1);
+        assert(gc::isValidGCObject(oarg1) || !oarg1);
     if (num_passed_args >= 2)
-        assert(gc::isValidGCObject(arg2) || !arg2);
+        assert(gc::isValidGCObject(oarg2) || !oarg2);
     if (num_passed_args >= 3)
-        assert(gc::isValidGCObject(arg3) || !arg3);
+        assert(gc::isValidGCObject(oarg3) || !oarg3);
     for (int i = 3; i < num_passed_args; i++) {
         assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
     }
@@ -3085,9 +3085,6 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
         rewrite_success = true;
-        oarg1 = arg1;
-        oarg2 = arg2;
-        oarg3 = arg3;
         if (num_output_args > 3)
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
         return;
@@ -3103,7 +3100,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             assert(num_output_args == num_passed_args + 1);
             int idx = paramspec.kwargsIndex();
             assert(idx < 3);
-            getArg(idx, arg1, arg2, arg3, NULL) = NULL; // pass NULL for kwargs
+            getArg(idx, oarg1, oarg2, oarg3, NULL) = NULL; // pass NULL for kwargs
             if (rewrite_args) {
                 if (idx == 0)
                     rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0);
@@ -3123,30 +3120,30 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         // received by the caller are always tuples).
         // This is why we can't pass kwargs here.
         if (argspec.has_starargs) {
-            Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+            Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, oarg1, oarg2, oarg3, args);
             if (given_varargs->cls == tuple_cls) {
                 if (rewrite_args) {
                     getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
                         ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
                 }
                 rewrite_success = true;
-                oarg1 = arg1;
-                oarg2 = arg2;
-                oarg3 = arg3;
                 if (num_output_args > 3)
                     memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
                 return;
             }
         } else {
             rewrite_success = true;
-            oarg1 = arg1;
-            oarg2 = arg2;
-            oarg3 = arg3;
             if (num_output_args > 3)
                 memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
             return;
         }
     }
+
+    // Save the original values:
+    Box* arg1 = oarg1;
+    Box* arg2 = oarg2;
+    Box* arg3 = oarg3;
+    oarg1 = oarg2 = oarg3 = NULL;
 
     static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
     slowpath_rearrangeargs_slowpath.log();
@@ -3422,7 +3419,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         }
     }
 
-    Box* oarg1, *oarg2, *oarg3, **oargs;
+    Box** oargs;
     bool rewrite_success = false;
 
     int num_output_args = paramspec.totalReceived();
@@ -3443,7 +3440,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     try {
         rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
                            paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
-                           arg1, arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+                           arg1, arg2, arg3, args, oargs, keyword_names);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -3454,7 +3451,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
 #if 0
     for (int i = 0; i < num_output_args; i++) {
-        auto arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+        auto arg = getArg(i, arg1, arg2, arg3, oargs);
         RELEASE_ASSERT(!arg || gc::isValidGCObject(arg), "%p", arg);
     }
 #endif
@@ -3530,9 +3527,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (f->isGenerator()) {
         // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
         // rewrite up to the call to it:
-        res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
+        res = createGenerator(func, arg1, arg2, arg3, oargs);
     } else {
-        res = callCLFunc<S>(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);
+        res = callCLFunc<S>(f, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2, arg3, oargs);
     }
 
     return res;
