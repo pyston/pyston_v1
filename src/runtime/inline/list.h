@@ -45,7 +45,7 @@ inline void BoxedList::ensure(int min_free) {
 extern "C" inline void listAppendInternal(Box* s, Box* v) {
     // Lock must be held!
 
-    assert(isSubclass(s->cls, list_cls));
+    assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);

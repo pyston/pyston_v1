@@ -468,7 +468,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         // The (cls == type_cls) part of the check is important because during bootstrapping
         // we might not have set up enough stuff in order to do proper subclass checking,
         // but those clases will either have cls == NULL or cls == type_cls
-        assert(cls == type_cls || isSubclass(cls, type_cls));
+        assert(cls == type_cls || PyType_Check(this));
     }
 
     if (is_user_defined) {
@@ -2164,7 +2164,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     }
 
     // TODO this should be in type_setattro
-    if (isSubclass(obj->cls, type_cls)) {
+    if (PyType_Check(obj)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
         static BoxedString* base_str = internStringImmortal("__base__");
@@ -2445,7 +2445,7 @@ extern "C" BoxedString* str(Box* obj) {
         checkAndThrowCAPIException();
     }
 
-    if (!isSubclass(obj->cls, str_cls)) {
+    if (!PyString_Check(obj)) {
         raiseExcHelper(TypeError, "__str__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
@@ -2473,7 +2473,7 @@ extern "C" BoxedString* repr(Box* obj) {
         checkAndThrowCAPIException();
     }
 
-    if (!isSubclass(obj->cls, str_cls)) {
+    if (!PyString_Check(obj)) {
         raiseExcHelper(TypeError, "__repr__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
@@ -3327,12 +3327,12 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         if (!kwargs) {
             // TODO could try to avoid creating this
             kwargs = new BoxedDict();
-        } else if (!isSubclass(kwargs->cls, dict_cls)) {
+        } else if (!PyDict_Check(kwargs)) {
             BoxedDict* d = new BoxedDict();
             dictMerge(d, kwargs);
             kwargs = d;
         }
-        assert(isSubclass(kwargs->cls, dict_cls));
+        assert(PyDict_Check(kwargs));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
         for (auto& p : d_kwargs->d) {
@@ -4943,7 +4943,7 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
     }
 
     // TODO this should be in type_setattro
-    if (isSubclass(obj->cls, type_cls)) {
+    if (PyType_Check(obj)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
         static BoxedString* base_str = internStringImmortal("__base__");
@@ -5134,7 +5134,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     assert(base);
     if (!PyType_HasFeature(base, Py_TPFLAGS_BASETYPE))
         raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);
-    assert(isSubclass(base->cls, type_cls));
+    assert(PyType_Check(base));
 
     // Handle slots
     static BoxedString* slots_str = internStringImmortal("__slots__");
@@ -5343,7 +5343,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     if (!made->tp_del) {
         for (auto b : *bases) {
             BoxedClass* base = static_cast<BoxedClass*>(b);
-            if (!isSubclass(base->cls, type_cls))
+            if (!PyType_Check(base))
                 continue;
             if (base->tp_del) {
                 break;
@@ -5425,7 +5425,7 @@ Box* typeNewGeneric(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     Box* arg3 = _args[0];
 
-    if (!isSubclass(_cls->cls, type_cls))
+    if (!PyType_Check(_cls))
         raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* metatype = static_cast<BoxedClass*>(_cls);
@@ -5609,7 +5609,7 @@ extern "C" Box* importFrom(Box* _m, BoxedString* name) {
 extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
     STAT_TIMER(t0, "us_timer_importStar", 10);
 
-    RELEASE_ASSERT(isSubclass(_from_module->cls, module_cls), "%s", _from_module->cls->tp_name);
+    RELEASE_ASSERT(PyModule_Check(_from_module), "%s", _from_module->cls->tp_name);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
     static BoxedString* all_str = internStringImmortal("__all__");

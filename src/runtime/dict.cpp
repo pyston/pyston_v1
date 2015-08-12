@@ -73,7 +73,7 @@ Box* dictRepr(BoxedDict* self) {
 }
 
 Box* dictClear(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'clear' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     self->d.clear();
@@ -81,7 +81,7 @@ Box* dictClear(BoxedDict* self) {
 }
 
 Box* dictCopy(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     BoxedDict* r = new BoxedDict();
@@ -111,7 +111,7 @@ Box* dictValues(BoxedDict* self) {
 }
 
 Box* dictKeys(BoxedDict* self) {
-    RELEASE_ASSERT(isSubclass(self->cls, dict_cls), "");
+    RELEASE_ASSERT(PyDict_Check(self), "");
 
     BoxedList* rtn = new BoxedList();
     rtn->ensure(self->d.size());
@@ -148,7 +148,7 @@ extern "C" PyObject* PyDict_Items(PyObject* mp) noexcept {
 }
 
 Box* dictViewKeys(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls)) {
+    if (!PyDict_Check(self)) {
         raiseExcHelper(TypeError, "descriptor 'viewkeys' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
     }
@@ -157,7 +157,7 @@ Box* dictViewKeys(BoxedDict* self) {
 }
 
 Box* dictViewValues(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls)) {
+    if (!PyDict_Check(self)) {
         raiseExcHelper(TypeError, "descriptor 'viewvalues' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
     }
@@ -166,7 +166,7 @@ Box* dictViewValues(BoxedDict* self) {
 }
 
 Box* dictViewItems(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls)) {
+    if (!PyDict_Check(self)) {
         raiseExcHelper(TypeError, "descriptor 'viewitems' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
     }
@@ -180,7 +180,7 @@ static Py_ssize_t dict_length(PyDictObject* mp) {
 }
 
 Box* dictLen(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor '__len__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
@@ -212,7 +212,7 @@ extern "C" int PyDict_Update(PyObject* a, PyObject* b) noexcept {
 }
 
 template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexcept(S == CAPI) {
-    if (!isSubclass(self->cls, dict_cls)) {
+    if (!PyDict_Check(self)) {
         if (S == CAPI) {
             PyErr_Format(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
                          getTypeName(self));
@@ -272,7 +272,7 @@ extern "C" PyObject* PyDict_New() noexcept {
 // The performance should hopefully be comparable to the CPython fast case, since we can use
 // runtimeICs.
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noexcept {
-    ASSERT(isSubclass(mp->cls, dict_cls) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
+    ASSERT(PyDict_Check(mp) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
 
     assert(mp);
     Box* b = static_cast<Box*>(mp);
@@ -303,8 +303,8 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
 }
 
 extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
-    ASSERT(isSubclass(dict->cls, dict_cls) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
-    if (isSubclass(dict->cls, dict_cls)) {
+    ASSERT(PyDict_Check(dict) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
+    if (PyDict_Check(dict)) {
         BoxedDict* d = static_cast<BoxedDict*>(dict);
         return d->getOrNull(key);
     }
@@ -325,7 +325,7 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
 }
 
 extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) noexcept {
-    assert(isSubclass(op->cls, dict_cls));
+    assert(PyDict_Check(op));
     BoxedDict* self = static_cast<BoxedDict*>(op);
 
     // Callers of PyDict_New() provide a pointer to some storage for this function to use, in
@@ -391,7 +391,7 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictDelitem(BoxedDict* self, Box* k) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
@@ -422,7 +422,7 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
 }
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
-    ASSERT(isSubclass(op->cls, dict_cls) || op->cls == attrwrapper_cls, "%s", getTypeName(op));
+    ASSERT(PyDict_Check(op) || op->cls == attrwrapper_cls, "%s", getTypeName(op));
     try {
         delitem(op, key);
         return 0;
@@ -444,7 +444,7 @@ extern "C" int PyDict_DelItemString(PyObject* v, const char* key) noexcept {
 }
 
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'pop' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     auto it = self->d.find(k);
@@ -461,7 +461,7 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictPopitem(BoxedDict* self) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'popitem' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
@@ -479,7 +479,7 @@ Box* dictPopitem(BoxedDict* self) {
 }
 
 Box* dictGet(BoxedDict* self, Box* k, Box* d) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'get' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     auto it = self->d.find(k);
@@ -490,7 +490,7 @@ Box* dictGet(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor 'setdefault' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
@@ -503,7 +503,7 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictContains(BoxedDict* self, Box* k) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor '__contains__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
@@ -528,7 +528,7 @@ extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
         }
 
         BoxedDict* mp = (BoxedDict*)op;
-        assert(isSubclass(mp->cls, dict_cls));
+        assert(PyDict_Check(mp));
         return mp->getOrNull(key) ? 1 : 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -551,11 +551,11 @@ Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
 }
 
 Box* dictEq(BoxedDict* self, Box* _rhs) {
-    if (!isSubclass(self->cls, dict_cls))
+    if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
-    if (!isSubclass(_rhs->cls, dict_cls))
+    if (!PyDict_Check(_rhs))
         return NotImplemented;
 
     BoxedDict* rhs = static_cast<BoxedDict*>(_rhs);
@@ -585,7 +585,7 @@ Box* dictNe(BoxedDict* self, Box* _rhs) {
 
 
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
-    if (!isSubclass(_cls->cls, type_cls))
+    if (!PyType_Check(_cls))
         raiseExcHelper(TypeError, "dict.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
@@ -597,7 +597,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 void dictMerge(BoxedDict* self, Box* other) {
-    if (isSubclass(other->cls, dict_cls)) {
+    if (PyDict_Check(other)) {
         for (const auto& p : static_cast<BoxedDict*>(other)->d)
             self->d[p.first] = p.second;
         return;
@@ -702,7 +702,7 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
-    assert(isSubclass(b->cls, dict_cls));
+    assert(PyDict_Check(b));
 
     Box::gcHandler(v, b);
 
@@ -731,7 +731,7 @@ void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
 }
 
 static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
-    assert(isSubclass(self->cls, dict_cls));
+    assert(PyDict_Check(self));
     try {
         dictInit(static_cast<BoxedDict*>(self), static_cast<BoxedTuple*>(args), static_cast<BoxedDict*>(kwds));
     } catch (ExcInfo e) {
@@ -742,7 +742,7 @@ static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
 }
 
 static Box* dict_repr(PyObject* self) noexcept {
-    assert(isSubclass(self->cls, dict_cls));
+    assert(PyDict_Check(self));
     try {
         return dictRepr(static_cast<BoxedDict*>(self));
     } catch (ExcInfo e) {

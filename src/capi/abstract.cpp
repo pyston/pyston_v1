@@ -1650,7 +1650,7 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     assert(obj && obj->cls);
 
     // Our check, since we don't currently fill in tp_as_number:
-    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls) || isSubclass(obj->cls, float_cls))
+    if (PyFloat_Check(obj) || PyFloat_Check(obj) || PyFloat_Check(obj))
         return true;
 
     // The CPython check:

@@ -80,7 +80,7 @@ extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
 }
 
 Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
-    assert(isSubclass(self->cls, tuple_cls));
+    assert(PyTuple_Check(self));
     assert(slice->cls == slice_cls);
 
     i64 start, stop, step, length;
@@ -89,7 +89,7 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
 }
 
 extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) noexcept {
-    RELEASE_ASSERT(isSubclass(p->cls, tuple_cls), "");
+    RELEASE_ASSERT(PyTuple_Check(p), "");
     BoxedTuple* t = static_cast<BoxedTuple*>(p);
 
     Py_ssize_t n = t->size();
@@ -144,7 +144,7 @@ template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
         }
     }
 
-    assert(isSubclass(self->cls, tuple_cls));
+    assert(PyTuple_Check(self));
 
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
@@ -158,7 +158,7 @@ template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
 }
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
-    if (!isSubclass(rhs->cls, tuple_cls)) {
+    if (!PyTuple_Check(rhs)) {
         return NotImplemented;
     }
 
@@ -199,7 +199,7 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleLen(BoxedTuple* t) {
-    assert(isSubclass(t->cls, tuple_cls));
+    assert(PyTuple_Check(t));
     return boxInt(t->size());
 }
 
@@ -210,7 +210,7 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
 
 Box* tupleRepr(BoxedTuple* t) {
 
-    assert(isSubclass(t->cls, tuple_cls));
+    assert(PyTuple_Check(t));
     int n;
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)t);
@@ -258,7 +258,7 @@ Box* tupleRepr(BoxedTuple* t) {
 }
 
 Box* tupleNonzero(BoxedTuple* self) {
-    RELEASE_ASSERT(isSubclass(self->cls, tuple_cls), "");
+    RELEASE_ASSERT(PyTuple_Check(self), "");
     return boxBool(self->size() != 0);
 }
 

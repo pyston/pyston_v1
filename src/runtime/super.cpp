@@ -159,7 +159,7 @@ Box* superRepr(Box* _s) {
 
 // Ported from the CPython version:
 BoxedClass* supercheck(BoxedClass* type, Box* obj) {
-    if (isSubclass(obj->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(obj), type))
+    if (PyType_Check(obj) && isSubclass(static_cast<BoxedClass*>(obj), type))
         return static_cast<BoxedClass*>(obj);
 
     if (isSubclass(obj->cls, type)) {
@@ -168,7 +168,7 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
 
     static BoxedString* class_str = internStringImmortal("__class__");
     Box* class_attr = obj->getattr(class_str);
-    if (class_attr && isSubclass(class_attr->cls, type_cls) && class_attr != obj->cls) {
+    if (class_attr && PyType_Check(class_attr) && class_attr != obj->cls) {
         Py_FatalError("warning: this path never tested"); // blindly copied from CPython
         return static_cast<BoxedClass*>(class_attr);
     }
@@ -180,7 +180,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     RELEASE_ASSERT(_self->cls == super_cls, "");
     BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
-    if (!isSubclass(_type->cls, type_cls))
+    if (!PyType_Check(_type))
         raiseExcHelper(TypeError, "must be type, not %s", getTypeName(_type));
     BoxedClass* type = static_cast<BoxedClass*>(_type);
 

@@ -86,7 +86,7 @@ extern "C" Box* vars(Box* obj) {
 }
 
 extern "C" Box* abs_(Box* x) {
-    if (isSubclass(x->cls, int_cls)) {
+    if (PyInt_Check(x)) {
         i64 n = static_cast<BoxedInt*>(x)->n;
         return boxInt(n >= 0 ? n : -n);
     } else if (x->cls == float_cls) {
@@ -108,7 +108,7 @@ extern "C" Box* hexFunc(Box* x) {
     if (!r)
         raiseExcHelper(TypeError, "hex() argument can't be converted to hex");
 
-    if (!isSubclass(r->cls, str_cls))
+    if (!PyString_Check(r))
         raiseExcHelper(TypeError, "__hex__() returned non-string (type %.200s)", r->cls->tp_name);
 
     return r;
@@ -121,7 +121,7 @@ extern "C" Box* octFunc(Box* x) {
     if (!r)
         raiseExcHelper(TypeError, "oct() argument can't be converted to oct");
 
-    if (!isSubclass(r->cls, str_cls))
+    if (!PyString_Check(r))
         raiseExcHelper(TypeError, "__oct__() returned non-string (type %.200s)", r->cls->tp_name);
 
     return r;
@@ -887,7 +887,7 @@ public:
 };
 
 Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
-    if (!isSubclass(cls->cls, type_cls))
+    if (!PyType_Check(cls))
         raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls));
 
     if (!isSubclass(cls, BaseException))
@@ -960,7 +960,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         BoxedString* boxedName = boxString(llvm::StringRef(dot_pos + 1, n - (dot_pos - name) - 1));
 
         // It can also be a tuple of bases
-        RELEASE_ASSERT(isSubclass(_base->cls, type_cls), "");
+        RELEASE_ASSERT(PyType_Check(_base), "");
         BoxedClass* base = static_cast<BoxedClass*>(_base);
 
         if (PyDict_GetItemString(dict, "__module__") == NULL) {
@@ -997,7 +997,7 @@ public:
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "");
+        RELEASE_ASSERT(PyInt_Check(start), "");
         int64_t idx = static_cast<BoxedInt*>(start)->n;
 
         llvm::iterator_range<BoxIterator> range = obj->pyElements();
@@ -1076,7 +1076,7 @@ Box* powFunc(Box* x, Box* y, Box* z) {
 
 Box* execfile(Box* _fn) {
     // The "globals" and "locals" arguments aren't implemented for now
-    if (!isSubclass(_fn->cls, str_cls)) {
+    if (!PyString_Check(_fn)) {
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
     }
 

@@ -30,7 +30,7 @@ Box* listIterIter(Box* s) {
 }
 
 Box* listIter(Box* s) noexcept {
-    assert(isSubclass(s->cls, list_cls));
+    assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
     return new BoxedListIterator(self, 0);
 }
@@ -95,7 +95,7 @@ template Box* listiterNext<CAPI>(Box*);
 template Box* listiterNext<CXX>(Box*);
 
 Box* listReversed(Box* s) {
-    assert(isSubclass(s->cls, list_cls));
+    assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
     return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
 }
@@ -146,7 +146,7 @@ void BoxedList::shrink() {
 
 
 extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
-    assert(isSubclass(s->cls, list_cls));
+    assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);
@@ -160,7 +160,7 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 extern "C" Box* listAppend(Box* s, Box* v) {
-    assert(isSubclass(s->cls, list_cls));
+    assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     listAppendInternal(self, v);

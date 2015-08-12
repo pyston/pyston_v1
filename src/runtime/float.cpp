@@ -116,13 +116,13 @@ extern "C" Box* floatAddFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatAddInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(lhs->d + rhs->n);
 }
 
 extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatAddInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatAddFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -142,14 +142,14 @@ extern "C" Box* floatDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(lhs->d / rhs->n);
 }
 
 extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -162,7 +162,7 @@ extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
 
 extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -182,14 +182,14 @@ extern "C" Box* floatRDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(lhs->d);
     return boxFloat(rhs->n / lhs->d);
 }
 
 extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatRDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -209,14 +209,14 @@ extern "C" Box* floatFloorDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatFloorDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(floor(lhs->d / rhs->n));
 }
 
 extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatFloorDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatFloorDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -450,7 +450,7 @@ Unimplemented:
 }
 
 extern "C" Box* floatEq(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -463,7 +463,7 @@ extern "C" Box* floatEq(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatNe(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -476,7 +476,7 @@ extern "C" Box* floatNe(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatLe(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__le__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -489,7 +489,7 @@ extern "C" Box* floatLe(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatLt(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -502,7 +502,7 @@ extern "C" Box* floatLt(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatGe(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -515,7 +515,7 @@ extern "C" Box* floatGe(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatGt(BoxedFloat* lhs, Box* rhs) {
-    if (!isSubclass(lhs->cls, float_cls)) {
+    if (!PyFloat_Check(lhs)) {
         raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
     }
@@ -535,13 +535,13 @@ extern "C" Box* floatModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatModInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(mod_float_float(lhs->d, rhs->n));
 }
 
 extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatModInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatModFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -560,13 +560,13 @@ extern "C" Box* floatRModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRModInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(mod_float_float(rhs->n, lhs->d));
 }
 
 extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatRModInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRModFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -595,7 +595,7 @@ extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None)
 extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
     // TODO to specialize this, need to account for all the special cases in float_pow
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return floatPow(lhs, rhs, mod);
 }
 
@@ -617,13 +617,13 @@ extern "C" Box* floatMulFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatMulInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(lhs->d * rhs->n);
 }
 
 extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatMulInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatMulFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -642,13 +642,13 @@ extern "C" Box* floatSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(lhs->d - rhs->n);
 }
 
 extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatSubInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -667,13 +667,13 @@ extern "C" Box* floatRSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(isSubclass(rhs->cls, int_cls));
+    assert(PyInt_Check(rhs));
     return boxFloat(rhs->n - lhs->d);
 }
 
 extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (isSubclass(rhs->cls, int_cls)) {
+    if (PyInt_Check(rhs)) {
         return floatRSubInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -793,9 +793,9 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
 
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
-    } else if (isSubclass(a->cls, float_cls)) {
+    } else if (PyFloat_Check(a)) {
         return new BoxedFloat(static_cast<BoxedFloat*>(a)->d);
-    } else if (isSubclass(a->cls, int_cls)) {
+    } else if (PyInt_Check(a)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         llvm::StringRef s = static_cast<BoxedString*>(a)->s();
@@ -836,7 +836,7 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
             }
         }
 
-        if (!isSubclass(r->cls, float_cls)) {
+        if (!PyFloat_Check(r)) {
             if (S == CAPI) {
                 PyErr_Format(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
                 return NULL;
@@ -848,7 +848,7 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
 }
 
 template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S == CAPI) {
-    if (!isSubclass(_cls->cls, type_cls)) {
+    if (!PyType_Check(_cls)) {
         if (S == CAPI) {
             PyErr_Format(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls));
             return NULL;
@@ -882,7 +882,7 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
 }
 
 Box* floatStr(BoxedFloat* self) {
-    if (!isSubclass(self->cls, float_cls))
+    if (!PyFloat_Check(self))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
 
@@ -895,7 +895,7 @@ Box* floatRepr(BoxedFloat* self) {
 }
 
 Box* floatTrunc(BoxedFloat* self) {
-    if (!isSubclass(self->cls, float_cls))
+    if (!PyFloat_Check(self))
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
 
@@ -925,7 +925,7 @@ Box* floatTrunc(BoxedFloat* self) {
 }
 
 Box* floatHash(BoxedFloat* self) {
-    if (!isSubclass(self->cls, float_cls))
+    if (!PyFloat_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
 

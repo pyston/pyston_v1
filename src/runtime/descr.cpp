@@ -309,7 +309,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     if (ml_flags & METH_CLASS) {
         rewrite_args = NULL;
-        if (!isSubclass(arg1->cls, type_cls))
+        if (!PyType_Check(arg1))
             raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
                            getFullTypeName(arg1).c_str());
     } else {

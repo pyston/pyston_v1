@@ -491,7 +491,7 @@ Box* setHash(BoxedSet* self) {
     int64_t rtn = 1927868237L;
     for (Box* e : self->s) {
         BoxedInt* h = hash(e);
-        assert(isSubclass(h->cls, int_cls));
+        assert(PyInt_Check(h));
         rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
     }
 

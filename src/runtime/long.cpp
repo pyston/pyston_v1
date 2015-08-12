@@ -358,7 +358,7 @@ extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
 extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) noexcept {
     BoxedLong* v = (BoxedLong*)aa;
 
-    RELEASE_ASSERT(isSubclass(v->cls, long_cls), "");
+    RELEASE_ASSERT(PyLong_Check(v), "");
     RELEASE_ASSERT(base >= 2 && base <= 62, "");
 
     bool is_negative = mpz_sgn(v->n) == -1;
@@ -635,25 +635,25 @@ extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) noexce
 BoxedLong* _longNew(Box* val, Box* _base) {
     BoxedLong* rtn = new BoxedLong();
     if (_base) {
-        if (!isSubclass(_base->cls, int_cls))
+        if (!PyInt_Check(_base))
             raiseExcHelper(TypeError, "an integer is required");
         int base = static_cast<BoxedInt*>(_base)->n;
 
-        if (!isSubclass(val->cls, str_cls))
+        if (!PyString_Check(val))
             raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
         BoxedString* s = static_cast<BoxedString*>(val);
 
         rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
         checkAndThrowCAPIException();
     } else {
-        if (isSubclass(val->cls, long_cls)) {
+        if (PyLong_Check(val)) {
             BoxedLong* l = static_cast<BoxedLong*>(val);
             if (val->cls == long_cls)
                 return l;
             BoxedLong* rtn = new BoxedLong();
             mpz_init_set(rtn->n, l->n);
             return rtn;
-        } else if (isSubclass(val->cls, int_cls)) {
+        } else if (PyInt_Check(val)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
             llvm::StringRef s = static_cast<BoxedString*>(val)->s();
@@ -672,9 +672,9 @@ BoxedLong* _longNew(Box* val, Box* _base) {
                                getTypeName(val));
             }
 
-            if (isSubclass(r->cls, int_cls)) {
+            if (PyInt_Check(r)) {
                 mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(r)->n);
-            } else if (!isSubclass(r->cls, long_cls)) {
+            } else if (!PyLong_Check(r)) {
                 raiseExcHelper(TypeError, "__long__ returned non-long (type %s)", r->cls->tp_name);
             } else {
                 return static_cast<BoxedLong*>(r);
@@ -685,7 +685,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
 }
 
 extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
-    if (!isSubclass(_cls->cls, type_cls))
+    if (!PyType_Check(_cls))
         raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
@@ -704,7 +704,7 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
 }
 
 Box* longInt(Box* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__int__' requires a 'long' object but received a '%s'", getTypeName(v));
 
     int overflow = 0;
@@ -717,7 +717,7 @@ Box* longInt(Box* v) {
 }
 
 Box* longFloat(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
                        getTypeName(v));
 
@@ -730,31 +730,31 @@ Box* longFloat(BoxedLong* v) {
 }
 
 Box* longRepr(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
     return _PyLong_Format(v, 10, 1 /* add L */, 0);
 }
 
 Box* longStr(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'", getTypeName(v));
     return _PyLong_Format(v, 10, 0 /* no L */, 0);
 }
 
 Box* longHex(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'long' object but received a '%s'", getTypeName(v));
     return _PyLong_Format(v, 16, 1 /* add L */, 0);
 }
 
 Box* longOct(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'long' object but received a '%s'", getTypeName(v));
     return _PyLong_Format(v, 8, 1 /* add L */, 0);
 }
 
 Box* longNeg(BoxedLong* v1) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     BoxedLong* r = new BoxedLong();
@@ -764,7 +764,7 @@ Box* longNeg(BoxedLong* v1) {
 }
 
 Box* longPos(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'long' object but received a '%s'", getTypeName(v));
 
     if (v->cls == long_cls) {
@@ -777,7 +777,7 @@ Box* longPos(BoxedLong* v) {
 }
 
 Box* longAbs(BoxedLong* v1) {
-    assert(isSubclass(v1->cls, long_cls));
+    assert(PyLong_Check(v1));
     BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
     mpz_abs(r->n, v1->n);
@@ -785,17 +785,17 @@ Box* longAbs(BoxedLong* v1) {
 }
 
 Box* longAdd(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__add__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_add(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         BoxedLong* r = new BoxedLong();
@@ -812,15 +812,15 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
 
 // TODO: split common code out into a helper function
 extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'", getTypeName(v1));
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_and(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
@@ -838,15 +838,15 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
 }
 
 extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'long' object but received a '%s'", getTypeName(v1));
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_ior(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
@@ -864,15 +864,15 @@ extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
 }
 
 extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'long' object but received a '%s'", getTypeName(v1));
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_xor(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
@@ -890,14 +890,14 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
 }
 
 static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
-    RELEASE_ASSERT(isSubclass(_v1->cls, long_cls), "");
+    RELEASE_ASSERT(PyLong_Check(_v1), "");
     BoxedLong* v1 = static_cast<BoxedLong*>(_v1);
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         return convert_3way_to_object(op, mpz_cmp(v1->n, v2->n));
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         return convert_3way_to_object(op, mpz_cmp_si(v1->n, v2->n));
@@ -907,11 +907,11 @@ static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
 }
 
 Box* longLshift(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         if (mpz_sgn(v2->n) < 0)
@@ -922,7 +922,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
         mpz_init(r->n);
         mpz_mul_2exp(r->n, v1->n, n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
         if (v2->n < 0)
             raiseExcHelper(ValueError, "negative shift count");
@@ -937,11 +937,11 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longRshift(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         if (mpz_sgn(v2->n) < 0)
@@ -952,7 +952,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
         mpz_init(r->n);
         mpz_div_2exp(r->n, v1->n, n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
         if (v2->n < 0)
             raiseExcHelper(ValueError, "negative shift count");
@@ -967,17 +967,17 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longSub(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_sub(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         BoxedLong* r = new BoxedLong();
@@ -993,7 +993,7 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longRsub(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rsub__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
@@ -1001,17 +1001,17 @@ Box* longRsub(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longMul(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_mul(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         BoxedLong* r = new BoxedLong();
@@ -1024,10 +1024,10 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longDiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         if (mpz_sgn(v2->n) == 0)
@@ -1037,7 +1037,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
         mpz_init(r->n);
         mpz_fdiv_q(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         if (v2->n == 0)
@@ -1053,17 +1053,17 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longFloorDiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
     return longDiv(v1, _v2);
 }
 
 Box* longMod(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         if (mpz_sgn(v2->n) == 0)
@@ -1073,7 +1073,7 @@ Box* longMod(BoxedLong* v1, Box* _v2) {
         mpz_init(r->n);
         mpz_mmod(r->n, v1->n, v2->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         if (v2->n == 0)
@@ -1089,15 +1089,15 @@ Box* longMod(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longRMod(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rmod__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
     Box* lhs = _v2;
     BoxedLong* rhs = v1;
-    if (isSubclass(lhs->cls, long_cls)) {
+    if (PyLong_Check(lhs)) {
         return longMod((BoxedLong*)lhs, rhs);
-    } else if (isSubclass(lhs->cls, int_cls)) {
+    } else if (PyInt_Check(lhs)) {
         return longMod(boxLong(((BoxedInt*)lhs)->n), rhs);
     } else {
         return NotImplemented;
@@ -1105,11 +1105,11 @@ Box* longRMod(BoxedLong* v1, Box* _v2) {
 }
 
 extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
-    if (!isSubclass(lhs->cls, long_cls))
+    if (!PyLong_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (isSubclass(_rhs->cls, long_cls)) {
+    if (PyLong_Check(_rhs)) {
         BoxedLong* rhs = static_cast<BoxedLong*>(_rhs);
 
         if (mpz_sgn(rhs->n) == 0)
@@ -1121,7 +1121,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         mpz_init(r->n);
         mpz_fdiv_qr(q->n, r->n, lhs->n, rhs->n);
         return BoxedTuple::create({ q, r });
-    } else if (isSubclass(_rhs->cls, int_cls)) {
+    } else if (PyInt_Check(_rhs)) {
         BoxedInt* rhs = static_cast<BoxedInt*>(_rhs);
 
         if (rhs->n == 0)
@@ -1139,21 +1139,21 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
 }
 
 Box* longRdiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
     if (mpz_sgn(v1->n) == 0)
         raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
-    if (isSubclass(_v2->cls, long_cls)) {
+    if (PyLong_Check(_v2)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
         BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_fdiv_q(r->n, v2->n, v1->n);
         return r;
-    } else if (isSubclass(_v2->cls, int_cls)) {
+    } else if (PyInt_Check(_v2)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
         BoxedLong* r = new BoxedLong();
@@ -1166,7 +1166,7 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longRfloorDiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rfloordiv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
@@ -1174,7 +1174,7 @@ Box* longRfloorDiv(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
@@ -1193,7 +1193,7 @@ Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
 }
 
 Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
-    if (!isSubclass(v1->cls, long_cls))
+    if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
@@ -1222,22 +1222,22 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
 }
 
 extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {
-    assert(isSubclass(lhs->cls, long_cls));
-    assert(isSubclass(rhs->cls, float_cls));
+    assert(PyLong_Check(lhs));
+    assert(PyFloat_Check(rhs));
     double lhs_float = static_cast<BoxedFloat*>(longFloat(lhs))->d;
     return boxFloat(pow_float_float(lhs_float, rhs->d));
 }
 
 Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
-    if (!isSubclass(lhs->cls, long_cls))
+    if (!PyLong_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
                        getTypeName(lhs));
 
     BoxedLong* mod_long = nullptr;
     if (mod != None) {
-        if (isSubclass(mod->cls, long_cls)) {
+        if (PyLong_Check(mod)) {
             mod_long = static_cast<BoxedLong*>(mod);
-        } else if (isSubclass(mod->cls, int_cls)) {
+        } else if (PyInt_Check(mod)) {
             mod_long = boxLong(static_cast<BoxedInt*>(mod)->n);
         } else {
             return NotImplemented;
@@ -1245,9 +1245,9 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
     }
 
     BoxedLong* rhs_long = nullptr;
-    if (isSubclass(rhs->cls, long_cls)) {
+    if (PyLong_Check(rhs)) {
         rhs_long = static_cast<BoxedLong*>(rhs);
-    } else if (isSubclass(rhs->cls, int_cls)) {
+    } else if (PyInt_Check(rhs)) {
         rhs_long = boxLong(static_cast<BoxedInt*>(rhs)->n);
     } else {
         return NotImplemented;
@@ -1297,7 +1297,7 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
 }
 
 extern "C" Box* longInvert(BoxedLong* v) {
-    if (!isSubclass(v->cls, long_cls))
+    if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'long' object but received a '%s'",
                        getTypeName(v));
 
@@ -1308,7 +1308,7 @@ extern "C" Box* longInvert(BoxedLong* v) {
 }
 
 Box* longNonzero(BoxedLong* self) {
-    if (!isSubclass(self->cls, long_cls))
+    if (!PyLong_Check(self))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
@@ -1322,7 +1322,7 @@ bool longNonzeroUnboxed(BoxedLong* self) {
 }
 
 Box* longHash(BoxedLong* self) {
-    if (!isSubclass(self->cls, long_cls))
+    if (!PyLong_Check(self))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
@@ -1341,7 +1341,7 @@ Box* longHash(BoxedLong* self) {
 }
 
 extern "C" Box* longTrunc(BoxedLong* self) {
-    if (!isSubclass(self->cls, long_cls))
+    if (!PyLong_Check(self))
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
