@@ -3335,7 +3335,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         assert(PyDict_Check(kwargs));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
-        for (auto& p : d_kwargs->d) {
+        for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);
 
             if (k->cls != str_cls)
@@ -5303,7 +5303,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         made->setattr(dict_str, dict_descr, NULL);
     }
 
-    for (const auto& p : attr_dict->d) {
+    for (const auto& p : *attr_dict) {
         auto k = coerceUnicodeToStr(p.first);
 
         RELEASE_ASSERT(k->cls == str_cls, "");

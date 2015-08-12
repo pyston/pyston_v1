@@ -102,7 +102,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));
     made->giveAttr("__doc__", None);
 
-    for (auto& p : dict->d) {
+    for (const auto& p : *dict) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
         BoxedString* s = (BoxedString*)p.first;
         internStringMortalInplace(s);

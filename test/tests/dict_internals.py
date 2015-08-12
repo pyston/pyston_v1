@@ -38,3 +38,20 @@ nan = float('nan')
 d[nan] = "hello world"
 print d[nan]
 
+
+
+# Dicts should not check __eq__ for values that have different hash values,
+# even if they internally cause a hash collision.
+class C(int):
+    def __eq__(self, rhs):
+        print "eq", self, rhs
+        raise Exception("Error, should not call __eq__!")
+
+    def __hash__(self):
+        print "hash", self
+        return self
+
+d = {}
+for i in xrange(1000):
+    d[C(i)] = i
+print len(d)

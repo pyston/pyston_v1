@@ -350,7 +350,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         } else {
             assert(kwargs_sz);
             auto const seq = *(kwargs->d.begin());
-            auto const kw = static_cast<BoxedString*>(seq.first);
+            auto const kw = static_cast<BoxedString*>(seq.first.value);
 
             if (kw->s() == "sequence")
                 elements = seq.second;

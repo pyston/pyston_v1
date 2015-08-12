@@ -225,7 +225,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
             if (levels > 0) {
                 int i = 0;
-                for (auto t : d->d) {
+                for (auto t : *d) {
                     printf("\nKey:");
                     dumpEx(t.first, levels - 1);
                     printf("Value:");
