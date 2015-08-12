@@ -149,8 +149,8 @@ struct CompareRewriteArgs {
 // match anyway.  Or maybe it should call a callback function, which could save on the common case.
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box* arg1, Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
-                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs);
+                        Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** oargs,
+                        const std::vector<BoxedString*>* keyword_names);
 
 // new_args should be allocated by the caller if at least three args get passed in.
 // rewrite_args will get modified in place.

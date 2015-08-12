@@ -201,7 +201,7 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
 
     assert(cls);
     // See definition of BoxedTuple for some notes on why we need this special case:
-    ASSERT(isSubclass(cls, tuple_cls) || cls->tp_basicsize >= size, "%s", cls->tp_name);
+    ASSERT(cls->tp_basicsize >= size || isSubclass(cls, tuple_cls), "%s", cls->tp_name);
     assert(cls->tp_itemsize > 0);
     assert(cls->tp_alloc);
 
@@ -758,14 +758,13 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
         ParamReceiveSpec paramspec(4, 3, false, false);
         bool rewrite_success = false;
-        Box* oarg1, *oarg2, *oarg3;
         static ParamNames param_names({ "string", "encoding", "errors" }, "", "");
         static Box* defaults[3] = { NULL, NULL, NULL };
         Box* oargs[1];
 
         rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
-                           arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
-        assert(oarg1 == cls);
+                           arg2, arg3, args, oargs, keyword_names);
+        assert(arg1 == cls);
 
         if (!rewrite_success)
             rewrite_args = NULL;
@@ -778,7 +777,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
 
         // TODO other encodings could return non-unicode?
-        return unicodeNewHelper(cls, oarg2, oarg3, oargs);
+        return unicodeNewHelper(cls, arg2, arg3, oargs);
     }
 
     if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new && S == CXX) {
@@ -790,10 +789,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
         ParamReceiveSpec paramspec(1, false, true, true);
         bool rewrite_success = false;
-        Box* oarg1, *oarg2, *oarg3, ** oargs = NULL;
+        Box** oargs = NULL;
         rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           keyword_names, oarg1, oarg2, oarg3, oargs);
-        assert(oarg1 == cls);
+                           oargs, keyword_names);
+        assert(arg1 == cls);
 
         if (!rewrite_success)
             rewrite_args = NULL;
@@ -804,7 +803,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             rewrite_args->out_success = true;
         }
 
-        return cpythonTypeCall(cls, oarg2, oarg3);
+        return cpythonTypeCall(cls, arg2, arg3);
     }
 
     if (argspec.has_starargs || argspec.has_kwargs)
@@ -877,7 +876,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     } else {
         new_attr = typeLookup(cls, new_str, NULL);
         try {
-            new_attr = processDescriptor(new_attr, None, cls);
+            if (new_attr->cls != function_cls) // optimization
+                new_attr = processDescriptor(new_attr, None, cls);
         } catch (ExcInfo e) {
             if (S == CAPI) {
                 setCAPIException(e);

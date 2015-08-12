@@ -1524,14 +1524,11 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         RELEASE_ASSERT(0, "0x%x", flags);
     }
 
-    Box* oarg1 = NULL;
-    Box* oarg2 = NULL;
-    Box* oarg3 = NULL;
     Box** oargs = NULL;
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, keyword_names, oarg1, oarg2, oarg3, oargs);
+                       arg2, arg3, args, oargs, keyword_names);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -1542,11 +1539,11 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     Box* rtn;
     if (flags == METH_VARARGS) {
-        rtn = (Box*)func(self->passthrough, oarg1);
+        rtn = (Box*)func(self->passthrough, arg1);
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
     } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
-        rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, oarg1, oarg2);
+        rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, arg1, arg2);
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
                                                                  rewrite_args->arg2);
@@ -1556,7 +1553,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
             rewrite_args->out_rtn = rewrite_args->rewriter->call(
                 true, (void*)func, r_passthrough, rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
     } else if (flags == METH_O) {
-        rtn = (Box*)func(self->passthrough, oarg1);
+        rtn = (Box*)func(self->passthrough, arg1);
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
     } else if (flags == METH_OLDARGS) {
@@ -1564,10 +1561,10 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
         rewrite_args = NULL;
 
-        int size = PyTuple_GET_SIZE(oarg1);
-        Box* arg = oarg1;
+        int size = PyTuple_GET_SIZE(arg1);
+        Box* arg = arg1;
         if (size == 1)
-            arg = PyTuple_GET_ITEM(oarg1, 0);
+            arg = PyTuple_GET_ITEM(arg1, 0);
         else if (size == 0)
             arg = NULL;
         rtn = func(self->passthrough, arg);

@@ -2558,11 +2558,11 @@ static int mro_internal(PyTypeObject* type) noexcept {
 extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
     PyObject* mro;
 
-    if (!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS))
+    if (unlikely(!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS)))
         return b == a || b == &PyBaseObject_Type;
 
     mro = a->tp_mro;
-    if (mro != NULL) {
+    if (likely(mro != NULL)) {
         /* Deal with multiple inheritance without recursion
            by walking the MRO tuple */
         Py_ssize_t i, n;
@@ -3217,10 +3217,10 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
     }
 
     bool rewrite_success = false;
-    Box* oarg1, * oarg2 = NULL, *oarg3, ** oargs = NULL;
+    Box** oargs = NULL;
     try {
         rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           keyword_names, oarg1, oarg2, oarg3, oargs);
+                           oargs, keyword_names);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -3251,7 +3251,7 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
         rewrite_args->out_success = true;
     }
 
-    Box* r = self->cls->tp_call(self, oarg1, oarg2);
+    Box* r = self->cls->tp_call(self, arg1, arg2);
     if (!r && S == CXX)
         throwCAPIException();
     return r;

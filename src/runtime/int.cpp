@@ -1018,7 +1018,7 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
             return n;
 
         if (S == CAPI) {
-            PyErr_Format(OverflowError, "Python int too large to convert to C long");
+            PyErr_SetString(OverflowError, "Python int too large to convert to C long");
             return NULL;
         } else
             raiseExcHelper(OverflowError, "Python int too large to convert to C long");

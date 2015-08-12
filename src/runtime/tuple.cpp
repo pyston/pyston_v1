@@ -328,7 +328,7 @@ Box* tupleCount(BoxedTuple* self, Box* elt) {
 }
 
 extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
-    if (!isSubclass(_cls->cls, type_cls))
+    if (!PyType_Check(_cls))
         raiseExcHelper(TypeError, "tuple.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
