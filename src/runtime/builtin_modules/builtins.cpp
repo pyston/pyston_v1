@@ -468,7 +468,7 @@ template <ExceptionStyle S> Box* getattrFunc(Box* obj, Box* _str, Box* default_v
             throw e;
     }
 
-    if (!isSubclass(_str->cls, str_cls)) {
+    if (!PyString_Check(_str)) {
         if (S == CAPI) {
             PyErr_SetString(TypeError, "getattr(): attribute name must be string");
             return NULL;

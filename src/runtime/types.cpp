@@ -201,7 +201,7 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
 
     assert(cls);
     // See definition of BoxedTuple for some notes on why we need this special case:
-    ASSERT(isSubclass(cls, tuple_cls) || cls->tp_basicsize >= size, "%s", cls->tp_name);
+    ASSERT(cls->tp_basicsize >= size || isSubclass(cls, tuple_cls), "%s", cls->tp_name);
     assert(cls->tp_itemsize > 0);
     assert(cls->tp_alloc);
 

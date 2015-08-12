@@ -100,7 +100,11 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
 extern "C" void assertFailDerefNameDefined(const char* name);
 extern "C" void assertFail(Box* assertion_type, Box* msg);
-extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
+
+inline bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+    return child == parent || PyType_IsSubtype(child, parent);
+}
+
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure, size_t size);
 
 Box* getiter(Box* o);

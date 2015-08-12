@@ -244,11 +244,6 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
-extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
-    STAT_TIMER(t0, "us_timer_isSubclass", 10);
-    return PyType_IsSubtype(child, parent);
-}
-
 extern "C" void assertFail(Box* assertion_type, Box* msg) {
     RELEASE_ASSERT(assertion_type->cls == type_cls, "%s", assertion_type->cls->tp_name);
     if (msg) {

@@ -2558,11 +2558,11 @@ static int mro_internal(PyTypeObject* type) noexcept {
 extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
     PyObject* mro;
 
-    if (!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS))
+    if (unlikely(!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS)))
         return b == a || b == &PyBaseObject_Type;
 
     mro = a->tp_mro;
-    if (mro != NULL) {
+    if (likely(mro != NULL)) {
         /* Deal with multiple inheritance without recursion
            by walking the MRO tuple */
         Py_ssize_t i, n;
