@@ -6,7 +6,6 @@ print-%: ; @echo $($*)
 # Disable builtin rules:
 .SUFFIXES:
 
-USE_TEST_LLVM := 0
 DEPS_DIR := $(HOME)/pyston_deps
 
 SRC_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
@@ -53,12 +52,6 @@ ENABLE_INTEL_JIT_EVENTS := 0
 CTAGS := ctags
 ETAGS := ctags-exuberant -e
 
-# Setting this to 1 will set the Makefile to use binaries from the trunk
-# directory, even if USE_TEST_LLVM is set to 1.
-# This is useful if clang isn't installed into the test directory, ex due
-# to disk space concerns.
-FORCE_TRUNK_BINARIES := 0
-
 NINJA := ninja
 
 CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
@@ -101,18 +94,11 @@ else
 endif
 
 LLVM_TRUNK_SRC := $(DEPS_DIR)/llvm-trunk
-LLVM_TEST_SRC := $(DEPS_DIR)/llvm-test
-LLVM_TRUNK_BUILD := $(DEPS_DIR)/llvm-trunk-build
-LLVM_TEST_BUILD := $(DEPS_DIR)/llvm-test-build
-ifneq ($(USE_TEST_LLVM),0)
-	LLVM_SRC := $(LLVM_TEST_SRC)
-	LLVM_BUILD := $(LLVM_TEST_BUILD)
-else
-	LLVM_SRC := $(LLVM_TRUNK_SRC)
-	LLVM_BUILD := $(LLVM_TRUNK_BUILD)
-endif
+LLVM_SRC := $(LLVM_TRUNK_SRC)
+LLVM_INC_DBG := ./build/Debug/llvm
 
 LLVM_BIN := ./build/Release/llvm/bin
+LLVM_BIN_DBG := ./build/Debug/llvm/bin
 
 LLVM_LINK_LIBS := core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
@@ -122,37 +108,6 @@ endif
 NEED_OLD_JIT := $(shell if [ $(LLVM_REVISION) -le 216982 ]; then echo 1; else echo 0; fi )
 ifeq ($(NEED_OLD_JIT),1)
 	LLVM_LINK_LIBS += jit
-endif
-
-LLVM_CONFIG_DBG := $(LLVM_BUILD)/Release+Asserts/bin/llvm-config
-ifneq ($(wildcard $(LLVM_CONFIG_DBG)),)
-LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
-LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
-LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
-else
-LLVM_CXXFLAGS := DBG_NOT_BUILT
-LLVM_LDFLAGS := DBG_NOT_BUILT
-LLVM_LIB_DEPS := DBG_NOT_BUILT
-endif
-
-LLVM_CONFIG_DEBUG := $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config
-ifneq ($(wildcard $(LLVM_CONFIG_DEBUG)),)
-LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
-LLVM_DEBUG_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Debug+Asserts/lib/*)
-else
-LLVM_DEBUG_LDFLAGS := DEBUG_NOT_BUILT
-LLVM_DEBUG_LIB_DEPS := DEBUG_NOT_BUILT
-endif
-
-LLVM_CONFIG_RELEASE := $(LLVM_BUILD)/Release/bin/llvm-config
-ifneq ($(wildcard $(LLVM_CONFIG_RELEASE)),)
-LLVM_RELEASE_CXXFLAGS := $(shell $(LLVM_BUILD)/Release/bin/llvm-config --cxxflags)
-LLVM_RELEASE_LDFLAGS := $(shell $(LLVM_BUILD)/Release/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
-LLVM_RELEASE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release/lib/*)
-else
-LLVM_RELEASE_CXXFLAGS := RELEASE_NOT_BUILT
-LLVM_RELEASE_LDFLAGS := RELEASE_NOT_BUILT
-LLVM_RELEASE_LIB_DEPS := RELEASE_NOT_BUILT
 endif
 
 ifneq ($(wildcard /usr/local/include/llvm),)
@@ -165,12 +120,6 @@ ifneq ($(wildcard /usr/local/include/llvm),)
 # but for now just error out:
 $(error "Error: global llvm include files detected")
 endif
-
-# Note: use lazy-expansion for these profile targets, since calling the profile llvm-config will
-# actually generate a gmon.out file!
-LLVM_PROFILE_CXXFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --cxxflags) -UNDEBUG
-LLVM_PROFILE_LDFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
-LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 
 CLANG_EXE := $(LLVM_BIN)/clang
 CLANGPP_EXE := $(LLVM_BIN)/clang++
@@ -245,8 +194,7 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)
-CLANG_DEPS := $(CLANGPP_EXE) $(abspath $(dir $(CLANGPP_EXE))/../../built_release)
-$(CLANGPP_EXE) $(CLANG_EXE): $(abspath $(dir $(CLANGPP_EXE))/../../built_release)
+CLANG_DEPS := $(CLANGPP_EXE)
 
 # settings to make clang and ccache play nicely:
 CLANG_CCACHE_FLAGS := -Qunused-arguments
@@ -308,20 +256,11 @@ else ifeq ($(USE_DISTCC),1)
 	CXX := distcc $(CXX)
 	CXX_PROFILE := distcc $(CXX_PROFILE)
 	CLANG_CXX := distcc $(CLANG_CXX)
-	LLVM_BUILD_VARS += CXX='distcc $(GPP)'
-endif
-ifeq ($(USE_DISTCC),1)
-	LLVM_BUILD_ENV += CCACHE_PREFIX=distcc
-endif
-ifeq ($(USE_CCACHE),1)
-	LLVM_BUILD_VARS += CXX='ccache $(GPP)'
 endif
 CXX := $(CXX_ENV) $(CXX)
 CXX_PROFILE := $(CXX_ENV) $(CXX_PROFILE)
 CC := $(CC_ENV) $(CC)
 CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
-# Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
-LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
 
 BASE_SRCS := $(wildcard src/codegen/*.cpp) $(wildcard src/asm_writing/*.cpp) $(wildcard src/codegen/irgen/*.cpp) $(wildcard src/codegen/opt/*.cpp) $(wildcard src/analysis/*.cpp) $(wildcard src/core/*.cpp) src/codegen/profiling/profiling.cpp src/codegen/profiling/dumprof.cpp $(wildcard src/runtime/*.cpp) $(wildcard src/runtime/builtin_modules/*.cpp) $(wildcard src/gc/*.cpp) $(wildcard src/capi/*.cpp)
 MAIN_SRCS := $(BASE_SRCS) src/jit.cpp
@@ -540,172 +479,9 @@ Makefile.local:
 	python -c 'import sys; v = sys.version_info; print "PYTHON_MAJOR_VERSION:=%d\nPYTHON_MINOR_VERSION:=%d\nPYTHON_MICRO_VERSION:=%d" % (v[0], v[1], v[2])' > Makefile.local || (rm $@; false)
 	which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local
 
-#################
-# LLVM rules:
-
-#
-# This is probably my worst makefile hackery:
-# - if you change the patch, the llvm_* targets should be rebuilt when you build a pyston target that depends on them
-# - they shouldn't be rebuilt if the built_* rule doesn't indicate it
-# - should rebuild the pyston targets *if and only if* one of their dependencies actually changes in the rebuild
-# -- make should report them as "up to date"
-
-LLVM_CONFIGURATION := $(LLVM_BUILD)/Makefile.config
-# First, specify when we need to rebuild the different targets:
-$(LLVM_BUILD)/built_quick: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	$(MAKE) llvm_quick
-$(LLVM_BUILD)/built_debug: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	$(MAKE) llvm_debug
-$(LLVM_BUILD)/built_release: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	$(MAKE) llvm_release
-$(LLVM_BUILD)/built_profile: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	$(MAKE) llvm_profile
-# Now, specify that we shouldn't check the timestamps of dependencies until after
-# the llvm rebuild finishes, if one is happening, but do it with order-only
-# dependencies so that make doesn't consider the libraries out of date
-# if they didn't get updated in the llvm rebuild:
-# $(CLANGPP_EXE): | $(LLVM_TRUNK)/built_release
-$(LLVM_LIB_DEPS): | $(LLVM_BUILD)/built_quick
-$(LLVM_DEBUG_LIB_DEPS): | $(LLVM_BUILD)/built_debug
-$(LLVM_RELEASE_LIB_DEPS): | $(LLVM_BUILD)/built_release
-$(LLVM_PROFILE_LIB_DEPS): | $(LLVM_BUILD)/built_profile
-# Now, put together some variables for later; pyston targets will have to depend on the lib_deps
-# so they can be rebuilt properly, but also the built_* targets to force a rebuild if appropriate
-# (because the lib_deps dependency won't cause a rebuild on their own)
-LLVM_DEPS := $(LLVM_LIB_DEPS) $(LLVM_BUILD)/built_quick
-LLVM_DEBUG_DEPS := $(LLVM_DEBUG_LIB_DEPS) $(LLVM_BUILD)/built_debug
-LLVM_RELEASE_DEPS := $(LLVM_RELEASE_LIB_DEPS) $(LLVM_BUILD)/built_release
-LLVM_PROFILE_DEPS := $(LLVM_PROFILE_LIB_DEPS) $(LLVM_BUILD)/built_profile
-# end worst makefile hackery
-
-LLVM_BUILDS := quick release debug profile
-# Tools for all builds (note: don't include llvm-config)
-LLVM_TOOLS := llc opt
-
-ifneq (,$(findstring llvm_debug,$(MAKECMDGOALS)))
-FIRST_LLVM_BUILD := debug
-else ifneq (,$(findstring llvm_quick,$(MAKECMDGOALS)))
-FIRST_LLVM_BUILD := quick
-else
-FIRST_LLVM_BUILD := release
-endif
-NONFIRST_LLVM_BUILDS := $(filter-out $(FIRST_LLVM_BUILD),$(LLVM_BUILDS))
-.PHONY: llvm llvm_configs $(patsubst %,llvm_%,$(LLVM_BUILDS)) llvm/% llvm_up
-llvm: llvm_configs $(LLVM_BUILDS:%=llvm_%)
-llvm_configs: $(LLVM_BUILDS:%=llvm/%/tools/llvm-config)
-# Use the configure-created Makefile as evidence that llvm has been configured:
-.PHONY: llvm_configure
-llvm_configure:
-	rm -f $(LLVM_BUILD)/Makefile.config
-	$(MAKE) $(LLVM_CONFIGURATION)
-
-# Put the llvm_configure line in its own file, so that we can force an llvm reconfigure
-# if we change the configuration parameters.
-# (All non-llvm build targets get rebuilt if the main Makefile is touched, but that is too
-# expensive to do for the llvm ones.)
-LLVM_CONFIG_INCL := Makefile.llvmconfig
-# Sets LLVM_CONFIGURE_LINE:
-include $(LLVM_CONFIG_INCL)
-ifeq (,$(LLVM_CONFIGURE_LINE))
-$(error "did not set configure line")
-endif
-ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
-LLVM_CONFIGURE_LINE += --with-intel-jitevents
-endif
-
-$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL) | $(LLVM_SRC)/_patched
-	mkdir -p $(LLVM_BUILD)
-	cd $(LLVM_BUILD) ; \
-	$(LLVM_CONFIGURE_LINE)
-	# CXX=ccache\ g++ ./configure --enable-targets=host
-	# CXX='env CCACHE_PREFIX=distcc ccache g++' ./configure --enable-targets=host
-
-# Use "Static Pattern Rules" instead of implicit rules to avoid needing to reuse the same implicit rule in a single chain:
-define add_llvm_dep
-$(eval \
-$(LLVM_BUILDS:%=llvm/%/$1): llvm/%/$1: llvm/%/$2
-)
-endef
-
-###
-# LLVM build dependency management:
-$(call add_llvm_dep,lib/TableGen,lib/Support)
-$(call add_llvm_dep,utils/TableGen,lib/TableGen)
-$(call add_llvm_dep,lib/IR,utils/TableGen)
-$(call add_llvm_dep,lib/Target,lib/IR)
-$(call add_llvm_dep,lib/Target,utils/TableGen)
-# There are some shared targets in the Target subdirectory, which will make a parallel make fail
-# if you try to build multiple llvm builds at the same time.  Work around this by
-# serializing the non-release Target builds to after the release one:
-$(NONFIRST_LLVM_BUILDS:%=llvm/%/lib/Target): llvm/%/lib/Target: llvm/$(FIRST_LLVM_BUILD)/lib/Target
-$(NONFIRST_LLVM_BUILDS:%=llvm/%/tools/llvm-config): llvm/%/tools/llvm-config: llvm/$(FIRST_LLVM_BUILD)/tools/llvm-config
-$(call add_llvm_dep,lib,lib/Target)
-$(call add_llvm_dep,tools/llvm-config,lib/Support)
-$(call add_llvm_dep,tools,lib)
-$(call add_llvm_dep,tools,utils/unittest)
-$(call add_llvm_dep,utils,lib)
-# The tools need to individually depend on the lib directory:
-$(foreach tool,$(LLVM_TOOLS),$(foreach build,$(LLVM_BUILDS),$(eval \
-llvm/$(build)/tools/$(tool): llvm/$(build)/lib \
-)))
-
-##
-# LLVM build subset specifications:
-$(LLVM_BUILDS:%=llvm_%): llvm_%: llvm/%/lib llvm/%/tools/llvm-config
-	touch $(LLVM_BUILD)/$(patsubst llvm_%,built_%,$@)
-llvm_release: llvm/release/tools llvm/release/utils
-llvm_quick: $(LLVM_TOOLS:%=llvm/quick/tools/%)
-llvm_debug: $(LLVM_TOOLS:%=llvm/debug/tools/%)
-
-llvm_quick_clean:
-	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 clean
-llvm_release_%:
-	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 $(patsubst llvm_release_%,%,$@)
-llvm_debug_clean:
-	$(MAKE) -C $(LLVM_BUILD) DEBUG_RUNTIME=1 DEBUG_SYMBOLS=1 ENABLE_OPTIMIZED=0 clean
-llvm_profile_clean:
-	$(MAKE) -C $(LLVM_BUILD) ENABLE_PROFILING=1 ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 clean
-llvm_allclean: $(patsubst %,llvm_%_clean,$(LLVM_BUILDS))
-	cd $(LLVM_SRC) ; git checkout .
-	rm -rfv $(LLVM_BUILD)/*
-llvm_install: llvm_release
-	sudo $(MAKE) -C $(LLVM_SRC)/tools ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install
-
-# Clear OPTIONAL_DIRS and OPTIONAL_PARALLEL_DIRS to make sure that clang doesn't get built+tested
-llvm_test: llvm_test_quick
-llvm_test_quick: llvm_quick llvm/quick/tools/opt
-	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 check
-llvm_test_release: llvm_release
-	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check
-llvm_test_all: llvm_release
-	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check-all
-
-llvm/quick/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	mkdir -p $(patsubst llvm/quick/%,$(LLVM_BUILD)/%,$@)
-	$(VERB) if [ ! -f $(patsubst llvm/quick/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/quick/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/quick/%,$(LLVM_BUILD)/%/,$@); fi
-	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/quick/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) ENABLE_OPTIMIZED=1 DEBUG_RUNTIME=0 NO_DEBUG_SYMBOLS=1
-llvm/release/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	mkdir -p $(patsubst llvm/release/%,$(LLVM_BUILD)/%,$@)
-	$(VERB) if [ ! -f $(patsubst llvm/release/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/release/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/release/%,$(LLVM_BUILD)/%/,$@); fi
-	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/release/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1
-llvm/debug/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	mkdir -p $(patsubst llvm/debug/%,$(LLVM_BUILD)/%,$@)
-	$(VERB) if [ ! -f $(patsubst llvm/debug/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/debug/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/debug/%,$(LLVM_BUILD)/%/,$@); fi
-	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/debug/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) DEBUG_RUNTIME=1 DEBUG_SYMBOLS=1 ENABLE_OPTIMIZED=0
-llvm/profile/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
-	mkdir -p $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@)
-	$(VERB) if [ ! -f $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/profile/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/,$@); fi
-	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) CXXFLAGS="-fno-omit-frame-pointer -fno-function-sections" ENABLE_PROFILING=1 ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 $(LLVM_MAKE_ARGS)
-
-$(LLVM_SRC)/_patched: $(wildcard ./llvm_patches/*) $(wildcard ./clang_patches/*) $(LLVM_REVISION_FILE)
-	$(MAKE) llvm_up
 llvm_up:
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ./clang_patches
-	touch $(LLVM_SRC)/_patched
-
-# end of llvm rules
-########
 
 ## TOOLS:
 
