@@ -387,7 +387,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         throwCAPIException();
 
     if (rewrite_args) {
-        rewrite_args->rewriter->call(false, (void*)checkAndThrowCAPIException);
+        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
         rewrite_args->out_success = true;
     }
 
@@ -565,7 +565,7 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
             rewrite_args->out_rtn = rewriter->call(
                 true, (void*)wk, r_obj, rewrite_args->arg1,
                 rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(2)), rewrite_args->arg2);
-            rewriter->call(false, (void*)checkAndThrowCAPIException);
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
     } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
@@ -577,7 +577,7 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
             rewrite_args->out_rtn
                 = rewriter->call(true, (void*)wrapper, r_obj, rewrite_args->arg1,
                                  rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(2)));
-            rewriter->call(false, (void*)checkAndThrowCAPIException);
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
     } else {

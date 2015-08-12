@@ -73,7 +73,7 @@ private:
     uint8_t* addr;
     bool failed; // if the rewrite failed at the assembly-generation level for some reason
 
-    static const uint8_t OPCODE_ADD = 0b000, OPCODE_SUB = 0b101;
+    static const uint8_t OPCODE_ADD = 0b000, OPCODE_SUB = 0b101, OPCODE_CMP = 0b111;
     static const uint8_t REX_B = 1, REX_X = 2, REX_R = 4, REX_W = 8;
 
 #ifndef NDEBUG

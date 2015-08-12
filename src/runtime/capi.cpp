@@ -797,6 +797,10 @@ void throwCAPIException() {
 }
 
 void checkAndThrowCAPIException() {
+    // Log these since these are expensive and usually avoidable:
+    static StatCounter num_checkAndThrowCAPIException("num_checkAndThrowCAPIException");
+    num_checkAndThrowCAPIException.log();
+
     Box* _type = cur_thread_state.curexc_type;
     if (!_type)
         assert(!cur_thread_state.curexc_value);
@@ -1572,7 +1576,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     }
 
     if (rewrite_args) {
-        rewrite_args->rewriter->call(false, (void*)checkAndThrowCAPIException);
+        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
         rewrite_args->out_success = true;
     }
 

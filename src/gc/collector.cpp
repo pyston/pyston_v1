@@ -271,18 +271,15 @@ bool isValidGCObject(void* p) {
     GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
     if (!al)
         return false;
-    return al->user_data == p && (al->kind_id == GCKind::CONSERVATIVE_PYTHON || al->kind_id == GCKind::PYTHON);
+    return al->user_data == p && al->kind_id == GCKind::PYTHON;
 }
 
 void registerPythonObject(Box* b) {
     assert(isValidGCMemory(b));
     auto al = GCAllocation::fromUserData(b);
 
-    if (al->kind_id == GCKind::CONSERVATIVE) {
-        al->kind_id = GCKind::CONSERVATIVE_PYTHON;
-    } else {
-        assert(al->kind_id == GCKind::PYTHON);
-    }
+    assert(al->kind_id == GCKind::CONSERVATIVE || al->kind_id == GCKind::PYTHON);
+    al->kind_id = GCKind::PYTHON;
 
     assert(b->cls);
     if (hasOrderedFinalizer(b->cls)) {
@@ -386,7 +383,7 @@ static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& vis
     GCKind kind_id = al->kind_id;
     if (kind_id == GCKind::UNTRACKED) {
         // Nothing to do here.
-    } else if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::CONSERVATIVE_PYTHON) {
+    } else if (kind_id == GCKind::CONSERVATIVE) {
         uint32_t bytes = al->kind_data;
         visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
     } else if (kind_id == GCKind::PRECISE) {
@@ -521,7 +518,7 @@ static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
         GCAllocation* al = GCAllocation::fromUserData(p);
 
 #if TRACE_GC_MARKING
-        if (al->kind_id == GCKind::PYTHON || al->kind_id == GCKind::CONSERVATIVE_PYTHON)
+        if (al->kind_id == GCKind::PYTHON)
             GC_TRACE_LOG("Looking at %s object %p\n", static_cast<Box*>(p)->cls->tp_name, p);
         else
             GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
@@ -684,11 +681,6 @@ static void markPhase() {
     // memory. So we root objects whose finalizers need to be called by placing them in a
     // pending finalization list.
     orderFinalizers();
-
-#if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
-#endif
 
 #ifndef NVALGRIND
     VALGRIND_ENABLE_ERROR_REPORTING;

@@ -170,7 +170,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
-    if (alloc_kind == GCKind::PYTHON || alloc_kind == GCKind::CONSERVATIVE_PYTHON) {
+    if (alloc_kind == GCKind::PYTHON) {
 #ifndef NVALGRIND
         VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -186,8 +186,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
             return false;
         }
 
-        ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al) || alloc_kind == GCKind::CONSERVATIVE_PYTHON, "%s",
-               getTypeName(b));
+        ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al), "%s", getTypeName(b));
 
         if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
             gc_safe_destructors.log();
@@ -273,17 +272,6 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     } else if (al->kind_id == GCKind::CONSERVATIVE) {
         stats->conservative.nallocs++;
         stats->conservative.nbytes += nbytes;
-    } else if (al->kind_id == GCKind::CONSERVATIVE_PYTHON) {
-        stats->conservative_python.nallocs++;
-        stats->conservative_python.nbytes += nbytes;
-
-        if (stats->collect_cls_stats) {
-            Box* b = (Box*)al->user_data;
-            auto& t = stats->by_cls[b->cls];
-
-            t.nallocs++;
-            t.nbytes += nbytes;
-        }
     } else if (al->kind_id == GCKind::UNTRACKED) {
         stats->untracked.nallocs++;
         stats->untracked.nbytes += nbytes;
@@ -509,7 +497,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
                 clearMark(al);
             } else {
                 if (_doFree(al, &weakly_referenced)) {
-                    GC_TRACE_LOG("freeing %p\n", al->user_data);
+                    // GC_TRACE_LOG("freeing %p\n", al->user_data);
                     b->isfree.set(atom_idx);
 #ifndef NDEBUG
                     memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));

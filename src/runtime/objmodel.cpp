@@ -1375,8 +1375,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
             if (descr->cls == capi_getset_cls)
-                // TODO I think we are supposed to check the return value?
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
             rewrite_args->out_success = true;
         }
@@ -1434,7 +1433,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
 
                 if (S == CXX)
-                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
                 else
                     rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
 
@@ -2057,12 +2056,11 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
             args.push_back(r_obj);
             args.push_back(r_val);
             args.push_back(r_closure);
-            rewrite_args->rewriter->call(
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(
                 /* has_side_effects */ true, (void*)getset_descr->set, args);
 
             if (descr->cls == capi_getset_cls)
-                // TODO I think we are supposed to check the return value?
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn, -1);
 
             rewrite_args->out_success = true;
         }
@@ -2579,7 +2577,11 @@ template <ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewr
             // support calling a RewriterVar (can only call fixed function addresses).
             r_m->addAttrGuard(offsetof(PySequenceMethods, sq_length), (intptr_t)m->sq_length);
             RewriterVar* r_n = rewrite_args->rewriter->call(true, (void*)m->sq_length, r_obj);
-            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
+            // Some CPython code seems to think that any negative return value means an exception,
+            // but the docs say -1. TODO it would be nice to just handle any negative value.
+            rewrite_args->rewriter->checkAndThrowCAPIException(r_n, -1);
+
             RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n);
 
             rewrite_args->out_success = true;
@@ -3658,7 +3660,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, func_ptr, arg_vec);
         if (S == CXX && chosen_cf->exception_style == CAPI)
-            rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
         rewrite_args->out_success = true;
     }
@@ -3696,7 +3698,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
                g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
                chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
-        assert(!PyErr_Occurred());
+        ASSERT(!PyErr_Occurred(), "%p", chosen_cf->code);
     }
 
     return r;
@@ -4232,7 +4234,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
                     // support calling a RewriterVar (can only call fixed function addresses).
                     r_sqm->addAttrGuard(offsetof(PySequenceMethods, sq_contains), (intptr_t)sqm->sq_contains);
                     RewriterVar* r_b = rewrite_args->rewriter->call(true, (void*)sqm->sq_contains, r_rhs, r_lhs);
-                    rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_b, -1);
+
                     // This could be inlined:
                     RewriterVar* r_r;
                     if (op_type == AST_TYPE::NotIn)
@@ -4649,7 +4652,7 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
             RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
             if (S == CXX)
-                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;
         }

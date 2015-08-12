@@ -168,11 +168,8 @@ extern "C" void dumpEx(void* p, int levels) {
         return;
     }
 
-    if (al->kind_id == gc::GCKind::PYTHON || al->kind_id == gc::GCKind::CONSERVATIVE_PYTHON) {
-        if (al->kind_id == gc::GCKind::PYTHON)
-            printf("Python object (precisely scanned)\n");
-        else
-            printf("Python object (conservatively scanned)\n");
+    if (al->kind_id == gc::GCKind::PYTHON) {
+        printf("Python object\n");
         Box* b = (Box*)p;
 
         printf("Class: %s", getFullTypeName(b).c_str());
@@ -224,7 +221,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (isSubclass(b->cls, dict_cls)) {
             BoxedDict* d = static_cast<BoxedDict*>(b);
-            printf("%ld elements\n", d->d.size());
+            printf("%d elements\n", d->d.size());
 
             if (levels > 0) {
                 int i = 0;

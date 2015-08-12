@@ -479,7 +479,7 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
     if (it != self->d.end())
         return it->second;
 
-    self->d.insert(it, std::make_pair(k, v));
+    self->d.insert(std::make_pair(k, v));
     return v;
 }
 
@@ -689,14 +689,10 @@ void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedDict* d = (BoxedDict*)b;
 
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&d->d;
-    void** end = start + (sizeof(d->d) / 8);
-    v->visitPotentialRange(start, end);
+    for (auto p : d->d) {
+        v->visit(p.first);
+        v->visit(p.second);
+    }
 }
 
 void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
@@ -708,7 +704,7 @@ void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == dict_items_cls);
+    assert(b->cls == dict_items_cls || b->cls == dict_values_cls || b->cls == dict_keys_cls);
     Box::gcHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
