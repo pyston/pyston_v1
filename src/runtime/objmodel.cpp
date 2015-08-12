@@ -3074,11 +3074,23 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 3; i < num_passed_args; i++) {
         assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
     }
-
+    assert((oargs != NULL) == (num_output_args > 3));
     assert((defaults != NULL) == (paramspec.num_defaults != 0));
 
     if (rewrite_args) {
         rewrite_success = false; // default case
+    }
+
+    // Super fast path:
+    if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
+        && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
+        rewrite_success = true;
+        oarg1 = arg1;
+        oarg2 = arg2;
+        oarg3 = arg3;
+        if (num_output_args > 3)
+            memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+        return;
     }
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple

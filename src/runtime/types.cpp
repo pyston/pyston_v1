@@ -877,7 +877,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     } else {
         new_attr = typeLookup(cls, new_str, NULL);
         try {
-            new_attr = processDescriptor(new_attr, None, cls);
+            if (new_attr->cls != function_cls) // optimization
+                new_attr = processDescriptor(new_attr, None, cls);
         } catch (ExcInfo e) {
             if (S == CAPI) {
                 setCAPIException(e);

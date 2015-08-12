@@ -298,7 +298,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     Box** oargs = NULL;
 
     Box* oargs_array[1];
-    if (paramspec.totalReceived() >= 3) {
+    if (paramspec.totalReceived() > 3) {
         assert((paramspec.totalReceived() - 3) <= sizeof(oargs_array) / sizeof(oargs_array[0]));
         oargs = oargs_array;
     }
