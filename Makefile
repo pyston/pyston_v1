@@ -1049,22 +1049,29 @@ update_section_ordering: pyston_release
 
 # TESTING:
 
-_plugins/clang_capi.so: plugins/clang_capi.cpp $(BUILD_SYSTEM_DEPS)
-	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
-	$(CXX) $< -o $@ -std=c++11 $(LLVM_CXXFLAGS) -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_BUILD)/tools/clang/include -shared
+plugins/clang_linter.o: plugins/clang_linter.cpp $(BUILD_SYSTEM_DEPS)
+	ninja -C $(CMAKE_DIR_DBG) llvm/bin/llvm-config clangASTMatchers clangTooling LLVMLTO LLVMDebugInfoPDB LLVMLineEditor LLVMInterpreter LLVMOrcJIT
+	$(CXX) $< -o $@ -std=c++11 $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) -fno-rtti -O0 -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_INC_DBG)/tools/clang/include -c
 
-plugins/clang_capi.o: plugins/clang_capi.cpp $(BUILD_SYSTEM_DEPS)
-	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
-	$(CXX) $< -o $@ -std=c++11 $(LLVM_CXXFLAGS) -O0 -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_BUILD)/tools/clang/include -c
-plugins/clang_capi: plugins/clang_capi.o $(BUILD_SYSTEM_DEPS)
-	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
-	$(CXX) $< -o $@ -L$(LLVM_BUILD)/Release/lib -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs all)
-plugins/clang_capi.so: plugins/clang_capi.o $(BUILD_SYSTEM_DEPS)
-	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
-	$(CXX) $< -o $@ -shared
-.PHONY: plugin_test
-plugin_test: plugins/clang_capi.so
-	$(CLANG_CXX) -Xclang -load -Xclang plugins/clang_capi.so -Xclang -add-plugin -Xclang print-fns test/test.cpp -c -S -o -
+plugins/clang_linter.so: plugins/clang_linter.o
+	$(CXX) $< -o $@ -shared -lclangASTMatchers -lclangTooling $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags)
+	# $(CXX) $< -o $@ -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags --system-libs --libs all)
+
+plugins/clang_linter: plugins/clang_linter.o $(BUILD_SYSTEM_DEPS)
+	$(CXX) $< -o $@ -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags --system-libs --libs all)
+
 .PHONY: tool_test
-tool_test: plugins/clang_capi
-	plugins/clang_capi test/test.cpp --
+tool_test: plugins/clang_linter.o
+	plugins/clang_linter test/test.cpp -- $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) -I/usr/lib/llvm-3.5/include
+
+.PHONY: superlint
+superlint: plugins/clang_linter.so
+	for fn in $(MAIN_SRCS); do $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter $$fn -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare || break; done
+
+.PHONY: lint_%
+lint_%: %.cpp plugins/clang_linter.so
+	$(ECHO) Linting $<
+	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped  -Ibuild_deps/libpypa/src/ -Wno-covered-switch-default -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
+
+.PHONY: clang_lint
+clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))
