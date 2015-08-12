@@ -25,7 +25,7 @@ sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-de
 
 **Fedora 21**
 ```
-sudo yum install cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake libtool gmp-devel readline-devel openssl-devel sqlite-devel python-devel zlib-devel bzip2-devel ncurses-devel
+sudo yum install git make cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake libtool gmp-devel readline-devel openssl-devel sqlite-devel python-devel zlib-devel bzip2-devel ncurses-devel texlive-latex2man libffi-devel
 ```
 
 ### Building and testing

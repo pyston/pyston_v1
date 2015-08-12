@@ -2,6 +2,7 @@
 
 include(CheckIncludeFiles)
 include(CheckTypeSizeof)
+include(CheckSymbolExists)
 
 set(CMAKE_EXTRA_INCLUDE_FILES unordered_map)
 set(CMAKE_REQUIRED_FLAGS -std=c++11)
@@ -57,5 +58,9 @@ check_include_files(termios.h HAVE_TERMIOS_H)
 check_include_files(unistd.h HAVE_UNISTD_H)
 check_include_files(utime.h HAVE_UTIME_H)
 check_include_files(wchar.h HAVE_WCHAR_H)
+
+set(CMAKE_REQUIRED_LIBRARIES util)
+
+check_symbol_exists(openpty "pty.h" HAVE_OPENPTY)
 
 configure_file(from_cpython/Include/pyconfig.h.in from_cpython/Include/pyconfig.h)
