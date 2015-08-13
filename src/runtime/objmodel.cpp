@@ -3293,8 +3293,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
-    if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
-        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+    Box* kwargs = nullptr;
+    if (argspec.has_kwargs) {
+        kwargs
+            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
+    }
+    if ((!param_names || !param_names->takes_param_names) && (argspec.num_keywords || argspec.has_kwargs)
+        && (!paramspec.takes_kwargs
+            && (kwargs && PyDict_Check(kwargs) && static_cast<BoxedDict*>(kwargs)->d.size() > 0))) {
+        raiseExcHelper(TypeError, "%s() takes no keyword arguments", func_name);
     }
 
     if (argspec.num_keywords)
@@ -3321,15 +3328,21 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     if (argspec.has_kwargs) {
         assert(!rewrite_args && "would need to be handled here");
 
-        Box* kwargs
-            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
-
         if (!kwargs) {
             // TODO could try to avoid creating this
             kwargs = new BoxedDict();
         } else if (!PyDict_Check(kwargs)) {
             BoxedDict* d = new BoxedDict();
-            dictMerge(d, kwargs);
+            try {
+                dictMerge(d, kwargs);
+            } catch (ExcInfo exc) {
+                if (exc.type == AttributeError) {
+                    raiseExcHelper(TypeError, "%s() argument after ** must be a mapping, not %s", func_name,
+                                   getTypeName(kwargs));
+                } else {
+                    throw;
+                }
+            }
             kwargs = d;
         }
         assert(PyDict_Check(kwargs));

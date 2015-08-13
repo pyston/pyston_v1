@@ -604,7 +604,7 @@ void dictMerge(BoxedDict* self, Box* other) {
     }
 
     static BoxedString* keys_str = internStringImmortal("keys");
-    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     Box* keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     assert(keys);
 
