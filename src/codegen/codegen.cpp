@@ -73,13 +73,13 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-        case AST_TYPE::Lambda:
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
         case AST_TYPE::Suite:
             is_generator = false;
             break;
         case AST_TYPE::FunctionDef:
+        case AST_TYPE::Lambda:
             is_generator = containsYield(ast);
             break;
         default:
