@@ -482,13 +482,8 @@ BoxedString* internStringImmortal(llvm::StringRef s);
 // Callers should use this function if they can accept mortal string objects.
 // FIXME For now it just returns immortal strings, but at least we can use it
 // to start documenting the places that can take mortal strings.
-inline BoxedString* internStringMortal(const char* s) {
-    return internStringImmortal(s);
-}
-
 inline BoxedString* internStringMortal(llvm::StringRef s) {
-    assert(s.data()[s.size()] == '\0');
-    return internStringMortal(s.data());
+    return internStringImmortal(s);
 }
 
 // TODO this is an immortal intern for now

@@ -1278,8 +1278,9 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, const UnwindInfo& unw_info) {
         if (node->str_type == AST_Str::STR) {
-            llvm::Value* rtn = embedRelocatablePtr(
-                irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
+            llvm::Value* rtn
+                = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data, true),
+                                      g.llvm_value_type_ptr);
 
             return new ConcreteCompilerVariable(STR, rtn, true);
         } else if (node->str_type == AST_Str::UNICODE) {
