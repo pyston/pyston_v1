@@ -20,6 +20,7 @@
 namespace pyston {
 class AST_Module;
 AST_Module* pypa_parse(char const* file_path);
+AST_Module* pypa_parse_string(char const* str);
 }
 
 #endif // PYSTON_CODEGEN_PYPAPARSER_H

@@ -1013,6 +1013,12 @@ static std::string getParserCommandLine(const char* fn) {
 }
 
 AST_Module* parse_string(const char* code) {
+    if (ENABLE_PYPA_PARSER) {
+        AST_Module* rtn = pypa_parse_string(code);
+        RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
+        return rtn;
+    }
+
     int size = strlen(code);
     char buf[] = "pystontmp_XXXXXX";
     char* tmpdir = mkdtemp(buf);

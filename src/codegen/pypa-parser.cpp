@@ -36,6 +36,10 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
+/* For cStringIO: */
+#include "Python.h"
+#include "cStringIO.h"
+
 namespace pypa {
 bool string_to_double(String const& s, double& result);
 }
@@ -1009,66 +1013,37 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
     }
 }
 
-class PystonSourceReader : public pypa::Reader {
+class PystonReader : public pypa::Reader {
 public:
-    PystonSourceReader();
-    ~PystonSourceReader() override;
-
-    bool open_file(const std::string& file_path);
-    void close();
-
+    PystonReader();
+    ~PystonReader() override;
     bool set_encoding(const std::string& coding) override;
-    std::string get_encoding() const { return encoding; }
     std::string get_line() override;
     unsigned get_line_number() const override { return line_number; }
-    std::string get_filename() const override { return file_path; }
+
+    virtual char next() = 0;
+    virtual PyObject* open_python_file() noexcept = 0;
+
     bool eof() const override { return is_eof; }
+    void set_eof() { is_eof = true; }
 
 private:
-    char next();
-
-    std::string file_path;
     bool is_eof;
-    FILE* file;
-    unsigned line_number;
     PyObject* readline;
-    std::string encoding;
+    unsigned line_number;
 };
 
-PystonSourceReader::PystonSourceReader() : file(nullptr), readline(nullptr) {
-    close();
+PystonReader::PystonReader() : is_eof(false), readline(nullptr), line_number(0) {
 }
 
-PystonSourceReader::~PystonSourceReader() {
-    close();
-}
-
-bool PystonSourceReader::open_file(const std::string& _file_path) {
-    file = fopen(_file_path.c_str(), "r");
-    if (!file)
-        return false;
-
-    file_path = _file_path;
-    is_eof = false;
-    line_number = 0;
-    readline = nullptr;
-    return true;
-}
-
-void PystonSourceReader::close() {
-    if (file)
-        fclose(file);
-    file = nullptr;
-    file_path.clear();
-    is_eof = true;
+PystonReader::~PystonReader() {
     if (readline)
         gc::deregisterPermanentRoot(readline);
     readline = nullptr;
-    line_number = 0;
 }
 
-bool PystonSourceReader::set_encoding(const std::string& coding) {
-    PyObject* stream = PyFile_FromFile(file, file_path.c_str(), "rb", NULL);
+bool PystonReader::set_encoding(const std::string& coding) {
+    PyObject* stream = open_python_file();
     if (stream == NULL)
         return false;
 
@@ -1084,19 +1059,7 @@ bool PystonSourceReader::set_encoding(const std::string& coding) {
     return true;
 }
 
-char PystonSourceReader::next() {
-    if (is_eof)
-        return 0;
-
-    int c = fgetc(file);
-    if (c == EOF) {
-        is_eof = true;
-        return 0;
-    }
-    return c;
-}
-
-std::string PystonSourceReader::get_line() {
+std::string PystonReader::get_line() {
     if (eof())
         return std::string();
 
@@ -1134,11 +1097,74 @@ std::string PystonSourceReader::get_line() {
     return line->s();
 }
 
-AST_Module* pypa_parse(char const* file_path) {
-    auto reader = llvm::make_unique<PystonSourceReader>();
-    if (!reader->open_file(file_path))
-        return nullptr;
+class PystonFileReader : public PystonReader {
+public:
+    PystonFileReader(FILE* file, std::string file_path);
+    ~PystonFileReader() override;
 
+    PyObject* open_python_file() noexcept override;
+
+    std::string get_filename() const override { return file_path; }
+
+    static std::unique_ptr<PystonFileReader> create(const char* path);
+
+private:
+    char next() override;
+
+    FILE* file;
+    std::string file_path;
+};
+
+PystonFileReader::PystonFileReader(FILE* file, std::string file_path) : file(file), file_path(std::move(file_path)) {
+}
+
+PystonFileReader::~PystonFileReader() {
+    if (file)
+        fclose(file);
+    file = nullptr;
+    file_path.clear();
+    set_eof();
+}
+
+std::unique_ptr<PystonFileReader> PystonFileReader::create(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return nullptr;
+    return llvm::make_unique<PystonFileReader>(f, path);
+}
+
+PyObject* PystonFileReader::open_python_file() noexcept {
+    return PyFile_FromFile(file, file_path.c_str(), "rb", NULL);
+}
+
+char PystonFileReader::next() {
+    if (eof())
+        return 0;
+
+    int c = fgetc(file);
+    if (c == EOF) {
+        set_eof();
+        return 0;
+    }
+    return c;
+}
+
+class PystonStringReader : public PystonReader {
+public:
+    PystonStringReader(const char* str) : str(str), position(0) {}
+    ~PystonStringReader() override {}
+
+    std::string get_filename() const override { return "<stdin>"; }
+
+private:
+    char next() override;
+    PyObject* open_python_file() noexcept override;
+
+    const char* str;
+    int position;
+};
+
+static AST_Module* parse_with_reader(std::unique_ptr<pypa::Reader> reader) {
     pypa::Lexer lexer(std::move(reader));
     pypa::SymbolTablePtr symbols;
     pypa::AstModulePtr module;
@@ -1155,5 +1181,36 @@ AST_Module* pypa_parse(char const* file_path) {
         return readModule(*module);
     }
     return nullptr;
+}
+
+char PystonStringReader::next() {
+    char c = str[position];
+    if (c)
+        position++;
+    else
+        set_eof();
+    return c;
+}
+
+PyObject* PystonStringReader::open_python_file() noexcept {
+    PycString_IMPORT;
+    PyObject* s = PyString_FromString(str + position);
+    if (!s)
+        return s;
+    return PycStringIO->NewInput(s);
+}
+
+AST_Module* pypa_parse(char const* file_path) {
+    auto reader = PystonFileReader::create(file_path);
+    if (!reader)
+        return nullptr;
+
+    return parse_with_reader(std::move(reader));
+}
+
+AST_Module* pypa_parse_string(char const* str) {
+    auto reader = llvm::make_unique<PystonStringReader>(str);
+
+    return parse_with_reader(std::move(reader));
 }
 }
