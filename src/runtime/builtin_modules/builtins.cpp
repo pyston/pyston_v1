@@ -37,6 +37,7 @@
 #include "runtime/list.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
+#include "runtime/rewrite_args.h"
 #include "runtime/set.h"
 #include "runtime/super.h"
 #include "runtime/types.h"
@@ -457,7 +458,47 @@ Box* delattrFunc(Box* obj, Box* _str) {
     return None;
 }
 
-template <ExceptionStyle S> Box* getattrFunc(Box* obj, Box* _str, Box* default_value) noexcept(S == CAPI) {
+static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
+    if (return_val)
+        return return_val;
+
+    bool exc = PyErr_Occurred();
+    if (exc && !PyErr_ExceptionMatches(AttributeError))
+        return NULL;
+
+    if (default_val) {
+        if (exc)
+            PyErr_Clear();
+        return default_val;
+    }
+    if (!exc)
+        raiseAttributeErrorCapi(obj, str->s());
+    return NULL;
+}
+
+template <ExceptionStyle S>
+Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                         Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    if (argspec != ArgPassSpec(2, 0, false, false) || argspec != ArgPassSpec(3, 0, false, false)) {
+        static Box* defaults[] = { NULL };
+        bool rewrite_success = false;
+        rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args,
+                           rewrite_success, argspec, arg1, arg2, arg3, args, NULL, keyword_names);
+        if (!rewrite_success)
+            rewrite_args = NULL;
+    }
+
+    Box* obj = arg1;
+    Box* _str = arg2;
+    Box* default_value = arg3;
+
+    if (rewrite_args) {
+        if (!PyString_Check(_str))
+            rewrite_args = NULL;
+        else
+            rewrite_args->arg2->addGuard((intptr_t)arg2);
+    }
+
     try {
         _str = coerceUnicodeToStr(_str);
     } catch (ExcInfo e) {
@@ -476,15 +517,43 @@ template <ExceptionStyle S> Box* getattrFunc(Box* obj, Box* _str, Box* default_v
             raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 
-    Box* rtn = PyObject_GetAttr(obj, _str);
-    if (rtn == NULL && default_value != NULL && PyErr_ExceptionMatches(AttributeError)) {
-        PyErr_Clear();
-        return default_value;
+    BoxedString* str = static_cast<BoxedString*>(_str);
+    if (!PyString_CHECK_INTERNED(str)) {
+        internStringMortalInplace(str);
+        rewrite_args = NULL;
     }
 
-    if (S == CXX && !rtn)
+    Box* rtn;
+    RewriterVar* r_rtn;
+    if (rewrite_args) {
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+        if (!grewrite_args.out_success)
+            rewrite_args = NULL;
+        else {
+            if (!rtn && !PyErr_Occurred())
+                r_rtn = rewrite_args->rewriter->loadConst(0);
+            else
+                r_rtn = grewrite_args.out_rtn;
+        }
+    } else {
+        rtn = getattrInternal<CAPI>(obj, str, NULL);
+    }
+
+    if (rewrite_args) {
+        RewriterVar* final_rtn = rewrite_args->rewriter->call(
+            false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+
+        if (S == CXX)
+            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+        rewrite_args->out_success = true;
+        rewrite_args->out_rtn = final_rtn;
+    }
+
+    Box* r = getattrFuncHelper(rtn, obj, str, default_value);
+    if (S == CXX && !r)
         throwCAPIException();
-    return rtn;
+    return r;
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
@@ -1449,8 +1518,9 @@ void setupBuiltins() {
     builtins_module->giveAttr("delattr",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)delattrFunc, NONE, 2), "delattr"));
 
-    auto getattr_func = boxRTFunction((void*)getattrFunc<CXX>, UNKNOWN, 3, 1, false, false, ParamNames::empty(), CXX);
-    addRTFunction(getattr_func, (void*)getattrFunc<CAPI>, UNKNOWN, CAPI);
+    auto getattr_func = createRTFunction(3, 1, 1, 1, ParamNames::empty());
+    getattr_func->internal_callable.capi_val = &getattrFuncInternal<CAPI>;
+    getattr_func->internal_callable.cxx_val = &getattrFuncInternal<CXX>;
     builtins_module->giveAttr("getattr", new BoxedBuiltinFunctionOrMethod(getattr_func, "getattr", { NULL }));
 
     builtins_module->giveAttr(
