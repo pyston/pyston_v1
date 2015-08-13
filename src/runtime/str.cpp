@@ -342,10 +342,16 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     }
 
     if (!PyString_Check(_rhs)) {
-        // Note: this is deliberately not returning NotImplemented, even though
-        // that would be more usual.  I assume this behavior of CPython's is
-        // for backwards compatibility.
-        raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
+        if (PyByteArray_Check(_rhs)) {
+            Box* rtn = PyByteArray_Concat(lhs, _rhs);
+            checkAndThrowCAPIException();
+            return rtn;
+        } else {
+            // Note: this is deliberately not returning NotImplemented, even though
+            // that would be more usual.  I assume this behavior of CPython's is
+            // for backwards compatibility.
+            raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
+        }
     }
 
     BoxedString* rhs = static_cast<BoxedString*>(_rhs);
