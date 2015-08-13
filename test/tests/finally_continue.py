@@ -1,5 +1,5 @@
-# expected: fail
-# - don't do this check yet
+# should_error
+# skip-if: '-x' in EXTRA_JIT_ARGS
 
 # Syntax error to have a "continue" in a finally
 #
