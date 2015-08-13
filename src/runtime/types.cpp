@@ -599,6 +599,35 @@ extern "C" CLFunction* unboxCLFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
 }
 
+static PyObject* cpython_type_call(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
+    PyObject* obj;
+
+    if (type->tp_new == NULL) {
+        PyErr_Format(PyExc_TypeError, "cannot create '%.100s' instances", type->tp_name);
+        return NULL;
+    }
+
+    obj = type->tp_new(type, args, kwds);
+    if (obj != NULL) {
+        /* Ugly exception: when the call was type(something),
+         *            don't call tp_init on the result. */
+        if (type == &PyType_Type && PyTuple_Check(args) && PyTuple_GET_SIZE(args) == 1
+            && (kwds == NULL || (PyDict_Check(kwds) && PyDict_Size(kwds) == 0)))
+            return obj;
+        /* If the returned object is not an instance of type,
+         *            it won't be initialized. */
+        if (!PyType_IsSubtype(obj->cls, type))
+            return obj;
+        type = obj->cls;
+        if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_CLASS) && type->tp_init != NULL
+            && type->tp_init(obj, args, kwds) < 0) {
+            Py_DECREF(obj);
+            obj = NULL;
+        }
+    }
+    return obj;
+}
+
 template <ExceptionStyle S>
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                           Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
@@ -607,6 +636,25 @@ template <ExceptionStyle S>
 static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     int npassed_args = argspec.totalPassed();
+
+    // Common CAPI path call this function with *args, **kw.
+    if (argspec == ArgPassSpec(0, 0, true, false) || argspec == ArgPassSpec(0, 0, true, true)) {
+        // Wouldn't be able to rewrite anyway:
+        assert(!rewrite_args || !rewrite_args->out_success);
+
+        arg1 = PySequence_Tuple(arg1);
+        if (!arg1) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
+
+        Box* r = cpython_type_call(static_cast<BoxedClass*>(self), arg1, argspec.has_kwargs ? arg2 : NULL);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    }
 
     if (argspec.has_starargs || argspec.has_kwargs) {
         // This would fail in typeCallInner
@@ -652,35 +700,6 @@ static void assertInitNone(Box* obj) {
     if (obj != None) {
         raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj));
     }
-}
-
-static PyObject* cpython_type_call(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
-    PyObject* obj;
-
-    if (type->tp_new == NULL) {
-        PyErr_Format(PyExc_TypeError, "cannot create '%.100s' instances", type->tp_name);
-        return NULL;
-    }
-
-    obj = type->tp_new(type, args, kwds);
-    if (obj != NULL) {
-        /* Ugly exception: when the call was type(something),
-         *            don't call tp_init on the result. */
-        if (type == &PyType_Type && PyTuple_Check(args) && PyTuple_GET_SIZE(args) == 1
-            && (kwds == NULL || (PyDict_Check(kwds) && PyDict_Size(kwds) == 0)))
-            return obj;
-        /* If the returned object is not an instance of type,
-         *            it won't be initialized. */
-        if (!PyType_IsSubtype(obj->cls, type))
-            return obj;
-        type = obj->cls;
-        if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_CLASS) && type->tp_init != NULL
-            && type->tp_init(obj, args, kwds) < 0) {
-            Py_DECREF(obj);
-            obj = NULL;
-        }
-    }
-    return obj;
 }
 
 static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwds) {

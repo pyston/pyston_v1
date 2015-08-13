@@ -100,16 +100,16 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**) PY
 
 /* */
 
-// Pyston change: made these function calls for now
-#if 0
 #define PyExceptionClass_Check(x)                                       \
     (PyClass_Check((x)) || (PyType_Check((x)) &&                        \
       PyType_FastSubclass((PyTypeObject*)(x), Py_TPFLAGS_BASE_EXC_SUBCLASS)))
 
 #define PyExceptionInstance_Check(x)                    \
     (PyInstance_Check((x)) ||                           \
-     PyType_FastSubclass((x)->ob_type, Py_TPFLAGS_BASE_EXC_SUBCLASS))
+     PyType_FastSubclass(Py_TYPE(x), Py_TPFLAGS_BASE_EXC_SUBCLASS))
 
+// Pyston change: made these function calls for now
+#if 0
 #define PyExceptionClass_Name(x)                                   \
     (PyClass_Check((x))                                            \
      ? PyString_AS_STRING(((PyClassObject*)(x))->cl_name)          \
@@ -121,8 +121,6 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**) PY
       : (PyObject*)((x)->ob_type)))
 #endif
 // (We might have to make these wrapper macros that do appropriate casting to PyObject)
-PyAPI_FUNC(int) PyExceptionClass_Check(PyObject*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(int) PyExceptionInstance_Check(PyObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(const char*) PyExceptionClass_Name(PyObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject*) PyExceptionInstance_Class(PyObject*) PYSTON_NOEXCEPT;
 
@@ -243,6 +241,14 @@ PyAPI_FUNC(PyObject *) PyErr_NewException(
 PyAPI_FUNC(PyObject *) PyErr_NewExceptionWithDoc(
     char *name, char *doc, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *) PYSTON_NOEXCEPT;
+
+// Pyston addition: allocate + initialize an instance of type `type`.
+// arg represents the single value that will be passed to the constructor;
+// a NULL value represents passing zero arguments, and a tuple value will
+// not be expanded into multiple arguments.
+// In the common cases this will be faster than creating the instance using
+// PyObject_Call(type, PyTuple_Pack(1, arg), NULL)
+PyAPI_FUNC(PyObject *) PyErr_CreateExceptionInstance(PyObject* type, PyObject* arg) PYSTON_NOEXCEPT;
 
 /* In sigcheck.c or signalmodule.c */
 PyAPI_FUNC(int) PyErr_CheckSignals(void) PYSTON_NOEXCEPT;
