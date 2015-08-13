@@ -561,7 +561,7 @@ void setupSys() {
 
 void setupSysEnd() {
     std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
-    for (auto& p : sys_modules_dict->d) {
+    for (const auto& p : *sys_modules_dict) {
         builtin_module_names.push_back(p.first);
     }
 

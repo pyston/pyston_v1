@@ -50,7 +50,7 @@ Box* dictRepr(BoxedDict* self) {
     try {
         chars.push_back('{');
         bool first = true;
-        for (const auto& p : self->d) {
+        for (const auto& p : *self) {
             if (!first) {
                 chars.push_back(',');
                 chars.push_back(' ');
@@ -93,7 +93,7 @@ Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
     rtn->ensure(self->d.size());
-    for (const auto& p : self->d) {
+    for (const auto& p : *self) {
         BoxedTuple* t = BoxedTuple::create({ p.first, p.second });
         listAppendInternal(rtn, t);
     }
@@ -104,7 +104,7 @@ Box* dictItems(BoxedDict* self) {
 Box* dictValues(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
     rtn->ensure(self->d.size());
-    for (const auto& p : self->d) {
+    for (const auto& p : *self) {
         listAppendInternal(rtn, p.second);
     }
     return rtn;
@@ -115,7 +115,7 @@ Box* dictKeys(BoxedDict* self) {
 
     BoxedList* rtn = new BoxedList();
     rtn->ensure(self->d.size());
-    for (const auto& p : self->d) {
+    for (const auto& p : *self) {
         listAppendInternal(rtn, p.first);
     }
     return rtn;
@@ -357,7 +357,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
         return 0;
     }
 
-    *pkey = (*it)->first;
+    *pkey = (*it)->first.value;
     *pvalue = (*it)->second;
 
     ++(*it);
@@ -470,7 +470,7 @@ Box* dictPopitem(BoxedDict* self) {
         raiseExcHelper(KeyError, "popitem(): dictionary is empty");
     }
 
-    Box* key = it->first;
+    Box* key = it->first.value;
     Box* value = it->second;
     self->d.erase(it);
 
@@ -563,7 +563,7 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
     if (self->d.size() != rhs->d.size())
         return False;
 
-    for (const auto& p : self->d) {
+    for (const auto& p : *self) {
         auto it = rhs->d.find(p.first);
         if (it == rhs->d.end())
             return False;
@@ -708,7 +708,7 @@ void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedDict* d = (BoxedDict*)b;
 
-    for (auto p : d->d) {
+    for (auto p : *d) {
         v->visit(p.first);
         v->visit(p.second);
     }

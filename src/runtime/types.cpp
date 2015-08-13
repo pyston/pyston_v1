@@ -2380,7 +2380,7 @@ public:
                 assert(PyDict_Check(_container));
                 BoxedDict* container = static_cast<BoxedDict*>(_container);
 
-                for (const auto& p : container->d) {
+                for (const auto& p : *container) {
                     AttrWrapper::setitem(self, p.first, p.second);
                 }
             }

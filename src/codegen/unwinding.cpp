@@ -1061,7 +1061,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     // TODO Right now d just has all the python variables that are *initialized*
     // But we also need to loop through all the uninitialized variables that we have
     // access to and delete them from the locals dict
-    for (const auto& p : d->d) {
+    for (const auto& p : *d) {
         Box* varname = p.first;
         Box* value = p.second;
         setitem(frame_info->boxedLocals, varname, value);

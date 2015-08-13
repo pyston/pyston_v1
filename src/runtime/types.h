@@ -659,22 +659,36 @@ struct PyLt {
     bool operator()(Box*, Box*) const;
 };
 
-struct PythonLevelEq {
-    static bool isEqual(Box* lhs, Box* rhs) {
-        if (lhs == rhs)
-            return true;
-        if (rhs == getEmptyKey() || rhs == getTombstoneKey())
-            return false;
-        return PyEq()(lhs, rhs);
-    }
-    static Box* getEmptyKey() { return (Box*)-1; }
-    static Box* getTombstoneKey() { return (Box*)-2; }
-    static unsigned getHashValue(Box* val) { return PyHasher()(val); }
-};
-
 class BoxedDict : public Box {
 public:
-    typedef llvm::DenseMap<Box*, Box*, PythonLevelEq> DictMap;
+    // llvm::DenseMap doesn't store the original hash values, choosing to instead
+    // check for equality more often.  This is probably a good tradeoff when the keys
+    // are pointers and comparison is cheap, but we want to make sure that keys with
+    // different hash values don't get compared.
+    struct BoxAndHash {
+        Box* value;
+        size_t hash;
+
+        BoxAndHash(Box* value) : value(value), hash(PyHasher()(value)) {}
+        BoxAndHash(Box* value, size_t hash) : value(value), hash(hash) {}
+    };
+
+    struct Comparisons {
+        static bool isEqual(BoxAndHash lhs, BoxAndHash rhs) {
+            if (lhs.value == rhs.value)
+                return true;
+            if (rhs.value == (Box*)-1 || rhs.value == (Box*)-2)
+                return false;
+            if (lhs.hash != rhs.hash)
+                return false;
+            return PyEq()(lhs.value, rhs.value);
+        }
+        static BoxAndHash getEmptyKey() { return BoxAndHash((Box*)-1, 0); }
+        static BoxAndHash getTombstoneKey() { return BoxAndHash((Box*)-2, 0); }
+        static unsigned getHashValue(BoxAndHash val) { return val.hash; }
+    };
+
+    typedef llvm::DenseMap<BoxAndHash, Box*, Comparisons> DictMap;
 
     DictMap d;
 
@@ -683,11 +697,31 @@ public:
     DEFAULT_CLASS_SIMPLE(dict_cls);
 
     Box* getOrNull(Box* k) {
-        const auto& p = d.find(k);
+        const auto& p = d.find(BoxAndHash(k));
         if (p != d.end())
             return p->second;
         return NULL;
     }
+
+    class iterator {
+    private:
+        DictMap::iterator it;
+
+    public:
+        iterator(DictMap::iterator it) : it(std::move(it)) {}
+
+        bool operator!=(const iterator& rhs) const { return it != rhs.it; }
+        bool operator==(const iterator& rhs) const { return it == rhs.it; }
+        iterator& operator++() {
+            ++it;
+            return *this;
+        }
+        std::pair<Box*, Box*> operator*() const { return std::make_pair(it->first.value, it->second); }
+        Box* first() const { return it->first.value; }
+    };
+
+    iterator begin() { return iterator(d.begin()); }
+    iterator end() { return iterator(d.end()); }
 
     static void gcHandler(GCVisitor* v, Box* b);
 };

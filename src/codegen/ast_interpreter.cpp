@@ -1837,7 +1837,7 @@ Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclo
     assert(clfunc->source->scoping->areGlobalsFromModule());
     interpreter.setGlobals(source_info->parent_module);
 
-    for (const auto& p : frame_state.locals->d) {
+    for (const auto& p : *frame_state.locals) {
         assert(p.first->cls == str_cls);
         auto name = static_cast<BoxedString*>(p.first)->s();
         if (name == PASSED_GENERATOR_NAME) {

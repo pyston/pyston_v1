@@ -65,11 +65,11 @@ Box* dictIterNext(Box* s) {
 
     Box* rtn = nullptr;
     if (self->type == BoxedDictIterator::KeyIterator) {
-        rtn = self->it->first;
+        rtn = self->it->first.value;
     } else if (self->type == BoxedDictIterator::ValueIterator) {
         rtn = self->it->second;
     } else if (self->type == BoxedDictIterator::ItemIterator) {
-        rtn = BoxedTuple::create({ self->it->first, self->it->second });
+        rtn = BoxedTuple::create({ self->it->first.value, self->it->second });
     }
     ++self->it;
     return rtn;
