@@ -110,9 +110,10 @@ private:
     Value visit_num(AST_Num* node);
     Value visit_repr(AST_Repr* node);
     Value visit_set(AST_Set* node);
-    Value visit_slice(AST_Slice* node);
     Value visit_str(AST_Str* node);
     Value visit_subscript(AST_Subscript* node);
+    Value visit_slice(AST_Slice* node);
+    Value visit_slice(AST_slice* node);
     Value visit_tuple(AST_Tuple* node);
     Value visit_yield(AST_Yield* node);
 
@@ -516,7 +517,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
         AST_Subscript* subscript = (AST_Subscript*)node;
 
         Value target = visit_expr(subscript->value);
-        Value slice = visit_expr(subscript->slice);
+        Value slice = visit_slice(subscript->slice);
 
         if (jit)
             jit->emitSetItem(target, slice, value);
@@ -544,6 +545,23 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     return doBinOp(left, right, node->op_type, BinExpType::BinOp);
 }
 
+Value ASTInterpreter::visit_slice(AST_slice* node) {
+    switch (node->type) {
+        case AST_TYPE::ExtSlice:
+            return visit_extslice(static_cast<AST_ExtSlice*>(node));
+        case AST_TYPE::Ellipsis:
+            RELEASE_ASSERT(0, "not implemented");
+            break;
+        case AST_TYPE::Index:
+            return visit_index(static_cast<AST_Index*>(node));
+        case AST_TYPE::Slice:
+            return visit_slice(static_cast<AST_Slice*>(node));
+        default:
+            RELEASE_ASSERT(0, "Attempt to handle invalid slice type");
+    }
+    return Value();
+}
+
 Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();
     Value upper = node->upper ? visit_expr(node->upper) : getNone();
@@ -562,7 +580,7 @@ Value ASTInterpreter::visit_extslice(AST_ExtSlice* node) {
     int num_slices = node->dims.size();
     BoxedTuple* rtn = BoxedTuple::create(num_slices);
     for (int i = 0; i < num_slices; ++i) {
-        Value v = visit_expr(node->dims[i]);
+        Value v = visit_slice(node->dims[i]);
         rtn->elts[i] = v.o;
         items.push_back(v);
     }
@@ -1156,7 +1174,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             case AST_TYPE::Subscript: {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
-                Value slice = visit_expr(sub->slice);
+                Value slice = visit_slice(sub->slice);
                 if (jit)
                     jit->emitDelItem(value, slice);
                 delitem(value.o, slice.o);
@@ -1265,10 +1283,6 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_compare((AST_Compare*)node);
         case AST_TYPE::Dict:
             return visit_dict((AST_Dict*)node);
-        case AST_TYPE::ExtSlice:
-            return visit_extslice((AST_ExtSlice*)node);
-        case AST_TYPE::Index:
-            return visit_index((AST_Index*)node);
         case AST_TYPE::Lambda:
             return visit_lambda((AST_Lambda*)node);
         case AST_TYPE::List:
@@ -1281,8 +1295,6 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_repr((AST_Repr*)node);
         case AST_TYPE::Set:
             return visit_set((AST_Set*)node);
-        case AST_TYPE::Slice:
-            return visit_slice((AST_Slice*)node);
         case AST_TYPE::Str:
             return visit_str((AST_Str*)node);
         case AST_TYPE::Subscript:
@@ -1531,7 +1543,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
 Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
-    Value slice = visit_expr(node->slice);
+    Value slice = visit_slice(node->slice);
 
     return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(value, slice) : NULL);
 }

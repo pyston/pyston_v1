@@ -112,6 +112,7 @@ std::unique_ptr<InternedStringPool> BufferedReader::createInternedPool() {
 AST* readASTMisc(BufferedReader* reader);
 AST_expr* readASTExpr(BufferedReader* reader);
 AST_stmt* readASTStmt(BufferedReader* reader);
+AST_slice* readASTSlice(BufferedReader* reader);
 
 static std::string readString(BufferedReader* reader) {
     int strlen = reader->readUInt();
@@ -164,6 +165,15 @@ static void readExprVector(std::vector<AST_expr*>& vec, BufferedReader* reader) 
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         vec.push_back(readASTExpr(reader));
+    }
+}
+
+static void readSliceVector(std::vector<AST_slice*>& vec, BufferedReader* reader) {
+    int num_elts = reader->readShort();
+    if (VERBOSITY("parsing") >= 3)
+        printf("%d elts to read\n", num_elts);
+    for (int i = 0; i < num_elts; i++) {
+        vec.push_back(readASTSlice(reader));
     }
 }
 
@@ -429,7 +439,7 @@ AST_ExtSlice* read_extslice(BufferedReader* reader) {
 
     rtn->col_offset = -1;
     rtn->lineno = -1;
-    readExprVector(rtn->dims, reader);
+    readSliceVector(rtn->dims, reader);
     return rtn;
 }
 
@@ -720,7 +730,7 @@ AST_Subscript* read_subscript(BufferedReader* reader) {
     rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->lineno = reader->readULL();
-    rtn->slice = readASTExpr(reader);
+    rtn->slice = readASTSlice(reader);
     rtn->value = readASTExpr(reader);
 
     return rtn;
@@ -803,6 +813,32 @@ AST_Yield* read_yield(BufferedReader* reader) {
     return rtn;
 }
 
+AST_slice* readASTSlice(BufferedReader* reader) {
+    uint8_t type = reader->readByte();
+    if (VERBOSITY("parsing") >= 3)
+        printf("type = %d\n", type);
+    if (type == 0)
+        return NULL;
+
+    uint8_t checkbyte = reader->readByte();
+    assert(checkbyte == 0xae);
+
+    switch (type) {
+        case AST_TYPE::Ellipsis:
+            return read_ellipsis(reader);
+        case AST_TYPE::ExtSlice:
+            return read_extslice(reader);
+        case AST_TYPE::Index:
+            return read_index(reader);
+        case AST_TYPE::Slice:
+            return read_slice(reader);
+        default:
+            fprintf(stderr, "Unknown slice node type (parser.cpp:" STRINGIFY(__LINE__) "): %d\n", type);
+            abort();
+            break;
+    }
+}
+
 AST_expr* readASTExpr(BufferedReader* reader) {
     uint8_t type = reader->readByte();
     if (VERBOSITY("parsing") >= 3)
@@ -828,16 +864,10 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_dict(reader);
         case AST_TYPE::DictComp:
             return read_dictcomp(reader);
-        case AST_TYPE::Ellipsis:
-            return read_ellipsis(reader);
-        case AST_TYPE::ExtSlice:
-            return read_extslice(reader);
         case AST_TYPE::GeneratorExp:
             return read_generatorexp(reader);
         case AST_TYPE::IfExp:
             return read_ifexp(reader);
-        case AST_TYPE::Index:
-            return read_index(reader);
         case AST_TYPE::Lambda:
             return read_lambda(reader);
         case AST_TYPE::List:
@@ -854,8 +884,6 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_set(reader);
         case AST_TYPE::SetComp:
             return read_setcomp(reader);
-        case AST_TYPE::Slice:
-            return read_slice(reader);
         case AST_TYPE::Str:
             return read_str(reader);
         case AST_TYPE::Subscript:

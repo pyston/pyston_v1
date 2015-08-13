@@ -143,6 +143,7 @@ enum AST_TYPE {
 class ASTVisitor;
 class ExprVisitor;
 class StmtVisitor;
+class SliceVisitor;
 class AST_keyword;
 
 class AST {
@@ -187,7 +188,12 @@ public:
     AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
 };
 
-
+class AST_slice : public AST {
+public:
+    virtual void* accept_slice(SliceVisitor* s) = 0;
+    AST_slice(AST_TYPE::AST_TYPE type) : AST(type) {}
+    AST_slice(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
+};
 
 class AST_alias : public AST {
 public:
@@ -422,12 +428,12 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };
 
-class AST_Ellipsis : public AST_expr {
+class AST_Ellipsis : public AST_slice {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    virtual void* accept_slice(SliceVisitor* v);
 
-    AST_Ellipsis() : AST_expr(AST_TYPE::Ellipsis) {}
+    AST_Ellipsis() : AST_slice(AST_TYPE::Ellipsis) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
 };
@@ -486,14 +492,14 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expression;
 };
 
-class AST_ExtSlice : public AST_expr {
+class AST_ExtSlice : public AST_slice {
 public:
-    std::vector<AST_expr*> dims;
+    std::vector<AST_slice*> dims;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    virtual void* accept_slice(SliceVisitor* v);
 
-    AST_ExtSlice() : AST_expr(AST_TYPE::ExtSlice) {}
+    AST_ExtSlice() : AST_slice(AST_TYPE::ExtSlice) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExtSlice;
 };
@@ -602,14 +608,14 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ImportFrom;
 };
 
-class AST_Index : public AST_expr {
+class AST_Index : public AST_slice {
 public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    virtual void* accept_slice(SliceVisitor* v);
 
-    AST_Index() : AST_expr(AST_TYPE::Index) {}
+    AST_Index() : AST_slice(AST_TYPE::Index) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
 };
@@ -837,14 +843,14 @@ public:
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::SetComp;
 };
 
-class AST_Slice : public AST_expr {
+class AST_Slice : public AST_slice {
 public:
     AST_expr* lower, *upper, *step;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    virtual void* accept_slice(SliceVisitor* v);
 
-    AST_Slice() : AST_expr(AST_TYPE::Slice) {}
+    AST_Slice() : AST_slice(AST_TYPE::Slice) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Slice;
 };
@@ -872,7 +878,8 @@ public:
 
 class AST_Subscript : public AST_expr {
 public:
-    AST_expr* value, *slice;
+    AST_expr* value;
+    AST_slice* slice;
     AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(ASTVisitor* v);
@@ -1256,11 +1263,8 @@ public:
     virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
@@ -1270,7 +1274,6 @@ public:
     virtual void* visit_repr(AST_Repr* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_set(AST_Set* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_setcomp(AST_SetComp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_slice(AST_Slice* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_str(AST_Str* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_subscript(AST_Subscript* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
@@ -1312,6 +1315,15 @@ public:
 
     virtual void visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
+};
+
+class SliceVisitor {
+public:
+    virtual ~SliceVisitor() {}
+    virtual void* visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_slice(AST_Slice* node) { RELEASE_ASSERT(0, ""); }
 };
 
 void print_ast(AST* ast);

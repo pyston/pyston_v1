@@ -27,6 +27,7 @@ class ScopeInfo;
 class CFGBlock;
 class BoxedClass;
 class AST_expr;
+class AST_slice;
 class OSREntryDescriptor;
 
 class TypeAnalysis {
@@ -41,6 +42,7 @@ public:
     virtual ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) = 0;
     virtual ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) = 0;
     virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
+    virtual BoxedClass* speculatedExprClass(AST_slice*) = 0;
 };
 
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& param_names,
