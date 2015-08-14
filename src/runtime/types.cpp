@@ -1073,6 +1073,12 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             made = runtimeCallInternal<S>(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
             if (!made) {
                 assert(S == CAPI);
+
+                if (srewrite_args.out_success && why_rewrite_allowed == NO_INIT) {
+                    rewrite_args->out_rtn = srewrite_args.out_rtn;
+                    rewrite_args->out_success = true;
+                }
+
                 return NULL;
             }
 
