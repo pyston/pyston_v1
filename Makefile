@@ -862,6 +862,9 @@ nosearch_dbgpy_% nosearch_pydbg_%: %.py ext_pythondbg
 $(call make_search,dbgpy_%)
 $(call make_search,pydbg_%)
 
+pydbg: ext_pythondbg
+	export PYTHON_VERSION=$$(python2.7-dbg -V 2>&1 | awk '{print $$2}'); PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7-pydebug $(GDB) --ex "dir $(DEPS_DIR)/python-src/python2.7-$$PYTHON_VERSION/debian" $(GDB_CMDS) --args python2.7-dbg
+
 # "kill valgrind":
 kv:
 	ps aux | awk '/[v]algrind/ {print $$2}' | xargs kill -9; true
