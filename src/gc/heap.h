@@ -247,7 +247,7 @@ public:
 #endif
     }
 
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
+    GCAllocation* alloc(size_t bytes) {
         registerGCManagedBytes(bytes);
         if (bytes <= 16)
             return _alloc(16, 0);
@@ -411,7 +411,7 @@ private:
     Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
-    GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
+    GCAllocation* _alloc(size_t bytes, int bucket_idx);
 };
 
 struct ObjLookupCache {
@@ -485,7 +485,7 @@ public:
     /* Largest object that can be allocated in a large block. */
     static constexpr size_t ALLOC_SIZE_LIMIT = BLOCK_SIZE - CHUNK_SIZE - sizeof(LargeObj);
 
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* alloc(size_t bytes);
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* alloc);
 
@@ -506,7 +506,7 @@ class HugeArena : public Arena<HUGE_ARENA_START, ARENA_SIZE, 0, PAGE_SIZE> {
 public:
     HugeArena(Heap* heap) : heap(heap) {}
 
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* alloc(size_t bytes);
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* alloc);
 
@@ -584,7 +584,7 @@ public:
         return rtn;
     }
 
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
+    GCAllocation* alloc(size_t bytes) {
         if (bytes > LargeArena::ALLOC_SIZE_LIMIT)
             return huge_arena.alloc(bytes);
         else if (bytes > sizes[NUM_BUCKETS - 1])
