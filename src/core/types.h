@@ -509,10 +509,12 @@ private:
 
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
-    Box() {}
+    Box();
 
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+
+    uint64_t id;
 
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
@@ -552,6 +554,7 @@ public:
     static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
+static_assert(offsetof(Box, id) == offsetof(struct _object, id), "");
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;

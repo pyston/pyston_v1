@@ -210,6 +210,13 @@ void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
     return mem;
 }
 
+Box::Box() {
+    static uint64_t id_counter = 1337;
+
+    id = id_counter;
+    id_counter++;
+}
+
 void* Box::operator new(size_t size, BoxedClass* cls) {
     ALLOC_STATS(cls);
 

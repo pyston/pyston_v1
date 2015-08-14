@@ -71,7 +71,7 @@ whose size is determined when the object is allocated.
     struct _object *_ob_next;           \
     struct _object *_ob_prev;
 
-#define _PyObject_EXTRA_INIT 0, 0,
+#define _PyObject_EXTRA_INIT 0, 0, 0,
 
 #else
 #define _PyObject_HEAD_EXTRA
@@ -82,11 +82,13 @@ whose size is determined when the object is allocated.
 // Pyston change: removed ob_refcnt
 #define PyObject_HEAD                   \
     _PyObject_HEAD_EXTRA                \
+    uint64_t id;                        \
     struct _typeobject *ob_type;
 
 // Pyston change: removed '1', the initial refcount
 #define PyObject_HEAD_INIT(type)        \
     _PyObject_EXTRA_INIT                \
+    0,                                  \
     type,
 
 #define PyVarObject_HEAD_INIT(type, size)       \
