@@ -32,6 +32,10 @@ public:
     virtual void visitRange(void** start, void** end);
     virtual void visitPotential(void* p) = 0;
     virtual void visitPotentialRange(void* const* start, void* const* end);
+
+    virtual void visitRedundant(void** ptr_address) {}
+    virtual void visitRedundantRange(void** start, void** end) {}
+    virtual void visitPotentialRedundant(void* p) {}
 };
 
 enum class GCKind : uint8_t {

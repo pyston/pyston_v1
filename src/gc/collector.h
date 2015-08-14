@@ -89,6 +89,12 @@ void visitByGCKind(void* p, GCVisitor& visitor);
 void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
 
+class GCVisitorNoRedundancy : public GCVisitor {
+    virtual void visitRedundant(void** ptr_address) { visit(ptr_address); }
+    virtual void visitRedundantRange(void** start, void** end) { visitRange(start, end); }
+    virtual void visitPotentialRedundant(void* p) { visitPotential(p); }
+};
+
 class TraceStack;
 class GCVisitorMarking : public GCVisitor {
 private:
@@ -103,7 +109,7 @@ public:
 };
 
 class ReferenceMapStack;
-class GCVisitorPinning : public GCVisitor {
+class GCVisitorPinning : public GCVisitorNoRedundancy {
 private:
     ReferenceMapStack* stack;
 
@@ -115,7 +121,7 @@ public:
     virtual void visitPotential(void* p);
 };
 
-class GCVisitorReplacing : public GCVisitor {
+class GCVisitorReplacing : public GCVisitorNoRedundancy {
 private:
     void* old_value;
     void* new_value;
@@ -130,7 +136,7 @@ public:
 };
 
 typedef std::unordered_map<uint64_t, std::shared_ptr<std::unordered_set<uint64_t>>> IDMap;
-class GCVisitorHelping : public GCVisitor {
+class GCVisitorHelping : public GCVisitorNoRedundancy {
 private:
     std::shared_ptr<std::unordered_set<uint64_t>> id_set;
 

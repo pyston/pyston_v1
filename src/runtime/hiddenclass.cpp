@@ -39,9 +39,18 @@ void HiddenClass::gc_visit(GCVisitor* visitor) {
     // in the attr_offssets map.
     // Also, if we have any children, we can skip scanning our attr_offsets map, since it will be a subset
     // of our child's map.
-    if (children.empty())
-        for (auto p : attr_offsets)
+    if (children.empty()) {
+        for (const auto& p : attr_offsets)
             visitor->visit((void**)&p.first);
+    } else {
+        for (const auto& p : attr_offsets)
+            visitor->visitRedundant((void**)&p.first);
+    }
+
+    visitor->visitRedundantRange((void**)&children.vector()[0], (void**)&children.vector()[children.size()]);
+    for (const auto& p : children) {
+        visitor->visitRedundant((void**)&p.first);
+    }
 }
 
 void HiddenClass::appendAttribute(BoxedString* attr) {
