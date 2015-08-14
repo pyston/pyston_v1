@@ -277,6 +277,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
             = initializePatchpoint3(func_addr, pp_start, pp_end, 0 /* scratch_offset */, 0 /* scratch_size */,
                                     std::unordered_set<int>(), _spill_map);
         assert(_spill_map.size() == 0);
+        assert(initialization_info.patchpoint_start == pp_start);
         assert(initialization_info.slowpath_start == pp_start + patchable_size);
         assert(initialization_info.slowpath_rtn_addr == pp_end);
         assert(initialization_info.continue_addr == pp_end);
