@@ -427,6 +427,8 @@ class GeneralFloatCases(unittest.TestCase):
             # and validate signs.  Tests currently disabled, since
             # they fail on systems where a subnormal result from pow
             # is flushed to zero (e.g. Debian/ia64.)
+            # Pyston change: enable it. This is disabled in  CPython
+            # both Python 3.x and 2.x
             self.assertTrue(0.0 < pow_op(0.5, 1048) < 1e-315)
             self.assertTrue(0.0 < pow_op(-0.5, 1048) < 1e-315)
             self.assertTrue(0.0 < pow_op(0.5, 1047) < 1e-315)
