@@ -17,6 +17,7 @@
 
 #include <string>
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
@@ -26,6 +27,8 @@ class Type;
 }
 
 namespace pyston {
+
+extern llvm::StringMap<const void*> relocatable_syms;
 
 llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type*, llvm::StringRef shared_name = llvm::StringRef());
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);

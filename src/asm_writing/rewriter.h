@@ -440,6 +440,7 @@ protected:
     }
     bool added_changing_action;
     bool marked_inside_ic;
+    std::vector<void*> gc_references;
 
     bool done_guarding;
     bool isDoneGuarding() {

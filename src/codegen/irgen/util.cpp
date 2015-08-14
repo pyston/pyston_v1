@@ -97,7 +97,7 @@ llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
 // It's slightly easier to emit them as integers (there are primitive integer constants but not pointer constants),
 // but doing it this way makes it clearer what's going on.
 
-static llvm::StringMap<const void*> relocatable_syms;
+llvm::StringMap<const void*> relocatable_syms;
 
 void clearRelocatableSymsMap() {
     relocatable_syms.clear();

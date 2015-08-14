@@ -20,6 +20,7 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "runtime/types.h"
+#include "gc/heap.h"
 
 namespace pyston {
 
@@ -350,6 +351,7 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
 
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
+
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val_var, negate); }, { this, val_var },
                         ActionType::GUARD);
@@ -716,6 +718,11 @@ void Rewriter::_trap() {
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    auto al = gc::global_heap.getAllocationFromInteriorPointer((void*)val);
+    if (al) {
+        gc_references.push_back(al->user_data);
+    }
 
     for (auto& p : const_loader.consts) {
         if (p.first != val)
@@ -1328,7 +1335,7 @@ void Rewriter::commit() {
     }
 #endif
 
-    rewrite->commit(this);
+    rewrite->commit(this, std::move(gc_references));
 
     if (assembler->hasFailed()) {
         on_assemblyfail();

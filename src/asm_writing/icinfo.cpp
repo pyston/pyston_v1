@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "llvm/Support/Memory.h"
+#include "llvm/ADT/DenseSet.h"
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/mc_writer.h"
@@ -25,6 +26,9 @@
 #include "core/common.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "gc/gc.h"
+#include "gc/heap.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -83,7 +87,7 @@ uint8_t* ICSlotRewrite::getSlotStart() {
     return (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
 }
 
-void ICSlotRewrite::commit(CommitHook* hook) {
+void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
         int orig_version = dependencies[i].second;
@@ -118,6 +122,9 @@ void ICSlotRewrite::commit(CommitHook* hook) {
 
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
+
+    ic_entry->something = true;
+    ic_entry->gc_references = std::move(gc_references);
 
     ic->times_rewritten++;
 
@@ -182,6 +189,8 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
     return NULL;
 }
 
+static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
+static llvm::DenseSet<ICInfo*> ics_list;
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
                int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs,
                assembler::GenericRegister return_register, TypeRecorder* type_recorder)
@@ -202,9 +211,16 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
     for (int i = 0; i < num_slots; i++) {
         slots.emplace_back(this, i);
     }
+
+    assert(ics_list.count(this) == 0);
+    ics_list.insert(this);
 }
 
-static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
+ICInfo::~ICInfo() {
+    assert(ics_list.count(this) == 1);
+    ics_list.erase(this);
+}
+
 std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
                                                    uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
                                                    const ICSetupInfo* ic, StackInfo stack_info, LiveOutSet live_outs) {
@@ -246,6 +262,7 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
     ICInfo* icinfo = new ICInfo(start_addr, slowpath_rtn_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
                                 ic->getCallingConvention(), std::move(live_outs), return_register, ic->type_recorder);
 
+    assert(!ics_by_return_addr.count(slowpath_rtn_addr));
     ics_by_return_addr[slowpath_rtn_addr] = icinfo;
 
     return std::unique_ptr<ICInfo>(icinfo);
@@ -299,5 +316,13 @@ bool ICInfo::shouldAttempt() {
 
 bool ICInfo::isMegamorphic() {
     return times_rewritten >= MEGAMORPHIC_THRESHOLD;
+}
+
+void ICInfo::visitGCReferences(gc::GCVisitor* v) {
+    for (const auto& p : ics_list) {
+        for (auto& slot : p->slots) {
+            v->visitPotentialRange(&slot.gc_references[0], &slot.gc_references[slot.gc_references.size()]);
+        }
+    }
 }
 }

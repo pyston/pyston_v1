@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "core/common.h"
@@ -28,6 +29,8 @@
 #include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
+
+#include "codegen/irgen/util.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"
@@ -540,6 +543,14 @@ static void visitRoots(GCVisitor& visitor) {
     for (auto weakref : weakrefs_needing_callback_list) {
         visitor.visit((void**)&weakref);
     }
+
+    GC_TRACE_LOG("Looking at generated code pointers\n");
+    for (auto& sym : relocatable_syms) {
+        const void** ptr = &sym.second;
+        if (global_heap.getAllocationFromInteriorPointer((void*)*ptr)) {
+            visitor.visitPotentialRedundant((void**)ptr);
+        }
+    }
 }
 
 static void finalizationOrderingFindReachable(Box* obj) {
@@ -791,6 +802,8 @@ static void mapReferencesPhase(ReferenceMap& refmap) {
     for (auto obj : objects_with_ordered_finalizers) {
         visitor.visit((void**)&obj);
     }
+
+    ICInfo::visitGCReferences(&visitor);
 
     graphTraversalMarking(stack, visitor);
 }
