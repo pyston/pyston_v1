@@ -173,8 +173,6 @@ Since we can't change the interface of a public API function, pend is
 still supported but now *officially* useless:  if pend is not NULL,
 *pend is set to NULL.
 **************************************************************************/
-// pyston change: comment this out
-#if 0
 PyObject *
 PyFloat_FromString(PyObject *v, char **pend)
 {
@@ -240,7 +238,6 @@ PyFloat_FromString(PyObject *v, char **pend)
 #endif
     return result;
 }
-#endif
 
 static void
 float_dealloc(PyFloatObject *op)
