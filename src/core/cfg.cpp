@@ -1178,7 +1178,7 @@ private:
 
         push_back(makeExpr(new AST_LangPrimitive(AST_LangPrimitive::UNCACHE_EXC_INFO)));
 
-        if (root_type != AST_TYPE::FunctionDef)
+        if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda)
             raiseExcHelper(SyntaxError, "'yield' outside function");
 
         return makeLoad(node_name, node);

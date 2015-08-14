@@ -128,3 +128,9 @@ try:
     g.next()
 except Exception as e:
     print type(e), e # StopIteration
+
+
+x = lambda: (yield 1)
+print list(x())
+x = lambda: ((yield 1), (yield 2))
+print list(x())
