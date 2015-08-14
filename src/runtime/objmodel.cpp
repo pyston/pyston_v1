@@ -3351,7 +3351,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);
 
-            if (k->cls != str_cls)
+            if (!isSubclass(k->cls, str_cls))
                 raiseExcHelper(TypeError, "%s() keywords must be strings", func_name);
 
             BoxedString* s = static_cast<BoxedString*>(k);
