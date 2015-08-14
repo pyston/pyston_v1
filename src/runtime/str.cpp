@@ -1293,60 +1293,65 @@ static bool _needs_escaping[256]
 static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but clang will complain
 
 extern "C" PyObject* PyString_Repr(PyObject* obj, int smartquotes) noexcept {
-    BoxedString* self = (BoxedString*)obj;
-    assert(PyString_Check(self));
-
-    std::ostringstream os("");
-
-    llvm::StringRef s(self->s());
-    char quote = '\'';
-    if (smartquotes && s.find('\'', 0) != std::string::npos && s.find('\"', 0) == std::string::npos) {
-        quote = '\"';
+    BoxedString* op = (BoxedString*)obj;
+    size_t newsize = 2 + 4 * Py_SIZE(op);
+    PyObject* v;
+    if (newsize > PY_SSIZE_T_MAX || newsize / 4 != Py_SIZE(op)) {
+        PyErr_SetString(PyExc_OverflowError, "string is too large to make repr");
+        return NULL;
     }
-    os << quote;
-    for (int i = 0; i < s.size(); i++) {
-        char c = s[i];
-        if ((c == '\'' && quote == '\"') || !_needs_escaping[c & 0xff]) {
-            os << c;
-        } else {
-            char special = 0;
-            switch (c) {
-                case '\t':
-                    special = 't';
-                    break;
-                case '\n':
-                    special = 'n';
-                    break;
-                case '\r':
-                    special = 'r';
-                    break;
-                case '\'':
-                    special = '\'';
-                    break;
-                case '\"':
-                    special = '\"';
-                    break;
-                case '\\':
-                    special = '\\';
-                    break;
-            }
-            if (special) {
-                os << '\\';
-                os << special;
-            } else {
-                os << '\\';
-                os << 'x';
-                os << _hex[(c & 0xff) / 16];
-                os << _hex[(c & 0xff) % 16];
-            }
+    v = PyString_FromStringAndSize((char*)NULL, newsize);
+    if (v == NULL) {
+        return NULL;
+    } else {
+        Py_ssize_t i;
+        char c;
+        char* p;
+        int quote;
+
+        /* figure out which quote to use; single is preferred */
+        quote = '\'';
+        if (smartquotes && memchr(op->data(), '\'', Py_SIZE(op)) && !memchr(op->data(), '"', Py_SIZE(op)))
+            quote = '"';
+
+        p = PyString_AS_STRING(v);
+        *p++ = quote;
+        for (i = 0; i < Py_SIZE(op); i++) {
+            /* There's at least enough room for a hex escape
+             *                and a closing quote. */
+            assert(newsize - (p - PyString_AS_STRING(v)) >= 5);
+            c = op->data()[i];
+            if (c == quote || c == '\\')
+                *p++ = '\\', *p++ = c;
+            else if (c == '\t')
+                *p++ = '\\', *p++ = 't';
+            else if (c == '\n')
+                *p++ = '\\', *p++ = 'n';
+            else if (c == '\r')
+                *p++ = '\\', *p++ = 'r';
+            else if (c < ' ' || c >= 0x7f) {
+                /* For performance, we don't want to call
+                 *                    PyOS_snprintf here (extra layers of
+                 *                                       function call). */
+                sprintf(p, "\\x%02x", c & 0xff);
+                p += 4;
+            } else
+                *p++ = c;
         }
+        assert(newsize - (p - PyString_AS_STRING(v)) >= 1);
+        *p++ = quote;
+        *p = '\0';
+        if (_PyString_Resize(&v, (p - PyString_AS_STRING(v))))
+            return NULL;
+        return v;
     }
-    os << quote;
-
-    return boxString(os.str());
 }
 
 extern "C" Box* strRepr(BoxedString* self) {
+    return PyString_Repr(self, 1 /* smartquotes */);
+}
+
+extern "C" Box* str_repr(Box* self) noexcept {
     return PyString_Repr(self, 1 /* smartquotes */);
 }
 
@@ -2882,6 +2887,7 @@ void setupStr() {
     add_operators(str_cls);
     str_cls->freeze();
 
+    str_cls->tp_repr = str_repr;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
     str_cls->tp_as_sequence->sq_length = str_length;
