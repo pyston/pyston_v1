@@ -167,8 +167,6 @@ extern "C" PY_LONG_LONG PyLong_AsLongLongAndOverflow(PyObject* obj, int* overflo
 }
 
 extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) noexcept {
-    RELEASE_ASSERT(pend == NULL, "unsupported");
-
     int sign = 1;
     if ((base != 0 && base < 2) || base > 36) {
         PyErr_SetString(PyExc_ValueError, "long() arg 2 must be >= 2 and <= 36");
@@ -207,15 +205,20 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
             || (base == 2 && (str[1] == 'b' || str[1] == 'B'))))
         str += 2;
 
-
     BoxedLong* rtn = new BoxedLong();
+    int r = 0;
     if (str[strlen(str) - 1] == 'L') {
         std::string without_l(str, strlen(str) - 1);
-        int r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
-        RELEASE_ASSERT(r == 0, "");
+        r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
     } else {
-        int r = mpz_init_set_str(rtn->n, str, base);
-        RELEASE_ASSERT(r == 0, "");
+        r = mpz_init_set_str(rtn->n, str, base);
+    }
+
+    if (pend)
+        *pend = const_cast<char*>(str) + strlen(str);
+    if (r != 0) {
+        PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: %s", base, str);
+        return NULL;
     }
 
     if (sign == -1)
@@ -1368,6 +1371,14 @@ extern "C" Box* longIndex(BoxedLong* v) noexcept {
     return rtn;
 }
 
+extern "C" Box* longBitLength(BoxedLong* self) noexcept {
+    if (!PyLong_Check(self))
+        raiseExcHelper(TypeError, "descriptor 'bit_length' requires a 'long' object but received a '%s'",
+                       getTypeName(self));
+    size_t bits = mpz_sizeinbase(self->n, 2);
+    return boxLong(bits);
+}
+
 static int convert_binop(PyObject* v, PyObject* w, PyLongObject** a, PyLongObject** b) noexcept {
     if (PyLong_Check(v)) {
         *a = (PyLongObject*)v;
@@ -1482,6 +1493,7 @@ void setupLong() {
     long_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)longTrunc, UNKNOWN, 1)));
     long_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)longIndex, LONG, 1)));
 
+    long_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)longBitLength, LONG, 1)));
     long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
     long_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)longLong, UNKNOWN, 1)));
