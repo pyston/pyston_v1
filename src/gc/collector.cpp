@@ -245,6 +245,11 @@ public:
             // points to them.
             if (al->kind_id == GCKind::RUNTIME) {
                 refmap->pinned.emplace(al);
+            } else if (al->kind_id == GCKind::PYTHON) {
+                Box* b = (Box*)al->user_data;
+                if (b->cls == type_cls || b->cls == module_cls) {
+                    refmap->pinned.emplace(al);
+                }
             }
 
             *cur++ = al->user_data;
