@@ -101,6 +101,7 @@ struct GCAllocation {
     GCKind kind_id : 8;
     unsigned int _reserved1 : 16;
     unsigned int kind_data : 32;
+    uint64_t id : 64;
 
     char user_data[0];
 
@@ -109,8 +110,10 @@ struct GCAllocation {
         return reinterpret_cast<GCAllocation*>(d - offsetof(GCAllocation, user_data));
     }
 };
+/*
 static_assert(sizeof(GCAllocation) <= sizeof(void*),
               "we should try to make sure the gc header is word-sized or smaller");
+              */
 
 #define MARK_BIT 0x1
 // reserved bit - along with MARK_BIT, encodes the states of finalization order
@@ -267,6 +270,7 @@ public:
     }
 
     void move_all(ReferenceMap& refmap);
+    void map_ids(IDMap& idmap);
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes, bool force_copy = false);
     void free(GCAllocation* al);
@@ -635,6 +639,7 @@ public:
     }
 
     void move_all(ReferenceMap& refmap) { small_arena.move_all(refmap); }
+    void map_ids(IDMap& idmap) { small_arena.map_ids(idmap); }
 
     // not thread safe:
     void freeUnmarked(std::vector<Box*>& weakly_referenced) {

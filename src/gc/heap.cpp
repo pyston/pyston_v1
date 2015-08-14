@@ -504,6 +504,44 @@ void SmallArena::move_all(ReferenceMap& refmap) {
     }
 }
 
+static void map_id(IDMap& idmap, GCAllocation* al) {
+    auto it_id = idmap.find(al->id);
+    if (it_id == idmap.end()) {
+        auto set = std::make_shared<std::unordered_set<uint64_t>>();
+        idmap.emplace((uint64_t)al->id, set);
+
+        GCVisitorHelping helping(set);
+        visitByGCKind(al->user_data, helping);
+    } else {
+        assert(false);
+    }
+}
+
+void SmallArena::map_ids(IDMap& idmap) {
+    assert(got_cache);
+    thread_caches.forEachValue([this, &idmap](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPtrs(ptrs, &cache->cache_free_heads[bidx]);
+            getPtrs(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                map_id(idmap, al);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPtrs(ptrs, &heads[bidx]);
+        getPtrs(ptrs, &full_heads[bidx]);
+        for (GCAllocation* al : ptrs) {
+            map_id(idmap, al);
+        }
+    }
+}
+
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
 

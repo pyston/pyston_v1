@@ -493,6 +493,25 @@ void GCVisitorReplacing::visit(void** ptr_address) {
     }
 }
 
+void GCVisitorHelping::visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    ASSERT(al && al->user_data == p, "%p", p);
+    id_set->emplace((uint64_t)al->id);
+}
+
+void GCVisitorHelping::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        id_set->emplace((uint64_t)a->id);
+    }
+}
+
 static void visitRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
@@ -797,7 +816,57 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
-void runCollection() {
+static void map_ids(std::string filename) {
+    IDMap map;
+    global_heap.map_ids(map);
+
+    std::vector<uint64_t> keys;
+    for (auto& k : map) {
+        keys.push_back(k.first);
+    }
+    std::sort(keys.begin(), keys.end());
+
+    FILE* f = fopen(filename.c_str(), "w");
+    for (auto k : keys) {
+        if (k == 25024) {
+            printf("");
+        }
+        fprintf(f, "%ld ->", k);
+
+        std::vector<uint64_t> refs;
+        for (auto id : *map[k]) {
+            refs.push_back(id);
+        }
+        std::sort(refs.begin(), refs.end());
+
+        for (auto id : refs) {
+            fprintf(f, " %ld", id);
+        }
+        fprintf(f, "\n");
+    }
+}
+
+void moveStuff() {
+    global_heap.prepareForCollection();
+
+    map_ids("start.txt");
+
+    ReferenceMap refmap;
+    mapReferencesPhase(refmap);
+
+    copyPhase(refmap);
+
+    map_ids("end.txt");
+
+    if (system("diff start.txt end.txt > /dev/null")) {
+        fprintf(stderr, "different id graph after %d collections!\n", ncollections);
+        exit(-1);
+    }
+
+    global_heap.cleanupAfterCollection();
+}
+
+void _runCollection() {
     static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
     sc.log();
@@ -859,14 +928,8 @@ void runCollection() {
     }
 
     global_heap.cleanupAfterCollection();
-    global_heap.prepareForCollection();
 
-    ReferenceMap refmap;
-    mapReferencesPhase(refmap);
-
-    copyPhase(refmap);
-
-    global_heap.cleanupAfterCollection();
+    moveStuff();
 
 #if TRACE_GC_MARKING
     fclose(trace_fp);
@@ -882,6 +945,10 @@ void runCollection() {
     sc_us.log(us);
 
     // dumpHeapStatistics();
+}
+
+void runCollection() {
+    _runCollection();
 }
 
 } // namespace gc

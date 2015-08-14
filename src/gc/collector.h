@@ -129,12 +129,27 @@ public:
     virtual void visitPotentialRange(void* const* start, void* const* end){};
 };
 
+typedef std::unordered_map<uint64_t, std::shared_ptr<std::unordered_set<uint64_t>>> IDMap;
+class GCVisitorHelping : public GCVisitor {
+private:
+    std::shared_ptr<std::unordered_set<uint64_t>> id_set;
+
+public:
+    GCVisitorHelping(std::shared_ptr<std::unordered_set<uint64_t>> set) : id_set(set) {}
+    virtual ~GCVisitorHelping() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p);
+};
+
 class GCAllocation;
 class ReferenceMap {
 public:
     std::unordered_set<GCAllocation*> pinned;
-    std::unordered_map<GCAllocation*, std::shared_ptr<std::vector<GCAllocation*>>> references;
     std::unordered_map<GCAllocation*, GCAllocation*> moves;
+
+    // For all allocations, what other allocations point to it.
+    std::unordered_map<GCAllocation*, std::shared_ptr<std::vector<GCAllocation*>>> references;
 };
 }
 }
