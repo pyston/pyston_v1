@@ -3940,9 +3940,8 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else if (rtn) {
+        } else
             rewriter->commitReturning(rewrite_args.out_rtn);
-        }
     } else {
         rtn = runtimeCallInternal<S>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }

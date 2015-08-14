@@ -1474,7 +1474,7 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 Value ASTInterpreter::visit_str(AST_Str* node) {
     Box* o = NULL;
     if (node->str_type == AST_Str::STR) {
-        o = parent_module->getStringConstant(node->str_data);
+        o = parent_module->getStringConstant(node->str_data, true);
     } else if (node->str_type == AST_Str::UNICODE) {
         o = parent_module->getUnicodeConstant(node->str_data);
     } else {

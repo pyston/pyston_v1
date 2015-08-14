@@ -72,6 +72,46 @@ BaseException_init(PyBaseExceptionObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
+    if (PyType_Check(_type) && ((PyTypeObject*)_type)->tp_new == (newfunc)BaseException_new &&
+            ((PyTypeObject*)_type)->tp_init == (initproc)BaseException_init) {
+        PyTypeObject* type = (PyTypeObject*)_type;
+        // Fast path: inline new and init
+
+        PyBaseExceptionObject *self;
+
+        self = (PyBaseExceptionObject *)type->tp_alloc(type, 0);
+        if (!self)
+            return NULL;
+
+        self->dict = NULL;
+        if (arg) {
+            self->args = PyTuple_Pack(1, arg);
+            if (!self->args)
+                return NULL;
+            self->message = arg;
+        } else {
+            self->args = PyTuple_New(0);
+            self->message = PyString_FromString("");
+            if (!self->message)
+                return NULL;
+        }
+        return (PyObject*)self;
+    } else {
+        // Fallback
+        PyObject* args;
+        if (arg == NULL)
+            args = PyTuple_New(0);
+        else
+            args = PyTuple_Pack(1, arg);
+
+        if (args == NULL)
+            return NULL;
+
+        return PyObject_Call(_type, args, NULL);
+    }
+}
+
 static int
 BaseException_clear(PyBaseExceptionObject *self)
 {

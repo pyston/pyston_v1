@@ -703,23 +703,21 @@ extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObjec
            class.
         */
         if (!inclass || !PyObject_IsSubclass(inclass, type)) {
-            PyObject* args, *res;
+            // Pyston change: rewrote this section
 
-            if (value == Py_None)
-                args = PyTuple_New(0);
-            else if (PyTuple_Check(value)) {
-                Py_INCREF(value);
-                args = value;
-            } else
-                args = PyTuple_Pack(1, value);
+            PyObject* res;
+            if (!PyTuple_Check(value)) {
+                res = PyErr_CreateExceptionInstance(type, value == Py_None ? NULL : value);
+            } else {
+                PyObject* args = value;
 
-            if (args == NULL)
-                goto finally;
-            res = PyEval_CallObject(type, args);
-            Py_DECREF(args);
+                // Pyston change:
+                // res = PyEval_CallObject(type, args);
+                res = PyObject_Call(type, args, NULL);
+            }
+
             if (res == NULL)
                 goto finally;
-            Py_DECREF(value);
             value = res;
         }
         /* if the class of the instance doesn't exactly match the
@@ -907,14 +905,6 @@ extern "C" int PyErr_BadArgument() noexcept {
 extern "C" PyObject* PyErr_NoMemory() noexcept {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
     return nullptr;
-}
-
-extern "C" int PyExceptionClass_Check(PyObject* o) noexcept {
-    return PyClass_Check(o) || (PyType_Check(o) && isSubclass(static_cast<BoxedClass*>(o), BaseException));
-}
-
-extern "C" int PyExceptionInstance_Check(PyObject* o) noexcept {
-    return PyInstance_Check(o) || isSubclass(o->cls, BaseException);
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
