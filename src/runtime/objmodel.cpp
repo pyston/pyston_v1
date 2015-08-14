@@ -3180,9 +3180,17 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     std::vector<Box*, StlCompatAllocator<Box*>> varargs;
     if (argspec.has_starargs) {
         assert(!rewrite_args);
-        Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
-        for (Box* e : given_varargs->pyElements()) {
-            varargs.push_back(e);
+        Box* given_varargs = nullptr;
+        try {
+            given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+            for (Box* e : given_varargs->pyElements()) {
+                varargs.push_back(e);
+            }
+        } catch (ExcInfo const& e) {
+            if (e.type == TypeError) {
+                raiseExcHelper(TypeError, "%s() argument after * must be a sequence, not %s", func_name,
+                               getTypeName(given_varargs));
+            }
         }
     }
 
@@ -3266,7 +3274,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes exactly %d argument%s (%ld given)", func_name, paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
@@ -3379,8 +3387,17 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name, paramspec.num_args,
-                       argspec.num_args + argspec.num_keywords + varargs.size());
+        long given = argspec.num_args + argspec.num_keywords + varargs.size();
+        int takes = paramspec.num_args;
+        if (!(paramspec.takes_varargs || paramspec.takes_kwargs)) {
+            raiseExcHelper(TypeError, "%s() takes exactly %d argument%s (%ld given)", func_name, takes,
+                           takes != 1 ? "s" : "", given);
+        } else {
+            if (given < takes) {
+                raiseExcHelper(TypeError, "%s() takes at least %d argument%s (%ld given)", func_name, takes,
+                               takes != 1 ? "s" : "", given);
+            }
+        }
     }
 
     for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
