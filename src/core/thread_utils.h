@@ -265,6 +265,7 @@ public:
             int code = pthread_setspecific(pthread_key, s);
             assert(code == 0);
 
+            assert(map.count(pthread_self()) == 0);
             map[pthread_self()] = s;
         }
         return &s->val;
