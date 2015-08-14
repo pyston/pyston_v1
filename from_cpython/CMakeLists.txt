@@ -152,3 +152,8 @@ add_custom_command(OUTPUT
 		       Modules/_cursesmodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)
+
+# trailing slashes on the source directories are important - that's the magic to get cmake to rename the
+# directory on install
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Lib/ DESTINATION lib/pyston${PYSTON_VERSION_STRING})
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Include/ DESTINATION include/pyston${PYSTON_VERSION_STRING})

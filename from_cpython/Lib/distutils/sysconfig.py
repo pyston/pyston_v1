@@ -52,25 +52,21 @@ if "_PYTHON_PROJECT_BASE" in os.environ:
 # Setup.local is available for Makefile builds including VPATH builds,
 # Setup.dist is available on Windows
 def _python_build():
-    for fn in ("Setup.dist", "Setup.local"):
-        if os.path.isfile(os.path.join(project_base, "Modules", fn)):
+    for fn in ("sre.h",):
+        if os.path.isfile(os.path.join(project_base, "from_cpython/Modules", fn)):
             return True
     return False
 python_build = _python_build()
-
 
 def get_python_version():
     """Return a string containing the major and minor Python version,
     leaving off the patchlevel.  Sample return values could be '1.5'
     or '2.2'.
     """
-    return sys.version[:3]
+    return sys.pyston_version[:3]
 
 
 def get_python_inc(plat_specific=0, prefix=None):
-    # Pyston change: this is the way we layout things internally:
-    return os.path.join(sys.prefix, "from_cpython/Include")
-
     """Return the directory containing installed Python header files.
 
     If 'plat_specific' is false (the default), this is the path to the
@@ -92,12 +88,14 @@ def get_python_inc(plat_specific=0, prefix=None):
                 inc_dir = buildir
             else:
                 # the source dir is relative to the buildir
-                srcdir = os.path.abspath(os.path.join(buildir,
-                                         get_config_var('srcdir')))
+                #srcdir = os.path.abspath(os.path.join(buildir,
+                                         #get_config_var('srcdir')))
                 # Include is located in the srcdir
-                inc_dir = os.path.join(srcdir, "Include")
+                #inc_dir = os.path.join(srcdir, "from_cpython/Include")
+                # Pyston change: include is located in the buildir
+                inc_dir = os.path.abspath(os.path.join(buildir, "from_cpython/Include"))
             return inc_dir
-        return os.path.join(prefix, "include", "python" + get_python_version())
+        return os.path.join(prefix, "include", "pyston" + get_python_version())
     elif os.name == "nt":
         return os.path.join(prefix, "include")
     elif os.name == "os2":

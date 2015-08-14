@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(pyston C CXX ASM)
 
+set(PYSTON_VERSION_MAJOR 0)
+set(PYSTON_VERSION_MINOR 3)
+set(PYSTON_VERSION_MICRO 0)
+set(PYSTON_VERSION_STRING "${PYSTON_VERSION_MAJOR}.${PYSTON_VERSION_MINOR}")
+
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 include(pyconfig)
@@ -221,6 +226,8 @@ if(ENABLE_OPROFILE)
   set(OPTIONAL_LIBRARIES ${OPTIONAL_LIBRARIES} opagent)
 endif()
 
+add_definitions(-DPYSTON_VERSION_MAJOR=${PYSTON_VERSION_MAJOR} -DPYSTON_VERSION_MINOR=${PYSTON_VERSION_MINOR} -DPYSTON_VERSION_MICRO=${PYSTON_VERSION_MICRO} -DPYSTON_VERSION="${PYSTON_VERSION_STRING}")
+add_definitions(-DPREFIX="${CMAKE_INSTALL_PREFIX}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -Wreturn-type -Wno-sign-compare -Wno-unused -Wno-unused-parameter -fno-omit-frame-pointer -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++11 -fno-rtti -fexceptions -fvisibility-inlines-hidden -ffunction-sections -fdata-sections -Woverloaded-virtual -Wno-invalid-offsetof -Wcast-qual -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wmissing-include-dirs -Wstrict-overflow=5 -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wmissing-field-initializers -Wredundant-decls -Winline -Wint-to-pointer-cast -Wlong-long -Wvla -Wno-attributes -g")
 
@@ -334,5 +341,8 @@ else()
   add_custom_target(docs COMMAND ${CMAKE_COMMAND} -E echo "Can't create docs, doxygen not installed \(try sudo apt-get install doxygen grpahviz on Ubuntu and then rerun cmake\)" VERBATIM)
 endif()
 
+# installation
+install(TARGETS pyston DESTINATION bin)
+   
 # last file added (need to change this if we add a file that is added via a glob):
 # from_cpython/Lib/test/test_re.py

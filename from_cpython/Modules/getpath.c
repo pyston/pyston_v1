@@ -97,7 +97,7 @@
 
 
 #ifndef VERSION
-#define VERSION "2.1"
+#define VERSION PYSTON_VERSION
 #endif
 
 #ifndef VPATH
@@ -118,8 +118,8 @@
 
 #ifndef PYTHONPATH
 // Pyston change
-#define PYTHONPATH PREFIX "/from_cpython/Lib:" \
-              EXEC_PREFIX "/from_cpython/Lib/lib-dynload"
+#define PYTHONPATH PREFIX "/lib/pyston" PYSTON_VERSION ":" \
+              EXEC_PREFIX "/lib/pyston" PYSTON_VERSION "/lib_pyston"
 #endif
 
 #ifndef LANDMARK
@@ -130,7 +130,7 @@ static char prefix[MAXPATHLEN+1];
 static char exec_prefix[MAXPATHLEN+1];
 static char progpath[MAXPATHLEN+1];
 static char *module_search_path = NULL;
-static char lib_python[] = "from_cpython/Lib"; // Pyston change
+static char lib_python[] = "lib/pyston" PYSTON_VERSION; // Pyston change
 
 static void
 reduce(char *dir)
@@ -279,13 +279,13 @@ search_for_prefix(char *argv0_path, char *home)
 
     /* Check to see if argv[0] is in the build directory */
     strcpy(prefix, argv0_path);
-    joinpath(prefix, "Modules/Setup");
+    joinpath(prefix, "from_cpython/Modules/sre.h");
     if (isfile(prefix)) {
         /* Check VPATH to see if argv0_path is in the build directory. */
         vpath = VPATH;
         strcpy(prefix, argv0_path);
         joinpath(prefix, vpath);
-        joinpath(prefix, "Lib");
+        joinpath(prefix, "from_cpython/Lib");
         joinpath(prefix, LANDMARK);
         if (ismodule(prefix))
             return -1;
@@ -545,7 +545,7 @@ calculate_path(void)
     }
     else
         strncpy(zip_path, PREFIX, MAXPATHLEN);
-    joinpath(zip_path, "lib/python00.zip");
+    joinpath(zip_path, "lib/pyston00.zip");
     bufsz = strlen(zip_path);   /* Replace "00" with version */
     zip_path[bufsz - 6] = VERSION[0];
     zip_path[bufsz - 5] = VERSION[2];

@@ -246,7 +246,13 @@ static std::string generateVersionString() {
     std::ostringstream oss;
     oss << PYTHON_VERSION_MAJOR << '.' << PYTHON_VERSION_MINOR << '.' << PYTHON_VERSION_MICRO;
     oss << '\n';
-    oss << "[Pyston " << PYSTON_VERSION_MAJOR << '.' << PYSTON_VERSION_MINOR << "]";
+    oss << "[Pyston " << PYSTON_VERSION_MAJOR << '.' << PYSTON_VERSION_MINOR << '.' << PYSTON_VERSION_MICRO << "]";
+    return oss.str();
+}
+
+static std::string generatePystonVersionString() {
+    std::ostringstream oss;
+    oss << PYSTON_VERSION_MAJOR << '.' << PYSTON_VERSION_MINOR << '.' << PYSTON_VERSION_MICRO;
     return oss.str();
 }
 
@@ -521,11 +527,15 @@ void setupSys() {
                                    "1991-1995 Stichting Mathematisch Centrum, Amsterdam.\nAll Rights Reserved."));
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
+    sys_module->giveAttr("pyston_version", boxString(generatePystonVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
-    // TODO: this should be a "sys.version_info" object, not just a tuple (ie can access fields by name)
+    // TODO: these should be "sys.version_info" objects, not just a tuple (ie can access fields by name)
     sys_module->giveAttr("version_info",
                          BoxedTuple::create({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
                                               boxInt(PYTHON_VERSION_MICRO), boxString("beta"), boxInt(0) }));
+    sys_module->giveAttr("pyston_version_info",
+                         BoxedTuple::create({ boxInt(PYSTON_VERSION_MAJOR), boxInt(PYSTON_VERSION_MINOR),
+                                              boxInt(PYSTON_VERSION_MICRO), boxString("alpha"), boxInt(0) }));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));

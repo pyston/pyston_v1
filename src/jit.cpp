@@ -468,7 +468,7 @@ static int main(int argc, char** argv) {
         }
 
         if (Py_InspectFlag || !(command || fn || module)) {
-            printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
+            printf("Pyston v" PYSTON_VERSION " (rev " STRINGIFY(GITREV) ")");
             printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
             Py_InspectFlag = 0;
