@@ -22,6 +22,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "codegen/unwinding.h"
 #include "core/threading.h"
@@ -1515,6 +1516,29 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     }
 
     Box** oargs = NULL;
+
+    if (func == (void*)tp_new_wrapper) {
+        assert(PyType_Check(self->passthrough));
+        BoxedClass* passthrough_cls = static_cast<BoxedClass*>(self->passthrough);
+        if (passthrough_cls->tp_new == BaseException->tp_new && argspec.num_args >= 1) {
+            // Optimization: BaseException->tp_new doesn't look at its arguments.
+            // Don't bother allocating any
+            assert(paramspec == ParamReceiveSpec(0, 0, true, true));
+
+            assert(PyType_Check(arg1));
+            Box* rtn = BaseException->tp_new(static_cast<BoxedClass*>(arg1), NULL, NULL);
+            if (rewrite_args) {
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)BaseException->tp_new, rewrite_args->arg1,
+                                                   rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
+                                                   rewrite_args->rewriter->loadConst(0, Location::forArg(2)));
+                rewrite_args->out_success = true;
+            }
+            return rtn;
+        }
+        // TODO rewrite these cases specially; tp_new_wrapper just slices the args array,
+        // so we could just rearrangeArguments to the form that it wants and then call tp_new directly.
+    }
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,

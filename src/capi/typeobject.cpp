@@ -25,7 +25,7 @@ namespace pyston {
 
 typedef int (*update_callback)(PyTypeObject*, void*);
 
-static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
+PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
@@ -2001,7 +2001,7 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
     return 0;
 }
 
-static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
+/* Pyston change: static */ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
     RELEASE_ASSERT(PyType_Check(self), "");
 
     // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
