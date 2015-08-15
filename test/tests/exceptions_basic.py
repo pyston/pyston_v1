@@ -104,7 +104,7 @@ f14()
 
 def test_set_state():
     exc = BaseException()
-    print exc.__dict__
+    print sorted(exc.__dict__.items())
     attrs = {"x": 1, "y": 2}
     exc.__setstate__(attrs)
     print exc.__dict__ == attrs

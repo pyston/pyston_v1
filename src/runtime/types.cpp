@@ -2480,6 +2480,10 @@ Box* Box::getAttrWrapper() {
     return attrs->attr_list->attrs[offset];
 }
 
+extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {
+    return obj->getAttrWrapper();
+}
+
 Box* unwrapAttrWrapper(Box* b) {
     assert(b->cls == attrwrapper_cls);
     return static_cast<AttrWrapper*>(b)->getUnderlying();
@@ -2998,6 +3002,26 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
         HCAttrs* attrs = obj->getHCAttrsPtr();
         attrs = new ((void*)attrs) HCAttrs();
     }
+}
+
+extern "C" void PyObject_InitHcAttrs(HCAttrs* attrs) noexcept {
+    new ((void*)attrs) HCAttrs();
+}
+
+extern "C" PyObject* PyObject_GetHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
+    return obj->getattr(internStringMortal(attr));
+}
+extern "C" int PyObject_SetHcAttrString(PyObject* obj, const char* attr, PyObject* val) PYSTON_NOEXCEPT {
+    obj->setattr(internStringMortal(attr), val, NULL);
+    return 0;
+}
+extern "C" int PyObject_DelHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
+    BoxedString* attr_str = internStringMortal(attr);
+    bool has = obj->hasattr(attr_str);
+    if (!has)
+        return -1;
+    obj->delattr(attr_str, NULL);
+    return 0;
 }
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {

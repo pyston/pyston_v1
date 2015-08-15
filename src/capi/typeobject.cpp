@@ -3262,6 +3262,18 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
     return r;
 }
 
+extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
+    assert(cls->attrs_offset == 0);
+    assert(cls->tp_dictoffset == 0);
+    cls->attrs_offset = offset;
+}
+
+extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
+    static BoxedString* dict_str = internStringImmortal("__dict__");
+    assert(!cls->hasattr(dict_str));
+    cls->giveAttr(dict_str, dict_descr);
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
@@ -3389,10 +3401,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         // e.g. CTypes does this.
         bool is_metaclass = PyType_IsSubtype(cls, type_cls);
         assert(!is_metaclass || cls->instancesHaveHCAttrs() || cls->instancesHaveDictAttrs());
-    } else {
-        // this should get automatically initialized to 0 on this path:
-        assert(cls->attrs_offset == 0);
     }
+
+    assert(!(cls->instancesHaveHCAttrs() && cls->instancesHaveDictAttrs()));
 
     if (Py_TPFLAGS_BASE_EXC_SUBCLASS & cls->tp_flags) {
         exception_types.push_back(cls);
