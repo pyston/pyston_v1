@@ -173,6 +173,7 @@ ExternalProject_Add(libunwind
                     DEPENDS libunwind_patched
                     UPDATE_COMMAND autoreconf -i
                     CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/build_deps/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    BUILD_COMMAND make -j${TEST_THREADS}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
