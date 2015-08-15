@@ -3177,13 +3177,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> varargs;
+    PyObject* varargs = NULL;
+    size_t varargs_size = 0;
     if (argspec.has_starargs) {
         assert(!rewrite_args);
         Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
-        for (Box* e : given_varargs->pyElements()) {
-            varargs.push_back(e);
-        }
+        varargs = PySequence_Fast(given_varargs, "argument after * must be a sequence");
+        if (!varargs)
+            return throwCAPIException();
+        varargs_size = PySequence_Fast_GET_SIZE(varargs);
     }
 
     ////
@@ -3193,10 +3195,10 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
     }
 
-    int varargs_to_positional = std::min((int)varargs.size(), paramspec.num_args - positional_to_positional);
+    int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
         assert(!rewrite_args && "would need to be handled here");
-        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
+        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = PySequence_Fast_GET_ITEM(varargs, i);
     }
 
     llvm::SmallVector<bool, 8> params_filled(num_output_args);
@@ -3219,15 +3221,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                 unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
         }
     }
-    for (int i = varargs_to_positional; i < varargs.size(); i++) {
+    for (int i = varargs_to_positional; i < varargs_size; i++) {
         assert(!rewrite_args);
-        unused_positional.push_back(varargs[i]);
+        unused_positional.push_back(PySequence_Fast_GET_ITEM(varargs, i));
     }
 
     if (paramspec.takes_varargs) {
         int varargs_idx = paramspec.num_args;
         if (rewrite_args) {
-            assert(!varargs.size());
+            assert(!varargs_size);
             assert(!argspec.has_starargs);
 
             RewriterVar* varargs_val;
@@ -3267,7 +3269,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
-                       (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
+                       (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
     ////
@@ -3367,7 +3369,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         if (params_filled[i])
             continue;
         raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name, paramspec.num_args,
-                       argspec.num_args + argspec.num_keywords + varargs.size());
+                       argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
     for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
