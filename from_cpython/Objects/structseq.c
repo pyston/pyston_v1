@@ -519,12 +519,12 @@ PyStructSequence_InitType(PyTypeObject *type, PyStructSequence_Desc *desc)
     for (i = k = 0; i < n_members; ++i) {
         if (desc->fields[i].name == PyStructSequence_UnnamedField)
             continue;
-        members[k].name = desc->fields[i].name;
+        members[k].name = (char*)desc->fields[i].name;
         members[k].type = T_OBJECT;
         members[k].offset = offsetof(PyStructSequence, ob_item)
           + i * sizeof(PyObject*);
         members[k].flags = READONLY;
-        members[k].doc = desc->fields[i].doc;
+        members[k].doc = (char*)desc->fields[i].doc;
         k++;
     }
     members[k].name = NULL;
