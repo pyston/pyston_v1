@@ -777,6 +777,15 @@ ExcInfo* getFrameExcInfo() {
     return cur_exc;
 }
 
+void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
+    if (latest->type)
+        return;
+
+    ExcInfo* updated = getFrameExcInfo();
+    assert(updated == latest);
+    return;
+}
+
 CLFunction* getTopPythonFunction() {
     auto rtn = getTopPythonFrame();
     if (!rtn)

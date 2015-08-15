@@ -2327,13 +2327,14 @@ private:
             assert(!node->arg1);
             assert(!node->arg2);
 
+            llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
-                emitter.createCall(unw_info, g.funcs.raise0_capi, std::vector<llvm::Value*>(), CAPI);
+                emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI);
                 emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
                                                        getNullPtr(g.llvm_value_type_ptr));
                 emitter.getBuilder()->CreateUnreachable();
             } else {
-                emitter.createCall(unw_info, g.funcs.raise0, std::vector<llvm::Value*>());
+                emitter.createCall(unw_info, g.funcs.raise0, exc_info);
                 emitter.getBuilder()->CreateUnreachable();
             }
 

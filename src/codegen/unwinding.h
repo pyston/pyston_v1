@@ -106,6 +106,10 @@ PythonFrameIterator getPythonFrame(int depth);
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).
 ExcInfo* getFrameExcInfo();
+// A similar function, but that takes a pointer to the most-recent ExcInfo.
+// This is faster in the case that the frame-level excinfo is already up-to-date,
+// but just as slow if it's not.
+void updateFrameExcInfoIfNeeded(ExcInfo* latest);
 
 struct FrameStackState {
     // This includes all # variables (but not the ! ones).

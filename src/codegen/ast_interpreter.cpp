@@ -1128,7 +1128,7 @@ Value ASTInterpreter::visit_raise(AST_Raise* node) {
             finishJITing();
         }
 
-        raise0();
+        ASTInterpreterJitInterface::raise0Helper(this);
     }
 
     Value arg0 = node->arg0 ? visit_expr(node->arg0) : getNone();
@@ -1676,6 +1676,11 @@ Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
     return None;
+}
+
+void ASTInterpreterJitInterface::raise0Helper(void* _interpreter) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    raise0(&interpreter->getFrameInfo()->exc);
 }
 
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;

@@ -478,7 +478,7 @@ void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) 
 }
 
 void JitFragmentWriter::emitRaise0() {
-    call(false, (void*)raise0);
+    call(false, (void*)ASTInterpreterJitInterface::raise0Helper, getInterp());
 }
 
 void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2) {
