@@ -40,10 +40,6 @@ extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
     return boxFloat(d);
 }
 
-extern "C" PyObject* PyFloat_FromString(PyObject* v, char** pend) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
     assert(o);
 
@@ -780,47 +776,21 @@ std::string floatFmt(double x, int precision, char code) {
 }
 
 template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == CAPI) {
-    // FIXME CPython uses PyUnicode_EncodeDecimal:
-    try {
-        a = coerceUnicodeToStr(a);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            throwCAPIException();
-            return NULL;
-        }
-        throw e;
-    }
-
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
-    } else if (PyFloat_Check(a)) {
-        return new BoxedFloat(static_cast<BoxedFloat*>(a)->d);
     } else if (PyInt_Check(a)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
-    } else if (a->cls == str_cls) {
-        llvm::StringRef s = static_cast<BoxedString*>(a)->s();
-        if (s == "nan")
-            return new BoxedFloat(NAN);
-        if (s == "-nan")
-            return new BoxedFloat(-NAN);
-        if (s == "inf")
-            return new BoxedFloat(INFINITY);
-        if (s == "-inf")
-            return new BoxedFloat(-INFINITY);
+    } else if (a->cls == str_cls || a->cls == unicode_cls) {
+        BoxedFloat* res = (BoxedFloat*)PyFloat_FromString(a, NULL);
 
-        // TODO this should just use CPython's implementation:
-        char* endptr;
-        assert(s.data()[s.size()] == '\0');
-        const char* startptr = s.data();
-        double r = strtod(startptr, &endptr);
-        if (endptr != startptr + s.size()) {
-            if (S == CAPI) {
-                PyErr_Format(ValueError, "could not convert string to float: %s", s.data());
+        if (!res) {
+            if (S == CAPI)
                 return NULL;
-            } else
-                raiseExcHelper(ValueError, "could not convert string to float: %s", s.data());
+            else
+                throwCAPIException();
         }
-        return new BoxedFloat(r);
+
+        return res;
     } else {
         static BoxedString* float_str = internStringImmortal("__float__");
         Box* r = callattrInternal<S>(a, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
@@ -868,7 +838,6 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
         }
     }
 
-
     if (cls == float_cls)
         return _floatNew<S>(a);
 
@@ -881,17 +850,36 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
     return new (cls) BoxedFloat(f->d);
 }
 
+PyObject* float_str_or_repr(double v, int precision, char format_code) {
+    PyObject* result;
+    char* buf = PyOS_double_to_string(v, format_code, precision, Py_DTSF_ADD_DOT_0, NULL);
+    if (!buf)
+        return PyErr_NoMemory();
+    result = PyString_FromString(buf);
+    PyMem_Free(buf);
+    return result;
+}
+
+extern "C" Box* floatFloat(BoxedFloat* self) {
+    if (!PyFloat_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'float' object but received a '%s'",
+                       getTypeName(self));
+
+    if (self->cls == float_cls)
+        return self;
+    return boxFloat(self->d);
+}
+
 Box* floatStr(BoxedFloat* self) {
     if (!PyFloat_Check(self))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
 
-    return boxString(floatFmt(self->d, 12, 'g'));
+    return float_str_or_repr(self->d, PyFloat_STR_PRECISION, 'g');
 }
 
 Box* floatRepr(BoxedFloat* self) {
-    assert(self->cls == float_cls);
-    return boxString(floatFmt(self->d, 16, 'g'));
+    return float_str_or_repr(self->d, 0, 'r');
 }
 
 Box* floatTrunc(BoxedFloat* self) {
@@ -967,7 +955,10 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     float_cls->giveAttr(name, new BoxedFunction(cl, { None }));
 }
 
-static Box* floatFloat(Box* b, void*) {
+static Box* floatConjugate(Box* b, void*) {
+    if (!PyFloat_Check(b))
+        raiseExcHelper(TypeError, "descriptor 'conjugate' requires a 'float' object but received a '%s'",
+                       getTypeName(b));
     if (b->cls == float_cls) {
         return b;
     } else {
@@ -1677,15 +1668,16 @@ void setupFloat() {
     float_cls->giveAttr("__nonzero__", new BoxedFunction(nonzero));
 
     // float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1)));
+    float_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)floatFloat, BOXED_FLOAT, 1)));
     float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, STR, 1)));
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, UNKNOWN, 1)));
     float_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)floatHash, BOXED_INT, 1)));
 
-    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
+    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatConjugate, NULL, NULL));
     float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
-    float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatFloat, BOXED_FLOAT, 1)));
+    float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatConjugate, BOXED_FLOAT, 1)));
 
     float_cls->giveAttr("__getformat__",
                         new BoxedClassmethod(new BoxedBuiltinFunctionOrMethod(

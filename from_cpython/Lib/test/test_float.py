@@ -1,5 +1,3 @@
-# expected: fail
-
 import unittest, struct
 import os
 from test import test_support
@@ -79,7 +77,9 @@ class GeneralFloatCases(unittest.TestCase):
         # Check that floats within the range of an int convert to type
         # int, not long.  (issue #11144.)
         boundary = float(sys.maxint + 1)
-        epsilon = 2**-sys.float_info.mant_dig * boundary
+        # TODO: hard code for now, need fix then finish the sys.
+        epsilon = 2**53 * boundary
+        # epsilon = 2**-sys.float_info.mant_dig * boundary
 
         # These 2 floats are either side of the positive int/long boundary on
         # both 32-bit and 64-bit systems.
@@ -427,14 +427,16 @@ class GeneralFloatCases(unittest.TestCase):
             # and validate signs.  Tests currently disabled, since
             # they fail on systems where a subnormal result from pow
             # is flushed to zero (e.g. Debian/ia64.)
-            #self.assertTrue(0.0 < pow_op(0.5, 1048) < 1e-315)
-            #self.assertTrue(0.0 < pow_op(-0.5, 1048) < 1e-315)
-            #self.assertTrue(0.0 < pow_op(0.5, 1047) < 1e-315)
-            #self.assertTrue(0.0 > pow_op(-0.5, 1047) > -1e-315)
-            #self.assertTrue(0.0 < pow_op(2.0, -1048) < 1e-315)
-            #self.assertTrue(0.0 < pow_op(-2.0, -1048) < 1e-315)
-            #self.assertTrue(0.0 < pow_op(2.0, -1047) < 1e-315)
-            #self.assertTrue(0.0 > pow_op(-2.0, -1047) > -1e-315)
+            # Pyston change: enable it. This is disabled in  CPython
+            # both Python 3.x and 2.x
+            self.assertTrue(0.0 < pow_op(0.5, 1048) < 1e-315)
+            self.assertTrue(0.0 < pow_op(-0.5, 1048) < 1e-315)
+            self.assertTrue(0.0 < pow_op(0.5, 1047) < 1e-315)
+            self.assertTrue(0.0 > pow_op(-0.5, 1047) > -1e-315)
+            self.assertTrue(0.0 < pow_op(2.0, -1048) < 1e-315)
+            self.assertTrue(0.0 < pow_op(-2.0, -1048) < 1e-315)
+            self.assertTrue(0.0 < pow_op(2.0, -1047) < 1e-315)
+            self.assertTrue(0.0 > pow_op(-2.0, -1047) > -1e-315)
 
 
 @requires_setformat

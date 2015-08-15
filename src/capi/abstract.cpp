@@ -1730,8 +1730,15 @@ extern "C" PyObject* PyNumber_Power(PyObject* v, PyObject* w, PyObject* z) noexc
 }
 
 extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PyNumberMethods* m;
+
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_negative)
+        return (*m->nb_negative)(o);
+
+    return type_error("bad operand type for unary -: '%.200s'", o);
 }
 
 extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
