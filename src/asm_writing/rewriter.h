@@ -227,7 +227,7 @@ public:
 private:
     Rewriter* rewriter;
 
-    std::set<Location> locations;
+    llvm::SmallVector<Location, 4> locations;
     bool isInLocation(Location l);
 
     // uses is a vector of the indices into the Rewriter::actions vector
@@ -320,7 +320,7 @@ protected:
         // Loads the constant into any register or if already in a register just return it
         assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
 
-        std::vector<std::pair<uint64_t, RewriterVar*>> consts;
+        llvm::SmallVector<std::pair<uint64_t, RewriterVar*>, 16> consts;
     };
 
 
@@ -463,7 +463,7 @@ protected:
                     }
                 }
                 assert(found);
-                assert(p.second->locations.count(p.first) == 1);
+                assert(p.second->isInLocation(p.first));
             }
         }
         if (!done_guarding) {

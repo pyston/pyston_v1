@@ -691,7 +691,7 @@ assembler::XMMRegister RewriterVar::getInXMMReg(Location dest) {
 }
 
 bool RewriterVar::isInLocation(Location l) {
-    return locations.count(l) != 0;
+    return std::find(locations.begin(), locations.end(), l) != locations.end();
 }
 
 RewriterVar* Rewriter::getArg(int argnum) {
@@ -880,7 +880,7 @@ void Rewriter::_setupCall(bool has_side_effects, const RewriterVar::SmallVector&
                 addLocationToVar(var, l);
             } else {
                 assembler::Register r2 = var->getInReg(l);
-                assert(var->locations.count(r2));
+                assert(var->isInLocation(r2));
                 assert(r2 == r);
             }
         }
@@ -1244,7 +1244,7 @@ void Rewriter::commit() {
             }
 
             // silly, but need to make a copy due to the mutations:
-            for (auto l : std::vector<Location>(var->locations.begin(), var->locations.end())) {
+            for (auto l : llvm::SmallVector<Location, 8>(var->locations.begin(), var->locations.end())) {
                 if (l == expected)
                     continue;
                 removeLocationFromVar(var, l);
@@ -1691,7 +1691,7 @@ void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
                || l.type == Location::Stack,
            "%d", l.type);
 
-    var->locations.insert(l);
+    var->locations.push_back(l);
     vars_by_location[l] = var;
 
 #ifndef NDEBUG
@@ -1714,7 +1714,12 @@ void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
     assert(vars_by_location[l] == var);
 
     vars_by_location.erase(l);
-    var->locations.erase(l);
+    for (auto it = var->locations.begin(), it_end = var->locations.end(); it != it_end; ++it) {
+        if (*it == l) {
+            it = var->locations.erase(it);
+            break;
+        }
+    }
 }
 
 RewriterVar* Rewriter::createNewVar() {
@@ -1751,7 +1756,8 @@ assembler::Register RewriterVar::initializeInReg(Location l) {
     var = this;
 
     // Add the location to this
-    this->locations.insert(l);
+    assert(!isInLocation(l));
+    this->locations.push_back(l);
 
     return reg;
 }
@@ -1768,7 +1774,8 @@ assembler::XMMRegister RewriterVar::initializeInXMMReg(Location l) {
     var = this;
 
     // Add the location to this
-    this->locations.insert(l);
+    assert(!isInLocation(l));
+    this->locations.push_back(l);
 
     return reg;
 }
@@ -1825,7 +1832,7 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
         RewriterVar*& var = vars_by_location[l];
         if (!var) {
             var = createNewVar();
-            var->locations.insert(l);
+            var->locations.push_back(l);
         }
 
         this->live_outs.push_back(var);
