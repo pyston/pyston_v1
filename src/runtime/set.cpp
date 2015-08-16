@@ -29,15 +29,9 @@ void BoxedSet::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedSet* s = (BoxedSet*)b;
-
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&s->s;
-    void** end = start + (sizeof(s->s) / 8);
-    v->visitPotentialRange(start, end);
+    for (auto&& p : s->s) {
+        v->visit(p.value);
+    }
 }
 
 namespace set {
@@ -54,7 +48,7 @@ public:
     bool hasNext() { return it != s->s.end(); }
 
     Box* next() {
-        Box* rtn = *it;
+        Box* rtn = it->value;
         ++it;
         return rtn;
     }
@@ -136,13 +130,13 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         chars.push_back('[');
 
         bool first = true;
-        for (Box* elt : self->s) {
+        for (auto&& elt : self->s) {
 
             if (!first) {
                 chars.push_back(',');
                 chars.push_back(' ');
             }
-            BoxedString* str = static_cast<BoxedString*>(repr(elt));
+            BoxedString* str = static_cast<BoxedString*>(repr(elt.value));
             chars.insert(chars.end(), str->s().begin(), str->s().end());
 
             first = false;
@@ -173,10 +167,10 @@ Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
-    for (Box* elt : lhs->s) {
+    for (auto&& elt : lhs->s) {
         rtn->s.insert(elt);
     }
-    for (Box* elt : rhs->s) {
+    for (auto&& elt : rhs->s) {
         rtn->s.insert(elt);
     }
     return rtn;
@@ -188,7 +182,7 @@ Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
-    for (Box* elt : lhs->s) {
+    for (auto&& elt : lhs->s) {
         if (rhs->s.count(elt))
             rtn->s.insert(elt);
     }
@@ -201,7 +195,7 @@ Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
-    for (Box* elt : lhs->s) {
+    for (auto&& elt : lhs->s) {
         // TODO if len(rhs) << len(lhs), it might be more efficient
         // to delete the elements of rhs from lhs?
         if (rhs->s.count(elt) == 0)
@@ -216,12 +210,12 @@ Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
 
     BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
-    for (Box* elt : lhs->s) {
+    for (auto&& elt : lhs->s) {
         if (rhs->s.count(elt) == 0)
             rtn->s.insert(elt);
     }
 
-    for (Box* elt : rhs->s) {
+    for (auto&& elt : rhs->s) {
         if (lhs->s.count(elt) == 0)
             rtn->s.insert(elt);
     }
@@ -447,7 +441,7 @@ Box* setPop(BoxedSet* self) {
         raiseExcHelper(KeyError, "pop from an empty set");
 
     auto it = self->s.begin();
-    Box* rtn = *it;
+    Box* rtn = it->value;
     self->s.erase(it);
     return rtn;
 }
@@ -489,10 +483,8 @@ Box* setHash(BoxedSet* self) {
     RELEASE_ASSERT(isSubclass(self->cls, frozenset_cls), "");
 
     int64_t rtn = 1927868237L;
-    for (Box* e : self->s) {
-        BoxedInt* h = hash(e);
-        assert(PyInt_Check(h));
-        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
+    for (auto&& e : self->s) {
+        rtn ^= e.hash + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
     }
 
     return boxInt(rtn);

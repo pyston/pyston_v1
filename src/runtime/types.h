@@ -659,19 +659,16 @@ struct PyLt {
     bool operator()(Box*, Box*) const;
 };
 
-class BoxedDict : public Box {
-public:
-    // llvm::DenseMap doesn't store the original hash values, choosing to instead
-    // check for equality more often.  This is probably a good tradeoff when the keys
-    // are pointers and comparison is cheap, but we want to make sure that keys with
-    // different hash values don't get compared.
-    struct BoxAndHash {
-        Box* value;
-        size_t hash;
+// llvm::DenseMap doesn't store the original hash values, choosing to instead
+// check for equality more often.  This is probably a good tradeoff when the keys
+// are pointers and comparison is cheap, but we want to make sure that keys with
+// different hash values don't get compared.
+struct BoxAndHash {
+    Box* value;
+    size_t hash;
 
-        BoxAndHash(Box* value) : value(value), hash(PyHasher()(value)) {}
-        BoxAndHash(Box* value, size_t hash) : value(value), hash(hash) {}
-    };
+    BoxAndHash(Box* value) : value(value), hash(PyHasher()(value)) {}
+    BoxAndHash(Box* value, size_t hash) : value(value), hash(hash) {}
 
     struct Comparisons {
         static bool isEqual(BoxAndHash lhs, BoxAndHash rhs) {
@@ -687,8 +684,11 @@ public:
         static BoxAndHash getTombstoneKey() { return BoxAndHash((Box*)-2, 0); }
         static unsigned getHashValue(BoxAndHash val) { return val.hash; }
     };
+};
 
-    typedef llvm::DenseMap<BoxAndHash, Box*, Comparisons> DictMap;
+class BoxedDict : public Box {
+public:
+    typedef llvm::DenseMap<BoxAndHash, Box*, BoxAndHash::Comparisons> DictMap;
 
     DictMap d;
 
