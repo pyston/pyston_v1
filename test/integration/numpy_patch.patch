@@ -1,0 +1,319 @@
+diff --git a/numpy/__init__.py b/numpy/__init__.py
+index d4ef54d..7a49dbd 100644
+--- a/numpy/__init__.py
++++ b/numpy/__init__.py
+@@ -196,7 +196,7 @@ else:
+     from . import linalg
+     from . import fft
+     from . import polynomial
+-    from . import random
++    # from . import random
+     from . import ctypeslib
+     from . import ma
+     from . import matrixlib as _mat
+@@ -218,7 +218,8 @@ else:
+     __all__.extend(core.__all__)
+     __all__.extend(_mat.__all__)
+     __all__.extend(lib.__all__)
+-    __all__.extend(['linalg', 'fft', 'random', 'ctypeslib', 'ma'])
++    __all__.extend(['linalg', 'fft', 'ctypeslib', 'ma'])
++    # __all__.extend(['linalg', 'fft', 'random', 'ctypeslib', 'ma'])
+ 
+     # Filter annoying Cython warnings that serve no good purpose.
+     import warnings
+diff --git a/numpy/core/arrayprint.py b/numpy/core/arrayprint.py
+index a28b5a8..28b948b 100644
+--- a/numpy/core/arrayprint.py
++++ b/numpy/core/arrayprint.py
+@@ -609,7 +609,8 @@ class FloatFormat(object):
+                 else:
+                     return self.special_fmt % ('-' + _inf_str,)
+ 
+-        s = self.format % x
++        # s = self.format % x
++        s = "%#+3.0f" % x
+         if self.large_exponent:
+             # 3-digit exponent
+             expsign = s[-3]
+diff --git a/numpy/core/include/numpy/ndarrayobject.h b/numpy/core/include/numpy/ndarrayobject.h
+index fbaaeac..cb4adbb 100644
+--- a/numpy/core/include/numpy/ndarrayobject.h
++++ b/numpy/core/include/numpy/ndarrayobject.h
+@@ -117,7 +117,8 @@ extern "C" CONFUSE_EMACS
+ #define PyArray_FILLWBYTE(obj, val) memset(PyArray_DATA(obj), val, \
+                                            PyArray_NBYTES(obj))
+ 
+-#define PyArray_REFCOUNT(obj) (((PyObject *)(obj))->ob_refcnt)
++//#define PyArray_REFCOUNT(obj) (((PyObject *)(obj))->ob_refcnt)
++#define PyArray_REFCOUNT(obj) 0
+ #define NPY_REFCOUNT PyArray_REFCOUNT
+ #define NPY_MAX_ELSIZE (2 * NPY_SIZEOF_LONGDOUBLE)
+ 
+diff --git a/numpy/core/include/numpy/ndarraytypes.h b/numpy/core/include/numpy/ndarraytypes.h
+index 8403ee2..0bc2d4d 100644
+--- a/numpy/core/include/numpy/ndarraytypes.h
++++ b/numpy/core/include/numpy/ndarraytypes.h
+@@ -931,11 +931,18 @@ typedef int (PyArray_FinalizeFunc)(PyArrayObject *, PyObject *);
+ #if NPY_ALLOW_THREADS
+ #define NPY_BEGIN_ALLOW_THREADS Py_BEGIN_ALLOW_THREADS
+ #define NPY_END_ALLOW_THREADS Py_END_ALLOW_THREADS
++#define NPY_BEGIN_THREADS do {_save = NULL;} while (0);
++/*
+ #define NPY_BEGIN_THREADS do {_save = PyEval_SaveThread();} while (0);
++*/
+ #define NPY_END_THREADS   do { if (_save) \
+                 { PyEval_RestoreThread(_save); _save = NULL;} } while (0);
+ #define NPY_BEGIN_THREADS_THRESHOLDED(loop_size) do { if (loop_size > 500) \
++                { _save = NULL;} } while (0);
++/*
++#define NPY_BEGIN_THREADS_THRESHOLDED(loop_size) do { if (loop_size > 500) \
+                 { _save = PyEval_SaveThread();} } while (0);
++*/
+ 
+ #define NPY_BEGIN_THREADS_DESCR(dtype) \
+         do {if (!(PyDataType_FLAGCHK(dtype, NPY_NEEDS_PYAPI))) \
+diff --git a/numpy/core/src/multiarray/arraytypes.c.src b/numpy/core/src/multiarray/arraytypes.c.src
+index 5a1e2f4..6f1cd62 100644
+--- a/numpy/core/src/multiarray/arraytypes.c.src
++++ b/numpy/core/src/multiarray/arraytypes.c.src
+@@ -4469,6 +4469,11 @@ set_typeinfo(PyObject *dict)
+     PyArray_Descr *dtype;
+     PyObject *cobj, *key;
+ 
++    /* Pyston change: deal with static nonheap objects */
++    for (i = 0; i < 24; i++) {
++        PyGC_AddNonHeapRoot((PyObject*)_builtin_descrs[i], sizeof(PyArray_Descr));
++    }
++
+     /*
+      * Add cast functions for the new types
+      */
+diff --git a/numpy/core/src/multiarray/compiled_base.c b/numpy/core/src/multiarray/compiled_base.c
+index 8ffeeda..5d43aab 100644
+--- a/numpy/core/src/multiarray/compiled_base.c
++++ b/numpy/core/src/multiarray/compiled_base.c
+@@ -1336,13 +1336,13 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
+         _ADDDOC(Type, new->tp_doc, new->tp_name);
+     }
+     else if (_TESTDOC2(MemberDescr)) {
+-        _ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name);
++        //_ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name);
+     }
+     else if (_TESTDOC2(GetSetDescr)) {
+-        _ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name);
++        //_ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name);
+     }
+     else if (_TESTDOC2(MethodDescr)) {
+-        _ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name);
++        //_ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name);
+     }
+     else {
+         PyObject *doc_attr;
+diff --git a/numpy/core/src/multiarray/multiarraymodule.c b/numpy/core/src/multiarray/multiarraymodule.c
+index 6155551..d488816 100644
+--- a/numpy/core/src/multiarray/multiarraymodule.c
++++ b/numpy/core/src/multiarray/multiarraymodule.c
+@@ -4206,6 +4206,7 @@ setup_scalartypes(PyObject *NPY_UNUSED(dict))
+     initialize_casting_tables();
+     initialize_numeric_types();
+ 
++    /* Pyston assumes PyType_Ready doesn't get called on Pyston classes
+     if (PyType_Ready(&PyBool_Type) < 0) {
+         return -1;
+     }
+@@ -4226,6 +4227,7 @@ setup_scalartypes(PyObject *NPY_UNUSED(dict))
+     if (PyType_Ready(&PyUnicode_Type) < 0) {
+         return -1;
+     }
++    */
+ 
+ #define SINGLE_INHERIT(child, parent)                                   \
+     Py##child##ArrType_Type.tp_base = &Py##parent##ArrType_Type;        \
+diff --git a/numpy/core/src/multiarray/scalarapi.c b/numpy/core/src/multiarray/scalarapi.c
+index 71a82d7..a88edea 100644
+--- a/numpy/core/src/multiarray/scalarapi.c
++++ b/numpy/core/src/multiarray/scalarapi.c
+@@ -712,10 +712,12 @@ PyArray_Scalar(void *data, PyArray_Descr *descr, PyObject *base)
+     if (PyTypeNum_ISFLEXIBLE(type_num)) {
+         if (type_num == NPY_STRING) {
+             destptr = PyString_AS_STRING(obj);
++/*
+             ((PyStringObject *)obj)->ob_shash = -1;
+ #if !defined(NPY_PY3K)
+             ((PyStringObject *)obj)->ob_sstate = SSTATE_NOT_INTERNED;
+ #endif
++*/
+             memcpy(destptr, data, itemsize);
+             return obj;
+         }
+diff --git a/numpy/core/src/multiarray/scalartypes.c.src b/numpy/core/src/multiarray/scalartypes.c.src
+index b5e0fde..8fa4dc2 100644
+--- a/numpy/core/src/multiarray/scalartypes.c.src
++++ b/numpy/core/src/multiarray/scalartypes.c.src
+@@ -1673,7 +1673,7 @@ voidtype_setfield(PyVoidScalarObject *self, PyObject *args, PyObject *kwds)
+      * However, as a special case, void-scalar assignment broadcasts
+      * differently from ndarrays when assigning to an object field: Assignment
+      * to an ndarray object field broadcasts, but assignment to a void-scalar
+-     * object-field should not, in order to allow nested ndarrays. 
++     * object-field should not, in order to allow nested ndarrays.
+      * These lines should then behave identically:
+      *
+      *     b = np.zeros(1, dtype=[('x', 'O')])
+@@ -3479,7 +3479,8 @@ NPY_NO_EXPORT PyTypeObject Py@NAME@ArrType_Type = {
+     0,                                          /* ob_size */
+ #endif
+     "numpy." NAME_@name@ "@ex@",                /* tp_name*/
+-    sizeof(Py@NAME@ScalarObject),               /* tp_basicsize*/
++    sizeof(PyObject),               /* tp_basicsize*/
++    // sizeof(Py@NAME@ScalarObject),               /* tp_basicsize*/
+     0,                                          /* tp_itemsize */
+     0,                                          /* tp_dealloc */
+     0,                                          /* tp_print */
+@@ -4060,6 +4061,10 @@ static void init_basetypes(void);
+ NPY_NO_EXPORT void
+ initialize_numeric_types(void)
+ {
++    /* Pyston change: deal with static nonheap objects */
++    PyGC_AddNonHeapRoot((PyObject*)&_PyArrayScalar_BoolValues[0], sizeof(PyBoolScalarObject));
++    PyGC_AddNonHeapRoot((PyObject*)&_PyArrayScalar_BoolValues[1], sizeof(PyBoolScalarObject));
++
+     init_basetypes();
+     PyGenericArrType_Type.tp_dealloc = (destructor)gentype_dealloc;
+     PyGenericArrType_Type.tp_as_number = &gentype_as_number;
+diff --git a/numpy/core/src/umath/ufunc_object.c b/numpy/core/src/umath/ufunc_object.c
+index 7797731..93edc66 100644
+--- a/numpy/core/src/umath/ufunc_object.c
++++ b/numpy/core/src/umath/ufunc_object.c
+@@ -4345,9 +4345,11 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
+     }
+ 
+ fail:
++    /* Causes compiler CRASH wtf
+     for (i = ufunc->nin; i < ufunc->nargs; i++) {
+         Py_XDECREF(mps[i]);
+     }
++    */
+     return NULL;
+ }
+ 
+diff --git a/numpy/lib/_iotools.py b/numpy/lib/_iotools.py
+index 44bd48d..3822b25 100644
+--- a/numpy/lib/_iotools.py
++++ b/numpy/lib/_iotools.py
+@@ -526,7 +526,7 @@ class StringConverter(object):
+         _mapper.append((nx.int64, int, -1))
+ 
+     _mapper.extend([(nx.floating, float, nx.nan),
+-                    (complex, _bytes_to_complex, nx.nan + 0j),
++                    (complex, _bytes_to_complex, complex(nx.nan) + 0j),
+                     (nx.string_, bytes, asbytes('???'))])
+ 
+     (_defaulttype, _defaultfunc, _defaultfill) = zip(*_mapper)
+diff --git a/numpy/lib/function_base.py b/numpy/lib/function_base.py
+index 1904080..3d78b5c 100644
+--- a/numpy/lib/function_base.py
++++ b/numpy/lib/function_base.py
+@@ -965,7 +965,7 @@ def gradient(f, *varargs, **kwargs):
+     Returns
+     -------
+     gradient : list of ndarray
+-        Each element of `list` has the same shape as `f` giving the derivative 
++        Each element of `list` has the same shape as `f` giving the derivative
+         of `f` with respect to each dimension.
+ 
+     Examples
+@@ -976,10 +976,10 @@ def gradient(f, *varargs, **kwargs):
+     >>> np.gradient(x, 2)
+     array([ 0.5 ,  0.75,  1.25,  1.75,  2.25,  2.5 ])
+ 
+-    For two dimensional arrays, the return will be two arrays ordered by 
+-    axis. In this example the first array stands for the gradient in 
++    For two dimensional arrays, the return will be two arrays ordered by
++    axis. In this example the first array stands for the gradient in
+     rows and the second one in columns direction:
+-    
++
+     >>> np.gradient(np.array([[1, 2, 6], [3, 4, 5]], dtype=np.float))
+     [array([[ 2.,  2., -1.],
+             [ 2.,  2., -1.]]), array([[ 1. ,  2.5,  4. ],
+@@ -3875,7 +3875,7 @@ def delete(arr, obj, axis=None):
+                 "`numpy.delete`.", FutureWarning)
+             obj = obj[positive_indices]
+ 
+-        keep[obj, ] = False
++        keep[(obj, )] = False
+         slobj[axis] = keep
+         new = arr[slobj]
+ 
+diff --git a/numpy/ma/core.py b/numpy/ma/core.py
+index d4771fb..54f3983 100644
+--- a/numpy/ma/core.py
++++ b/numpy/ma/core.py
+@@ -158,10 +158,10 @@ for v in ["Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", "ps",
+ max_filler = ntypes._minvals
+ max_filler.update([(k, -np.inf) for k in [np.float32, np.float64]])
+ min_filler = ntypes._maxvals
+-min_filler.update([(k, +np.inf) for k in [np.float32, np.float64]])
++# min_filler.update([(k, +np.inf) for k in [np.float32, np.float64]])
+ if 'float128' in ntypes.typeDict:
+     max_filler.update([(np.float128, -np.inf)])
+-    min_filler.update([(np.float128, +np.inf)])
++    # min_filler.update([(np.float128, +np.inf)])
+ 
+ 
+ def default_fill_value(obj):
+@@ -6816,7 +6816,7 @@ def resize(x, new_shape):
+     return result
+ 
+ 
+-def rank(obj): 
++def rank(obj):
+     """
+     maskedarray version of the numpy function.
+ 
+@@ -6833,7 +6833,7 @@ def rank(obj):
+ rank.__doc__ = np.rank.__doc__
+ 
+ 
+-def ndim(obj): 
++def ndim(obj):
+     """
+     maskedarray version of the numpy function.
+ 
+diff --git a/numpy/random/setup.py b/numpy/random/setup.py
+index 9d90590..b3ee24f 100644
+--- a/numpy/random/setup.py
++++ b/numpy/random/setup.py
+@@ -39,18 +39,6 @@ def configuration(parent_package='',top_path=None):
+ 
+     libs = []
+     # Configure mtrand
+-    config.add_extension('mtrand',
+-                         sources=[join('mtrand', x) for x in
+-                                  ['mtrand.c', 'randomkit.c', 'initarray.c',
+-                                   'distributions.c']]+[generate_libraries],
+-                         libraries=libs,
+-                         depends=[join('mtrand', '*.h'),
+-                                  join('mtrand', '*.pyx'),
+-                                  join('mtrand', '*.pxi'),],
+-                         define_macros=defs,
+-                         )
+-
+-    config.add_data_files(('.', join('mtrand', 'randomkit.h')))
+     config.add_data_dir('tests')
+ 
+     return config
+diff --git a/setup.py b/setup.py
+index 90dcb24..943851a 100755
+--- a/setup.py
++++ b/setup.py
+@@ -245,7 +245,8 @@ def setup_package():
+         cwd = os.path.abspath(os.path.dirname(__file__))
+         if not os.path.exists(os.path.join(cwd, 'PKG-INFO')):
+             # Generate Cython sources, unless building from source release
+-            generate_cython()
++            # generate_cython()
++            pass
+         metadata['configuration'] = configuration
+ 
+     try:

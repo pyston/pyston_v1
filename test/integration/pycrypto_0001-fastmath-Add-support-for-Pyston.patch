@@ -1,0 +1,59 @@
+From 7303cd6db08b41a513bbd45aad0676a47eb3820a Mon Sep 17 00:00:00 2001
+From: Marius Wachtler <undingen@gmail.com>
+Date: Tue, 28 Apr 2015 11:49:32 +0200
+Subject: [PATCH] fastmath: Add support for Pyston
+
+---
+ src/_fastmath.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/src/_fastmath.c b/src/_fastmath.c
+index e369f5a..c4cf2aa 100644
+--- a/src/_fastmath.c
++++ b/src/_fastmath.c
+@@ -29,7 +29,14 @@
+ #include "pycrypto_common.h"
+ #include <stdio.h>
+ #include <string.h>
++
++#ifdef Py_HAVE_LONG_MPZ_API
++#ifndef HAVE_LIBGMP
++#error Pyston only supports GMP.
++#endif
++#else
+ #include <longintrepr.h>				/* for conversions */
++#endif
+ #if HAVE_LIBGMP
+ # include <gmp.h>
+ #elif HAVE_LIBMPIR
+@@ -60,6 +67,19 @@
+ static unsigned int sieve_base[10000];
+ static int rabinMillerTest (mpz_t n, int rounds, PyObject *randfunc);
+ 
++#ifdef Py_HAVE_LONG_MPZ_API
++static void
++longObjToMPZ (mpz_t m, PyLongObject * p)
++{
++    _PyLong_AsMPZ ((PyObject*)p, m);
++}
++
++static PyObject *
++mpzToLongObj (mpz_t m)
++{
++    return _PyLong_FromMPZ (m);
++}
++#else
+ static void
+ longObjToMPZ (mpz_t m, PyLongObject * p)
+ {
+@@ -113,6 +133,7 @@ mpzToLongObj (mpz_t m)
+ 	mpz_clear (temp);
+ 	return (PyObject *) l;
+ }
++#endif
+ 
+ typedef struct
+ {
+-- 
+2.1.0
+
