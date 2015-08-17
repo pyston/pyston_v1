@@ -3463,7 +3463,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 
     try {
-        rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
+        rearrangeArguments(paramspec, &f->param_names, func->name ? func->name->c_str() : getFunctionName(f).data(),
                            paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
                            arg1, arg2, arg3, args, oargs, keyword_names);
     } catch (ExcInfo e) {
