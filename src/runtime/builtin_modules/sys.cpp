@@ -13,12 +13,15 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <langinfo.h>
 #include <sstream>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "Python.h"
+#include "structseq.h"
 
 #include "capi/types.h"
 #include "codegen/unwinding.h"
@@ -453,6 +456,131 @@ static PyMethodDef sys_methods[] = {
     { "displayhook", sys_displayhook, METH_O, displayhook_doc },
 };
 
+PyDoc_STRVAR(version_info__doc__, "sys.version_info\n\
+        \n\
+        Version information as a named tuple.");
+
+static struct _typeobject VersionInfoType;
+
+static PyStructSequence_Field version_info_fields[]
+    = { { "major", "Major release number" },
+        { "minor", "Minor release number" },
+        { "micro", "Patch release number" },
+        { "releaselevel", "'alpha', 'beta', 'candidate', or 'release'" },
+        { "serial", "Serial release number" },
+        { 0, 0 } };
+
+static PyStructSequence_Desc version_info_desc = { "sys.version_info",  /* name */
+                                                   version_info__doc__, /* doc */
+                                                   version_info_fields, /* fields */
+                                                   5 };
+
+static PyObject* make_version_info(void) noexcept {
+    PyObject* version_info;
+    const char* s;
+    int pos = 0;
+    version_info = PyStructSequence_New(&VersionInfoType);
+    if (version_info == NULL) {
+        return NULL;
+    }
+
+/*
+ * These release level checks are mutually exclusive and cover
+ * the field, so don't get too fancy with the pre-processor!
+ */
+#if PY_RELEASE_LEVEL == PY_RELEASE_LEVEL_ALPHA
+    s = "alpha";
+#elif PY_RELEASE_LEVEL == PY_RELEASE_LEVEL_BETA
+    s = "beta";
+#elif PY_RELEASE_LEVEL == PY_RELEASE_LEVEL_GAMMA
+    s = "candidate";
+#elif PY_RELEASE_LEVEL == PY_RELEASE_LEVEL_FINAL
+    s = "final";
+#endif
+
+#define SetIntItem(flag) PyStructSequence_SET_ITEM(version_info, pos++, PyInt_FromLong(flag))
+#define SetStrItem(flag) PyStructSequence_SET_ITEM(version_info, pos++, PyString_FromString(flag))
+
+    SetIntItem(PY_MAJOR_VERSION);
+    SetIntItem(PY_MINOR_VERSION);
+    SetIntItem(PY_MICRO_VERSION);
+    SetStrItem(s);
+    SetIntItem(PY_RELEASE_SERIAL);
+#undef SetIntItem
+#undef SetStrItem
+
+    if (PyErr_Occurred()) {
+        Py_CLEAR(version_info);
+        return NULL;
+    }
+    return version_info;
+}
+
+static struct _typeobject FloatInfoType;
+
+PyDoc_STRVAR(floatinfo__doc__, "sys.float_info\n\
+\n\
+A structseq holding information about the float type. It contains low level\n\
+information about the precision and internal representation. Please study\n\
+your system's :file:`float.h` for more information.");
+
+static PyStructSequence_Field floatinfo_fields[]
+    = { { "max", "DBL_MAX -- maximum representable finite float" },
+        { "max_exp", "DBL_MAX_EXP -- maximum int e such that radix**(e-1) "
+                     "is representable" },
+        { "max_10_exp", "DBL_MAX_10_EXP -- maximum int e such that 10**e "
+                        "is representable" },
+        { "min", "DBL_MIN -- Minimum positive normalizer float" },
+        { "min_exp", "DBL_MIN_EXP -- minimum int e such that radix**(e-1) "
+                     "is a normalized float" },
+        { "min_10_exp", "DBL_MIN_10_EXP -- minimum int e such that 10**e is "
+                        "a normalized" },
+        { "dig", "DBL_DIG -- digits" },
+        { "mant_dig", "DBL_MANT_DIG -- mantissa digits" },
+        { "epsilon", "DBL_EPSILON -- Difference between 1 and the next "
+                     "representable float" },
+        { "radix", "FLT_RADIX -- radix of exponent" },
+        { "rounds", "FLT_ROUNDS -- addition rounds" },
+        { NULL, NULL } };
+
+static PyStructSequence_Desc float_info_desc = { "sys.float_info", /* name */
+                                                 floatinfo__doc__, /* doc */
+                                                 floatinfo_fields, /* fields */
+                                                 11 };
+
+PyObject* PyFloat_GetInfo(void) {
+    PyObject* floatinfo;
+    int pos = 0;
+
+    floatinfo = PyStructSequence_New(&FloatInfoType);
+    if (floatinfo == NULL) {
+        return NULL;
+    }
+
+#define SetIntFlag(flag) PyStructSequence_SET_ITEM(floatinfo, pos++, PyInt_FromLong(flag))
+#define SetDblFlag(flag) PyStructSequence_SET_ITEM(floatinfo, pos++, PyFloat_FromDouble(flag))
+
+    SetDblFlag(DBL_MAX);
+    SetIntFlag(DBL_MAX_EXP);
+    SetIntFlag(DBL_MAX_10_EXP);
+    SetDblFlag(DBL_MIN);
+    SetIntFlag(DBL_MIN_EXP);
+    SetIntFlag(DBL_MIN_10_EXP);
+    SetIntFlag(DBL_DIG);
+    SetIntFlag(DBL_MANT_DIG);
+    SetDblFlag(DBL_EPSILON);
+    SetIntFlag(FLT_RADIX);
+    SetIntFlag(FLT_ROUNDS);
+#undef SetIntFlag
+#undef SetDblFlag
+
+    if (PyErr_Occurred()) {
+        Py_CLEAR(floatinfo);
+        return NULL;
+    }
+    return floatinfo;
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerPermanentRoot(sys_modules_dict);
@@ -522,11 +650,6 @@ void setupSys() {
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
-    // TODO: this should be a "sys.version_info" object, not just a tuple (ie can access fields by name)
-    sys_module->giveAttr("version_info",
-                         BoxedTuple::create({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
-                                              boxInt(PYTHON_VERSION_MICRO), boxString("beta"), boxInt(0) }));
-
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
@@ -547,7 +670,6 @@ void setupSys() {
 #ifdef Py_USING_UNICODE
     SET_SYS_FROM_STRING("maxunicode", PyInt_FromLong(PyUnicode_GetMax()));
 #endif
-
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
@@ -571,5 +693,23 @@ void setupSysEnd() {
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
     sys_flags_cls->finishInitialization();
+
+    /* version_info */
+    if (VersionInfoType.tp_name == 0)
+        PyStructSequence_InitType((PyTypeObject*)&VersionInfoType, &version_info_desc);
+    /* prevent user from creating new instances */
+    VersionInfoType.tp_init = NULL;
+    VersionInfoType.tp_new = NULL;
+
+    SET_SYS_FROM_STRING("version_info", make_version_info());
+
+    /* float_info */
+    if (FloatInfoType.tp_name == 0)
+        PyStructSequence_InitType((PyTypeObject*)&FloatInfoType, &float_info_desc);
+    /* prevent user from creating new instances */
+    FloatInfoType.tp_init = NULL;
+    FloatInfoType.tp_new = NULL;
+
+    SET_SYS_FROM_STRING("float_info", PyFloat_GetInfo());
 }
 }
