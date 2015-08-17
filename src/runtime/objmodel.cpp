@@ -1764,63 +1764,34 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 }
 
                 // Lookup __get__
-                RewriterVar* r_get = NULL;
-                Box* local_get;
+                descrgetfunc local_get = val->cls->tp_descr_get;
                 if (rewrite_args) {
-                    RewriterVar* r_val_cls = r_val->getAttr(offsetof(Box, cls), Location::any());
-                    GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_val_cls, Location::any());
-                    local_get = typeLookup(val->cls, get_str, &grewrite_args);
-                    if (!grewrite_args.out_success) {
-                        rewrite_args = NULL;
-                    } else if (local_get) {
-                        r_get = grewrite_args.out_rtn;
+                    RewriterVar* r_cls = r_val->getAttr(offsetof(Box, cls));
+                    r_cls->addAttrGuard(offsetof(BoxedClass, tp_descr_get), (intptr_t)local_get);
+                }
+
+                if (!local_get) {
+                    if (rewrite_args) {
+                        rewrite_args->out_rtn = r_val;
+                        rewrite_args->out_success = true;
                     }
-                } else {
-                    local_get = typeLookup(val->cls, get_str, NULL);
+                    return val;
                 }
 
                 // Call __get__(val, None, obj)
-                if (local_get) {
-                    Box* res;
+                Box* r = local_get(val, NULL, obj);
+                if (!r)
+                    throwCAPIException();
 
-                    if (for_call) {
-#if STAT_CALLATTR_DESCR_ABORTS
-                        if (rewrite_args) {
-                            std::string attr_name = "num_callattr_descr_abort";
-                            Stats::log(Stats::getStatCounter(attr_name));
-                            logByCurrentPythonLine(attr_name);
-                        }
-#endif
-
-                        rewrite_args = NULL;
-                        REWRITE_ABORTED("");
-                    }
-
-                    if (rewrite_args) {
-                        CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
-                        crewrite_args.arg1 = r_val;
-                        crewrite_args.arg2 = rewrite_args->rewriter->loadConst((intptr_t)None, Location::any());
-                        crewrite_args.arg3 = rewrite_args->obj;
-                        res = runtimeCallInternal<CXX>(local_get, &crewrite_args, ArgPassSpec(3), val, None, obj, NULL,
-                                                       NULL);
-                        if (!crewrite_args.out_success) {
-                            rewrite_args = NULL;
-                        } else {
-                            rewrite_args->out_success = true;
-                            rewrite_args->out_rtn = crewrite_args.out_rtn;
-                        }
-                    } else {
-                        res = runtimeCallInternal<CXX>(local_get, NULL, ArgPassSpec(3), val, None, obj, NULL, NULL);
-                    }
-                    return res;
-                }
-
-                // If there was no local __get__, just return val
                 if (rewrite_args) {
-                    rewrite_args->out_rtn = r_val;
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                        true, (void*)local_get, r_val, rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
+                        rewrite_args->obj);
+                    rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
                     rewrite_args->out_success = true;
                 }
-                return val;
+
+                return r;
             }
         }
     }
