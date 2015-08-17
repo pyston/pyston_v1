@@ -1484,34 +1484,13 @@ extern "C" Box* noneNonzero(Box* v) {
 }
 
 extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod* v) {
-    // TODO there has to be a better way
-    if (v == repr_obj)
-        return boxString("<built-in function repr>");
-    if (v == len_obj)
-        return boxString("<built-in function len>");
-    if (v == hash_obj)
-        return boxString("<built-in function hash>");
-    if (v == range_obj)
-        return boxString("<built-in function range>");
-    if (v == abs_obj)
-        return boxString("<built-in function abs>");
-    if (v == min_obj)
-        return boxString("<built-in function min>");
-    if (v == max_obj)
-        return boxString("<built-in function max>");
-    if (v == open_obj)
-        return boxString("<built-in function open>");
-    if (v == id_obj)
-        return boxString("<built-in function id>");
-    if (v == chr_obj)
-        return boxString("<built-in function chr>");
-    if (v == ord_obj)
-        return boxString("<built-in function ord>");
+    if (v->name != NULL)
+        return (BoxedString*)PyString_FromFormat("<built-in function %s>", PyString_AsString(v->name));
     RELEASE_ASSERT(false, "builtinFunctionOrMethodRepr not properly implemented");
 }
 
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
-    return boxString("function");
+    return (BoxedString*)PyString_FromFormat("<function %s at %p>", PyString_AsString(v->name), v);
 }
 
 static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
@@ -2551,14 +2530,21 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
     return type->tp_alloc(type, 0);
 }
 
-Box* objectRepr(Box* obj) {
-    char buf[80];
-    if (obj->cls == type_cls) {
-        snprintf(buf, 80, "<type '%s'>", getNameOfClass(static_cast<BoxedClass*>(obj)));
-    } else {
-        snprintf(buf, 80, "<%s object at %p>", getTypeName(obj), obj);
+static Box* typeName(Box* b, void*);
+Box* objectRepr(Box* self) {
+    BoxedClass* type = self->cls;
+    Box* mod = NULL;
+    try {
+        mod = typeModule(type, NULL);
+        if (!PyString_Check(mod))
+            mod = NULL;
+    } catch (ExcInfo) {
     }
-    return boxString(buf);
+
+    Box* name = typeName(type, NULL);
+    if (mod != NULL && strcmp(PyString_AS_STRING(mod), "__builtin__"))
+        return PyString_FromFormat("<%s.%s object at %p>", PyString_AS_STRING(mod), PyString_AS_STRING(name), self);
+    return PyString_FromFormat("<%s object at %p>", type->tp_name, self);
 }
 
 static Box* object_str(Box* obj) noexcept {
