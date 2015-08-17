@@ -105,3 +105,6 @@ for lhs in all_args:
                 print pow(lhs, rhs, mod)
             except Exception as e:
                 print type(e), e
+
+import sys
+print sys.float_info

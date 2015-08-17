@@ -407,7 +407,7 @@ static Box* methodRepr(Box* _o) {
     return PyString_FromFormat("<method '%s' of '%s' objects>", name, getNameOfClass(md->type));
 }
 
-Box* BoxedMethodDescriptor::__get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
+Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Box* owner) noexcept {
     RELEASE_ASSERT(self->cls == method_cls, "");
 
     // CPython handles this differently: they create the equivalent of different BoxedMethodDescriptor
@@ -420,7 +420,7 @@ Box* BoxedMethodDescriptor::__get__(BoxedMethodDescriptor* self, Box* inst, Box*
     if (self->method->ml_flags & METH_COEXIST)
         Py_FatalError("unimplemented");
 
-    if (inst == None)
+    if (inst == NULL)
         return self;
     else
         return boxInstanceMethod(inst, self, self->type);
@@ -653,8 +653,8 @@ void setupDescr() {
         "__get__", new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, 1, false, false), { None }));
     classmethod_cls->freeze();
 
-    method_cls->giveAttr("__get__",
-                         new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
+    method_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::descr_get, UNKNOWN, 3,
+                                                                    ParamNames::empty(), CAPI)));
     CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
     method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
     method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;

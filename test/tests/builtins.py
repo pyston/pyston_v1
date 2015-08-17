@@ -123,3 +123,5 @@ print apply(sorted, [l], { "reverse" : True })
 print format(5.0, '+')
 print format(5.011111111111, '+.6')
 print format("abc", '')
+
+print '{n}'.format(n=None)
