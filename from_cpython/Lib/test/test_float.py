@@ -77,9 +77,7 @@ class GeneralFloatCases(unittest.TestCase):
         # Check that floats within the range of an int convert to type
         # int, not long.  (issue #11144.)
         boundary = float(sys.maxint + 1)
-        # TODO: hard code for now, need fix then finish the sys.
-        epsilon = 2**53 * boundary
-        # epsilon = 2**-sys.float_info.mant_dig * boundary
+        epsilon = 2**-sys.float_info.mant_dig * boundary
 
         # These 2 floats are either side of the positive int/long boundary on
         # both 32-bit and 64-bit systems.
