@@ -398,6 +398,15 @@ static Box* methodGetDoc(Box* b, void*) {
     return None;
 }
 
+static Box* methodRepr(Box* _o) {
+    assert(_o->cls == method_cls);
+    BoxedMethodDescriptor* md = static_cast<BoxedMethodDescriptor*>(_o);
+    const char* name = md->method->ml_name;
+    if (!name)
+        name = "?";
+    return PyString_FromFormat("<method '%s' of '%s' objects>", name, getNameOfClass(md->type));
+}
+
 Box* BoxedMethodDescriptor::__get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == method_cls, "");
 
@@ -469,6 +478,22 @@ static Box* wrapperdescrGetDoc(Box* b, void*) {
     auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
     assert(s.size());
     return boxString(s);
+}
+
+static Box* wrapperDescrRepr(Box* _o) {
+    assert(_o->cls == wrapperdescr_cls);
+    BoxedWrapperDescriptor* wd = static_cast<BoxedWrapperDescriptor*>(_o);
+    const char* name = "?";
+    if (wd->wrapper != NULL)
+        name = wd->wrapper->name.data();
+    return PyString_FromFormat("<slot wrapper '%s' of '%s' objects>", name, getNameOfClass(wd->type));
+}
+
+static Box* wrapperObjectRepr(Box* _o) {
+    assert(_o->cls == wrapperobject_cls);
+    BoxedWrapperObject* wp = static_cast<BoxedWrapperObject*>(_o);
+    return PyString_FromFormat("<method-wrapper '%s' of %s object at %p>", wp->descr->wrapper->name.str().c_str(),
+                               getTypeName(wp->obj), wp->obj);
 }
 
 Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
@@ -635,6 +660,7 @@ void setupDescr() {
     method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
     method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
+    method_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)methodRepr, UNKNOWN, 1)));
     method_cls->freeze();
 
     wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
@@ -643,6 +669,7 @@ void setupDescr() {
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
     add_operators(wrapperdescr_cls);
+    wrapperdescr_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperDescrRepr, UNKNOWN, 1)));
     wrapperdescr_cls->freeze();
     assert(wrapperdescr_cls->tp_descr_get == BoxedWrapperDescriptor::descr_get);
 
@@ -650,6 +677,7 @@ void setupDescr() {
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->tpp_call.capi_val = BoxedWrapperObject::tppCall<CAPI>;
     wrapperobject_cls->tpp_call.cxx_val = BoxedWrapperObject::tppCall<CXX>;
+    wrapperobject_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperObjectRepr, UNKNOWN, 1)));
     wrapperobject_cls->freeze();
 }
 
