@@ -3300,19 +3300,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     assert(cls->tp_name);
 
-    // Inherit some special protocols. Normally methods are automatically inherited,
-    // when a Python class is declared, but that may not be the case with C extensions.
-    if (base != NULL) {
-        if (cls->tp_as_number == NULL)
-            cls->tp_as_number = base->tp_as_number;
-        if (cls->tp_as_sequence == NULL)
-            cls->tp_as_sequence = base->tp_as_sequence;
-        if (cls->tp_as_mapping == NULL)
-            cls->tp_as_mapping = base->tp_as_mapping;
-        if (cls->tp_as_buffer == NULL)
-            cls->tp_as_buffer = base->tp_as_buffer;
-    }
-
     if (cls->tp_call) {
         cls->tpp_call.capi_val = tppProxyToTpCall<CAPI>;
         cls->tpp_call.cxx_val = tppProxyToTpCall<CXX>;
@@ -3353,6 +3340,19 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         } else {
             cls->giveAttr(doc_str, None);
         }
+    }
+
+    // Inherit some special protocols. Normally methods are automatically inherited,
+    // when a Python class is declared, but that may not be the case with C extensions.
+    if (base != NULL) {
+        if (cls->tp_as_number == NULL)
+            cls->tp_as_number = base->tp_as_number;
+        if (cls->tp_as_sequence == NULL)
+            cls->tp_as_sequence = base->tp_as_sequence;
+        if (cls->tp_as_mapping == NULL)
+            cls->tp_as_mapping = base->tp_as_mapping;
+        if (cls->tp_as_buffer == NULL)
+            cls->tp_as_buffer = base->tp_as_buffer;
     }
 
     if (cls->tp_alloc == &PystonType_GenericAlloc)
