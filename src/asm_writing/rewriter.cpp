@@ -801,7 +801,7 @@ static const Location caller_save_registers[]{
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {
     RewriterVar* result = createNewVar();
-    std::vector<RewriterVar*> uses;
+    RewriterVar::SmallVector uses;
     for (RewriterVar* v : args) {
         assert(v != NULL);
         uses.push_back(v);
@@ -1489,10 +1489,12 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
         assert(rest_ptr == NULL);
 
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_allocateAndCopyPlus1(result, first_elem, rest_ptr, n_rest); },
-              rest_ptr ? std::vector<RewriterVar*>({ first_elem, rest_ptr })
-                       : std::vector<RewriterVar*>({ first_elem }),
-              ActionType::NORMAL);
+
+    RewriterVar::SmallVector uses;
+    uses.push_back(first_elem);
+    if (rest_ptr)
+        uses.push_back(rest_ptr);
+    addAction([=]() { this->_allocateAndCopyPlus1(result, first_elem, rest_ptr, n_rest); }, uses, ActionType::NORMAL);
     return result;
 }
 
