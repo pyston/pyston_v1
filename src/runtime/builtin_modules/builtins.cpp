@@ -472,6 +472,8 @@ Box* delattrFunc(Box* obj, Box* _str) {
 }
 
 static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
+    assert(PyString_Check(str));
+
     if (return_val)
         return return_val;
 
@@ -492,21 +494,24 @@ static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* 
 template <ExceptionStyle S>
 Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-    if (argspec != ArgPassSpec(2, 0, false, false) || argspec != ArgPassSpec(3, 0, false, false)) {
-        static Box* defaults[] = { NULL };
-        bool rewrite_success = false;
-        rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args,
-                           rewrite_success, argspec, arg1, arg2, arg3, args, NULL, keyword_names);
-        if (!rewrite_success)
-            rewrite_args = NULL;
-    }
+    static Box* defaults[] = { NULL };
+    bool rewrite_success = false;
+    rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args, rewrite_success,
+                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
+    if (!rewrite_success)
+        rewrite_args = NULL;
 
     Box* obj = arg1;
     Box* _str = arg2;
     Box* default_value = arg3;
 
     if (rewrite_args) {
-        if (!PyString_Check(_str))
+        // We need to make sure that the attribute string will be the same.
+        // Even though the passed string might not be the exact attribute name
+        // that we end up looking up (because we need to encode it or intern it),
+        // guarding on that object means (for strings and unicode) that the string
+        // value is fixed.
+        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
             rewrite_args = NULL;
         else
             rewrite_args->arg2->addGuard((intptr_t)arg2);
@@ -531,10 +536,8 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    if (!PyString_CHECK_INTERNED(str)) {
+    if (!PyString_CHECK_INTERNED(str))
         internStringMortalInplace(str);
-        rewrite_args = NULL;
-    }
 
     Box* rtn;
     RewriterVar* r_rtn;
@@ -554,8 +557,10 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     }
 
     if (rewrite_args) {
-        RewriterVar* final_rtn = rewrite_args->rewriter->call(
-            false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+        assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
+        RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
+        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn,
+                                                              rewrite_args->arg1, r_str, rewrite_args->arg3);
 
         if (S == CXX)
             rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
