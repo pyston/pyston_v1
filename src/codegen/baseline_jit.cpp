@@ -314,6 +314,8 @@ RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s)
 }
 
 RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
+    if (s->s() == "None")
+        return imm(None);
     return emitPPCall((void*)getGlobal, { imm(global), imm(s) }, 2, 512);
 }
 
