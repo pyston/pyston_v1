@@ -832,15 +832,16 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
-    Box* new_attr, *init_attr;
+    Box* new_attr, * init_attr = NULL;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
         assert(!argspec.has_kwargs);
         assert(argspec.num_args > 0);
 
         r_ccls = rewrite_args->arg1;
-        // This is probably a duplicate, but it's hard to really convince myself of that.
-        // Need to create a clear contract of who guards on what
+        // Guard on the requested class.  We could potentially support multiple classes in a rewrite,
+        // but there are parts of this function's rewrite that currently take advantage of the fact
+        // that the requested class is fixed.
         r_ccls->addGuard((intptr_t)arg1 /* = _cls */);
 
 
@@ -930,7 +931,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     //
 
     // For debugging, keep track of why we think we can rewrite this:
-    enum { NOT_ALLOWED, VERIFIED, NO_INIT, TYPE_NEW_SPECIAL_CASE, } why_rewrite_allowed = NOT_ALLOWED;
+    enum { NOT_ALLOWED, MAKES_CLS, NO_INIT, TYPE_NEW_SPECIAL_CASE, } why_rewrite_allowed = NOT_ALLOWED;
 
     // These are __new__ functions that have the property that __new__(kls) always returns an instance of kls.
     // These are ok to call regardless of what type was requested.
@@ -939,32 +940,32 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     // type?  then object.__new__ would not be able to be here:
     //
     // this array is ok with not using StlCompatAllocator since we will manually register these objects with the GC
-    static std::vector<Box*> allowable_news;
-    if (allowable_news.empty()) {
+    static std::vector<Box*> class_making_news;
+    if (class_making_news.empty()) {
         for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
             auto new_obj = typeLookup(allowed_cls, new_str, NULL);
             gc::registerPermanentRoot(new_obj, /* allow_duplicates= */ true);
-            allowable_news.push_back(new_obj);
+            class_making_news.push_back(new_obj);
         }
     }
 
     if (rewrite_args) {
-        for (auto b : allowable_news) {
+        for (auto b : class_making_news) {
             if (b == new_attr) {
-                why_rewrite_allowed = VERIFIED;
+                why_rewrite_allowed = MAKES_CLS;
                 break;
             }
         }
 
         if (cls->tp_new == BaseException->tp_new)
-            why_rewrite_allowed = VERIFIED;
+            why_rewrite_allowed = MAKES_CLS;
 
         bool know_first_arg = !argspec.has_starargs && !argspec.has_kwargs && argspec.num_keywords == 0;
 
         if (know_first_arg) {
             if (argspec.num_args == 1
                 && (cls == int_cls || cls == float_cls || cls == long_cls || cls == str_cls || cls == unicode_cls))
-                why_rewrite_allowed = VERIFIED;
+                why_rewrite_allowed = MAKES_CLS;
 
             if (argspec.num_args == 2 && (cls == int_cls || cls == float_cls || cls == long_cls)
                 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls
@@ -975,7 +976,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // str(obj) can return str-subtypes, but for builtin types it won't:
             if (argspec.num_args == 2 && cls == str_cls && (arg2->cls == int_cls || arg2->cls == float_cls)) {
-                why_rewrite_allowed = VERIFIED;
+                why_rewrite_allowed = MAKES_CLS;
                 rewrite_args->arg2->addAttrGuard(offsetof(Box, cls), (intptr_t)arg2->cls);
             }
 
@@ -1011,22 +1012,25 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     }
 
     static BoxedString* init_str = internStringImmortal("__init__");
-    if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
-        init_attr = typeLookup(cls, init_str, &grewrite_args);
+    if (cls->tp_init == slot_tp_init) {
+        // If there's a Python-level tp_init, try getting it, since calling it might be faster than calling
+        // tp_init if we can manage to rewrite it.
+        if (rewrite_args) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
+            init_attr = typeLookup(cls, init_str, &grewrite_args);
 
-        if (!grewrite_args.out_success)
-            rewrite_args = NULL;
-        else {
-            if (init_attr) {
-                r_init = grewrite_args.out_rtn;
-                r_init->addGuard((intptr_t)init_attr);
+            if (!grewrite_args.out_success)
+                rewrite_args = NULL;
+            else {
+                if (init_attr) {
+                    r_init = grewrite_args.out_rtn;
+                    r_init->addGuard((intptr_t)init_attr);
+                }
             }
+        } else {
+            init_attr = typeLookup(cls, init_str, NULL);
         }
-    } else {
-        init_attr = typeLookup(cls, init_str, NULL);
     }
-    // The init_attr should always resolve as well, but doesn't yet
 
     Box* made;
     RewriterVar* r_made = NULL;
@@ -1121,60 +1125,95 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         return made;
     }
 
+    bool skip_init = false;
+
     // If __new__ returns a subclass, supposed to call that subclass's __init__.
     // If __new__ returns a non-subclass, not supposed to call __init__.
     if (made->cls != cls) {
+        assert(why_rewrite_allowed != MAKES_CLS);
         ASSERT(rewrite_args == NULL || (why_rewrite_allowed == NO_INIT && made->cls->tp_init == object_cls->tp_init
                                         && cls->tp_init == object_cls->tp_init),
                "We should only have allowed the rewrite to continue if we were guaranteed that "
                "made would have class cls!");
 
         if (!isSubclass(made->cls, cls)) {
-            init_attr = NULL;
+            skip_init = true;
         } else {
-            // We could have skipped the initial __init__ lookup
-            init_attr = typeLookup(made->cls, init_str, NULL);
+            if (init_attr) {
+                // Getting here means the init_attr is wrong; set it to NULL so that we don't use it.
+                init_attr = NULL;
+            }
         }
     }
 
-    if (init_attr && made->cls->tp_init != object_cls->tp_init) {
-        // TODO apply the same descriptor special-casing as in callattr?
-
+    if (!skip_init && made->cls->tp_init != object_cls->tp_init) {
         Box* initrtn;
-        // Attempt to rewrite the basic case:
-        if (rewrite_args && init_attr->cls == function_cls) {
-            // Note: this code path includes the descriptor logic
-            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
-            srewrite_args.arg1 = r_made;
-            if (npassed_args >= 2)
-                srewrite_args.arg2 = rewrite_args->arg2;
-            if (npassed_args >= 3)
-                srewrite_args.arg3 = rewrite_args->arg3;
-            if (npassed_args >= 4)
-                srewrite_args.args = rewrite_args->args;
-            srewrite_args.args_guarded = rewrite_args->args_guarded;
-            srewrite_args.func_guarded = true;
+        // If there's a Python-level __init__ function, try calling it.
+        if (init_attr && init_attr->cls == function_cls) {
+            if (rewrite_args) {
+                // We are going to rewrite as a call to cls.init:
+                assert(why_rewrite_allowed == MAKES_CLS);
+                assert(made->cls == cls);
+            }
 
-            // initrtn = callattrInternal<CXX>(cls, _init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3,
-            // args, keyword_names);
-            initrtn = runtimeCallInternal<S>(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
+            // Note: this code path includes the descriptor logic
+            if (rewrite_args) {
+                CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
+                srewrite_args.arg1 = r_made;
+                if (npassed_args >= 2)
+                    srewrite_args.arg2 = rewrite_args->arg2;
+                if (npassed_args >= 3)
+                    srewrite_args.arg3 = rewrite_args->arg3;
+                if (npassed_args >= 4)
+                    srewrite_args.args = rewrite_args->args;
+                srewrite_args.args_guarded = rewrite_args->args_guarded;
+                srewrite_args.func_guarded = true;
+
+                initrtn
+                    = runtimeCallInternal<S>(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
+
+                if (!srewrite_args.out_success) {
+                    rewrite_args = NULL;
+                } else {
+                    assert(S == CXX && "this need to be converted");
+                    rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
+                }
+            } else {
+                initrtn = runtimeCallInternal<S>(init_attr, NULL, argspec, made, arg2, arg3, args, keyword_names);
+            }
 
             if (!initrtn) {
                 assert(S == CAPI);
                 return NULL;
             }
 
-            if (!srewrite_args.out_success) {
-                rewrite_args = NULL;
-            } else {
-                assert(S == CXX && "this need to be converted");
-                rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
-            }
-        } else {
-            rewrite_args = NULL;
+            assert(initrtn);
 
+            if (S == CAPI) {
+                if (initrtn != None) {
+                    PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(initrtn));
+                    return NULL;
+                }
+            } else
+                assertInitNone(initrtn);
+        } else {
+            // Otherwise, just call tp_init.  This will work out well for extension classes, and no worse
+            // than failing the rewrite for Python non-extension non-functions (when does that happen?).
+
+            initproc tpinit = made->cls->tp_init;
+
+            if (rewrite_args) {
+                // This is the only case that should get here:
+                assert(why_rewrite_allowed == MAKES_CLS && made->cls == cls);
+                // We're going to emit a call to cls->tp_init, but really we should be calling made->cls->tp_init,
+                // but the MAKES_CLS condition tells us that made->cls is cls so the two tp_inits are the same.
+                assert(tpinit == cls->tp_init);
+            }
+
+            bool rewrite_success = false;
             try {
-                init_attr = processDescriptor(init_attr, made, cls);
+                rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
+                                   argspec, made, arg2, arg3, args, NULL, keyword_names);
             } catch (ExcInfo e) {
                 if (S == CAPI) {
                     setCAPIException(e);
@@ -1183,30 +1222,28 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     throw e;
             }
 
-            ArgPassSpec init_argspec = argspec;
-            init_argspec.num_args--;
+            if (!rewrite_success)
+                rewrite_args = NULL;
 
-            int passed = init_argspec.totalPassed();
+            assert(arg2->cls == tuple_cls);
+            assert(!arg3 || arg3->cls == dict_cls);
 
-            // If we weren't passed the args array, it's not safe to index into it
-            if (passed <= 2)
-                initrtn = runtimeCallInternal<S>(init_attr, NULL, init_argspec, arg2, arg3, NULL, NULL, keyword_names);
-            else
-                initrtn = runtimeCallInternal<S>(init_attr, NULL, init_argspec, arg2, arg3, args[0], &args[1],
-                                                 keyword_names);
+            int err = tpinit(made, arg2, arg3);
+            if (err == -1) {
+                if (S == CAPI)
+                    return NULL;
+                else
+                    throwCAPIException();
+            }
 
-            if (!initrtn) {
-                assert(S == CAPI);
-                return NULL;
+            if (rewrite_args) {
+                auto r_err
+                    = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2, rewrite_args->arg3);
+
+                assert(S == CXX && "this need to be converted");
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1);
             }
         }
-        assert(initrtn);
-
-        if (S == CAPI && initrtn != None) {
-            PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(initrtn));
-            return NULL;
-        }
-        assertInitNone(initrtn);
     } else {
         if (new_attr == NULL && npassed_args != 1) {
             // TODO not npassed args, since the starargs or kwargs could be null

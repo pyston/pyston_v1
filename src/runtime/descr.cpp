@@ -75,9 +75,9 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     Box* doc = args[1];
 
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
-    self->prop_get = fget;
-    self->prop_set = fset;
-    self->prop_del = fdel;
+    self->prop_get = fget == None ? NULL : fget;
+    self->prop_set = fset == None ? NULL : fset;
+    self->prop_del = fdel == None ? NULL : fdel;
     self->prop_doc = doc;
     self->getter_doc = false;
 
@@ -151,6 +151,12 @@ static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
 
         return prop;
     } else {
+        if (!get)
+            get = None;
+        if (!set)
+            set = None;
+        if (!del)
+            del = None;
         Box* doc;
         if ((old->getter_doc && get != None) || !old->prop_doc)
             doc = None;

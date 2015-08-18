@@ -1152,7 +1152,7 @@ static PyObject* slot_tp_del(PyObject* self) noexcept {
     }
 }
 
-static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+/* Pyston change: static */ int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpinit", SLOT_AVOIDABILITY(self));
 
     static PyObject* init_str;
