@@ -41,23 +41,19 @@ test_extcall            f(**kw) crashes if kw isn't a dict
 test_file               wontfix: we don't destruct file objects when the test wants
 test_file2k             we abort when you try to open() a directory
 test_file_eintr         not sure
-test_float              float(long), a couple unknown things
 test_funcattrs          we don't allow changing numing of function defaults
 test_functools          unknown errors
 test_generators         crash when sending non-None to a just-started generator
 test_genexps            parser not raising a SyntaxError when assigning to a genexp
 test_global             SyntaxWarnings for global statements after uses
 test_grammar            bug in our tokenizer
-test_hash               number of hash bugs (all representations of '1' don't have the same hash; empty string is supposed to have 0 hash, etc)
 test_index              slice.indices, old-styl-class __mul__
-test_int                we assert instead of throw exception
 test_io                 memory/gc issue?
 test_iterlen            [unknown]
 test_itertools          [unknown]
 test_json               'from test.script_helper import assert_python_ok' fails; sounds like it is trying to look at pycs
 test_list               longs as slice indices
 test_long               sys.long_info
-test_math               float(long); sys.float_info, sys.displayhook
 test_module             unicode docstrings
 test_mutants            unknown failure
 test_operator           PyNumber_Absolute()
