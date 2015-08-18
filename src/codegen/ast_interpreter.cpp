@@ -294,7 +294,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(source_info->getName())));
+        code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(source_info->getName()->s())));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }
@@ -334,7 +334,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 
         auto source = getCL()->source.get();
         stmt->cxx_exception_count++;
-        caughtCxxException(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &e);
+        caughtCxxException(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()), &e);
 
         next_block = ((AST_Invoke*)stmt)->exc_dest;
         last_exception = e;
@@ -791,7 +791,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
 
         auto source = getCL()->source.get();
         node->cxx_exception_count++;
-        caughtCxxException(LineInfo(node->lineno, node->col_offset, source->fn, source->getName()), &e);
+        caughtCxxException(LineInfo(node->lineno, node->col_offset, source->getFn(), source->getName()), &e);
 
         next_block = node->exc_dest;
         last_exception = e;
@@ -925,7 +925,7 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
 #endif
 
     if (0) {
-        printf("%20s % 2d ", source_info->getName().data(), current_block->idx);
+        printf("%20s % 2d ", source_info->getName()->c_str(), current_block->idx);
         print_ast(node);
         printf("\n");
     }
@@ -1128,7 +1128,7 @@ Value ASTInterpreter::visit_raise(AST_Raise* node) {
             finishJITing();
         }
 
-        raise0();
+        ASTInterpreterJitInterface::raise0Helper(this);
     }
 
     Value arg0 = node->arg0 ? visit_expr(node->arg0) : getNone();
@@ -1676,6 +1676,11 @@ Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
     return None;
+}
+
+void ASTInterpreterJitInterface::raise0Helper(void* _interpreter) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    raise0(&interpreter->getFrameInfo()->exc);
 }
 
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;

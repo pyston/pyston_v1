@@ -432,7 +432,7 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     // some builtin functions that are BoxedFunctions but really ought to be a type that
     // we don't have yet.
     if (f->source) {
-        this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
+        this->name = static_cast<BoxedString*>(f->source->getName());
     }
 }
 
@@ -799,7 +799,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         return unicodeNewHelper(cls, arg2, arg3, oargs);
     }
 
-    if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new && S == CXX) {
+    if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new && cls->tp_new != BaseException->tp_new
+        && S == CXX) {
         // Looks like we're calling an extension class and we're not going to be able to
         // separately rewrite the new + init calls.  But we can rewrite the fact that we
         // should just call the cpython version, which will end up working pretty well.
@@ -954,6 +955,9 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 break;
             }
         }
+
+        if (cls->tp_new == BaseException->tp_new)
+            why_rewrite_allowed = VERIFIED;
 
         bool know_first_arg = !argspec.has_starargs && !argspec.has_kwargs && argspec.num_keywords == 0;
 

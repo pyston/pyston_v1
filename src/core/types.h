@@ -304,6 +304,8 @@ class ScopeInfo;
 class InternedStringPool;
 class LivenessAnalysis;
 class SourceInfo {
+private:
+    BoxedString* fn; // equivalent of code.co_filename
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
@@ -312,7 +314,6 @@ public:
     AST* ast;
     CFG* cfg;
     bool is_generator;
-    std::string fn; // equivalent of code.co_filename
 
     InternedStringPool& getInternedStrings();
 
@@ -323,13 +324,15 @@ public:
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
-    llvm::StringRef getName();
+    BoxedString* getName();
+    BoxedString* getFn() { return fn; }
+
     InternedString mangleName(InternedString id);
 
     Box* getDocString();
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
-               std::vector<AST_stmt*> body, std::string fn);
+               std::vector<AST_stmt*> body, BoxedString* fn);
     ~SourceInfo();
 
 private:
@@ -727,9 +730,9 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
 struct LineInfo {
 public:
     int line, column;
-    std::string file, func;
+    BoxedString* file, *func;
 
-    LineInfo(int line, int column, llvm::StringRef file, llvm::StringRef func)
+    LineInfo(int line, int column, BoxedString* file, BoxedString* func)
         : line(line), column(column), file(file), func(func) {}
 };
 

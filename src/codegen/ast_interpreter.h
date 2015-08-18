@@ -48,6 +48,7 @@ struct ASTInterpreterJitInterface {
     static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
     static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
     static Box* uncacheExcInfoHelper(void* interp);
+    static void raise0Helper(void* interp) __attribute__((noreturn));
 };
 
 class RewriterVar;

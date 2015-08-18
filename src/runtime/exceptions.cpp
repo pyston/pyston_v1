@@ -37,7 +37,7 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
+    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None);
     assert(!PyErr_Occurred());
     throw ExcInfo(exc->cls, exc, tb);
 }
@@ -135,33 +135,34 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     return ExcInfo(type, value, tb);
 }
 
-extern "C" void raise0() {
-    ExcInfo* exc_info = getFrameExcInfo();
-    assert(exc_info->type);
+extern "C" void raise0(ExcInfo* frame_exc_info) {
+    updateFrameExcInfoIfNeeded(frame_exc_info);
+    assert(frame_exc_info->type);
 
     // TODO need to clean up when we call normalize, do_raise, etc
-    if (exc_info->type == None)
+    if (frame_exc_info->type == None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
     startReraise();
     assert(!PyErr_Occurred());
-    throw * exc_info;
+    throw * frame_exc_info;
 }
 
-extern "C" void raise0_capi() noexcept {
-    ExcInfo exc_info = *getFrameExcInfo();
-    assert(exc_info.type);
+extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
+    updateFrameExcInfoIfNeeded(frame_exc_info);
+    assert(frame_exc_info->type);
 
     // TODO need to clean up when we call normalize, do_raise, etc
-    if (exc_info.type == None) {
-        exc_info.type = TypeError;
-        exc_info.value = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");
-        exc_info.traceback = None;
-        PyErr_NormalizeException(&exc_info.type, &exc_info.value, &exc_info.traceback);
+    if (frame_exc_info->type == None) {
+        frame_exc_info->type = TypeError;
+        frame_exc_info->value
+            = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");
+        frame_exc_info->traceback = None;
+        PyErr_NormalizeException(&frame_exc_info->type, &frame_exc_info->value, &frame_exc_info->traceback);
     }
 
     startReraise();
-    PyErr_Restore(exc_info.type, exc_info.value, exc_info.traceback);
+    PyErr_Restore(frame_exc_info->type, frame_exc_info->value, frame_exc_info->traceback);
 }
 
 extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
@@ -242,7 +243,8 @@ extern "C" void caughtCapiException(AST_stmt* stmt, void* _source_info) {
     SourceInfo* source = static_cast<SourceInfo*>(_source_info);
     PyThreadState* tstate = PyThreadState_GET();
 
-    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &tstate->curexc_traceback);
+    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()),
+                    &tstate->curexc_traceback);
 }
 
 extern "C" void reraiseCapiExcAsCxx() {

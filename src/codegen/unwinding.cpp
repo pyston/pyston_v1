@@ -490,7 +490,7 @@ static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
 
     auto source = cl->source.get();
 
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->getFn(), source->getName());
 }
 
 // A class that converts a C stack trace to a Python stack trace.
@@ -775,6 +775,15 @@ ExcInfo* getFrameExcInfo() {
     }
     assert(cur_exc);
     return cur_exc;
+}
+
+void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
+    if (latest->type)
+        return;
+
+    ExcInfo* updated = getFrameExcInfo();
+    assert(updated == latest);
+    return;
 }
 
 CLFunction* getTopPythonFunction() {
@@ -1137,7 +1146,7 @@ std::string getCurrentPythonLine() {
 
         auto current_stmt = frame_iter->getCurrentStatement();
 
-        stream << source->fn << ":" << current_stmt->lineno;
+        stream << source->getFn()->c_str() << ":" << current_stmt->lineno;
         return stream.str();
     }
     return "unknown:-1";

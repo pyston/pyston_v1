@@ -934,18 +934,18 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
 
     llvm::DIBuilder builder(*g.cur_module);
 
-    const std::string& fn = source->fn;
+    BoxedString* fn = source->getFn();
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
-    llvm::DIFile file = builder.createFile(fn, dir);
+    llvm::DIFile file = builder.createFile(fn->s(), dir);
     llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
     llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
     llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
                                                           false, true, lineno + 1, 0, true, f);
 
     llvm::DICompileUnit compile_unit
-        = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn, dir, producer, true, "", 0);
+        = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);
 
     builder.finalize();
     return func_info;
@@ -967,7 +967,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
 
 CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            ExceptionStyle exception_style, FunctionSpecialization* spec, std::string nameprefix) {
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
     long irgen_us = 0;

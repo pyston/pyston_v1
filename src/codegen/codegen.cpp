@@ -31,6 +31,7 @@
 #include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -60,16 +61,18 @@ CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool 
 }
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
-                       std::vector<AST_stmt*> body, std::string fn)
+                       std::vector<AST_stmt*> body, BoxedString* fn)
     : parent_module(m),
       scoping(scoping),
       scope_info(NULL),
       future_flags(future_flags),
       ast(ast),
       cfg(NULL),
-      fn(std::move(fn)),
       body(std::move(body)) {
-    assert(this->fn.size());
+    assert(fn->size());
+    // TODO: we should track this reference correctly rather than making it a root
+    gc::registerPermanentRoot(fn, true);
+    this->fn = fn;
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:

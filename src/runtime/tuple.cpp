@@ -408,6 +408,8 @@ extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
 extern "C" PyObject* PyTuple_New(Py_ssize_t size) noexcept {
     RELEASE_ASSERT(size >= 0, "");
 
+    if (size == 0)
+        return EmptyTuple;
     return BoxedTuple::create(size);
 }
 

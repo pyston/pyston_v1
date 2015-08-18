@@ -471,7 +471,7 @@ check:
 quick_check:
 	$(MAKE) pyston_dbg
 	$(MAKE) check-deps
-	( cd $(CMAKE_DIR_DBG) && ctest -V -R 'check-format|unittests|pyston_defaults_tests|pyston_defaults_cpython' )
+	( cd $(CMAKE_DIR_DBG) && ctest -V -R '^(check-format|unittests|pyston_defaults_tests|pyston_defaults_cpython)$$' )
 
 
 Makefile.local:

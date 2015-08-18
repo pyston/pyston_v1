@@ -50,6 +50,7 @@ PyObject* slot_mp_subscript(PyObject* self, PyObject* arg1) noexcept;
 int slot_sq_contains(PyObject* self, PyObject* value) noexcept;
 Py_ssize_t slot_sq_length(PyObject* self) noexcept;
 PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept;
+PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 
 class GetattrRewriteArgs;
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* attr, GetattrRewriteArgs* rewrite_args);
