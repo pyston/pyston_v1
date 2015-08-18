@@ -1645,6 +1645,7 @@ static slotdef slotdefs[]
         TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
         FLSLOT("__class__", has___class__, NULL, NULL, "", PyWrapperFlag_BOOL),
         FLSLOT("__instancecheck__", has_instancecheck, NULL, NULL, "", PyWrapperFlag_BOOL),
+        FLSLOT("__subclasscheck__", has_subclasscheck, NULL, NULL, "", PyWrapperFlag_BOOL),
         FLSLOT("__getattribute__", has_getattribute, NULL, NULL, "", PyWrapperFlag_BOOL),
         TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 

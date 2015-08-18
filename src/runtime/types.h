@@ -232,6 +232,7 @@ public:
 
     bool has___class__; // Has a custom __class__ attribute (ie different from object's __class__ descriptor)
     bool has_instancecheck;
+    bool has_subclasscheck;
     bool has_getattribute;
 
     typedef bool (*pyston_inquiry)(Box*);
