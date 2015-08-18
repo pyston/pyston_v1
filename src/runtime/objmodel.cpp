@@ -3180,9 +3180,17 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     std::vector<Box*, StlCompatAllocator<Box*>> varargs;
     if (argspec.has_starargs) {
         assert(!rewrite_args);
-        Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
-        for (Box* e : given_varargs->pyElements()) {
-            varargs.push_back(e);
+        Box* given_varargs = nullptr;
+        try {
+            given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+            for (Box* e : given_varargs->pyElements()) {
+                varargs.push_back(e);
+            }
+        } catch (ExcInfo const& e) {
+            if (e.type == TypeError) {
+                raiseExcHelper(TypeError, "%s() argument after * must be a sequence, not %s", func_name,
+                               getTypeName(given_varargs));
+            }
         }
     }
 
@@ -3266,7 +3274,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes exactly %d argument%s (%ld given)", func_name, paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
@@ -3293,8 +3301,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
-    if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
-        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+    Box* kwargs = nullptr;
+    if (argspec.has_kwargs) {
+        kwargs
+            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
+    }
+    if ((!param_names || !param_names->takes_param_names) && (argspec.num_keywords || argspec.has_kwargs)
+        && (!paramspec.takes_kwargs
+            && (kwargs && PyDict_Check(kwargs) && static_cast<BoxedDict*>(kwargs)->d.size() > 0))) {
+        raiseExcHelper(TypeError, "%s() takes no keyword arguments", func_name);
     }
 
     if (argspec.num_keywords)
@@ -3321,15 +3336,21 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     if (argspec.has_kwargs) {
         assert(!rewrite_args && "would need to be handled here");
 
-        Box* kwargs
-            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
-
         if (!kwargs) {
             // TODO could try to avoid creating this
             kwargs = new BoxedDict();
         } else if (!PyDict_Check(kwargs)) {
             BoxedDict* d = new BoxedDict();
-            dictMerge(d, kwargs);
+            try {
+                dictMerge(d, kwargs);
+            } catch (ExcInfo exc) {
+                if (exc.type == AttributeError) {
+                    raiseExcHelper(TypeError, "%s() argument after ** must be a mapping, not %s", func_name,
+                                   getTypeName(kwargs));
+                } else {
+                    throw;
+                }
+            }
             kwargs = d;
         }
         assert(PyDict_Check(kwargs));
@@ -3338,7 +3359,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);
 
-            if (k->cls != str_cls)
+            if (!isSubclass(k->cls, str_cls))
                 raiseExcHelper(TypeError, "%s() keywords must be strings", func_name);
 
             BoxedString* s = static_cast<BoxedString*>(k);
@@ -3366,8 +3387,17 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name, paramspec.num_args,
-                       argspec.num_args + argspec.num_keywords + varargs.size());
+        long given = argspec.num_args + argspec.num_keywords + varargs.size();
+        int takes = paramspec.num_args;
+        if (!(paramspec.takes_varargs || paramspec.takes_kwargs)) {
+            raiseExcHelper(TypeError, "%s() takes exactly %d argument%s (%ld given)", func_name, takes,
+                           takes != 1 ? "s" : "", given);
+        } else {
+            if (given < takes) {
+                raiseExcHelper(TypeError, "%s() takes at least %d argument%s (%ld given)", func_name, takes,
+                               takes != 1 ? "s" : "", given);
+            }
+        }
     }
 
     for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
