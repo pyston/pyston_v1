@@ -102,6 +102,19 @@ extern "C" Box* abs_(Box* x) {
     }
 }
 
+extern "C" Box* binFunc(Box* x) {
+    static BoxedString* bin_str = internStringImmortal("__bin__");
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    Box* r = callattr(x, bin_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    if (!r)
+        raiseExcHelper(TypeError, "bin() argument can't be converted to bin");
+
+    if (!PyString_Check(r))
+        raiseExcHelper(TypeError, "__bin__() returned non-string (type %.200s)", r->cls->tp_name);
+
+    return r;
+}
+
 extern "C" Box* hexFunc(Box* x) {
     static BoxedString* hex_str = internStringImmortal("__hex__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
@@ -1483,6 +1496,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)abs_, UNKNOWN, 1), "abs");
     builtins_module->giveAttr("abs", abs_obj);
+    builtins_module->giveAttr("bin",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)binFunc, UNKNOWN, 1), "bin"));
     builtins_module->giveAttr("hex",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hexFunc, UNKNOWN, 1), "hex"));
     builtins_module->giveAttr("oct",

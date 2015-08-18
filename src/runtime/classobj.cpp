@@ -1292,13 +1292,33 @@ Box* instanceInvert(Box* _inst) {
     return runtimeCall(invert_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
+Box* instanceTrunc(BoxedInstance* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    static BoxedString* trunc_str = internStringImmortal("__trunc__");
+    Box* trunc_func = _instanceGetattribute(inst, trunc_str, true);
+
+    return runtimeCall(trunc_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
 Box* instanceInt(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     static BoxedString* int_str = internStringImmortal("__int__");
-    Box* int_func = _instanceGetattribute(inst, int_str, true);
-    return runtimeCall(int_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (PyObject_HasAttr((PyObject*)inst, int_str)) {
+        Box* int_func = _instanceGetattribute(inst, int_str, true);
+        return runtimeCall(int_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    }
+
+    Box* truncated = instanceTrunc(inst);
+    /* __trunc__ is specified to return an Integral type, but
+       int() needs to return an int. */
+    Box* res = _PyNumber_ConvertIntegralToInt(truncated, "__trunc__ returned non-Integral (type %.200s)");
+    if (!res)
+        throwCAPIException();
+    return res;
 }
 
 Box* instanceLong(Box* _inst) {

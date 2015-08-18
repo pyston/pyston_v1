@@ -1932,12 +1932,7 @@ extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const ch
 
 non_integral_error:
     if (PyInstance_Check(integral)) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-        /* cpython has this:
-        type_name = PyString_AS_STRING(((PyInstanceObject *)integral)
-                                       ->in_class->cl_name);
-        */
+        type_name = static_cast<BoxedInstance*>(integral)->inst_cls->name->data();
     } else {
         type_name = integral->cls->tp_name;
     }

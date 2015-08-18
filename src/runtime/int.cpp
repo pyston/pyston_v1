@@ -320,8 +320,8 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
 #if PYSTON_INT_MIN < -PYSTON_INT_MAX
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
-    if (lhs == PYSTON_INT_MIN && rhs == -1) {
-        return longDiv(boxLong(lhs), boxLong(rhs));
+    if (lhs == PYSTON_INT_MIN) {
+        return longInt(longDiv(boxLong(lhs), boxLong(rhs)));
     }
 #endif
 
@@ -828,6 +828,14 @@ extern "C" Box* intHash(BoxedInt* self) {
     return boxInt(self->n);
 }
 
+extern "C" Box* intBin(BoxedInt* self) {
+    if (!PyInt_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__bin__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return _PyInt_Format(reinterpret_cast<PyIntObject*>(self), 2, 0);
+}
+
 extern "C" Box* intHex(BoxedInt* self) {
     if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'int' object but received a '%s'",
@@ -886,12 +894,30 @@ extern "C" Box* intIndex(BoxedInt* v) {
 
 template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S == CAPI) {
     if (val->cls == int_cls) {
-        RELEASE_ASSERT(!base, "");
+        if (base) {
+            if (S == CAPI) {
+                PyErr_Format(TypeError, "int() missing string argument");
+                return NULL;
+            } else
+                raiseExcHelper(TypeError, "int() missing string argument");
+        }
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
-    } else if (PyString_Check(val)) {
+    }
+    if (!base) {
+        Box* r = PyNumber_Int(val);
+        if (!r) {
+            if (S == CAPI) {
+                return NULL;
+            } else
+                throwCAPIException();
+        }
+        return r;
+    }
+
+    if (PyString_Check(val)) {
         int base_n;
         if (!base)
             base_n = 10;
@@ -899,10 +925,19 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
             RELEASE_ASSERT(base->cls == int_cls, "");
             base_n = static_cast<BoxedInt*>(base)->n;
         }
-
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        RELEASE_ASSERT(s->size() == strlen(s->data()), "");
+        if (s->size() != strlen(s->data())) {
+            Box* srepr = PyObject_Repr(val);
+            if (S == CAPI) {
+                PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base_n,
+                             PyString_AS_STRING(srepr));
+                return NULL;
+            } else {
+                raiseExcHelper(ValueError, "invalid literal for int() with base %d: %s", base_n,
+                               PyString_AS_STRING(srepr));
+            }
+        }
         Box* r = PyInt_FromString(s->data(), NULL, base_n);
         if (!r) {
             if (S == CAPI)
@@ -958,7 +993,8 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
         }
         return PyLong_FromDouble(wholepart);
     } else {
-        RELEASE_ASSERT(!base, "");
+        if (base)
+            raiseExcHelper(TypeError, "TypeError: int() can't convert non-string with explicit base");
         static BoxedString* int_str = internStringImmortal("__int__");
         Box* r = callattrInternal<S>(val, int_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
@@ -1168,6 +1204,7 @@ void setupInt() {
     int_cls->tp_hash = (hashfunc)int_hash;
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, UNKNOWN, 2)));
 
+    int_cls->giveAttr("__bin__", new BoxedFunction(boxRTFunction((void*)intBin, STR, 1)));
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
