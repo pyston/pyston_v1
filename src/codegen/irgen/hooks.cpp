@@ -97,19 +97,23 @@ InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
 
-llvm::StringRef SourceInfo::getName() {
+BoxedString* SourceInfo::getName() {
     assert(ast);
+
+    static BoxedString* lambda_name = internStringImmortal("<lambda>");
+    static BoxedString* module_name = internStringImmortal("<module>");
+
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name.s();
+            return ast_cast<AST_ClassDef>(ast)->name;
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name.s();
+            return ast_cast<AST_FunctionDef>(ast)->name;
         case AST_TYPE::Lambda:
-            return "<lambda>";
+            return lambda_name;
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
         case AST_TYPE::Suite:
-            return "<module>";
+            return module_name;
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -194,16 +198,16 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     SourceInfo* source = f->source.get();
     assert(source);
 
-    std::string name = source->getName();
+    BoxedString* name = source->getName();
 
-    ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
+    ASSERT(f->versions.size() < 20, "%s %ld", name->c_str(), f->versions.size());
 
     ExceptionStyle exception_style;
     if (force_exception_style)
         exception_style = forced_exception_style;
     else if (FORCE_LLVM_CAPI_THROWS)
         exception_style = CAPI;
-    else if (name == "next")
+    else if (name->s() == "next")
         exception_style = CAPI;
     else if (f->propagated_cxx_exceptions >= 100)
         exception_style = CAPI;
@@ -223,7 +227,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         RELEASE_ASSERT((int)effort < sizeof(colors) / sizeof(colors[0]), "");
 
         if (spec) {
-            ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << source->fn << ":" << name << " with signature (";
+            ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << source->getFn()->s() << ":" << name->s()
+               << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";
@@ -233,8 +238,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << source->fn << ":"
-               << name << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
+            ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << source->getFn()->s()
+               << ":" << name->s() << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort << " with exception style "
            << (exception_style == CXX ? "C++" : "CAPI") << '\n';
@@ -255,7 +260,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     }
 
 
-    CompiledFunction* cf = doCompile(f, source, &f->param_names, entry_descriptor, effort, exception_style, spec, name);
+    CompiledFunction* cf
+        = doCompile(f, source, &f->param_names, entry_descriptor, effort, exception_style, spec, name->s());
     compileIR(cf, effort);
 
     f->addVersion(cf);
@@ -264,7 +270,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     static StatCounter us_compiling("us_compiling");
     us_compiling.log(us);
     if (VERBOSITY() >= 1 && us > 100000) {
-        printf("Took %ldms to compile %s::%s (effort %d)!\n", us / 1000, source->fn.c_str(), name.c_str(), (int)effort);
+        printf("Took %ldms to compile %s::%s (effort %d)!\n", us / 1000, source->getFn()->c_str(), name->c_str(),
+               (int)effort);
     }
 
     static StatCounter num_compiles("num_compiles");
@@ -306,7 +313,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         FutureFlags future_flags = getFutureFlags(m->body, fn);
         ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn));
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, boxString(fn)));
 
         static BoxedString* doc_str = internStringImmortal("__doc__");
         bm->setattr(doc_str, si->getDocString(), NULL);
@@ -337,7 +344,8 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(cl, globals, boxedLocals);
 }
 
-CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::string fn, PyCompilerFlags* flags) {
+static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, BoxedString* fn,
+                                        PyCompilerFlags* flags) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     Timer _t("for evalOrExec()");
@@ -348,7 +356,7 @@ CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::
     // `caller_future_flags` are the future flags of the source that the exec statement is in.
     // We need to enable features that are enabled in either.
     FutureFlags caller_future_flags = flags ? flags->cf_flags : 0;
-    FutureFlags my_future_flags = getFutureFlags(body, fn.c_str());
+    FutureFlags my_future_flags = getFutureFlags(body, fn->c_str());
     FutureFlags future_flags = caller_future_flags | my_future_flags;
 
     if (flags) {
@@ -356,7 +364,7 @@ CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, std::
     }
 
     std::unique_ptr<SourceInfo> si(
-        new SourceInfo(getCurrentModule(), scoping, future_flags, source, std::move(body), std::move(fn)));
+        new SourceInfo(getCurrentModule(), scoping, future_flags, source, std::move(body), fn));
     CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
     return cl_f;
@@ -390,7 +398,7 @@ static AST_Suite* parseExec(llvm::StringRef source, bool interactive = false) {
     return parsedSuite;
 }
 
-static CLFunction* compileExec(AST_Suite* parsedSuite, llvm::StringRef fn, PyCompilerFlags* flags) {
+static CLFunction* compileExec(AST_Suite* parsedSuite, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedSuite, parsedSuite->body, fn, flags);
 }
 
@@ -417,7 +425,7 @@ static AST_Expression* parseEval(llvm::StringRef source) {
     return parsedExpr;
 }
 
-static CLFunction* compileEval(AST_Expression* parsedExpr, llvm::StringRef fn, PyCompilerFlags* flags) {
+static CLFunction* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
     // We need body (list of statements) to compile.
     // Obtain this by simply making a single statement which contains the expression.
     AST_Return* stmt = new AST_Return();
@@ -458,8 +466,8 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     }
     RELEASE_ASSERT(PyString_Check(type), "");
 
-    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s();
-    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s();
+    BoxedString* filename_str = static_cast<BoxedString*>(fn);
+    BoxedString* type_str = static_cast<BoxedString*>(type);
 
     if (iflags & ~(PyCF_MASK | PyCF_MASK_OBSOLETE | /* PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
         raiseExcHelper(ValueError, "compile(): unrecognised flags");
@@ -492,11 +500,11 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         RELEASE_ASSERT(PyString_Check(source), "");
         llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
 
-        if (type_str == "exec") {
+        if (type_str->s() == "exec") {
             parsed = parseExec(source_str);
-        } else if (type_str == "eval") {
+        } else if (type_str->s() == "eval") {
             parsed = parseEval(source_str);
-        } else if (type_str == "single") {
+        } else if (type_str->s() == "single") {
             parsed = parseExec(source_str, true);
         } else {
             raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
@@ -510,12 +518,12 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     pcf.cf_flags = future_flags;
 
     CLFunction* cl;
-    if (type_str == "exec" || type_str == "single") {
+    if (type_str->s() == "exec" || type_str->s() == "single") {
         // TODO: CPython parses execs as Modules
         if (parsed->type != AST_TYPE::Suite)
             raiseExcHelper(TypeError, "expected Suite node, got %s", boxAst(parsed)->cls->tp_name);
         cl = compileExec(static_cast<AST_Suite*>(parsed), filename_str, &pcf);
-    } else if (type_str == "eval") {
+    } else if (type_str->s() == "eval") {
         if (parsed->type != AST_TYPE::Expression)
             raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
         cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str, &pcf);
@@ -563,7 +571,8 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
         AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s());
-        cl = compileEval(parsed, "<string>", flags);
+        static BoxedString* string_string = internStringImmortal("<string>");
+        cl = compileEval(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
     } else {
@@ -642,7 +651,8 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
         AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
-        cl = compileExec(parsed, "<string>", flags);
+        static BoxedString* string_string = internStringImmortal("<string>");
+        cl = compileExec(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
     } else {

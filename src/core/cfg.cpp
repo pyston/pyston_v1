@@ -2733,7 +2733,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (b->predecessors.size() == 0) {
             if (b != rtn->getStartingBlock()) {
                 rtn->print();
-                printf("%s\n", source->getName().data());
+                printf("%s\n", source->getName()->c_str());
             }
             ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
         }

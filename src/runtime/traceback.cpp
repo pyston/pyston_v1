@@ -45,6 +45,9 @@ void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
     if (self->tb_next)
         v->visit(self->tb_next);
 
+    v->visit(self->line.file);
+    v->visit(self->line.func);
+
     Box::gcHandler(v, b);
 }
 
@@ -59,12 +62,12 @@ void printTraceback(Box* b) {
 
     for (; tb && tb != None; tb = static_cast<BoxedTraceback*>(tb->tb_next)) {
         auto& line = tb->line;
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line.file.c_str(), line.line, line.func.c_str());
+        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line.file->c_str(), line.line, line.func->c_str());
 
         if (line.line < 0)
             continue;
 
-        FILE* f = fopen(line.file.c_str(), "r");
+        FILE* f = fopen(line.file->c_str(), "r");
         if (f) {
             assert(line.line < 10000000 && "Refusing to try to seek that many lines forward");
             for (int i = 1; i < line.line; i++) {
@@ -104,7 +107,7 @@ Box* BoxedTraceback::getLines(Box* b) {
         BoxedList* lines = new BoxedList();
         for (BoxedTraceback* wtb = tb; wtb && wtb != None; wtb = static_cast<BoxedTraceback*>(wtb->tb_next)) {
             auto& line = wtb->line;
-            auto l = BoxedTuple::create({ boxString(line.file), boxString(line.func), boxInt(line.line) });
+            auto l = BoxedTuple::create({ line.file, line.func, boxInt(line.line) });
             listAppendInternal(lines, l);
         }
         tb->py_lines = lines;

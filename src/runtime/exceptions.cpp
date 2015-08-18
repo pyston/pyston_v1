@@ -37,7 +37,7 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
 
-    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, file, func), None);
+    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None);
     assert(!PyErr_Occurred());
     throw ExcInfo(exc->cls, exc, tb);
 }
@@ -243,7 +243,8 @@ extern "C" void caughtCapiException(AST_stmt* stmt, void* _source_info) {
     SourceInfo* source = static_cast<SourceInfo*>(_source_info);
     PyThreadState* tstate = PyThreadState_GET();
 
-    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->fn, source->getName()), &tstate->curexc_traceback);
+    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()),
+                    &tstate->curexc_traceback);
 }
 
 extern "C" void reraiseCapiExcAsCxx() {

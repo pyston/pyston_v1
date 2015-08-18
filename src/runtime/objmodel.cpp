@@ -2958,7 +2958,7 @@ static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_ou
 
 static llvm::StringRef getFunctionName(CLFunction* f) {
     if (f->source)
-        return f->source->getName();
+        return f->source->getName()->s();
     else if (f->versions.size()) {
         return "<builtin function>";
         // std::ostringstream oss;

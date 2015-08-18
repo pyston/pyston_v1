@@ -44,12 +44,12 @@ public:
 
     static Box* name(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
-        return boxString(static_cast<BoxedCode*>(b)->f->source->getName());
+        return static_cast<BoxedCode*>(b)->f->source->getName();
     }
 
     static Box* filename(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
-        return boxString(static_cast<BoxedCode*>(b)->f->source->fn);
+        return static_cast<BoxedCode*>(b)->f->source->getFn();
     }
 
     static Box* firstlineno(Box* b, void*) {

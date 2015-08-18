@@ -256,7 +256,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
             CLFunction* cl = f->f;
             if (cl->source) {
-                printf("User-defined function '%s'\n", cl->source->getName().data());
+                printf("User-defined function '%s'\n", cl->source->getName()->c_str());
             } else {
                 printf("A builtin function\n");
             }

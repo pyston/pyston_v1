@@ -432,7 +432,7 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     // some builtin functions that are BoxedFunctions but really ought to be a type that
     // we don't have yet.
     if (f->source) {
-        this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
+        this->name = static_cast<BoxedString*>(f->source->getName());
     }
 }
 

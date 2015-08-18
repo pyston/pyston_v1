@@ -468,7 +468,7 @@ Box* generatorName(Box* _self, void* context) {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return boxString(self->function->f->source->getName());
+    return self->function->f->source->getName();
 }
 
 void generatorDestructor(Box* b) {
