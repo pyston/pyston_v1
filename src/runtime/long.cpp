@@ -744,6 +744,12 @@ Box* longStr(BoxedLong* v) {
     return _PyLong_Format(v, 10, 0 /* no L */, 0);
 }
 
+Box* longBin(BoxedLong* v) {
+    if (!PyLong_Check(v))
+        raiseExcHelper(TypeError, "descriptor '__bin__' requires a 'long' object but received a '%s'", getTypeName(v));
+    return _PyLong_Format(v, 2, 0 /* no L */, 0);
+}
+
 Box* longHex(BoxedLong* v) {
     if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'long' object but received a '%s'", getTypeName(v));
@@ -1481,6 +1487,7 @@ void setupLong() {
     long_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)longFloat, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__bin__", new BoxedFunction(boxRTFunction((void*)longBin, STR, 1)));
     long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
     long_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)longOct, STR, 1)));
 
