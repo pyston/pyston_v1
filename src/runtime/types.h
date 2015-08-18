@@ -1017,7 +1017,7 @@ public:
 
     DEFAULT_CLASS(method_cls);
 
-    static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner);
+    static Box* descr_get(BoxedMethodDescriptor* self, Box* inst, Box* owner) noexcept;
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,

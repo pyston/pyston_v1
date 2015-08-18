@@ -1888,8 +1888,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                point out a bug in this reasoning a beer. */
         } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
                    && static_cast<BoxedFunction*>(descr)->f->always_use_version) {
-            type->tpp_descr_get = (descrgetfunc) static_cast<BoxedFunction*>(descr)->f->always_use_version->code;
-            specific = (void*)slot_tp_tpp_descr_get;
+            CompiledFunction* cf = static_cast<BoxedFunction*>(descr)->f->always_use_version;
+            if (cf->exception_style == CXX) {
+                type->tpp_descr_get = (descrgetfunc)cf->code;
+                specific = (void*)slot_tp_tpp_descr_get;
+            } else {
+                specific = cf->code;
+            }
         } else if (descr == Py_None && ptr == (void**)&type->tp_hash) {
             /* We specifically allow __hash__ to be set to None
                to prevent inheritance of the default
