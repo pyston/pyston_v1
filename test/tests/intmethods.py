@@ -138,3 +138,29 @@ print int(u"12938719238719827398172938712983791827938712987312", 16)
 print int(1e100)
 print int(*[1e100])
 print int(x=1e100)
+
+import sys
+min_int = -1 - sys.maxint
+max_int = sys.maxint
+
+print(min_int / 2)
+print(min_int / -2)
+print(min_int / 3)
+print(min_int / -3)
+print(min_int / 5)
+print(min_int / -5)
+print(min_int / 7)
+print(min_int / -7)
+
+print(max_int / 2)
+print(max_int / -2)
+print(-max_int / 2)
+print(max_int / 3)
+print(max_int / -3)
+print(-max_int / 3)
+print(max_int / 5)
+print(max_int / -5)
+print(-max_int / 5)
+print(max_int / 7)
+print(-max_int / 7)
+print(max_int / -7)
