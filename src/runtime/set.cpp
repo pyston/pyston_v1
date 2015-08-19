@@ -426,6 +426,12 @@ static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
     return rtn;
 }
 
+static Box* setIntersectionUpdate(BoxedSet* self, BoxedTuple* args) {
+    Box* tmp = setIntersection(self, args);
+    std::swap(self->s, ((BoxedSet*)tmp)->s);
+    return None;
+}
+
 Box* setCopy(BoxedSet* self) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
@@ -598,6 +604,9 @@ void setupSet() {
     set_cls->giveAttr("intersection",
                       new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
     frozenset_cls->giveAttr("intersection", set_cls->getattr(internStringMortal("intersection")));
+    set_cls->giveAttr("intersection_update",
+                      new BoxedFunction(boxRTFunction((void*)setIntersectionUpdate, UNKNOWN, 1, 0, true, false)));
+    frozenset_cls->giveAttr("intersection_update", set_cls->getattr(internStringMortal("intersection_update")));
     set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, 0, true, false)));
     frozenset_cls->giveAttr("difference", set_cls->getattr(internStringMortal("difference")));
     set_cls->giveAttr("difference_update",
