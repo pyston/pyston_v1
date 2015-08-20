@@ -1821,7 +1821,6 @@ Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals
 
 Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state) {
-    RELEASE_ASSERT(0, "didn't check if this still works");
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);
