@@ -105,6 +105,8 @@ public:
         printf("nonzero not defined for %s\n", debugName().c_str());
         abort();
     }
+    virtual ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, VAR* var,
+                                              AST_TYPE::AST_TYPE op_type);
     virtual ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("hasnext not defined for %s\n", debugName().c_str());
         abort();
@@ -264,6 +266,7 @@ public:
     virtual BoxedClass* guaranteedClass() = 0;
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) = 0;
+    virtual ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, AST_TYPE::AST_TYPE op_type) = 0;
     virtual ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, bool cls_only) = 0;
     virtual void setattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CompilerVariable* v) = 0;
@@ -334,6 +337,9 @@ public:
     }
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) override {
         return type->nonzero(emitter, info, this);
+    }
+    ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, AST_TYPE::AST_TYPE op_type) override {
+        return type->unaryop(emitter, info, this, op_type);
     }
     ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) override {
         return type->hasnext(emitter, info, this);
@@ -435,6 +441,15 @@ CompilerVariable* _ValuedCompilerType<V>::contains(IREmitter& emitter, const OpI
                                                    CompilerVariable* rhs) {
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
     auto r = UNKNOWN->contains(emitter, info, converted, rhs);
+    converted->decvref(emitter);
+    return r;
+}
+
+template <typename V>
+ConcreteCompilerVariable* _ValuedCompilerType<V>::unaryop(IREmitter& emitter, const OpInfo& info, VAR* var,
+                                                          AST_TYPE::AST_TYPE op_type) {
+    ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
+    auto r = UNKNOWN->unaryop(emitter, info, converted, op_type);
     converted->decvref(emitter);
     return r;
 }

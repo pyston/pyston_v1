@@ -239,6 +239,8 @@ public:
                                CallattrFlags flags, const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override;
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
+    ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                      AST_TYPE::AST_TYPE op_type) override;
     ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
@@ -731,6 +733,31 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     return boolFromI1(emitter, rtn_val);
 }
 
+ConcreteCompilerVariable* UnknownType::unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                               AST_TYPE::AST_TYPE op_type) {
+    ConcreteCompilerVariable* converted = var->makeConverted(emitter, var->getBoxType());
+
+    llvm::Value* rtn = NULL;
+    bool do_patchpoint = ENABLE_ICGENERICS;
+    if (do_patchpoint) {
+        ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 256);
+
+        std::vector<llvm::Value*> llvm_args;
+        llvm_args.push_back(converted->getValue());
+        llvm_args.push_back(getConstantInt(op_type, g.i32));
+
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::unaryop, llvm_args, info.unw_info);
+        rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+    } else {
+        rtn = emitter.createCall2(info.unw_info, g.funcs.unaryop, converted->getValue(),
+                                  getConstantInt(op_type, g.i32));
+    }
+
+    converted->decvref(emitter);
+
+    return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+}
+
 ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
     bool do_patchpoint = ENABLE_ICS;
     do_patchpoint = false; // we are currently using runtime ics for this
@@ -1012,6 +1039,26 @@ public:
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
         llvm::Value* cmp = emitter.getBuilder()->CreateICmpNE(var->getValue(), llvm::ConstantInt::get(g.i64, 0, false));
         return boolFromI1(emitter, cmp);
+    }
+
+    ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                      AST_TYPE::AST_TYPE op_type) override {
+        llvm::Value* unboxed = var->getValue();
+        if (op_type == AST_TYPE::USub) {
+            if (llvm::ConstantInt* llvm_val = llvm::dyn_cast<llvm::ConstantInt>(unboxed)) {
+                int64_t val = llvm_val->getSExtValue();
+                if (val != PYSTON_INT_MIN) {
+                    return makeInt(-val);
+                }
+            }
+            // Not safe to emit a simple negation in the general case since val could be INT_MIN.
+            // Could emit a check though.
+        }
+
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
+        auto rtn = converted->unaryop(emitter, info, op_type);
+        converted->decvref(emitter);
+        return rtn;
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -1834,6 +1881,11 @@ public:
         }
 
         return UNKNOWN->nonzero(emitter, info, var);
+    }
+
+    ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                      AST_TYPE::AST_TYPE op_type) override {
+        return UNKNOWN->unaryop(emitter, info, var, op_type);
     }
 
     ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
