@@ -581,7 +581,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         return Box::operator new(size, default_cls);                                                                   \
     }
 
-#if STAT_ALLOCATIONS
+#if STAT_ALLOCATION_TYPES
 #define ALLOC_STATS(cls)                                                                                               \
     if (cls->tp_name) {                                                                                                \
         std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \

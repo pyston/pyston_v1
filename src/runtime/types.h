@@ -83,6 +83,9 @@ BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
 extern "C" Box* getSysStdout();
 
+extern "C" BoxedTuple* EmptyTuple;
+extern "C" BoxedString* EmptyString;
+
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
@@ -492,11 +495,15 @@ static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated)
 class BoxedTuple : public BoxVar {
 public:
     static BoxedTuple* create(int64_t size) {
+        if (size == 0)
+            return EmptyTuple;
         BoxedTuple* rtn = new (size) BoxedTuple();
         memset(rtn->elts, 0, size * sizeof(Box*)); // TODO not all callers want this (but some do)
         return rtn;
     }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
+        if (nelts == 0)
+            return EmptyTuple;
         BoxedTuple* rtn = new (nelts) BoxedTuple();
         for (int i = 0; i < nelts; i++)
             assert(gc::isValidGCObject(elts[i]));
@@ -643,8 +650,6 @@ static_assert(sizeof(BoxedTuple) == sizeof(PyTupleObject), "");
 static_assert(offsetof(BoxedTuple, ob_size) == offsetof(PyTupleObject, ob_size), "");
 static_assert(offsetof(BoxedTuple, elts) == offsetof(PyTupleObject, ob_item), "");
 
-extern "C" BoxedTuple* EmptyTuple;
-extern "C" BoxedString* EmptyString;
 extern BoxedString* characters[UCHAR_MAX + 1];
 
 struct PyHasher {

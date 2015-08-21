@@ -8745,13 +8745,46 @@ static PyBufferProcs unicode_as_buffer = {
 static PyObject *
 unicode_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds);
 
-PyObject* unicode_new_inner(PyObject* x, char* encoding, char* errors) {
+PyObject* unicode_new_inner(PyTypeObject* type, PyObject* x, char* encoding, char* errors) {
+    PyObject* tmp;
     if (x == NULL)
-        return (PyObject *)_PyUnicode_New(0);
-    if (encoding == NULL && errors == NULL)
-        return PyObject_Unicode(x);
+        tmp = (PyObject *)_PyUnicode_New(0);
+    else if (encoding == NULL && errors == NULL)
+        tmp = PyObject_Unicode(x);
     else
-        return PyUnicode_FromEncodedObject(x, encoding, errors);
+        tmp = PyUnicode_FromEncodedObject(x, encoding, errors);
+
+    if (type == &PyUnicode_Type)
+        return tmp;
+
+    if (tmp == NULL)
+        return NULL;
+
+    // Inlined unicode_subtype_new:
+    PyUnicodeObject *tmp2;
+    PyUnicodeObject *pnew;
+    Py_ssize_t n;
+
+    assert(PyUnicode_Check(tmp));
+    tmp2 = (PyUnicodeObject*)tmp;
+
+    pnew = (PyUnicodeObject *) type->tp_alloc(type, n = tmp2->length);
+    if (pnew == NULL) {
+        Py_DECREF(tmp2);
+        return NULL;
+    }
+    pnew->str = (Py_UNICODE*) PyObject_MALLOC(sizeof(Py_UNICODE) * (n+1));
+    if (pnew->str == NULL) {
+        _Py_ForgetReference((PyObject *)pnew);
+        PyObject_Del(pnew);
+        Py_DECREF(tmp2);
+        return PyErr_NoMemory();
+    }
+    Py_UNICODE_COPY(pnew->str, tmp2->str, n+1);
+    pnew->length = n;
+    pnew->hash = tmp2->hash;
+    Py_DECREF(tmp2);
+    return (PyObject *)pnew;
 }
 
 static PyObject *
@@ -8762,42 +8795,11 @@ unicode_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     char *encoding = NULL;
     char *errors = NULL;
 
-    if (type != &PyUnicode_Type)
-        return unicode_subtype_new(type, args, kwds);
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oss:unicode",
                                      kwlist, &x, &encoding, &errors))
         return NULL;
-    return unicode_new_inner(x, encoding, errors);
-}
 
-static PyObject *
-unicode_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
-    PyUnicodeObject *tmp, *pnew;
-    Py_ssize_t n;
-
-    assert(PyType_IsSubtype(type, &PyUnicode_Type));
-    tmp = (PyUnicodeObject *)unicode_new(&PyUnicode_Type, args, kwds);
-    if (tmp == NULL)
-        return NULL;
-    assert(PyUnicode_Check(tmp));
-    pnew = (PyUnicodeObject *) type->tp_alloc(type, n = tmp->length);
-    if (pnew == NULL) {
-        Py_DECREF(tmp);
-        return NULL;
-    }
-    pnew->str = (Py_UNICODE*) PyObject_MALLOC(sizeof(Py_UNICODE) * (n+1));
-    if (pnew->str == NULL) {
-        _Py_ForgetReference((PyObject *)pnew);
-        PyObject_Del(pnew);
-        Py_DECREF(tmp);
-        return PyErr_NoMemory();
-    }
-    Py_UNICODE_COPY(pnew->str, tmp->str, n+1);
-    pnew->length = n;
-    pnew->hash = tmp->hash;
-    Py_DECREF(tmp);
-    return (PyObject *)pnew;
+    return unicode_new_inner(type, x, encoding, errors);
 }
 
 PyDoc_STRVAR(unicode_doc,

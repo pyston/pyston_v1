@@ -3254,7 +3254,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     ////
     // Second, apply any keywords:
 
-    BoxedDict* okwargs = NULL;
+    // Speed hack: we try to not create the kwargs dictionary if it will end up being empty.
+    // So if we see that we need to pass something, first set it to NULL, and then store the
+    // pointer here so that if we need to we can instantiate the dict and store it here.
+    // If you need to access the dict, you should call get_okwargs()
+    BoxedDict** _okwargs = NULL;
     if (paramspec.takes_kwargs) {
         int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
         if (rewrite_args) {
@@ -3270,33 +3274,43 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                 rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
         }
 
-        okwargs = new BoxedDict();
-        getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
+        _okwargs = (BoxedDict**)&getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs);
+        *_okwargs = NULL;
     }
+    auto get_okwargs = [=]() {
+        if (!paramspec.takes_kwargs)
+            return (BoxedDict*)nullptr;
+        BoxedDict* okw = *_okwargs;
+        if (okw)
+            return okw;
+        okw = *_okwargs = new BoxedDict();
+        return okw;
+    };
 
     if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
         raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
     }
 
-    if (argspec.num_keywords)
+    if (argspec.num_keywords) {
         assert(argspec.num_keywords == keyword_names->size());
 
-    for (int i = 0; i < argspec.num_keywords; i++) {
-        assert(!rewrite_args && "would need to be handled here");
+        BoxedDict* okwargs = get_okwargs();
+        for (int i = 0; i < argspec.num_keywords; i++) {
+            assert(!rewrite_args && "would need to be handled here");
 
-        int arg_idx = i + argspec.num_args;
-        Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
+            int arg_idx = i + argspec.num_args;
+            Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
 
-        if (!param_names || !param_names->takes_param_names) {
-            assert(okwargs);
-            assert(!rewrite_args); // would need to add it to r_kwargs
-            okwargs->d[(*keyword_names)[i]] = kw_val;
-            continue;
+            if (!param_names || !param_names->takes_param_names) {
+                assert(!rewrite_args); // would need to add it to r_kwargs
+                okwargs->d[(*keyword_names)[i]] = kw_val;
+                continue;
+            }
+
+            auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3,
+                                     oargs, okwargs, func_name);
+            assert(!rewrite_args);
         }
-
-        auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
-                                 okwargs, func_name);
-        assert(!rewrite_args);
     }
 
     if (argspec.has_kwargs) {
@@ -3315,6 +3329,10 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
         assert(PyDict_Check(kwargs));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
+
+        BoxedDict* okwargs = NULL;
+        if (d_kwargs->d.size())
+            okwargs = get_okwargs();
 
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);
