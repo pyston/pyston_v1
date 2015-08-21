@@ -510,6 +510,7 @@ public:
         bool rtn = false;
 
         if (isDeopt(ip)) {
+            assert(!skip_next_pythonlike_frame);
             skip_next_pythonlike_frame = true;
         } else if (frameIsPythonFrame(ip, bp, cursor, frame_iter)) {
             if (!skip_next_pythonlike_frame)

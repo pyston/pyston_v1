@@ -1819,8 +1819,10 @@ Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals
     return v ? v : None;
 }
 
-Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                       FrameStackState frame_state) {
+static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                                   FrameStackState frame_state) __attribute__((noinline));
+static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                                   FrameStackState frame_state) {
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);
@@ -1908,6 +1910,11 @@ Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclo
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : None;
+}
+
+Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                       FrameStackState frame_state) {
+    return astInterpretDeoptInner(clfunc, after_expr, enclosing_stmt, expr_val, frame_state);
 }
 
 extern "C" void printExprHelper(Box* obj) {
