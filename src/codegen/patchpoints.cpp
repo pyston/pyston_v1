@@ -29,7 +29,7 @@
 
 namespace pyston {
 
-void PatchpointInfo::addFrameVar(const std::string& name, CompilerType* type) {
+void PatchpointInfo::addFrameVar(llvm::StringRef name, CompilerType* type) {
     frame_vars.push_back(FrameVarInfo({.name = name, .type = type }));
 }
 
@@ -91,7 +91,7 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
         int num_args = frame_var.type->numFrameArgs();
 
         llvm::SmallVector<StackMap::Record::Location, 1> locations;
-        locations.append(&r->locations[cur_arg], &r->locations[cur_arg + num_args]);
+        locations.append(r->locations.data() + cur_arg, r->locations.data() + cur_arg + num_args);
 
         // printf("%s %d %d\n", frame_var.name.c_str(), r->locations[cur_arg].type, r->locations[cur_arg].regnum);
 
@@ -151,7 +151,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         cf->location_map->constants = stackmap->constants;
 
     for (int i = 0; i < nrecords; i++) {
-        StackMap::Record* r = stackmap->records[i];
+        StackMap::Record* r = &stackmap->records[i];
 
         assert(stackmap->stack_size_records.size() == 1);
         const StackMap::StackSizeRecord& stack_size_record = stackmap->stack_size_records[0];

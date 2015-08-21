@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace llvm {
 class JITEventListener;
@@ -61,20 +62,20 @@ struct StackMap {
         uint64_t id;
         uint32_t offset;
         uint16_t flags;
-        std::vector<Location> locations;
-        std::vector<LiveOut> live_outs;
+        llvm::SmallVector<Location, 8> locations;
+        llvm::SmallVector<LiveOut, 8> live_outs;
     };
 
-    std::vector<StackSizeRecord> stack_size_records;
+    llvm::SmallVector<StackSizeRecord, 1> stack_size_records;
     uint32_t header;
-    std::vector<uint64_t> constants;
-    std::vector<Record*> records;
+    llvm::SmallVector<uint64_t, 8> constants;
+    std::vector<Record> records;
 };
 
 // TODO this belongs somewhere else?
 class LocationMap {
 public:
-    std::vector<uint64_t> constants;
+    llvm::SmallVector<uint64_t, 8> constants;
 
     StackMap::Record::Location frame_info_location;
     bool frameInfoFound() { return frame_info_location.type != 0; }
@@ -88,10 +89,10 @@ public:
             CompilerType* type;
             llvm::SmallVector<StackMap::Record::Location, 1> locations;
         };
-        std::vector<LocationEntry> locations;
+        llvm::SmallVector<LocationEntry, 2> locations;
     };
 
-    std::unordered_map<std::string, LocationTable> names;
+    llvm::StringMap<LocationTable> names;
 };
 
 StackMap* parseStackMap();

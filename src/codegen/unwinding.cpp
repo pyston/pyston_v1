@@ -866,7 +866,7 @@ DeoptState getDeoptState() {
             std::unordered_set<std::string> is_undefined;
 
             for (const auto& p : cf->location_map->names) {
-                if (!startswith(p.first, "!is_defined_"))
+                if (!startswith(p.first(), "!is_defined_"))
                     continue;
 
                 for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
@@ -876,7 +876,7 @@ DeoptState getDeoptState() {
                         assert(locs.size() == 1);
                         uint64_t v = frame_iter->readLocation(locs[0]);
                         if ((v & 1) == 0)
-                            is_undefined.insert(p.first.substr(12));
+                            is_undefined.insert(p.first().substr(12));
 
                         break;
                     }
@@ -884,10 +884,10 @@ DeoptState getDeoptState() {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (p.first[0] == '!')
+                if (p.first()[0] == '!')
                     continue;
 
-                if (is_undefined.count(p.first))
+                if (is_undefined.count(p.first()))
                     continue;
 
                 for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
@@ -895,16 +895,16 @@ DeoptState getDeoptState() {
                         const auto& locs = e.locations;
 
                         llvm::SmallVector<uint64_t, 1> vals;
-                        // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
+                        // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
 
                         for (auto& loc : locs) {
                             vals.push_back(frame_iter->readLocation(loc));
                         }
 
                         Box* v = e.type->deserializeFromFrame(vals);
-                        // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
+                        // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
                         ASSERT(gc::isValidGCObject(v), "%p", v);
-                        d->d[boxString(p.first)] = v;
+                        d->d[boxString(p.first())] = v;
                     }
                 }
             }
@@ -961,7 +961,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
         std::unordered_set<std::string> is_undefined;
 
         for (const auto& p : cf->location_map->names) {
-            if (!startswith(p.first, "!is_defined_"))
+            if (!startswith(p.first(), "!is_defined_"))
                 continue;
 
             for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
@@ -971,7 +971,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
                     assert(locs.size() == 1);
                     uint64_t v = impl->readLocation(locs[0]);
                     if ((v & 1) == 0)
-                        is_undefined.insert(p.first.substr(12));
+                        is_undefined.insert(p.first().substr(12));
 
                     break;
                 }
@@ -979,13 +979,13 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
         }
 
         for (const auto& p : cf->location_map->names) {
-            if (p.first[0] == '!')
+            if (p.first()[0] == '!')
                 continue;
 
-            if (p.first[0] == '#')
+            if (p.first()[0] == '#')
                 continue;
 
-            if (is_undefined.count(p.first))
+            if (is_undefined.count(p.first()))
                 continue;
 
             for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
@@ -993,7 +993,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
                     const auto& locs = e.locations;
 
                     llvm::SmallVector<uint64_t, 1> vals;
-                    // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
+                    // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
                     // printf("%ld locs\n", locs.size());
 
                     for (auto& loc : locs) {
@@ -1004,9 +1004,9 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
                     }
 
                     Box* v = e.type->deserializeFromFrame(vals);
-                    // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
+                    // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
                     assert(gc::isValidGCObject(v));
-                    d->d[boxString(p.first)] = v;
+                    d->d[boxString(p.first())] = v;
                 }
             }
         }
