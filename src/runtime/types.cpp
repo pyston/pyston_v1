@@ -3816,26 +3816,25 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const char* fn, const char* doc) {
+BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
-    Box* b_name = boxString(name);
 
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
-    Box* existing = d->getOrNull(b_name);
+    Box* existing = d->getOrNull(name);
     if (existing && PyModule_Check(existing)) {
         return static_cast<BoxedModule*>(existing);
     }
 
     BoxedModule* module = new BoxedModule();
-    moduleInit(module, boxString(name), boxString(doc ? doc : ""));
+    moduleInit(module, name, boxString(doc ? doc : ""));
     if (fn)
         module->giveAttr("__file__", boxString(fn));
 
-    d->d[b_name] = module;
-    if (name == "__main__")
+    d->d[name] = module;
+    if (name->s() == "__main__")
         module->giveAttr("__builtins__", builtins_module);
     return module;
 }

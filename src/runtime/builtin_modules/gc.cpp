@@ -43,7 +43,7 @@ static Box* enable() {
 }
 
 void setupGC() {
-    BoxedModule* gc_module = createModule("gc");
+    BoxedModule* gc_module = createModule(boxString("gc"));
 
     gc_module->giveAttr("collect",
                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)gcCollect, NONE, 0), "collect"));
