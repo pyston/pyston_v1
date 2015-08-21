@@ -225,15 +225,18 @@ protected:
             } else
                 ++it;
         }
+        ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
     }
 
 public:
     PerThreadSet(CtorArgs... ctor_args) : ctor_args(std::forward<CtorArgs>(ctor_args)...) {
         int code = pthread_key_create(&pthread_key, &dtor);
+        ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
     }
 
     void forEachValue(std::function<void(T*)> f) {
         LOCK_REGION(&lock);
+        ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
 
         for (auto& p : map) {
             f(&p.second->val);
@@ -242,6 +245,7 @@ public:
 
     template <typename... Arguments> void forEachValue(std::function<void(T*, Arguments...)> f, Arguments... args) {
         LOCK_REGION(&lock);
+        ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
 
         for (auto& p : map) {
             f(&p.second->val, std::forward<Arguments>(args)...);
@@ -267,6 +271,7 @@ public:
 
             assert(map.count(pthread_self()) == 0);
             map[pthread_self()] = s;
+            ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
         }
         return &s->val;
     }
