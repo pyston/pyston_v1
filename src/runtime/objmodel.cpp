@@ -39,6 +39,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "gc/heap.h"
+#include "gc/roots.h"
 #include "runtime/classobj.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
@@ -3177,7 +3178,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         params_filled[i] = true;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
+    // unussed_positional relies on the fact that all the args (including a potentially-created varargs) will keep its
+    // contents alive
+    llvm::SmallVector<Box*, 4> unused_positional;
+    unused_positional.reserve(argspec.num_args - positional_to_positional + varargs_size - varargs_to_positional);
+
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
@@ -3236,12 +3241,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             }
         }
 
-        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
+        Box* ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
+
+    // unused_positional relies on varargs being alive so that it doesn't have to do its own tracking.
+    GC_KEEP_ALIVE(varargs);
 
     ////
     // Second, apply any keywords:
