@@ -724,6 +724,7 @@ public:
     iterator end() { return iterator(d.end()); }
 
     static void gcHandler(GCVisitor* v, Box* b);
+    static void dealloc(Box* b) noexcept;
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
