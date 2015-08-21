@@ -961,7 +961,7 @@ test_cpp_dwarf:
 	objdump -W test_asm | less
 	rm test_asm
 test_cpp_ll:
-	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11
 	less test.ll
 	rm test.ll
 .PHONY: bench_exceptions

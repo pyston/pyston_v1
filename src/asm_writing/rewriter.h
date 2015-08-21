@@ -296,7 +296,34 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
 
 class Rewriter : public ICSlotRewrite::CommitHook {
+private:
+    class RegionAllocator {
+    public:
+        static const int BLOCK_SIZE = 200; // reserve a bit of space for list/malloc overhead
+        std::list<char[BLOCK_SIZE]> blocks;
+
+        int cur_offset = BLOCK_SIZE + 1;
+
+        void* alloc(size_t bytes);
+    };
+    template <typename T> class RegionAllocatorAdaptor : public std::allocator<T> {
+    private:
+        RegionAllocator* allocator;
+
+    public:
+        T* allocate(size_t n) { return (T*)allocator->alloc(n); }
+        void deallocate(T* p, size_t n) {
+            // do nothing
+        }
+    };
+
+    // This needs to be the first member:
+    RegionAllocator allocator;
+
 protected:
+    // Allocates `bytes` bytes of data.  The allocation will get freed when the rewriter gets freed.
+    void* regionAlloc(size_t bytes) { return allocator.alloc(bytes); }
+
     // Helps generating the best code for loading a const integer value.
     // By keeping track of the last known value of every register and reusing it.
     class ConstLoader {
@@ -357,8 +384,8 @@ protected:
 
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
-    llvm::SmallVector<RewriterAction, 32> actions;
-    void addAction(std::function<void()> action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
+    std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
+    template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -377,7 +404,7 @@ protected:
             assert(!added_changing_action);
             last_guard_action = (int)actions.size();
         }
-        actions.emplace_back(std::move(action));
+        actions.emplace_back(std::forward<F>(action));
     }
     bool added_changing_action;
     bool marked_inside_ic;
