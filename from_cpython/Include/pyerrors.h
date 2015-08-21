@@ -10,14 +10,18 @@ extern "C" {
 
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
 } PyBaseExceptionObject;
 
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
     PyObject *msg;
@@ -31,7 +35,9 @@ typedef struct {
 #ifdef Py_USING_UNICODE
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
     PyObject *encoding;
@@ -44,7 +50,9 @@ typedef struct {
 
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
     PyObject *code;
@@ -52,7 +60,9 @@ typedef struct {
 
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
     PyObject *myerrno;
@@ -63,7 +73,9 @@ typedef struct {
 #ifdef MS_WINDOWS
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
+    // Pyston change: changed from dict to hcattrs
+    // PyObject *dict;
+    struct _hcattrs hcattrs;
     PyObject *args;
     PyObject *message;
     PyObject *myerrno;

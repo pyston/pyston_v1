@@ -505,6 +505,7 @@ public:
 
     HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
 };
+static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 
 class BoxedDict;
 class BoxedString;

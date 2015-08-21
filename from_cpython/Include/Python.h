@@ -86,6 +86,36 @@
 #include "warnings.h"
 #include "weakrefobject.h"
 
+// Pyston additions:
+// These new APIS give access to our fast hidden-class-based attributes implementation.
+// Ideally in the future this will just be "storage strategy" of dicts and all Python
+// dicts will benefit from it, but for now classes have to explicitly opt-in to having
+// these kinds of attrs.
+struct _hcattrs {
+    char _data[16];
+};
+#ifndef _PYSTON_API
+typedef struct _hcattrs PyHcAttrs;
+#else
+namespace pyston {
+class HCAttrs;
+}
+typedef int PyHcAttrs;
+#endif
+PyAPI_FUNC(void) PyObject_InitHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject*) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyType_RequestHcAttrs(PyTypeObject*, int offset) PYSTON_NOEXCEPT;
+// Sets a descriptor on the type so that the attrs are available via __dict__
+PyAPI_FUNC(void) PyType_GiveHcAttrsDictDescr(PyTypeObject*) PYSTON_NOEXCEPT;
+// These functions directly manipulate the hcattrs storage, bypassing any getattro
+// or descriptor logic.  This is the equivallent of callling PyDict_GetItemString
+// on an instance's dict.
+// These functions try to mimic the Dict versions as much as possible, so for example
+// the PyObject_GetHcAttrString function does not set an exception.
+PyAPI_FUNC(PyObject*) PyObject_GetHcAttrString(PyObject*, const char*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_SetHcAttrString(PyObject*, const char*, PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_DelHcAttrString(PyObject*, const char*) PYSTON_NOEXCEPT;
+
 #include "codecs.h"
 #include "pyerrors.h"
 

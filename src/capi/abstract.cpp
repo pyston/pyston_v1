@@ -797,8 +797,15 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
         return r;
     }
     if (!(PyClass_Check(cls) || PyInstance_Check(cls))) {
-        PyObject* checker;
-        checker = _PyObject_LookupSpecial(cls, "__subclasscheck__", &name);
+        PyObject* checker = NULL;
+        if (cls->cls->has_subclasscheck) {
+            checker = _PyObject_LookupSpecial(cls, "__subclasscheck__", &name);
+            if (!checker && PyErr_Occurred())
+                return -1;
+
+            assert(checker);
+        }
+
         if (checker != NULL) {
             PyObject* res;
             int ok = -1;

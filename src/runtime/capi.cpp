@@ -984,6 +984,13 @@ extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) noexcep
         err = PyExceptionInstance_Class(err);
 
     if (PyExceptionClass_Check(err) && PyExceptionClass_Check(exc)) {
+        // Pyston addition: fast-path the check for if the exception exactly-matches the specifier.
+        // Note that we have to check that the exception specifier doesn't have a custom metaclass
+        // (ie it's cls is type_cls), since otherwise we would have to check for subclasscheck overloading.
+        // (TODO actually, that should be fast now)
+        if (exc->cls == type_cls && exc == err)
+            return 1;
+
         int res = 0, reclimit;
         PyObject* exception, *value, *tb;
         PyErr_Fetch(&exception, &value, &tb);

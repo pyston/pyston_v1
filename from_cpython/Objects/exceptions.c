@@ -36,8 +36,8 @@ BaseException_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self = (PyBaseExceptionObject *)type->tp_alloc(type, 0);
     if (!self)
         return NULL;
-    /* the dict is created on the fly in PyObject_GenericSetAttr */
-    self->message = self->dict = NULL;
+    self->message = NULL;
+    PyObject_InitHcAttrs(&self->hcattrs);
 
     self->args = PyTuple_New(0);
     if (!self->args) {
@@ -84,7 +84,7 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
         if (!self)
             return NULL;
 
-        self->dict = NULL;
+        PyObject_InitHcAttrs(&self->hcattrs);
         if (arg) {
             self->args = PyTuple_Pack(1, arg);
             if (!self->args)
@@ -115,7 +115,8 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
 static int
 BaseException_clear(PyBaseExceptionObject *self)
 {
-    Py_CLEAR(self->dict);
+    // Pyston change:
+    // Py_CLEAR(self->dict);
     Py_CLEAR(self->args);
     Py_CLEAR(self->message);
     return 0;
@@ -132,7 +133,8 @@ BaseException_dealloc(PyBaseExceptionObject *self)
 static int
 BaseException_traverse(PyBaseExceptionObject *self, visitproc visit, void *arg)
 {
-    Py_VISIT(self->dict);
+    // Pyston change:
+    // Py_VISIT(self->dict);
     Py_VISIT(self->args);
     Py_VISIT(self->message);
     return 0;
@@ -225,10 +227,16 @@ BaseException_repr(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_reduce(PyBaseExceptionObject *self)
 {
+    /* Pyston change:
     if (self->args && self->dict)
         return PyTuple_Pack(3, Py_TYPE(self), self->args, self->dict);
     else
         return PyTuple_Pack(2, Py_TYPE(self), self->args);
+    */
+    PyObject* attr_wrapper = PyObject_GetAttrWrapper((PyObject*)self);
+    if (!attr_wrapper)
+        return NULL;
+    return PyTuple_Pack(3, Py_TYPE(self), self->args, attr_wrapper);
 }
 
 /*
@@ -299,6 +307,7 @@ static PySequenceMethods BaseException_as_sequence = {
     0                       /* sq_inplace_repeat; */
 };
 
+/* Pyston change: we use the standard dict descriptor for these types now
 static PyObject *
 BaseException_get_dict(PyBaseExceptionObject *self)
 {
@@ -327,6 +336,7 @@ BaseException_set_dict(PyBaseExceptionObject *self, PyObject *val)
     self->dict = val;
     return 0;
 }
+*/
 
 static PyObject *
 BaseException_get_args(PyBaseExceptionObject *self)
@@ -361,8 +371,7 @@ BaseException_get_message(PyBaseExceptionObject *self)
     PyObject *msg;
 
     /* if "message" is in self->dict, accessing a user-set message attribute */
-    if (self->dict &&
-        (msg = PyDict_GetItemString(self->dict, "message"))) {
+    if ((msg = PyObject_GetHcAttrString((PyObject*)self, "message"))) {
         Py_INCREF(msg);
         return msg;
     }
@@ -387,25 +396,18 @@ BaseException_set_message(PyBaseExceptionObject *self, PyObject *val)
 {
     /* if val is NULL, delete the message attribute */
     if (val == NULL) {
-        if (self->dict && PyDict_GetItemString(self->dict, "message")) {
-            if (PyDict_DelItemString(self->dict, "message") < 0)
+        if (PyObject_GetHcAttrString((PyObject*)self, "message")) {
+            if (PyObject_DelHcAttrString((PyObject*)self, "message") < 0)
                 return -1;
         }
         Py_CLEAR(self->message);
         return 0;
     }
 
-    /* else set it in __dict__, but may need to create the dict first */
-    if (self->dict == NULL) {
-        self->dict = PyDict_New();
-        if (!self->dict)
-            return -1;
-    }
-    return PyDict_SetItemString(self->dict, "message", val);
+    return PyObject_SetHcAttrString((PyObject*)self, "message", val);
 }
 
 static PyGetSetDef BaseException_getset[] = {
-    {"__dict__", (getter)BaseException_get_dict, (setter)BaseException_set_dict},
     {"args", (getter)BaseException_get_args, (setter)BaseException_set_args},
     {"message", (getter)BaseException_get_message,
             (setter)BaseException_set_message},
@@ -450,7 +452,7 @@ static PyTypeObject _PyExc_BaseException = {
     0,                          /* tp_dict */
     0,                          /* tp_descr_get */
     0,                          /* tp_descr_set */
-    offsetof(PyBaseExceptionObject, dict), /* tp_dictoffset */
+    /* Pyston change: offsetof(PyBaseExceptionObject, dict)*/ 0, /* tp_dictoffset */
     (initproc)BaseException_init, /* tp_init */
     0,                          /* tp_alloc */
     BaseException_new,          /* tp_new */
@@ -474,7 +476,7 @@ static PyTypeObject _PyExc_ ## EXCNAME = { \
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, \
     PyDoc_STR(EXCDOC), (traverseproc)BaseException_traverse, \
     (inquiry)BaseException_clear, 0, 0, 0, 0, 0, 0, 0, &_ ## EXCBASE, \
-    0, 0, 0, offsetof(PyBaseExceptionObject, dict), \
+    0, 0, 0, /* Pyston change: offsetof(PyBaseExceptionObject, dict) */ 0, \
     (initproc)BaseException_init, 0, BaseException_new,\
 }; \
 PyObject *PyExc_ ## EXCNAME = (PyObject *)&_PyExc_ ## EXCNAME
@@ -490,7 +492,7 @@ static PyTypeObject _PyExc_ ## EXCNAME = { \
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, \
     PyDoc_STR(EXCDOC), (traverseproc)EXCSTORE ## _traverse, \
     (inquiry)EXCSTORE ## _clear, 0, 0, 0, 0, 0, 0, 0, &_ ## EXCBASE, \
-    0, 0, 0, offsetof(Py ## EXCSTORE ## Object, dict), \
+    0, 0, 0, /* Pyston change: offsetof(Py ## EXCSTORE ## Object, dict) */ 0, \
     (initproc)EXCSTORE ## _init, 0, BaseException_new,\
 }; \
 PyObject *PyExc_ ## EXCNAME = (PyObject *)&_PyExc_ ## EXCNAME
@@ -507,7 +509,7 @@ static PyTypeObject _PyExc_ ## EXCNAME = { \
     PyDoc_STR(EXCDOC), (traverseproc)EXCSTORE ## _traverse, \
     (inquiry)EXCSTORE ## _clear, 0, 0, 0, 0, EXCMETHODS, \
     EXCMEMBERS, 0, &_ ## EXCBASE, \
-    0, 0, 0, offsetof(Py ## EXCSTORE ## Object, dict), \
+    0, 0, 0, /* Pyston change: offsetof(Py ## EXCSTORE ## Object, dict) */ 0, \
     (initproc)EXCSTORE ## _init, 0, BaseException_new,\
 }; \
 PyObject *PyExc_ ## EXCNAME = (PyObject *)&_PyExc_ ## EXCNAME
@@ -831,12 +833,17 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
     } else
         Py_INCREF(args);
 
+    /* Pyston change:
     if (self->dict)
         res = PyTuple_Pack(3, Py_TYPE(self), args, self->dict);
     else
         res = PyTuple_Pack(2, Py_TYPE(self), args);
     Py_DECREF(args);
-    return res;
+    return res; */
+    PyObject* attr_wrapper = PyObject_GetAttrWrapper((PyObject*)self);
+    if (!attr_wrapper)
+        return NULL;
+    return PyTuple_Pack(3, Py_TYPE(self), args, attr_wrapper);
 }
 
 
@@ -1743,7 +1750,7 @@ static PyTypeObject _PyExc_UnicodeEncodeError = {
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
     PyDoc_STR("Unicode encoding error."), (traverseproc)UnicodeError_traverse,
     (inquiry)UnicodeError_clear, 0, 0, 0, 0, 0, UnicodeError_members,
-    0, &_PyExc_UnicodeError, 0, 0, 0, offsetof(PyUnicodeErrorObject, dict),
+    0, &_PyExc_UnicodeError, 0, 0, 0, /* Pyston change: offsetof(PyUnicodeErrorObject, dict) */ 0,
     (initproc)UnicodeEncodeError_init, 0, BaseException_new,
 };
 PyObject *PyExc_UnicodeEncodeError = (PyObject *)&_PyExc_UnicodeEncodeError;
@@ -1828,7 +1835,7 @@ static PyTypeObject _PyExc_UnicodeDecodeError = {
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
     PyDoc_STR("Unicode decoding error."), (traverseproc)UnicodeError_traverse,
     (inquiry)UnicodeError_clear, 0, 0, 0, 0, 0, UnicodeError_members,
-    0, &_PyExc_UnicodeError, 0, 0, 0, offsetof(PyUnicodeErrorObject, dict),
+    0, &_PyExc_UnicodeError, 0, 0, 0, /* Pyston change: offsetof(PyUnicodeErrorObject, dict) */ 0,
     (initproc)UnicodeDecodeError_init, 0, BaseException_new,
 };
 PyObject *PyExc_UnicodeDecodeError = (PyObject *)&_PyExc_UnicodeDecodeError;
@@ -1926,7 +1933,7 @@ static PyTypeObject _PyExc_UnicodeTranslateError = {
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
     PyDoc_STR("Unicode translation error."), (traverseproc)UnicodeError_traverse,
     (inquiry)UnicodeError_clear, 0, 0, 0, 0, 0, UnicodeError_members,
-    0, &_PyExc_UnicodeError, 0, 0, 0, offsetof(PyUnicodeErrorObject, dict),
+    0, &_PyExc_UnicodeError, 0, 0, 0, /* Pyston change: offsetof(PyUnicodeErrorObject, dict) */ 0,
     (initproc)UnicodeTranslateError_init, 0, BaseException_new,
 };
 PyObject *PyExc_UnicodeTranslateError = (PyObject *)&_PyExc_UnicodeTranslateError;
@@ -2110,7 +2117,10 @@ _PyExc_Init(void)
 {
     PyObject *m, *bltinmod, *bdict;
 
+    PyType_RequestHcAttrs(&_PyExc_BaseException, offsetof(PyBaseExceptionObject, hcattrs));
     PRE_INIT(BaseException)
+    PyType_GiveHcAttrsDictDescr(&_PyExc_BaseException);
+
     PRE_INIT(Exception)
     PRE_INIT(StandardError)
     PRE_INIT(TypeError)
