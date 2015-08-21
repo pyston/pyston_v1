@@ -294,7 +294,7 @@ private:
     void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
-    void _emitPPCall(RewriterVar* result, void* func_addr, const RewriterVar::SmallVector& args, int num_slots,
+    void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                      int slot_size);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);

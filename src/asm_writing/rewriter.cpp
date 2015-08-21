@@ -816,12 +816,30 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
         type = ActionType::MUTATION;
     else
         type = ActionType::NORMAL;
-    addAction([=]() { this->_call(result, has_side_effects, func_addr, args, args_xmm); }, uses, type);
+
+    // It's not nice to pass llvm::SmallVectors through a closure, especially with our SmallFunction
+    // optimization, so just regionAlloc them and copy the data in:
+    RewriterVar** _args = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * args.size());
+    memcpy(_args, args.begin(), sizeof(RewriterVar*) * args.size());
+    RewriterVar** _args_xmm = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * args_xmm.size());
+    memcpy(_args_xmm, args_xmm.begin(), sizeof(RewriterVar*) * args_xmm.size());
+
+    int args_size = args.size();
+    assert(args_xmm.size() <= 0x7fff);
+    // Hack: pack this into a short to make sure it fits in the closure
+    short xmm_args_size = args_xmm.size();
+
+    // Hack: explicitly order the closure arguments so they pad nicer
+    addAction([args_size, xmm_args_size, has_side_effects, this, result, func_addr, _args, _args_xmm]() {
+        this->_call(result, has_side_effects, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
+                    llvm::ArrayRef<RewriterVar*>(_args_xmm, xmm_args_size));
+    }, uses, type);
+
     return result;
 }
 
-void Rewriter::_setupCall(bool has_side_effects, const RewriterVar::SmallVector& args,
-                          const RewriterVar::SmallVector& args_xmm) {
+void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args,
+                          llvm::ArrayRef<RewriterVar*> args_xmm) {
     if (has_side_effects)
         assert(done_guarding);
 
@@ -966,8 +984,8 @@ void Rewriter::_setupCall(bool has_side_effects, const RewriterVar::SmallVector&
 #endif
 }
 
-void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
-                     const RewriterVar::SmallVector& args_xmm) {
+void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
+                     llvm::ArrayRef<RewriterVar*> args_xmm) {
     assembler->comment("_call");
 
     // RewriterVarUsage scratch = createNewVar(Location::any());

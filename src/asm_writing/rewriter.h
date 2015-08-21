@@ -69,13 +69,9 @@ public:
         int32_t _data;
     };
 
-    constexpr Location() : type(Uninitialized), _data(-1) {}
-    constexpr Location(const Location& r) : type(r.type), _data(r._data) {}
-    Location operator=(const Location& r) {
-        type = r.type;
-        _data = r._data;
-        return *this;
-    }
+    constexpr Location() noexcept : type(Uninitialized), _data(-1) {}
+    constexpr Location(const Location& r) = default;
+    Location& operator=(const Location& r) = default;
 
     constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
 
@@ -283,11 +279,50 @@ public:
     friend class JitFragmentWriter;
 };
 
+// A utility class that is similar to std::function, but stores any closure data inline rather
+// than in a separate allocation.  It's similar to SmallVector, but will just fail to compile if
+// you try to put more bytes in than you allocated.
+// Currently, it only works for functions with the signature "void()"
+template <int N = 24> class SmallFunction {
+private:
+    void (*func)(void*);
+    char data[N];
+
+    template <typename Functor> struct Caller {
+        static void call(void* data) { (*(Functor*)data)(); }
+    };
+
+public:
+    template <typename Functor> SmallFunction(Functor&& f) noexcept {
+        static_assert(std::has_trivial_copy_constructor<typename std::remove_reference<Functor>::type>::value,
+                      "SmallFunction currently only works with simple types");
+        static_assert(std::is_trivially_destructible<typename std::remove_reference<Functor>::type>::value,
+                      "SmallFunction currently only works with simple types");
+        static_assert(sizeof(Functor) <= sizeof(data), "Please increase N");
+        new (data) typename std::remove_reference<Functor>::type(std::forward<Functor>(f));
+        func = Caller<Functor>::call;
+    }
+
+    SmallFunction() = default;
+    SmallFunction(const SmallFunction<N>& rhs) = default;
+    SmallFunction(SmallFunction<N>&& rhs) = default;
+    SmallFunction& operator=(const SmallFunction<N>& rhs) = default;
+    SmallFunction& operator=(SmallFunction<N>&& rhs) = default;
+
+    void operator()() { func(data); }
+};
+
 class RewriterAction {
 public:
-    std::function<void()> action;
+    SmallFunction<48> action;
 
-    RewriterAction(std::function<void()> f) : action(std::move(f)) {}
+    template <typename F> RewriterAction(F&& action) : action(std::forward<F>(action)) {}
+
+    RewriterAction() = default;
+    RewriterAction(const RewriterAction& rhs) = default;
+    RewriterAction(RewriterAction&& rhs) = default;
+    RewriterAction& operator=(const RewriterAction& rhs) = default;
+    RewriterAction& operator=(RewriterAction&& rhs) = default;
 };
 
 enum class ActionType { NORMAL, GUARD, MUTATION };
@@ -449,10 +484,9 @@ protected:
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
-    void _setupCall(bool has_side_effects, const RewriterVar::SmallVector& args,
-                    const RewriterVar::SmallVector& args_xmm);
-    void _call(RewriterVar* result, bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
-               const RewriterVar::SmallVector& args_xmm);
+    void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm);
+    void _call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
+               llvm::ArrayRef<RewriterVar*> args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
