@@ -613,7 +613,7 @@ public:
         assert(tuple_cls->is_pyston_class);
         assert(tuple_cls->attrs_offset == 0);
 
-        void* mem = gc_alloc(sizeof(BoxedTuple) + nitems * sizeof(Box*), gc::GCKind::PYTHON);
+        void* mem = gc_alloc(offsetof(BoxedTuple, elts) + nitems * sizeof(Box*), gc::GCKind::PYTHON);
         assert(mem);
 
         BoxVar* rtn = static_cast<BoxVar*>(mem);
