@@ -1333,29 +1333,9 @@ private:
             rtn->decvref(emitter);
             return boolFromI1(emitter, negated);
         } else {
-            // TODO These are pretty inefficient, but luckily I don't think they're used that often:
-            ConcreteCompilerVariable* converted = operand->makeConverted(emitter, operand->getBoxType());
+            ConcreteCompilerVariable* rtn = operand->unaryop(emitter, getOpInfoForNode(node, unw_info), node->op_type);
             operand->decvref(emitter);
-
-            llvm::Value* rtn = NULL;
-            bool do_patchpoint = ENABLE_ICGENERICS;
-            if (do_patchpoint) {
-                ICSetupInfo* pp = createGenericIC(getEmptyOpInfo(unw_info).getTypeRecorder(), true, 256);
-
-                std::vector<llvm::Value*> llvm_args;
-                llvm_args.push_back(converted->getValue());
-                llvm_args.push_back(getConstantInt(node->op_type, g.i32));
-
-                llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::unaryop, llvm_args, unw_info);
-                rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-            } else {
-                rtn = emitter.createCall2(unw_info, g.funcs.unaryop, converted->getValue(),
-                                          getConstantInt(node->op_type, g.i32));
-            }
-
-            converted->decvref(emitter);
-
-            return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+            return rtn;
         }
     }
 

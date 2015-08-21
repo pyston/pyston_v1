@@ -417,7 +417,7 @@ static int main(int argc, char** argv) {
         // if the user invoked `pyston -c command`
         if (command != NULL) {
             try {
-                main_module = createModule("__main__", "<string>");
+                main_module = createModule(boxString("__main__"), "<string>");
                 AST_Module* m = parse_string(command);
                 compileAndRunModule(m, main_module);
                 rtncode = 0;
@@ -428,7 +428,7 @@ static int main(int argc, char** argv) {
             }
         } else if (module != NULL) {
             // TODO: CPython uses the same main module for all code paths
-            main_module = createModule("__main__", "<string>");
+            main_module = createModule(boxString("__main__"), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
             rtncode = 0;
@@ -455,7 +455,7 @@ static int main(int argc, char** argv) {
                 prependToSysPath(real_path);
                 free(real_path);
 
-                main_module = createModule("__main__", fn);
+                main_module = createModule(boxString("__main__"), fn);
                 try {
                     AST_Module* ast = caching_parse_file(fn);
                     compileAndRunModule(ast, main_module);
@@ -474,7 +474,7 @@ static int main(int argc, char** argv) {
             Py_InspectFlag = 0;
 
             if (!main_module) {
-                main_module = createModule("__main__", "<stdin>");
+                main_module = createModule(boxString("__main__"), "<stdin>");
             } else {
                 // main_module->fn = "<stdin>";
             }

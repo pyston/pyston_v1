@@ -1449,9 +1449,9 @@ Box* builtinFormat(Box* value, Box* format_spec) {
 }
 
 void setupBuiltins() {
-    builtins_module
-        = createModule("__builtin__", NULL, "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
-                                            "the `nil' object; Ellipsis represents `...' in slices.");
+    builtins_module = createModule(boxString("__builtin__"), NULL,
+                                   "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
+                                   "the `nil' object; Ellipsis represents `...' in slices.");
 
     BoxedHeapClass* ellipsis_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");

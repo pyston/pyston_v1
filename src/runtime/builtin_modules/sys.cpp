@@ -586,7 +586,7 @@ void setupSys() {
     gc::registerPermanentRoot(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
-    sys_module = createModule("sys");
+    sys_module = createModule(boxString("sys"));
 
     sys_module->giveAttr("modules", sys_modules_dict);
 

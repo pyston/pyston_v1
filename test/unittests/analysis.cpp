@@ -40,7 +40,7 @@ TEST_F(AnalysisTest, augassign) {
 
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    SourceInfo* si = new SourceInfo(createModule("augassign", fn.c_str()), scoping, future_flags, func,
+    SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func,
             func->body, boxString(fn));
 
     CFG* cfg = computeCFG(si, func->body);
@@ -70,7 +70,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    std::unique_ptr<SourceInfo> si(new SourceInfo(createModule("osr" + std::to_string((is_osr << 1) + i_maybe_undefined),
+    std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
                     fn.c_str()), scoping, future_flags, func, func->body, boxString(fn)));
     CLFunction* clfunc = new CLFunction(0, 0, false, false, std::move(si));
 

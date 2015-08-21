@@ -35,13 +35,12 @@ static const std::string name_str("__name__");
 static const std::string package_str("__package__");
 static BoxedClass* null_importer_cls;
 
-static void removeModule(const std::string& name) {
+static void removeModule(BoxedString* name) {
     BoxedDict* d = getSysModulesDict();
-    Box* b_name = boxString(name);
-    d->d.erase(b_name);
+    d->d.erase(name);
 }
 
-Box* createAndRunModule(const std::string& name, const std::string& fn) {
+Box* createAndRunModule(BoxedString* name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn.c_str());
 
     AST_Module* ast = caching_parse_file(fn.c_str());
@@ -53,13 +52,13 @@ Box* createAndRunModule(const std::string& name, const std::string& fn) {
         throw e;
     }
 
-    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    Box* r = getSysModulesDict()->getOrNull(name);
     if (!r)
-        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name->c_str());
     return r;
 }
 
-static Box* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
+static Box* createAndRunModule(BoxedString* name, const std::string& fn, const std::string& module_path) {
     BoxedModule* module = createModule(name, fn.c_str());
 
     Box* b_path = boxString(module_path);
@@ -79,9 +78,9 @@ static Box* createAndRunModule(const std::string& name, const std::string& fn, c
         throw e;
     }
 
-    Box* r = getSysModulesDict()->getOrNull(boxString(name));
+    Box* r = getSysModulesDict()->getOrNull(name);
     if (!r)
-        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name.c_str());
+        raiseExcHelper(ImportError, "Loaded module %.200s not found in sys.modules", name->c_str());
     return r;
 }
 
@@ -184,7 +183,7 @@ struct SearchResult {
     SearchResult(Box* loader) : loader(loader), type(IMP_HOOK) {}
 };
 
-SearchResult findModule(const std::string& name, const std::string& full_name, BoxedList* path_list) {
+SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedList* path_list) {
     static BoxedString* meta_path_str = internStringImmortal("meta_path");
     BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(meta_path_str));
     if (!meta_path || meta_path->cls != list_cls)
@@ -196,8 +195,7 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
 
         auto path_pass = path_list ? path_list : None;
         CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
-        Box* loader
-            = callattr(finder, findmodule_str, callattr_flags, boxString(full_name), path_pass, NULL, NULL, NULL);
+        Box* loader = callattr(finder, findmodule_str, callattr_flags, full_name, path_pass, NULL, NULL, NULL);
 
         if (loader != None)
             return SearchResult(loader);
@@ -240,8 +238,7 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
 
         if (importer != None) {
             CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
-            Box* loader
-                = callattr(importer, findmodule_str, callattr_flags, boxString(full_name), NULL, NULL, NULL, NULL);
+            Box* loader = callattr(importer, findmodule_str, callattr_flags, full_name, NULL, NULL, NULL, NULL);
             if (loader != None)
                 return SearchResult(loader);
         }
@@ -371,11 +368,10 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
 }
 
 
-static Box* importSub(const std::string& name, const std::string& full_name, Box* parent_module) {
-    Box* boxed_name = boxString(full_name);
+static Box* importSub(const std::string& name, BoxedString* full_name, Box* parent_module) {
     BoxedDict* sys_modules = getSysModulesDict();
-    if (sys_modules->d.find(boxed_name) != sys_modules->d.end()) {
-        return sys_modules->d[boxed_name];
+    if (sys_modules->d.find(full_name) != sys_modules->d.end()) {
+        return sys_modules->d[full_name];
     }
 
     BoxedList* path_list;
@@ -406,12 +402,11 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
                 CallattrFlags callattr_flags{.cls_only = false,
                                              .null_on_nonexistent = false,
                                              .argspec = ArgPassSpec(1) };
-                module
-                    = callattr(sr.loader, loadmodule_str, callattr_flags, boxString(full_name), NULL, NULL, NULL, NULL);
+                module = callattr(sr.loader, loadmodule_str, callattr_flags, full_name, NULL, NULL, NULL, NULL);
             } else
                 RELEASE_ASSERT(0, "%d", sr.type);
         } catch (ExcInfo e) {
-            removeModule(name);
+            removeModule(full_name);
             throw e;
         }
 
@@ -464,10 +459,10 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
     std::string subname(local_name.substr(0, len));
     buf += subname;
 
-    result = importSub(subname, buf, mod);
+    result = importSub(subname, boxString(buf), mod);
     if (result == None && altmod != mod) {
         /* Here, altmod must be None and mod must not be None */
-        result = importSub(subname, subname, altmod);
+        result = importSub(subname, boxString(subname), altmod);
         if (result != NULL && result != None) {
             markMiss(buf);
 
@@ -597,7 +592,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
             continue;
 
         // Just want to import it and add it to the modules list for now:
-        importSub(s->s(), (llvm::Twine(buf) + "." + s->s()).str(), module);
+        importSub(s->s(), boxStringTwine(llvm::Twine(buf) + "." + s->s()), module);
     }
 }
 
@@ -626,11 +621,12 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
 extern "C" PyObject* PyImport_AddModule(const char* name) noexcept {
     try {
         PyObject* modules = getSysModulesDict();
-        PyObject* m = PyDict_GetItemString(modules, name);
+        BoxedString* s = boxString(name);
+        PyObject* m = PyDict_GetItem(modules, s);
 
         if (m != NULL && m->cls == module_cls)
             return m;
-        return createModule(name);
+        return createModule(s);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -638,6 +634,7 @@ extern "C" PyObject* PyImport_AddModule(const char* name) noexcept {
 }
 
 extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* pathname) noexcept {
+    BoxedString* s = boxString(name);
     try {
         RELEASE_ASSERT(co->cls == str_cls, "");
         BoxedString* code = (BoxedString*)co;
@@ -652,7 +649,7 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
         compileAndRunModule(ast, module);
         return module;
     } catch (ExcInfo e) {
-        removeModule(name);
+        removeModule(s);
         setCAPIException(e);
         return NULL;
     }
@@ -694,7 +691,7 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     BoxedString* name = static_cast<BoxedString*>(_name);
     BoxedList* path_list = path && path != None ? path : getSysPath();
 
-    SearchResult sr = findModule(name->s(), name->s(), path_list);
+    SearchResult sr = findModule(name->s(), name, path_list);
     if (sr.type == SearchResult::SEARCH_ERROR)
         raiseExcHelper(ImportError, "%s", name->data());
 
@@ -747,10 +744,10 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
         RELEASE_ASSERT(suffix->s().empty(), "");
         RELEASE_ASSERT(mode->s().empty(), "");
         RELEASE_ASSERT(_file == None, "");
-        return createAndRunModule(name->s(), (llvm::Twine(pathname->s()) + "/__init__.py").str(), pathname->s());
+        return createAndRunModule(name, (llvm::Twine(pathname->s()) + "/__init__.py").str(), pathname->s());
     } else if (type->n == SearchResult::PY_SOURCE) {
         RELEASE_ASSERT(_file->cls == file_cls, "");
-        return createAndRunModule(name->s(), pathname->s());
+        return createAndRunModule(name, pathname->s());
     }
 
     Py_FatalError("unimplemented");
@@ -762,7 +759,7 @@ Box* impLoadSource(Box* _name, Box* _pathname, Box* _file) {
     RELEASE_ASSERT(_name->cls == str_cls, "");
     RELEASE_ASSERT(_pathname->cls == str_cls, "");
 
-    return createAndRunModule(static_cast<BoxedString*>(_name)->s(), static_cast<BoxedString*>(_pathname)->s());
+    return createAndRunModule(static_cast<BoxedString*>(_name), static_cast<BoxedString*>(_pathname)->s());
 }
 
 Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
@@ -782,10 +779,10 @@ Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
         shortname = lastdot + 1;
     }
 
-    return importCExtension(name->s(), shortname, pathname->s());
+    return importCExtension(name, shortname, pathname->s());
 }
 
-BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path) {
+BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path) {
     void* handle = dlopen(path.c_str(), RTLD_NOW);
     if (!handle) {
         // raiseExcHelper(ImportError, "%s", dlerror());
@@ -815,7 +812,7 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
     bss_end -= bss_end % sizeof(void*);
     gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
 
-    char* packagecontext = strdup(full_name.c_str());
+    char* packagecontext = strdup(full_name->c_str());
     char* oldcontext = _Py_PackageContext;
     _Py_PackageContext = packagecontext;
     (*init)();
@@ -825,8 +822,7 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
     checkAndThrowCAPIException();
 
     BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxString(full_name);
-    Box* _m = sys_modules->d[s];
+    Box* _m = sys_modules->d[full_name];
     RELEASE_ASSERT(_m, "dynamic module not initialized properly");
     assert(_m->cls == module_cls);
 
@@ -886,8 +882,8 @@ Box* impIsFrozen(Box* name) {
 
 void setupImport() {
     BoxedModule* imp_module
-        = createModule("imp", NULL, "'This module provides the components needed to build your own\n"
-                                    "__import__ function.  Undocumented functions are obsolete.'");
+        = createModule(boxString("imp"), NULL, "'This module provides the components needed to build your own\n"
+                                               "__import__ function.  Undocumented functions are obsolete.'");
 
     imp_module->giveAttr("PY_SOURCE", boxInt(SearchResult::PY_SOURCE));
     imp_module->giveAttr("PY_COMPILED", boxInt(SearchResult::PY_COMPILED));

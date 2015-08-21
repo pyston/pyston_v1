@@ -519,9 +519,17 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
 
 } // namespace set
 
+void BoxedSet::dealloc(Box* b) noexcept {
+    assert(PyAnySet_Check(b));
+    static_cast<BoxedSet*>(b)->s.~Set();
+}
+
 using namespace pyston::set;
 
 void setupSet() {
+    set_cls->tp_dealloc = frozenset_cls->tp_dealloc = BoxedSet::dealloc;
+    set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
+
     set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSetIterator::gcHandler, 0, 0,
                                               sizeof(BoxedSetIterator), false, "setiterator");
     set_iterator_cls->giveAttr(

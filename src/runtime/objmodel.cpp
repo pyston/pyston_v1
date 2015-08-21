@@ -39,6 +39,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "gc/heap.h"
+#include "gc/roots.h"
 #include "runtime/classobj.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
@@ -3177,7 +3178,11 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         params_filled[i] = true;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
+    // unussed_positional relies on the fact that all the args (including a potentially-created varargs) will keep its
+    // contents alive
+    llvm::SmallVector<Box*, 4> unused_positional;
+    unused_positional.reserve(argspec.num_args - positional_to_positional + varargs_size - varargs_to_positional);
+
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
@@ -3236,17 +3241,24 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             }
         }
 
-        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
+        Box* ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
+    // unused_positional relies on varargs being alive so that it doesn't have to do its own tracking.
+    GC_KEEP_ALIVE(varargs);
+
     ////
     // Second, apply any keywords:
 
-    BoxedDict* okwargs = NULL;
+    // Speed hack: we try to not create the kwargs dictionary if it will end up being empty.
+    // So if we see that we need to pass something, first set it to NULL, and then store the
+    // pointer here so that if we need to we can instantiate the dict and store it here.
+    // If you need to access the dict, you should call get_okwargs()
+    BoxedDict** _okwargs = NULL;
     if (paramspec.takes_kwargs) {
         int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
         if (rewrite_args) {
@@ -3262,33 +3274,43 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                 rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
         }
 
-        okwargs = new BoxedDict();
-        getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
+        _okwargs = (BoxedDict**)&getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs);
+        *_okwargs = NULL;
     }
+    auto get_okwargs = [=]() {
+        if (!paramspec.takes_kwargs)
+            return (BoxedDict*)nullptr;
+        BoxedDict* okw = *_okwargs;
+        if (okw)
+            return okw;
+        okw = *_okwargs = new BoxedDict();
+        return okw;
+    };
 
     if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
         raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
     }
 
-    if (argspec.num_keywords)
+    if (argspec.num_keywords) {
         assert(argspec.num_keywords == keyword_names->size());
 
-    for (int i = 0; i < argspec.num_keywords; i++) {
-        assert(!rewrite_args && "would need to be handled here");
+        BoxedDict* okwargs = get_okwargs();
+        for (int i = 0; i < argspec.num_keywords; i++) {
+            assert(!rewrite_args && "would need to be handled here");
 
-        int arg_idx = i + argspec.num_args;
-        Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
+            int arg_idx = i + argspec.num_args;
+            Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
 
-        if (!param_names || !param_names->takes_param_names) {
-            assert(okwargs);
-            assert(!rewrite_args); // would need to add it to r_kwargs
-            okwargs->d[(*keyword_names)[i]] = kw_val;
-            continue;
+            if (!param_names || !param_names->takes_param_names) {
+                assert(!rewrite_args); // would need to add it to r_kwargs
+                okwargs->d[(*keyword_names)[i]] = kw_val;
+                continue;
+            }
+
+            auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3,
+                                     oargs, okwargs, func_name);
+            assert(!rewrite_args);
         }
-
-        auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
-                                 okwargs, func_name);
-        assert(!rewrite_args);
     }
 
     if (argspec.has_kwargs) {
@@ -3307,6 +3329,10 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
         assert(PyDict_Check(kwargs));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
+
+        BoxedDict* okwargs = NULL;
+        if (d_kwargs->d.size())
+            okwargs = get_okwargs();
 
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);

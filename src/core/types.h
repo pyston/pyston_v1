@@ -582,7 +582,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         return Box::operator new(size, default_cls);                                                                   \
     }
 
-#if STAT_ALLOCATIONS
+#if STAT_ALLOCATION_TYPES
 #define ALLOC_STATS(cls)                                                                                               \
     if (cls->tp_name) {                                                                                                \
         std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
@@ -712,8 +712,8 @@ class BoxedClass;
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-Box* createAndRunModule(const std::string& name, const std::string& fn);
-BoxedModule* createModule(const std::string& name, const char* fn = NULL, const char* doc = NULL);
+Box* createAndRunModule(BoxedString* name, const std::string& fn);
+BoxedModule* createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL);
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this

@@ -712,7 +712,8 @@ static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwd
 static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, Box** _args) {
     Box* errors_obj = _args[0];
 
-    assert(type == unicode_cls);
+    assert(isSubclass(type, unicode_cls));
+    assert(type->tp_new == unicode_cls->tp_new);
 
     char* encoding = NULL;
     char* errors = NULL;
@@ -723,10 +724,44 @@ static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, B
         if (!PyArg_ParseSingle(errors_obj, 1, "unicode", "s", &errors))
             throwCAPIException();
 
-    Box* r = unicode_new_inner(string, encoding, errors);
+    Box* r = unicode_new_inner(type, string, encoding, errors);
     if (!r)
         throwCAPIException();
-    assert(r->cls == unicode_cls); // otherwise we'd need to call this object's init
+
+    if (type == unicode_cls) {
+        if (r->cls == unicode_cls) // no init
+            return r;
+        if (!PyUnicode_Check(r)) // skip init
+            return r;
+    } else {
+        if (!isSubclass(r->cls, type)) // skip init
+            return r;
+    }
+
+    // Call tp_init:
+
+    if (r->cls->tp_init == object_cls->tp_init)
+        return r;
+
+    if (!string)
+        assert(!encoding_obj);
+    if (!encoding_obj)
+        assert(!errors_obj);
+
+    Box* args;
+    if (!string)
+        args = EmptyTuple;
+    else if (!encoding_obj)
+        args = BoxedTuple::create1(string);
+    else if (!errors_obj)
+        args = BoxedTuple::create2(string, encoding_obj);
+    else
+        args = BoxedTuple::create3(string, encoding_obj, errors_obj);
+
+    int init_code = r->cls->tp_init(r, args, NULL);
+    if (init_code == -1)
+        throwCAPIException();
+
     return r;
 }
 
@@ -762,19 +797,14 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
 
-    if (cls == unicode_cls && !argspec.has_kwargs && !argspec.has_starargs
-        && (argspec.num_args == 1 || (argspec.num_args == 2 && arg2->cls == str_cls)) && S == CXX) {
-        // unicode() takes an "encoding" parameter which can cause the constructor to return unicode subclasses.
-
+    // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
+    if (cls->tp_new == unicode_cls->tp_new) {
         assert(S == CXX && "implement me");
 
         if (rewrite_args) {
             rewrite_args->arg1->addGuard((intptr_t)cls);
-            if (argspec.num_args >= 2)
-                rewrite_args->arg2->addGuard((intptr_t)arg2->cls);
         }
 
-        // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
         ParamReceiveSpec paramspec(4, 3, false, false);
         bool rewrite_success = false;
         static ParamNames param_names({ "string", "encoding", "errors" }, "", "");
@@ -795,12 +825,11 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             rewrite_args->out_success = true;
         }
 
-        // TODO other encodings could return non-unicode?
         return unicodeNewHelper(cls, arg2, arg3, oargs);
     }
 
     if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new && cls->tp_new != BaseException->tp_new
-        && S == CXX) {
+        && cls->tp_new != type_cls->tp_new && S == CXX) {
         // Looks like we're calling an extension class and we're not going to be able to
         // separately rewrite the new + init calls.  But we can rewrite the fact that we
         // should just call the cpython version, which will end up working pretty well.
@@ -3848,26 +3877,25 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const char* fn, const char* doc) {
+BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
-    Box* b_name = boxString(name);
 
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
-    Box* existing = d->getOrNull(b_name);
+    Box* existing = d->getOrNull(name);
     if (existing && PyModule_Check(existing)) {
         return static_cast<BoxedModule*>(existing);
     }
 
     BoxedModule* module = new BoxedModule();
-    moduleInit(module, boxString(name), boxString(doc ? doc : ""));
+    moduleInit(module, name, boxString(doc ? doc : ""));
     if (fn)
         module->giveAttr("__file__", boxString(fn));
 
-    d->d[b_name] = module;
-    if (name == "__main__")
+    d->d[name] = module;
+    if (name->s() == "__main__")
         module->giveAttr("__builtins__", builtins_module);
     return module;
 }

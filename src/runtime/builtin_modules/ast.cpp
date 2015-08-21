@@ -66,7 +66,7 @@ extern "C" int PyAST_Check(PyObject* o) noexcept {
 }
 
 void setupAST() {
-    BoxedModule* ast_module = createModule("_ast", "__builtin__");
+    BoxedModule* ast_module = createModule(boxString("_ast"), "__builtin__");
 
     ast_module->giveAttr("PyCF_ONLY_AST", boxInt(PyCF_ONLY_AST));
 

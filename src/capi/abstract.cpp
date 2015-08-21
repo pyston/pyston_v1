@@ -1993,7 +1993,11 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
         return PyInt_FromLong(io->n);
     }
 
-    PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
+    // Pyston change: this should be an optimization
+    // PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
+    static BoxedString* trunc_str = internStringImmortal("__trunc__");
+    PyObject* trunc_func = getattrInternal<ExceptionStyle::CAPI>(o, trunc_str, NULL);
+
     if (trunc_func) {
         PyObject* truncated = PyEval_CallObject(trunc_func, NULL);
         Py_DECREF(trunc_func);

@@ -751,6 +751,11 @@ static Box* dict_repr(PyObject* self) noexcept {
     }
 }
 
+void BoxedDict::dealloc(Box* b) noexcept {
+    assert(PyDict_Check(b));
+    static_cast<BoxedDict*>(b)->d.~DictMap();
+}
+
 void setupDict() {
     dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
                                                sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
@@ -761,6 +766,9 @@ void setupDict() {
                                              sizeof(BoxedDictView), false, "dict_values");
     dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0,
                                             sizeof(BoxedDictView), false, "dict_items");
+
+    dict_cls->tp_dealloc = &BoxedDict::dealloc;
+    dict_cls->has_safe_tp_dealloc = true;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));

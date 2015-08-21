@@ -221,6 +221,21 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
     if (*end != '\0') {
     bad:
         slen = strlen(s) < 200 ? strlen(s) : 200;
+
+        // Pyston addition: try to avoid doing the string repr if possible.
+        bool use_fast = true;
+        for (int i = 0; i < slen; i++) {
+            char c = s[i];
+            if (c == '\'' || c == '\\' || c == '\t' || c == '\n' || c == '\r' || c < ' ' || c >= 0x7f) {
+                use_fast = false;
+                break;
+            }
+        }
+        if (use_fast) {
+            PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: '%.200s'", base, s);
+            return NULL;
+        }
+
         sobj = PyString_FromStringAndSize(s, slen);
         if (sobj == NULL)
             return NULL;
@@ -241,17 +256,17 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
 #ifdef Py_USING_UNICODE
 extern "C" PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
     PyObject* result;
-    char* buffer = (char*)PyMem_MALLOC(length + 1);
+    char* buffer = (char*)malloc(length + 1);
 
     if (buffer == NULL)
         return PyErr_NoMemory();
 
     if (PyUnicode_EncodeDecimal(s, length, buffer, NULL)) {
-        PyMem_FREE(buffer);
+        free(buffer);
         return NULL;
     }
     result = PyInt_FromString(buffer, NULL, base);
-    PyMem_FREE(buffer);
+    free(buffer);
     return result;
 }
 #endif
