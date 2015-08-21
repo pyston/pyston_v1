@@ -320,16 +320,35 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
 #if PYSTON_INT_MIN < -PYSTON_INT_MAX
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
-    if (lhs == PYSTON_INT_MIN) {
-        return longInt(longDiv(boxLong(lhs), boxLong(rhs)));
+    if (lhs == PYSTON_INT_MIN && rhs == -1) {
+        return longDiv(boxLong(lhs), boxLong(rhs));
     }
 #endif
 
-    if (lhs < 0 && rhs > 0)
-        return boxInt((lhs - rhs + 1) / rhs);
-    if (lhs > 0 && rhs < 0)
-        return boxInt((lhs - rhs - 1) / rhs);
-    return boxInt(lhs / rhs);
+    i64 div_result, mod_result;
+    div_result = lhs / rhs;
+    /* div_result * rhs can overflow on platforms where lhs/rhs gives floor(lhs/rhs)
+     * for lhs and rhs with differing signs. (This is unusual
+     * behaviour, and C99 prohibits it, but it's allowed by C89;
+     * for an example of overflow, take lhs = LONG_MIN, rhs = 5 or lhs =
+     * LONG_MAX, rhs = -5.)  However, lhs - div_result*rhs is always
+     * representable as a long, since it lies strictly between
+     * -abs(rhs) and abs(rhs).  We add casts to avoid intermediate
+     * overflow.
+     */
+    mod_result = (i64)(lhs - (unsigned long)div_result * rhs);
+    /* If the signs of lhs and rhs differ, and the remainder is non-0,
+     * C89 doesn't define whether div_result is now the floor or the
+     * ceiling of the infinitely precise quotient.  We want the floor,
+     * and we have it iff the remainder's sign matches rhs's.
+     */
+    if (mod_result && ((rhs ^ mod_result) < 0) /* i.e. and signs differ */) {
+        mod_result += rhs;
+        --div_result;
+        assert(mod_result && ((rhs ^ mod_result) >= 0));
+    }
+
+    return boxInt(div_result);
 }
 
 extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
