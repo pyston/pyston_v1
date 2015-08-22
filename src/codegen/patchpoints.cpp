@@ -117,14 +117,14 @@ static int extractScratchOffset(PatchpointInfo* pp, StackMap::Record* r) {
     return l.offset;
 }
 
-static std::unordered_set<int> extractLiveOuts(StackMap::Record* r, llvm::CallingConv::ID cc) {
-    std::unordered_set<int> live_outs;
+static LiveOutSet extractLiveOuts(StackMap::Record* r, llvm::CallingConv::ID cc) {
+    LiveOutSet live_outs;
 
     // Using the C calling convention, there shouldn't be any non-callee-save registers in here,
     // but LLVM is conservative and will add some.  So with the C cc, ignored the specified live outs
     if (cc != llvm::CallingConv::C) {
         for (const auto& live_out : r->live_outs) {
-            live_outs.insert(live_out.regnum);
+            live_outs.set(live_out.regnum);
         }
     }
 
@@ -133,11 +133,11 @@ static std::unordered_set<int> extractLiveOuts(StackMap::Record* r, llvm::Callin
     // sense to track them as live_outs.
     // Unfortunately this means we need to be conservative about it unless
     // we can change llvm's behavior.
-    live_outs.insert(3);
-    live_outs.insert(12);
-    live_outs.insert(13);
-    live_outs.insert(14);
-    live_outs.insert(15);
+    live_outs.set(3);
+    live_outs.set(12);
+    live_outs.set(13);
+    live_outs.set(14);
+    live_outs.set(15);
 
     return live_outs;
 }
@@ -212,12 +212,12 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         if (ic == NULL) {
             // We have to be using the C calling convention here, so we don't need to check the live outs
             // or save them across the call.
-            initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size,
-                                  std::unordered_set<int>(), frame_remapped);
+            initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size, LiveOutSet(),
+                                  frame_remapped);
             continue;
         }
 
-        std::unordered_set<int> live_outs(extractLiveOuts(r, ic->getCallingConvention()));
+        LiveOutSet live_outs(extractLiveOuts(r, ic->getCallingConvention()));
 
         if (ic->hasReturnValue()) {
             assert(ic->getCallingConvention() == llvm::CallingConv::C
@@ -226,14 +226,12 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
             static const int DWARF_RAX = 0;
             // It's possible that the return value doesn't get used, in which case
             // we can avoid copying back into RAX at the end
-            if (live_outs.count(DWARF_RAX)) {
-                live_outs.erase(DWARF_RAX);
-            }
+            live_outs.clear(DWARF_RAX);
         }
 
 
         auto initialization_info = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset,
-                                                         scratch_size, live_outs, frame_remapped);
+                                                         scratch_size, std::move(live_outs), frame_remapped);
 
         ASSERT(initialization_info.slowpath_start - start_addr >= ic->num_slots * ic->slot_size,
                "Used more slowpath space than expected; change ICSetupInfo::totalSize()?");

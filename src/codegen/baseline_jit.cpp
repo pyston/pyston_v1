@@ -102,7 +102,7 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
 
     int scratch_offset = num_stack_args * 8;
     StackInfo stack_info(scratch_size, scratch_offset);
-    std::unordered_set<int> live_outs;
+    LiveOutSet live_outs;
 
     void* fragment_start = a.curInstPointer() - patch_jump_offset;
     long fragment_offset = a.bytesWritten() - patch_jump_offset;
@@ -612,13 +612,13 @@ int JitFragmentWriter::finishCompilation() {
         uint8_t* end_addr = pp_info.end_addr;
         PatchpointInitializationInfo initialization_info
             = initializePatchpoint3(pp_info.func_addr, start_addr, end_addr, 0 /* scratch_offset */,
-                                    0 /* scratch_size */, std::unordered_set<int>(), _spill_map);
+                                    0 /* scratch_size */, LiveOutSet(), _spill_map);
         uint8_t* slowpath_start = initialization_info.slowpath_start;
         uint8_t* slowpath_rtn_addr = initialization_info.slowpath_rtn_addr;
 
-        std::unique_ptr<ICInfo> pp = registerCompiledPatchpoint(
-            start_addr, slowpath_start, initialization_info.continue_addr, slowpath_rtn_addr, pp_info.ic.get(),
-            pp_info.stack_info, std::unordered_set<int>());
+        std::unique_ptr<ICInfo> pp
+            = registerCompiledPatchpoint(start_addr, slowpath_start, initialization_info.continue_addr,
+                                         slowpath_rtn_addr, pp_info.ic.get(), pp_info.stack_info, LiveOutSet());
         pp.release();
     }
 

@@ -183,14 +183,14 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
 }
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
-               int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+               int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs,
                assembler::GenericRegister return_register, TypeRecorder* type_recorder)
     : next_slot_to_try(0),
       stack_info(stack_info),
       num_slots(num_slots),
       slot_size(slot_size),
       calling_conv(calling_conv),
-      live_outs(live_outs.begin(), live_outs.end()),
+      live_outs(std::move(_live_outs)),
       return_register(return_register),
       type_recorder(type_recorder),
       retry_in(0),
@@ -200,15 +200,14 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
       slowpath_rtn_addr(slowpath_rtn_addr),
       continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
-        slots.push_back(ICSlotInfo(this, i));
+        slots.emplace_back(this, i);
     }
 }
 
 static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
 std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
                                                    uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
-                                                   const ICSetupInfo* ic, StackInfo stack_info,
-                                                   std::unordered_set<int> live_outs) {
+                                                   const ICSetupInfo* ic, StackInfo stack_info, LiveOutSet live_outs) {
     assert(slowpath_start_addr - start_addr >= ic->num_slots * ic->slot_size);
     assert(slowpath_rtn_addr > slowpath_start_addr);
     assert(slowpath_rtn_addr <= start_addr + ic->totalSize());
@@ -221,9 +220,7 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
         static const int DWARF_RAX = 0;
         // It's possible that the return value doesn't get used, in which case
         // we can avoid copying back into RAX at the end
-        if (live_outs.count(DWARF_RAX)) {
-            live_outs.erase(DWARF_RAX);
-        }
+        live_outs.clear(DWARF_RAX);
 
         // TODO we only need to do this if 0 was in live_outs, since if it wasn't, that indicates
         // the return value won't be used and we can optimize based on that.
@@ -247,7 +244,7 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
     }
 
     ICInfo* icinfo = new ICInfo(start_addr, slowpath_rtn_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
-                                ic->getCallingConvention(), live_outs, return_register, ic->type_recorder);
+                                ic->getCallingConvention(), std::move(live_outs), return_register, ic->type_recorder);
 
     ics_by_return_addr[slowpath_rtn_addr] = icinfo;
 
