@@ -668,8 +668,15 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
-    addAction([=]() { this->_emitPPCall(result, func_addr, args_vec, num_slots, slot_size); }, args,
-              ActionType::NORMAL);
+
+    int args_size = args.size();
+    RewriterVar** _args = (RewriterVar**)regionAlloc(sizeof(RewriterVar*) * args_size);
+    memcpy(_args, args.begin(), sizeof(RewriterVar*) * args_size);
+
+    addAction([=]() {
+        this->_emitPPCall(result, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size), num_slots, slot_size);
+    }, args, ActionType::NORMAL);
+
     if (type_recorder) {
         RewriterVar* type_recorder_var = imm(type_recorder);
         RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
@@ -813,7 +820,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
     assertConsistent();
 }
 
-void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, const RewriterVar::SmallVector& args,
+void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                                     int num_slots, int slot_size) {
     assembler::Register r = allocReg(assembler::R11);
 
