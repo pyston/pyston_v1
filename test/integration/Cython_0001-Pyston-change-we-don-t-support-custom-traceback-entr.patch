@@ -1,0 +1,125 @@
+From 0d1aaa649bd47a3f78e573eb4e5b9e35f9aa02d3 Mon Sep 17 00:00:00 2001
+From: Marius Wachtler <undingen@gmail.com>
+Date: Tue, 9 Jun 2015 19:26:44 +0200
+Subject: [PATCH] Pyston change: we don't support custom traceback entries yet
+
+---
+ Cython/Compiler/ModuleNode.py |  8 ++++++--
+ Cython/Utility/Exceptions.c   |  7 ++++++-
+ Cython/Utility/Generator.c    | 31 +++++++++++++++++++++----------
+ 3 files changed, 33 insertions(+), 13 deletions(-)
+
+diff --git a/Cython/Compiler/ModuleNode.py b/Cython/Compiler/ModuleNode.py
+index 4785858..699cd15 100644
+--- a/Cython/Compiler/ModuleNode.py
++++ b/Cython/Compiler/ModuleNode.py
+@@ -1399,9 +1399,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
+         code.putln("{")
+         code.putln("PyObject *etype, *eval, *etb;")
+         code.putln("PyErr_Fetch(&etype, &eval, &etb);")
+-        code.putln("++Py_REFCNT(o);")
++        # Pyston change:
++        # code.putln("++Py_REFCNT(o);")
++        code.putln("Py_INCREF(o);")
+         code.putln("%s(o);" % entry.func_cname)
+-        code.putln("--Py_REFCNT(o);")
++        # Pyston change:
++        # code.putln("--Py_REFCNT(o);")
++        code.putln("Py_DECREF(o);")
+         code.putln("PyErr_Restore(etype, eval, etb);")
+         code.putln("}")
+ 
+diff --git a/Cython/Utility/Exceptions.c b/Cython/Utility/Exceptions.c
+index 354a776..8af3cb7 100644
+--- a/Cython/Utility/Exceptions.c
++++ b/Cython/Utility/Exceptions.c
+@@ -450,7 +450,8 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
+ /////////////// AddTraceback ///////////////
+ //@requires: ModuleSetupCode.c::CodeObjectCache
+ //@substitute: naming
+-
++// Pyston change: We don't support custom traceback entries currently
++#if 0
+ #include "compile.h"
+ #include "frameobject.h"
+ #include "traceback.h"
+@@ -534,3 +535,7 @@ bad:
+     Py_XDECREF(py_code);
+     Py_XDECREF(py_frame);
+ }
++#else
++static void __Pyx_AddTraceback(const char *funcname, int c_line, int py_line, const char *filename) {
++}
++#endif
+diff --git a/Cython/Utility/Generator.c b/Cython/Utility/Generator.c
+index 0310570..bcd0eb2 100644
+--- a/Cython/Utility/Generator.c
++++ b/Cython/Utility/Generator.c
+@@ -43,7 +43,9 @@ static void __Pyx_Generator_Replace_StopIteration(void) {
+ //////////////////// Generator.proto ////////////////////
+ #define __Pyx_Generator_USED
+ #include <structmember.h>
+-#include <frameobject.h>
++
++// Pyston change:
++// #include <frameobject.h>
+ 
+ typedef PyObject *(*__pyx_generator_body_t)(PyObject *, PyObject *);
+ 
+@@ -487,7 +489,8 @@ static void __Pyx_Generator_dealloc(PyObject *self) {
+         if (PyObject_CallFinalizerFromDealloc(self))
+ #else
+         Py_TYPE(gen)->tp_del(self);
+-        if (self->ob_refcnt > 0)
++        // Pyston change:
++        // if (self->ob_refcnt > 0)
+ #endif
+         {
+             // resurrected.  :(
+@@ -509,9 +512,10 @@ static void __Pyx_Generator_del(PyObject *self) {
+         return ;
+ 
+ #if PY_VERSION_HEX < 0x030400a1
+-    // Temporarily resurrect the object.
+-    assert(self->ob_refcnt == 0);
+-    self->ob_refcnt = 1;
++    // Pyston change:
++    // // Temporarily resurrect the object.
++    // assert(self->ob_refcnt == 0);
++    // self->ob_refcnt = 1;
+ #endif
+ 
+     // Save the current exception, if any.
+@@ -530,18 +534,25 @@ static void __Pyx_Generator_del(PyObject *self) {
+ #if PY_VERSION_HEX < 0x030400a1
+     // Undo the temporary resurrection; can't use DECREF here, it would
+     // cause a recursive call.
+-    assert(self->ob_refcnt > 0);
+-    if (--self->ob_refcnt == 0) {
+-        // this is the normal path out
+-        return;
+-    }
++
++    // Pyston change:
++    // assert(self->ob_refcnt > 0);
++    // if (--self->ob_refcnt == 0) {
++    //     // this is the normal path out
++    //     return;
++    // }
+ 
+     // close() resurrected it!  Make it look like the original Py_DECREF
+     // never happened.
+     {
++// Pyston change:
++#if 0
+         Py_ssize_t refcnt = self->ob_refcnt;
+         _Py_NewReference(self);
+         self->ob_refcnt = refcnt;
++#else
++        _Py_NewReference(self);
++#endif
+     }
+ #if CYTHON_COMPILING_IN_CPYTHON
+     assert(PyType_IS_GC(self->ob_type) &&
+-- 
+2.1.4

@@ -1,3 +1,23 @@
+[submodule "test/integration/django"]
+	path = test/lib/django
+	url = https://github.com/django/django
+[submodule "test/integration/virtualenv"]
+	path = test/lib/virtualenv
+	url = https://github.com/dropbox/virtualenv
+[submodule "test/integration/pycrypto"]
+	path = test/lib/pycrypto
+	url = https://github.com/dlitz/pycrypto.git
+[submodule "test/integration/gflags"]
+	path = test/lib/gflags
+	url = https://github.com/google/python-gflags
+	ignore = untracked
+[submodule "test/integration/sqlalchemy"]
+	path = test/lib/sqlalchemy
+	url = https://github.com/zzzeek/sqlalchemy
+[submodule "test/integration/pyxl"]
+	path = test/lib/pyxl
+	url = https://github.com/dropbox/pyxl.git
+	ignore = untracked
 [submodule "build_deps/libunwind"]
 	path = build_deps/libunwind
 	url = git://git.sv.gnu.org/libunwind.git
@@ -11,6 +31,6 @@
 [submodule "build_deps/jemalloc"]
 	path = build_deps/jemalloc
 	url = git://github.com/jemalloc/jemalloc.git
-[submodule "test/testsuite"]
-	path = test/testsuite
-	url = https://github.com/dropbox/pyston-testsuite
+[submodule "test/lib/numpy"]
+	path = test/lib/numpy
+	url = http://github.com/numpy/numpy

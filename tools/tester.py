@@ -525,6 +525,13 @@ def main(orig_dir):
     if TEST_DIR.rstrip('/').endswith("cpython") and not EXIT_CODE_ONLY:
         print >>sys.stderr, "Test directory name ends in cpython; are you sure you don't want --exit-code-only?"
 
+    if TEST_DIR.rstrip('/').endswith("extra") or TEST_DIR.rstrip('/').endswith("integration"):
+        if not os.path.exists(os.path.join(TEST_DIR, '../lib/virtualenv/virtualenv.py')):
+            print "Looks like you don't have the integration-test repositories checked out; skipping them."
+            print "If you would like to run them, please run:"
+            print "git submodule update --init --recursive", os.path.join(TEST_DIR, "../lib")
+            sys.exit(0)
+
     # do we need this any more?
     IGNORE_STATS = ["%s/%d.py" % (TEST_DIR, i) for i in ()] + []
 
