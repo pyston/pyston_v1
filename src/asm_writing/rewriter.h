@@ -417,7 +417,7 @@ protected:
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
 
-    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
+    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs);
 
     std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
     template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
@@ -616,10 +616,10 @@ struct PatchpointInitializationInfo {
     uint8_t* slowpath_start;
     uint8_t* slowpath_rtn_addr;
     uint8_t* continue_addr;
-    std::unordered_set<int> live_outs;
+    LiveOutSet live_outs;
 
     PatchpointInitializationInfo(uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr, uint8_t* continue_addr,
-                                 std::unordered_set<int>&& live_outs)
+                                 LiveOutSet live_outs)
         : slowpath_start(slowpath_start),
           slowpath_rtn_addr(slowpath_rtn_addr),
           continue_addr(continue_addr),
@@ -627,8 +627,8 @@ struct PatchpointInitializationInfo {
 };
 
 PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
-                                                   int scratch_offset, int scratch_size,
-                                                   const std::unordered_set<int>& live_outs, SpillMap& remapped);
+                                                   int scratch_offset, int scratch_size, LiveOutSet live_outs,
+                                                   SpillMap& remapped);
 
 template <> inline RewriterVar* RewriterVar::getAttrCast<bool, bool>(int offset, Location loc) {
     return getAttr(offset, loc, assembler::MovType::ZBL);

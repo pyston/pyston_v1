@@ -42,7 +42,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap);
 struct PatchpointInfo {
 public:
     struct FrameVarInfo {
-        std::string name;
+        llvm::StringRef name;
         CompilerType* type;
     };
 
@@ -74,7 +74,7 @@ public:
     int scratchStackmapArg() { return 0; }
     int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
 
-    void addFrameVar(const std::string& name, CompilerType* type);
+    void addFrameVar(llvm::StringRef name, CompilerType* type);
     void setNumFrameArgs(int num_frame_args) {
         assert(num_frame_stackmap_args == -1);
         num_frame_stackmap_args = num_frame_args;

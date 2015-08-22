@@ -23,6 +23,7 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/types.h"
+#include "core/util.h"
 
 namespace pyston {
 
@@ -91,6 +92,8 @@ public:
     friend class ICInfo;
 };
 
+typedef BitSet<16> LiveOutSet;
+
 class ICInfo {
 private:
     std::vector<ICSlotInfo> slots;
@@ -105,7 +108,7 @@ private:
     const int num_slots;
     const int slot_size;
     const llvm::CallingConv::ID calling_conv;
-    const std::vector<int> live_outs;
+    LiveOutSet live_outs;
     const assembler::GenericRegister return_register;
     TypeRecorder* const type_recorder;
     int retry_in, retry_backoff;
@@ -116,14 +119,14 @@ private:
 
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
-           int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+           int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet live_outs,
            assembler::GenericRegister return_register, TypeRecorder* type_recorder);
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
     int getSlotSize() { return slot_size; }
     int getNumSlots() { return num_slots; }
     llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
-    const std::vector<int>& getLiveOuts() { return live_outs; }
+    const LiveOutSet& getLiveOuts() { return live_outs; }
 
     std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
@@ -138,8 +141,7 @@ class ICSetupInfo;
 struct CompiledFunction;
 std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
                                                    uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
-                                                   const ICSetupInfo*, StackInfo stack_info,
-                                                   std::unordered_set<int> live_outs);
+                                                   const ICSetupInfo*, StackInfo stack_info, LiveOutSet live_outs);
 void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);

@@ -1804,7 +1804,7 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs)
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
       picked_slot(NULL),
@@ -1854,6 +1854,11 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const s
             var = createNewVar();
             var->locations.push_back(l);
         }
+
+        // Make sure there weren't duplicates in the live_outs list.
+        // Probably not a big deal if there were, but we shouldn't be generating those.
+        assert(std::find(this->live_out_regs.begin(), this->live_out_regs.end(), dwarf_regnum)
+               == this->live_out_regs.end());
 
         this->live_outs.push_back(var);
         this->live_out_regs.push_back(dwarf_regnum);
@@ -2052,16 +2057,14 @@ void setSlowpathFunc(uint8_t* pp_addr, void* func) {
 }
 
 PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
-                                                   int scratch_offset, int scratch_size,
-                                                   const std::unordered_set<int>& live_outs, SpillMap& remapped) {
+                                                   int scratch_offset, int scratch_size, LiveOutSet live_outs,
+                                                   SpillMap& remapped) {
     assert(start_addr < end_addr);
 
     int est_slowpath_size = INITIAL_CALL_SIZE;
 
     std::vector<assembler::GenericRegister> regs_to_spill;
     std::vector<assembler::Register> regs_to_reload;
-
-    std::unordered_set<int> live_outs_for_slot;
 
     for (int dwarf_regnum : live_outs) {
         assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(dwarf_regnum);
@@ -2070,7 +2073,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
 
         if (ru.type == assembler::GenericRegister::GP) {
             if (ru.gp == assembler::RSP || ru.gp.isCalleeSave()) {
-                live_outs_for_slot.insert(dwarf_regnum);
+                live_outs.set(dwarf_regnum);
                 continue;
             }
         }
@@ -2086,7 +2089,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
             continue;
         }
 
-        live_outs_for_slot.insert(dwarf_regnum);
+        live_outs.set(dwarf_regnum);
 
         regs_to_spill.push_back(ru);
 
@@ -2143,8 +2146,7 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assem.fillWithNops();
     assert(!assem.hasFailed());
 
-    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr,
-                                        std::move(live_outs_for_slot));
+    return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr, std::move(live_outs));
 }
 
 void* Rewriter::RegionAllocator::alloc(size_t bytes) {

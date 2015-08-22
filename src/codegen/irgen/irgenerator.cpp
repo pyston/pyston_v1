@@ -247,7 +247,7 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
-    IRBuilder* builder;
+    std::unique_ptr<IRBuilder> builder;
     llvm::BasicBlock*& curblock;
     IRGenerator* irgenerator;
 
@@ -348,6 +348,9 @@ private:
 public:
     explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
         : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
+        // Perf note: it seems to be more efficient to separately allocate the "builder" member,
+        // even though we could allocate it in-line; maybe it's infrequently used enough that it's better
+        // to not have it take up cache space.
 
         RELEASE_ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(),
                        "jit doesn't support custom globals yet");
@@ -356,7 +359,7 @@ public:
         builder->SetInsertPoint(curblock);
     }
 
-    IRBuilder* getBuilder() override { return builder; }
+    IRBuilder* getBuilder() override { return &*builder; }
 
     GCBuilder* getGC() override { return irstate->getGC(); }
 
@@ -556,8 +559,6 @@ public:
           myblock(myblock),
           types(types),
           state(RUNNING) {}
-
-    ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 
 private:
     OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {

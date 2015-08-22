@@ -128,6 +128,62 @@ template <class T1, class T2> bool sameKeyset(T1* lhs, T2* rhs) {
     }
     return good;
 }
+
+// A simple constant-width bitset.
+template <int N> struct BitSet {
+    uint16_t bits = 0;
+    static_assert(N <= 8 * sizeof(bits), "");
+
+    struct iterator {
+        const BitSet& set;
+        int cur;
+
+        iterator(const BitSet& set, int cur) : set(set), cur(cur) {}
+
+        int operator*() {
+            assert(cur >= 0 && cur < N);
+            return cur;
+        }
+
+        bool operator==(const iterator& rhs) { return cur == rhs.cur; }
+        bool operator!=(const iterator& rhs) { return !(*this == rhs); }
+        iterator& operator++() {
+            // TODO: this function (and begin()) could be optimized using __builtin_ctz
+            assert(cur >= 0 && cur < N);
+            uint16_t tmp = set.bits;
+            tmp >>= cur + 1;
+            cur++;
+
+            while (cur < N) {
+                if (tmp & 1)
+                    return *this;
+
+                cur++;
+                tmp >>= 1;
+            }
+            assert(cur == N);
+            return *this;
+        }
+    };
+
+    void set(int idx) {
+        assert(idx >= 0 && idx < N);
+        bits |= (1 << idx);
+    }
+    void clear(int idx) {
+        assert(idx >= 0 && idx < N);
+        bits &= ~(1 << idx);
+    }
+    iterator begin() const {
+        uint16_t tmp = bits;
+        for (int i = 0; i < N; i++) {
+            if (tmp & 1)
+                return iterator(*this, i);
+        }
+        return iterator(*this, N);
+    }
+    iterator end() const { return iterator(*this, N); }
+};
 }
 
 #endif
