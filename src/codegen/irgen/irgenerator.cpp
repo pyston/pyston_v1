@@ -604,7 +604,7 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
-                                             embedRelocatablePtr(node, g.llvm_aststmt_type_ptr), node_value);
+                                             embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value);
         emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
