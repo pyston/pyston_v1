@@ -698,6 +698,22 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         return self;
     }
 
+    if (_rhs->cls == tuple_cls) {
+        BoxedTuple* rhs = static_cast<BoxedTuple*>(_rhs);
+
+        int s1 = self->size;
+        int s2 = rhs->ob_size;
+
+        if (s2 == 0)
+            return self;
+
+        self->ensure(s1 + s2);
+
+        memcpy(self->elts->elts + s1, rhs->elts, sizeof(self->elts->elts[0]) * s2);
+        self->size = s1 + s2;
+        return self;
+    }
+
     RELEASE_ASSERT(_rhs != self, "unsupported");
 
     for (auto* b : _rhs->pyElements())
@@ -971,9 +987,7 @@ Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
 
     if (container != None) {
-        for (Box* e : container->pyElements()) {
-            listAppendInternal(self, e);
-        }
+        listIAdd(self, container);
     }
 
     return None;
