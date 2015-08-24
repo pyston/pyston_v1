@@ -118,6 +118,9 @@
 
 #include "Python.h"
 
+// Pyston change: disable custom memory managment because it confuses our GC
+#define Py_USING_MEMORY_DEBUGGER 1
+
 /* if PY_NO_SHORT_FLOAT_REPR is defined, then don't even try to compile
    the following code */
 #ifndef PY_NO_SHORT_FLOAT_REPR
