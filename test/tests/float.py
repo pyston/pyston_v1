@@ -108,3 +108,6 @@ for lhs in all_args:
 
 import sys
 print sys.float_info
+
+if 1:
+    x = -2.0

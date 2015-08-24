@@ -1294,6 +1294,14 @@ public:
         return boolFromI1(emitter, cmp);
     }
 
+    ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                      AST_TYPE::AST_TYPE op_type) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
+        auto rtn = converted->unaryop(emitter, info, op_type);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->getitem(emitter, info, slice);
@@ -1885,6 +1893,15 @@ public:
 
     ConcreteCompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                       AST_TYPE::AST_TYPE op_type) override {
+        BoxedString* attr = getOpName(op_type);
+
+        bool no_attribute = false;
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, &no_attribute);
+
+        if (called_constant && !no_attribute)
+            return called_constant;
+
         return UNKNOWN->unaryop(emitter, info, var, op_type);
     }
 
