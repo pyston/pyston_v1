@@ -173,3 +173,11 @@ class C(object):
     def __str__(self):
         return "my class"
 print "{0}".format(C())
+
+def irgen_error():
+	for i in range(1):
+		fail = "test".format()
+		print fail
+		fail = "test {0} {1} {2}".format(1, 2, 3)
+		print fail
+irgen_error()

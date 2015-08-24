@@ -824,7 +824,9 @@ public:
     struct Sig {
         std::vector<ConcreteCompilerType*> arg_types;
         CompilerType* rtn_type;
-        int ndefaults;
+        int ndefaults = 0;
+        bool takes_varargs = false;
+        bool takes_kwargs = false;
     };
 
 private:
@@ -847,14 +849,20 @@ public:
         RELEASE_ASSERT(!argspec.has_starargs, "");
         RELEASE_ASSERT(!argspec.has_kwargs, "");
         RELEASE_ASSERT(argspec.num_keywords == 0, "");
+        RELEASE_ASSERT(!keyword_names || keyword_names->empty() == 0, "");
 
         for (int i = 0; i < sigs.size(); i++) {
             Sig* sig = sigs[i];
-            if (arg_types.size() < sig->arg_types.size() - sig->ndefaults || arg_types.size() > sig->arg_types.size())
+            int num_normal_args = sig->arg_types.size() - ((sig->takes_varargs ? 1 : 0) + (sig->takes_kwargs ? 1 : 0));
+            if (arg_types.size() < num_normal_args - sig->ndefaults)
+                continue;
+            if (!sig->takes_varargs && arg_types.size() > sig->arg_types.size())
                 continue;
 
             bool works = true;
             for (int j = 0; j < arg_types.size(); j++) {
+                if (j == num_normal_args)
+                    break;
                 if (!arg_types[j]->canConvertTo(sig->arg_types[j])) {
                     works = false;
                     break;
@@ -883,6 +891,8 @@ public:
             Sig* type_sig = new Sig();
             type_sig->rtn_type = fspec->rtn_type;
             type_sig->ndefaults = clf->paramspec.num_defaults;
+            type_sig->takes_varargs = clf->paramspec.takes_varargs;
+            type_sig->takes_kwargs = clf->paramspec.takes_kwargs;
 
             if (stripfirst) {
                 assert(fspec->arg_types.size() >= 1);
