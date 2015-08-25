@@ -953,16 +953,12 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 }
 
 /* Pyston change: static */ PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
-    try {
-        assert(name->cls == str_cls);
-        return slotTpGetattrHookInternal(self, (BoxedString*)name, NULL);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    assert(name->cls == str_cls);
+    return slotTpGetattrHookInternal<CAPI>(self, (BoxedString*)name, NULL);
 }
 
-Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) {
+template <ExceptionStyle S>
+Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slot_tpgetattrhook", SLOT_AVOIDABILITY(self));
 
     PyObject* getattr, *getattribute, * res = NULL;
@@ -987,7 +983,10 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
 
         /* No __getattr__ hook: use a simpler dispatcher */
         self->cls->tp_getattro = slot_tp_getattro;
-        return slot_tp_getattro(self, name);
+        Box* r = slot_tp_getattro(self, name);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
     }
 
     /* speed hack: we could use lookup_maybe, but that would resolve the
@@ -1031,8 +1030,13 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             try {
                 res = getattrInternalGeneric(self, name, &grewrite_args, false, false, NULL, NULL);
             } catch (ExcInfo e) {
-                if (!e.matches(AttributeError))
-                    throw e;
+                if (!e.matches(AttributeError)) {
+                    if (S == CAPI) {
+                        setCAPIException(e);
+                        return NULL;
+                    } else
+                        throw e;
+                }
 
                 grewrite_args.out_success = false;
                 res = NULL;
@@ -1046,8 +1050,13 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             try {
                 res = getattrInternalGeneric(self, name, NULL, false, false, NULL, NULL);
             } catch (ExcInfo e) {
-                if (!e.matches(AttributeError))
-                    throw e;
+                if (!e.matches(AttributeError)) {
+                    if (S == CAPI) {
+                        setCAPIException(e);
+                        return NULL;
+                    } else
+                        throw e;
+                }
                 res = NULL;
             }
         }
@@ -1058,8 +1067,12 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         if (res == NULL) {
             if (PyErr_ExceptionMatches(PyExc_AttributeError))
                 PyErr_Clear();
-            else
-                throwCAPIException();
+            else {
+                if (S == CAPI)
+                    return NULL;
+                else
+                    throwCAPIException();
+            }
         }
     }
 
@@ -1091,9 +1104,9 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
         crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
 
-        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name,
-                                    NULL, NULL, NULL, NULL);
-        assert(res);
+        res = callattrInternal<S>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name,
+                                  NULL, NULL, NULL, NULL);
+        assert(res || S == CAPI);
 
         if (!crewrite_args.out_success)
             rewrite_args = NULL;
@@ -1105,15 +1118,18 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         // the rewrite_args and non-rewrite_args case the same.
         // Actually, we might have gotten to the point that doing a runtimeCall on an instancemethod is as
         // fast as a callattr, but that hasn't typically been the case.
-        res = callattrInternal<CXX>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
-                                    NULL, NULL);
-        assert(res);
+        res = callattrInternal<S>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
+                                  NULL, NULL);
+        assert(res || S == CAPI);
     }
 
     if (rewrite_args)
         rewrite_args->out_success = true;
     return res;
 }
+// Force instantiation of the template
+template Box* slotTpGetattrHookInternal<CAPI>(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args);
+template Box* slotTpGetattrHookInternal<CXX>(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args);
 
 /* Pyston change: static */ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpnew", SLOT_AVOIDABILITY(self));

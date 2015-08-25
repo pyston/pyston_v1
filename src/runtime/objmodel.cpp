@@ -1406,19 +1406,11 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
-            if (obj->cls->tp_getattro == slot_tp_getattr_hook && S == CXX) {
-                return slotTpGetattrHookInternal(obj, attr, rewrite_args);
+            if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
+                return slotTpGetattrHookInternal<S>(obj, attr, rewrite_args);
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
-
-            if (!r) {
-                if (S == CAPI) {
-                    ensureCAPIExceptionSet();
-                    return r;
-                } else
-                    throwCAPIException();
-            }
 
             // If attr is immortal, then we are free to write an embedded reference to it.
             // Immortal are (unfortunately) common right now, so this is an easy way to get
@@ -1436,6 +1428,15 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 rewrite_args->out_rtn = r_rtn;
                 rewrite_args->out_success = true;
             }
+
+            if (!r) {
+                if (S == CAPI) {
+                    ensureCAPIExceptionSet();
+                    return r;
+                } else
+                    throwCAPIException();
+            }
+
             return r;
         }
 
@@ -2832,11 +2833,12 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
             rewrite_args.args = rewriter->getArg(6);
         rtn = callattrInternal<S>(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
+        assert(!(S == CAPI && flags.null_on_nonexistent));
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (rtn) {
             rewriter->commitReturning(rewrite_args.out_rtn);
-        } else if (flags.null_on_nonexistent) {
+        } else if ((S == CAPI && !rtn) || flags.null_on_nonexistent) {
             rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
         }
     } else {
@@ -3755,26 +3757,20 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             assert((obj->cls->tp_call == NULL) == (typeLookup(obj->cls, call_str, NULL) == NULL));
         }
 
-        try {
-            if (rewrite_args) {
-                rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
-                                          keyword_names);
-            } else {
-                rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args,
-                                          keyword_names);
-            }
-        } catch (ExcInfo e) {
-            if (S == CAPI) {
-                setCAPIException(e);
-                return NULL;
-            } else
-                throw e;
+        if (rewrite_args) {
+            rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
+                                      keyword_names);
+        } else {
+            rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
         }
 
         if (!rtn) {
             if (S == CAPI) {
-                if (!PyErr_Occurred())
+                if (!PyErr_Occurred()) {
+                    if (rewrite_args)
+                        rewrite_args->out_success = false;
                     PyErr_Format(TypeError, "'%s' object is not callable", getTypeName(obj));
+                }
                 return NULL;
             } else
                 raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj));
