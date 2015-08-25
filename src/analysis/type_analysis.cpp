@@ -222,7 +222,7 @@ private:
         return rtn;
     }
 
-    bool hasFixedBinops(CompilerType* type) {
+    bool hasFixedOps(CompilerType* type) {
         // This is non-exhaustive:
         return type == STR || type == INT || type == FLOAT || type == LIST || type == DICT;
     }
@@ -230,7 +230,7 @@ private:
     void* visit_augbinop(AST_AugBinOp* node) override {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
-        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+        if (!hasFixedOps(left) || !hasFixedOps(right))
             return UNKNOWN;
 
         // TODO this isn't the exact behavior
@@ -259,7 +259,7 @@ private:
     void* visit_binop(AST_BinOp* node) override {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
-        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+        if (!hasFixedOps(left) || !hasFixedOps(right))
             return UNKNOWN;
 
         // TODO this isn't the exact behavior
@@ -505,12 +505,20 @@ private:
 
     void* visit_unaryop(AST_UnaryOp* node) override {
         CompilerType* operand = getType(node->operand);
+        if (!hasFixedOps(operand))
+            return UNKNOWN;
 
         // TODO this isn't the exact behavior
         BoxedString* name = getOpName(node->op_type);
         CompilerType* attr_type = operand->getattrType(name, true);
+
+        if (attr_type == UNDEF)
+            attr_type = UNKNOWN;
+
         std::vector<CompilerType*> arg_types;
-        return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
+        CompilerType* rtn_type = attr_type->callType(ArgPassSpec(0), arg_types, NULL);
+        rtn_type = unboxedType(rtn_type->getConcreteType());
+        return rtn_type;
     }
 
     void* visit_yield(AST_Yield*) override { return UNKNOWN; }
