@@ -77,6 +77,17 @@ public:
     }
 };
 
+class CallattrCapiIC : public RuntimeIC {
+public:
+    CallattrCapiIC() : RuntimeIC((void*)callattrCapi, 1, 320) {}
+
+    Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
+              const std::vector<BoxedString*>* keyword_names) {
+        return (Box*)call_ptr(obj, attr, flags, arg0, arg1, arg2, args, keyword_names);
+    }
+};
+
+
 class BinopIC : public RuntimeIC {
 public:
     BinopIC() : RuntimeIC((void*)binop, 2, 240) {}

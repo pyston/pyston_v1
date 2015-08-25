@@ -186,10 +186,11 @@ public:
     HCAttrs attrs;
 
     // TODO: these don't actually get deallocated right now
-    std::unique_ptr<CallattrIC> hasnext_ic, next_ic, repr_ic;
+    std::unique_ptr<CallattrCapiIC> next_ic;
+    std::unique_ptr<CallattrIC> hasnext_ic, repr_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
     Box* callHasnextIC(Box* obj, bool null_on_nonexistent);
-    Box* callNextIC(Box* obj);
+    Box* call_nextIC(Box* obj) noexcept;
     Box* callReprIC(Box* obj);
     bool callNonzeroIC(Box* obj);
 

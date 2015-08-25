@@ -239,32 +239,27 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
 }
 
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
-    if (iter->cls->tp_iternext != slot_tp_iternext) {
-        PyObject* result;
+    Box* result = NULL;
+    if (iter->cls->tp_iternext != slot_tp_iternext)
         result = (*iter->cls->tp_iternext)(iter);
-        if (result == NULL && PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-            PyErr_Clear();
-        return result;
+    else {
+        try {
+            Box* hasnext = iter->hasnextOrNullIC();
+            if (hasnext && !hasnext->nonzeroIC())
+                return NULL;
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+        result = iter->cls->call_nextIC(iter);
     }
 
-    try {
-        Box* hasnext = iter->hasnextOrNullIC();
-        if (hasnext) {
-            if (hasnext->nonzeroIC())
-                return iter->cls->callNextIC(iter);
-            else
-                return NULL;
-        } else {
-            return iter->cls->callNextIC(iter);
-        }
-    } catch (ExcInfo e) {
-        if (!e.matches(StopIteration))
-            setCAPIException(e);
-        return NULL;
-    }
+    if (result == NULL && PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
+        PyErr_Clear();
+    return result;
 }
 
-Box* BoxedClass::callNextIC(Box* obj) {
+Box* BoxedClass::call_nextIC(Box* obj) noexcept {
     assert(obj->cls == this);
 
     // This would work, but it would have been better to just call tp_iternext
@@ -272,7 +267,7 @@ Box* BoxedClass::callNextIC(Box* obj) {
 
     auto ic = next_ic.get();
     if (!ic) {
-        ic = new CallattrIC();
+        ic = new CallattrCapiIC();
         next_ic.reset(ic);
     }
 
