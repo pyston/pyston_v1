@@ -2836,9 +2836,9 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         assert(!(S == CAPI && flags.null_on_nonexistent));
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else if (rtn) {
+        } else if (rtn || (S == CAPI && !rtn)) {
             rewriter->commitReturning(rewrite_args.out_rtn);
-        } else if ((S == CAPI && !rtn) || flags.null_on_nonexistent) {
+        } else if (flags.null_on_nonexistent) {
             rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
         }
     } else {
