@@ -466,7 +466,7 @@ public:
             = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
         normal_dest->moveAfter(curblock);
 
-        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(unw_info.exc_dest, unw_info.current_stmt);
+        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
 
         assert(returned_val->getType() == exc_val->getType());
         llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
@@ -541,7 +541,7 @@ private:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
-    llvm::DenseMap<llvm::BasicBlock*, AST_stmt*> capi_current_statements;
+    llvm::DenseMap<llvm::BasicBlock*, llvm::PHINode*> capi_phis;
 
     enum State {
         RUNNING,  // normal
@@ -2800,62 +2800,68 @@ public:
 
     // Create a (or reuse an existing) block that will catch a CAPI exception, and then forward
     // it to the "final_dest" block.  ie final_dest is a block corresponding to the IR level
-    // LANDINGPAD, and this function will createa  helper block that fetches the exception.
+    // LANDINGPAD, and this function will create a helper block that fetches the exception.
     // As a special-case, a NULL value for final_dest means that this helper block should
     // instead propagate the exception out of the function.
-    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* final_dest, AST_stmt* current_stmt) {
+    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
+                                     AST_stmt* current_stmt) {
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
-        if (capi_exc_dest) {
-            assert(capi_current_statements[final_dest] == current_stmt);
-            return capi_exc_dest;
-        }
+        llvm::PHINode*& phi_node = capi_phis[final_dest];
 
-        llvm::BasicBlock* orig_block = curblock;
+        if (!capi_exc_dest) {
+            auto orig_block = curblock;
 
-        capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-        capi_current_statements[final_dest] = current_stmt;
+            capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
 
-        emitter.setCurrentBasicBlock(capi_exc_dest);
-        emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException,
-                                          embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr),
-                                          embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+            emitter.setCurrentBasicBlock(capi_exc_dest);
+            assert(!phi_node);
+            phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
+            emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException, phi_node,
+                                              embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
-        if (!final_dest) {
-            // Propagate the exception out of the function:
-            if (irstate->getExceptionStyle() == CXX) {
-                emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
-                emitter.getBuilder()->CreateUnreachable();
+            if (!final_dest) {
+                // Propagate the exception out of the function:
+                if (irstate->getExceptionStyle() == CXX) {
+                    emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
+                    emitter.getBuilder()->CreateUnreachable();
+                } else {
+                    emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+                }
             } else {
-                emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+                // Catch the exception and forward to final_dest:
+                llvm::Value* exc_type_ptr
+                    = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
+                                           irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                llvm::Value* exc_value_ptr
+                    = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_value",
+                                           irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                llvm::Value* exc_traceback_ptr
+                    = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
+                                           irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
+                emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr, exc_traceback_ptr);
+                // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
+                emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
+                                                  exc_traceback_ptr);
+                llvm::Value* exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
+                llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
+                llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
+
+                addOutgoingExceptionState(
+                    IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+
+                emitter.getBuilder()->CreateBr(final_dest);
             }
-        } else {
-            // Catch the exception and forward to final_dest:
-            llvm::Value* exc_type_ptr
-                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_type",
-                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-            llvm::Value* exc_value_ptr
-                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_value",
-                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-            llvm::Value* exc_traceback_ptr
-                = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
-                                       irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-            emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr, exc_traceback_ptr);
-            // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
-            emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
-                                              exc_traceback_ptr);
-            llvm::Value* exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
-            llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
-            llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
 
-            addOutgoingExceptionState(
-                IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                            new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                            new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
-
-            emitter.getBuilder()->CreateBr(final_dest);
+            emitter.setCurrentBasicBlock(from_block);
         }
 
-        emitter.setCurrentBasicBlock(orig_block);
+        assert(capi_exc_dest);
+        assert(phi_node);
+
+
+        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr), from_block);
 
         return capi_exc_dest;
     }

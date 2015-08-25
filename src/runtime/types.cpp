@@ -799,6 +799,16 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
     if (cls->tp_new == unicode_cls->tp_new) {
+        // TODO: implement
+        if (S == CAPI) {
+            try {
+                return typeCallInner<CXX>(NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            } catch (ExcInfo e) {
+                setCAPIException(e);
+                return NULL;
+            }
+        }
+
         assert(S == CXX && "implement me");
 
         if (rewrite_args) {
