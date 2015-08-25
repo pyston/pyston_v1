@@ -2836,9 +2836,9 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         assert(!(S == CAPI && flags.null_on_nonexistent));
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else if (rtn) {
+        } else if (rtn || (S == CAPI && !rtn)) {
             rewriter->commitReturning(rewrite_args.out_rtn);
-        } else if ((S == CAPI && !rtn) || flags.null_on_nonexistent) {
+        } else if (flags.null_on_nonexistent) {
             rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
         }
     } else {
@@ -3573,6 +3573,16 @@ static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closur
     return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
+static Box* astInterpretHelperCapi(CLFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
+                                   Box* globals, Box** _args) noexcept {
+    try {
+        return astInterpretHelper(f, num_args, closure, generator, globals, _args);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 // TODO: is it better to take the func_ptr last (requiring passing all the args), or is it better to put it
 // first (requiring moving all the args)?
 static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*), void* a, void* b, void* c, void* d,
@@ -3592,7 +3602,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     CompiledFunction* chosen_cf = pickVersion(f, S, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
-        if (rewrite_args && S == CXX) {
+        if (rewrite_args) {
             RewriterVar::SmallVector arg_vec;
 
             rewrite_args->rewriter->addDependenceOn(f->dependent_interp_callsites);
@@ -3619,8 +3629,10 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
             if (num_output_args >= 4)
                 arg_array->setAttr(24, rewrite_args->args);
 
-            assert(S == CXX);
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+            if (S == CXX)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+            else
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec);
             rewrite_args->out_success = true;
         }
 

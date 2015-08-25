@@ -435,6 +435,7 @@ class Rewriter;
 class RewriterVar;
 class RuntimeIC;
 class CallattrIC;
+class CallattrCapiIC;
 class NonzeroIC;
 class BinopIC;
 
