@@ -128,7 +128,12 @@ void _bytesAllocatedTripped() {
 /// Finalizers
 
 bool hasOrderedFinalizer(BoxedClass* cls) {
-    if (cls->has_safe_tp_dealloc) {
+    if (PyType_FastSubclass(cls, Py_TPFLAGS_TYPE_SUBCLASS)) {
+        // Class objects need to be kept alive for at least as long as any objects that point
+        // to them, even if those objects are garbage (or involved in finalizer chains).
+        // Marking class objects as having finalizers should get us this behavior.
+        return true;
+    } else if (cls->has_safe_tp_dealloc) {
         ASSERT(!cls->tp_del, "class \"%s\" with safe tp_dealloc also has tp_del?", cls->tp_name);
         return false;
     } else if (cls->hasNonDefaultTpDealloc()) {

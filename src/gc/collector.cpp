@@ -48,9 +48,6 @@ std::list<Box*> objects_with_ordered_finalizers;
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
 
-// BoxedClasses in the program that are still needed.
-static std::unordered_set<BoxedClass*> class_objects;
-
 static std::unordered_set<void*> nonheap_roots;
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap
@@ -291,9 +288,6 @@ void registerPythonObject(Box* b) {
     assert(b->cls);
     if (hasOrderedFinalizer(b->cls)) {
         objects_with_ordered_finalizers.push_back(b);
-    }
-    if (PyType_Check(b)) {
-        class_objects.insert((BoxedClass*)b);
     }
 }
 
@@ -653,35 +647,6 @@ static void markPhase() {
     markRoots(visitor);
 
     graphTraversalMarking(stack, visitor);
-
-    // Some classes might be unreachable. Unfortunately, we have to keep them around for
-    // one more collection, because during the sweep phase, instances of unreachable
-    // classes might still end up looking at the class. So we visit those unreachable
-    // classes remove them from the list of class objects so that it can be freed
-    // in the next collection.
-    std::vector<BoxedClass*> classes_to_remove;
-    for (BoxedClass* cls : class_objects) {
-        GCAllocation* al = GCAllocation::fromUserData(cls);
-        if (!isMarked(al)) {
-            visitor.visit(cls);
-            classes_to_remove.push_back(cls);
-        }
-    }
-
-    // We added new objects to the stack again from visiting classes so we nee to do
-    // another (mini) traversal.
-    graphTraversalMarking(stack, visitor);
-
-    for (BoxedClass* cls : classes_to_remove) {
-        class_objects.erase(cls);
-    }
-
-    // The above algorithm could fail if we have a class and a metaclass -- they might
-    // both have been added to the classes to remove. In case that happens, make sure
-    // that the metaclass is retained for at least another collection.
-    for (BoxedClass* cls : classes_to_remove) {
-        class_objects.insert(cls->cls);
-    }
 
     // Objects with finalizers cannot be freed in any order. During the call to a finalizer
     // of an object, the finalizer expects the object's references to still point to valid

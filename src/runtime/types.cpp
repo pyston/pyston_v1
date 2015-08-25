@@ -3382,6 +3382,7 @@ void setupRuntime() {
     mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
     type_cls = ::new (mem) BoxedHeapClass(object_cls, &BoxedHeapClass::gcHandler, offsetof(BoxedClass, attrs),
                                           offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, NULL);
+    type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
     PyObject_Init(object_cls, type_cls);
