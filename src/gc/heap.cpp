@@ -32,6 +32,8 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#define NO_SMALL_ARENA_REUSE 1
+
 namespace std {
 template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept {
     void* r = pyston::gc::gc_alloc(sizeof(pyston::Box*) * count, pyston::gc::GCKind::CONSERVATIVE);
@@ -363,7 +365,13 @@ void SmallArena::free(GCAllocation* alloc) {
     int atom_idx = offset / ATOM_SIZE;
 
     assert(!b->isfree.isSet(atom_idx));
-    b->isfree.set(atom_idx);
+
+    if (NO_SMALL_ARENA_REUSE) {
+        setNoReuse(alloc);
+        memset(alloc->user_data, 0xbb, b->size - sizeof(GCAllocation));
+    } else {
+        b->isfree.set(atom_idx);
+    }
 
 #ifndef NVALGRIND
 // VALGRIND_MEMPOOL_FREE(b, ptr);
@@ -383,6 +391,10 @@ GCAllocation* SmallArena::allocationFrom(void* ptr) {
 
     if (b->isfree.isSet(atom_idx))
         return NULL;
+
+    if (isNoReuse(reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]))) {
+        return NULL;
+    }
 
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
@@ -429,6 +441,10 @@ void SmallArena::getPtrs(std::vector<GCAllocation*>& ptrs, Block** head) {
 
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            if (isNoReuse(al)) {
+                continue;
+            }
 
             ptrs.push_back(al);
         }
@@ -625,16 +641,26 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
 
+            if (isNoReuse(al)) {
+                continue;
+            }
+
             clearOrderingState(al);
             if (isMarked(al)) {
                 clearMark(al);
             } else {
                 if (_doFree(al, &weakly_referenced)) {
                     // GC_TRACE_LOG("freeing %p\n", al->user_data);
-                    b->isfree.set(atom_idx);
+
+                    if (NO_SMALL_ARENA_REUSE) {
+                        setNoReuse(al);
+                        memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+                    } else {
+                        b->isfree.set(atom_idx);
 #ifndef NDEBUG
-                    memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+                        memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
 #endif
+                    }
                 }
             }
         }
@@ -780,6 +806,10 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
 
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            if (isNoReuse(al)) {
+                continue;
+            }
 
             addStatistic(stats, al, b->size);
         }

@@ -122,6 +122,8 @@ static_assert(sizeof(GCAllocation) <= sizeof(void*),
 
 #define ORDERING_BITS (MARK_BIT | ORDERING_EXTRA_BIT)
 
+#define NO_REUSE_BIT 0x8
+
 enum FinalizationState {
     UNREACHABLE = 0x0,
     TEMPORARY = ORDERING_EXTRA_BIT,
@@ -168,10 +170,20 @@ inline void clearOrderingState(GCAllocation* header) {
     header->gc_flags &= ~ORDERING_EXTRA_BIT;
 }
 
+inline bool isNoReuse(GCAllocation* header) {
+    return (header->gc_flags & NO_REUSE_BIT) != 0;
+}
+
+inline void setNoReuse(GCAllocation* header) {
+    assert(!isNoReuse(header));
+    header->gc_flags |= NO_REUSE_BIT;
+}
+
 #undef MARK_BIT
 #undef ORDERING_EXTRA_BIT
 #undef FINALIZER_HAS_RUN_BIT
 #undef ORDERING_BITS
+#undef NO_REUSE_BIT
 
 bool hasOrderedFinalizer(BoxedClass* cls);
 void finalize(Box* b);
