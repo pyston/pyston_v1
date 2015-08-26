@@ -118,17 +118,18 @@
 
 #include "Python.h"
 
-// Pyston change: disable custom memory managment because it confuses our GC
-#define Py_USING_MEMORY_DEBUGGER 1
-
 /* if PY_NO_SHORT_FLOAT_REPR is defined, then don't even try to compile
    the following code */
 #ifndef PY_NO_SHORT_FLOAT_REPR
 
 #include "float.h"
 
-#define MALLOC PyMem_Malloc
-#define FREE PyMem_Free
+// Pyston change: use normal malloc allocator because it's faster and we can't use the GC
+// because the custom memory managment functions inside this file are not compatible with it.
+// #define MALLOC PyMem_Malloc
+// #define FREE PyMem_Free
+#define MALLOC malloc
+#define FREE free
 
 /* This code should also work for ARM mixed-endian format on little-endian
    machines, where doubles have byte order 45670123 (in increasing address
