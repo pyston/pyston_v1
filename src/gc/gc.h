@@ -72,6 +72,42 @@ public:
 
     virtual void gc_visit(GCVisitor* visitor) = 0;
 };
+
+// Situation: Sometimes, we allocate an object on the stack (e.g. ASTInterpreter) who fields may be pointers
+// to objects in the Pyston heap. These pointers need to be scanned by the GC. Since the GC scans the entire
+// stack conservatively, these fields will be scanned. However, it is also possible that the stack-allocated
+// object points to a non-Pyston heap object which contains pointers to Pyston heap objects. In that case, the
+// conservative scanner won't get to those pointers.
+//
+// As such, objects who contain pointers to pointers to Pyston heap objects need a GC handler function. To do
+// that, we allocate a small object in the Pyston heap that refers back to the stack object and scans it.
+class StackObjectWithGCHandler {
+    class StackObjectHandler : public GCAllocatedRuntime {
+    public:
+        StackObjectWithGCHandler* stack_object;
+
+        StackObjectHandler(StackObjectWithGCHandler* obj): stack_object(obj) {}
+        ~StackObjectHandler() = default;
+
+        virtual void gc_visit(GCVisitor* visitor) {
+            assert(stack_object);
+            stack_object->gc_visit(visitor);
+        }
+    };
+
+    // This is allocated in the Pyston heap and is conservatively scanned.
+    StackObjectHandler* handler;
+
+public:
+    // GC visit function that will be called from the handler.
+    virtual void gc_visit(GCVisitor* visitor) = 0;
+
+    StackObjectWithGCHandler() {
+        handler = new StackObjectHandler(this);
+    }
+    virtual ~StackObjectWithGCHandler() = default;
+};
+
 } // namespace gc
 }
 
