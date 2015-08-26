@@ -3645,6 +3645,17 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
         // rewrite up to the call to it:
         res = createGenerator(func, arg1, arg2, arg3, oargs);
+
+        if (rewrite_args) {
+            RewriterVar* r_arg1 = num_output_args >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0);
+            RewriterVar* r_arg2 = num_output_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0);
+            RewriterVar* r_arg3 = num_output_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0);
+            RewriterVar* r_args = num_output_args >= 4 ? rewrite_args->args : rewrite_args->rewriter->loadConst(0);
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)createGenerator, rewrite_args->obj,
+                                                                 r_arg1, r_arg2, r_arg3, r_args);
+
+            rewrite_args->out_success = true;
+        }
     } else {
         res = callCLFunc<S>(f, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2, arg3, oargs);
     }
