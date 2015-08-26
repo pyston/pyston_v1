@@ -134,7 +134,7 @@ public:
             Box* globals = it.getGlobalsDict();
             BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
             f->_globals = globals;
-            f->_code = codeForCLFunction(cl);
+            f->_code = (Box*)cl->getCode();
         }
 
         return fi->frame_obj;
