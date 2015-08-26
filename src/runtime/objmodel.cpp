@@ -1499,6 +1499,23 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             return NULL;
         }
     } else {
+        if (unlikely(rewrite_args && rewrite_args->rewriter->aggressiveness() < 20)) {
+            class Helper {
+            public:
+                static Box* call(Box* obj, BoxedString* attr, bool cls_only) {
+                    return getattrInternalGeneric(obj, attr, NULL, cls_only, false, NULL, NULL);
+                }
+            };
+
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)Helper::call, rewrite_args->obj,
+                                               rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)),
+                                               rewrite_args->rewriter->loadConst(cls_only, Location::forArg(2)));
+            rewrite_args->out_success = true;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::NOEXC_POSSIBLE;
+            return Helper::call(obj, attr, cls_only);
+        }
+
         return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
     }
 }
@@ -1743,6 +1760,22 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         if (!PyType_Check(obj)) {
             // Look up the val in the object's dictionary and if you find it, return it.
 
+            if (unlikely(rewrite_args && !descr && obj->cls != instancemethod_cls
+                         && rewrite_args->rewriter->aggressiveness() < 40
+                         && attr->interned_state == SSTATE_INTERNED_IMMORTAL)) {
+                class Helper {
+                public:
+                    static Box* call(Box* obj, BoxedString* attr) { return obj->getattr(attr); }
+                };
+
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                    false, (void*)Helper::call, rewrite_args->obj,
+                    rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)));
+                rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::NOEXC_POSSIBLE;
+                return Helper::call(obj, attr);
+            }
+
             Box* val;
             RewriterVar* r_val = NULL;
             if (rewrite_args) {
@@ -1976,6 +2009,13 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
         printf("");
     ScopedStatTimer st(counter, 10);
 #endif
+
+    if (unlikely(rewriter.get() && rewriter->aggressiveness() < 5)) {
+        RewriterVar* r_rtn = rewriter->call(true, (void*)_getattrEntry<S>, rewriter->getArg(0), rewriter->getArg(1),
+                                            rewriter->loadConst(0, Location::forArg(2)));
+        rewriter->commitReturning(r_rtn);
+        rewriter.reset(NULL);
+    }
 
     // getattrInternal (what we call) can return NULL without setting an exception, but this function's
     // convention is that an exception will need to be thrown.

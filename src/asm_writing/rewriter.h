@@ -589,6 +589,17 @@ public:
 
     static bool isLargeConstant(int64_t val) { return (val < (-1L << 31) || val >= (1L << 31) - 1); }
 
+    // The "aggressiveness" with which we should try to do this rewrite.  It starts high, and decreases over time.
+    // The values are nominally in the range 0-100, with 0 being no aggressiveness and 100 being fully aggressive,
+    // but callers should be prepared to receive values from a larger range.
+    //
+    // It would be nice to have this be stateful so that we could support things like "Lower the aggressiveness for
+    // this sub-call and then increase it back afterwards".
+    int aggressiveness() {
+        const ICInfo* ic = rewrite->getICInfo();
+        return 100 - ic->percentBackedoff() - ic->percentMegamorphic();
+    }
+
     friend class RewriterVar;
 };
 
