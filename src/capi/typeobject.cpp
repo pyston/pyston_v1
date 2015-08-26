@@ -1044,8 +1044,10 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
 
             if (!grewrite_args.out_success)
                 rewrite_args = NULL;
-            else if (res)
+            else if (res) {
                 rewrite_args->out_rtn = grewrite_args.out_rtn;
+                rewrite_args->out_return_convention = grewrite_args.out_return_convention;
+            }
         } else {
             try {
                 res = getattrInternalGeneric(self, name, NULL, false, false, NULL, NULL);
@@ -1110,8 +1112,10 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
 
         if (!crewrite_args.out_success)
             rewrite_args = NULL;
-        else
+        else {
             rewrite_args->out_rtn = crewrite_args.out_rtn;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+        }
     } else {
         // TODO: we already fetched the getattr attribute, it would be faster to call it rather than do
         // a second callattr.  My guess though is that the gains would be small, so I would prefer to keep

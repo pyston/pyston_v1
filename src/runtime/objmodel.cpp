@@ -735,6 +735,7 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
         if (offset == -1) {
             if (rewrite_args) {
                 rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
             }
             return NULL;
         }
@@ -753,6 +754,8 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
 
         if (rewrite_args) {
             rewrite_args->out_success = true;
+            assert(rewrite_args->out_rtn);
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
 
         Box* rtn = attrs->attr_list->attrs[offset];
@@ -774,6 +777,8 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
 
     if (rewrite_args) {
         rewrite_args->out_success = true;
+        assert(rewrite_args->out_rtn == NULL);
+        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
     }
 
     return NULL;
@@ -986,6 +991,9 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 return val;
         }
 
+        assert(rewrite_args->out_success);
+        assert(!rewrite_args->out_rtn);
+        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
         return NULL;
     } else {
         assert(attr->interned_state != SSTATE_NOT_INTERNED);
@@ -1088,6 +1096,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
                 rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
             }
             return boxInstanceMethod(im_self, im_func, im_class);
         } else {
@@ -1095,6 +1104,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             if (rewrite_args) {
                 rewrite_args->out_rtn = r_im_func;
                 rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 *r_bind_obj_out = r_im_self;
             }
             return im_func;
@@ -1110,6 +1120,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             r_sm_callable->addGuardNotEq(0);
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_sm_callable;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
 
         return sm->sm_callable;
@@ -1128,6 +1139,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
         return r;
     }
@@ -1149,6 +1161,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr, r_cls);
                 rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
             }
             return boxUnboundInstanceMethod(descr, cls);
         }
@@ -1156,6 +1169,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (rewrite_args) {
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_descr;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
         return descr;
     }
@@ -1169,6 +1183,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (rewrite_args) {
             rewrite_args->out_rtn = r_descr;
             rewrite_args->out_success = true;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
         return descr;
     }
@@ -1213,6 +1228,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     rewrite_args->out_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
                     rewrite_args->out_rtn->addGuardNotEq(0);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
@@ -1228,6 +1244,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     // TODO would be faster to not use a call
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
@@ -1241,8 +1258,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
+                        = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->offset);
@@ -1257,6 +1275,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     rewrite_args->out_rtn
                         = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 float rtn = *reinterpret_cast<float*>((char*)obj + member_desc->offset);
@@ -1269,6 +1288,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val);                   \
             rewrite_args->out_success = true;                                                                          \
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;                                    \
         }                                                                                                              \
         type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->offset);                                         \
         return boxFn((cast)rtn);                                                                                       \
@@ -1292,6 +1312,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 char* rtn = *reinterpret_cast<char**>((char*)obj + member_desc->offset);
@@ -1303,6 +1324,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                         true, (void*)boxStringFromCharPtr,
                         rewrite_args->rewriter->add(rewrite_args->obj, member_desc->offset, rewrite_args->destination));
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 rewrite_args = NULL;
@@ -1335,6 +1357,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             } else {
                 rewrite_args->out_success = true;
                 rewrite_args->out_rtn = crewrite_args.out_rtn;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
             }
             return rtn;
         }
@@ -1374,6 +1397,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
             rewrite_args->out_success = true;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
 
         return getset_descr->get(obj, getset_descr->closure);
@@ -1427,6 +1451,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
                 rewrite_args->out_rtn = r_rtn;
                 rewrite_args->out_success = true;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
             }
 
             if (!r) {
@@ -1596,7 +1621,10 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
         } else if (descr) {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             r_descr = grewrite_args.out_rtn;
+        } else {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
         }
     } else {
         descr = typeLookup(obj->cls, attr, NULL);
@@ -1698,6 +1726,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                         } else {
                             rewrite_args->out_success = true;
                             rewrite_args->out_rtn = crewrite_args.out_rtn;
+                            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                         }
                     } else {
                         res = descr_get(descr, obj, obj->cls);
@@ -1723,7 +1752,10 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 if (!hrewrite_args.out_success) {
                     rewrite_args = NULL;
                 } else if (val) {
+                    assert(hrewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                     r_val = hrewrite_args.out_rtn;
+                } else {
+                    assert(hrewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
                 }
             } else {
                 val = obj->getattr(attr, NULL);
@@ -1733,6 +1765,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 if (rewrite_args) {
                     rewrite_args->out_rtn = r_val;
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
                 return val;
             }
@@ -1776,6 +1809,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     if (rewrite_args) {
                         rewrite_args->out_rtn = r_val;
                         rewrite_args->out_success = true;
+                        rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                     }
                     return val;
                 }
@@ -1791,6 +1825,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                         rewrite_args->obj);
                     rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
                     rewrite_args->out_success = true;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
 
                 return r;
@@ -1837,6 +1872,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 } else {
                     rewrite_args->out_success = true;
                     rewrite_args->out_rtn = crewrite_args.out_rtn;
+                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
                 }
             } else {
                 res = descr_get(descr, obj, obj->cls);
@@ -1850,6 +1886,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         if (rewrite_args) {
             rewrite_args->out_rtn = r_descr;
             rewrite_args->out_success = true;
+            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
         return descr;
     }
@@ -1863,6 +1900,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
 
     if (rewrite_args) {
         rewrite_args->out_success = true;
+        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
     }
     return NULL;
 }
@@ -1939,6 +1977,22 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
     ScopedStatTimer st(counter, 10);
 #endif
 
+    // getattrInternal (what we call) can return NULL without setting an exception, but this function's
+    // convention is that an exception will need to be thrown.
+    // Here's a simple helper to help with that:
+    class NoexcHelper {
+    public:
+        static void call(Box* rtn, Box* obj, BoxedString* attr) {
+            if (S == CAPI) {
+                if (!rtn && !PyErr_Occurred())
+                    raiseAttributeErrorCapi(obj, attr->s());
+            } else {
+                if (!rtn)
+                    raiseAttributeError(obj, attr->s());
+            }
+        }
+    };
+
     Box* val;
     if (rewriter.get()) {
         Location dest;
@@ -1951,45 +2005,37 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
         val = getattrInternal<S>(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success) {
-            if (!val) {
-                if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
-                    if (S == CXX) {
-                        rewriter->call(true, (void*)raiseAttributeError, rewriter->getArg(0),
-                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
-                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
-                        rewriter->commit();
-                    } else if (S == CAPI && !PyErr_Occurred()) {
-                        rewriter->call(true, (void*)raiseAttributeErrorCapi, rewriter->getArg(0),
-                                       rewriter->loadConst((intptr_t)attr->data(), Location::forArg(1)),
-                                       rewriter->loadConst(attr->size(), Location::forArg(2)));
-                        rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
-                    }
-                }
-            } else if (recorder) {
-                RewriterVar* record_rtn = rewriter->call(false, (void*)recordType,
-                                                         rewriter->loadConst((intptr_t)recorder, Location::forArg(0)),
-                                                         rewrite_args.out_rtn);
-                rewriter->commitReturning(record_rtn);
+            assert(rewrite_args.out_return_convention != GetattrRewriteArgs::UNSPECIFIED);
 
-                recordType(recorder, val);
-            } else {
-                rewriter->commitReturning(rewrite_args.out_rtn);
+            if (rewrite_args.out_return_convention != GetattrRewriteArgs::VALID_RETURN) {
+                if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
+                    if (rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN) {
+                        assert(!rewrite_args.out_rtn);
+                        rewrite_args.out_rtn = rewriter->loadConst(0, Location::forArg(1));
+                    }
+                    rewriter->call(true, (void*)NoexcHelper::call, rewrite_args.out_rtn, rewriter->getArg(0),
+                                   rewriter->loadConst((intptr_t)attr, Location::forArg(2)));
+                    rewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                }
+            }
+
+            if (rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN) {
+                RewriterVar* r_rtn = rewrite_args.out_rtn;
+                if (recorder) {
+                    r_rtn = rewriter->call(false, (void*)recordType,
+                                           rewriter->loadConst((intptr_t)recorder, Location::forArg(0)), r_rtn);
+                    recordType(recorder, val);
+                }
+
+                rewriter->commitReturning(r_rtn);
             }
         }
     } else {
         val = getattrInternal<S>(obj, attr, NULL);
     }
 
-    if (val)
-        return val;
-
-    if (S == CAPI) {
-        if (!PyErr_Occurred())
-            raiseAttributeErrorCapi(obj, attr->s());
-        return NULL;
-    } else {
-        raiseAttributeError(obj, attr->s());
-    }
+    NoexcHelper::call(val, obj, attr);
+    return val;
 }
 
 extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept {
