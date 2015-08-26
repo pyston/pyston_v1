@@ -22,6 +22,10 @@
 // Files outside of the gc/ folder should only import gc.h or gc_alloc.h
 // which are the "public" memory management interface.
 
+// Some code is only useful towards an effort to implement a
+// moving gc, gate behind this flag for now.
+#define MOVING_GC 0
+
 #define GC_KEEP_ALIVE(t) asm volatile("" : : "X"(t))
 
 #define TRACE_GC_MARKING 0

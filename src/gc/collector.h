@@ -68,6 +68,7 @@ class GCVisitorNoRedundancy : public GCVisitor {
     virtual void visitRangeRedundant(void* const* start, void* const* end) { visitRange(start, end); }
     virtual void visitPotentialRedundant(void* p) { visitPotential(p); }
     virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) { visitPotentialRange(start, end); }
+    virtual bool shouldVisitRedundants() { return true; }
 };
 }
 }
