@@ -545,10 +545,19 @@ static void visitRoots(GCVisitor& visitor) {
     }
 
     GC_TRACE_LOG("Looking at generated code pointers\n");
+    // These need to be pinned too because GC could happen during codegen.
     for (auto& sym : relocatable_syms) {
-        const void** ptr = &sym.second;
-        if (global_heap.getAllocationFromInteriorPointer((void*)*ptr)) {
-            visitor.visitPotentialRedundant((void**)ptr);
+        const void* ptr = &sym.second;
+        if (global_heap.getAllocationFromInteriorPointer((void*)ptr)) {
+            visitor.visitPotentialRedundant((void*)ptr);
+        }
+    }
+
+    for (auto& it : all_compiled_functions) {
+        for (const void* ptr : it.first->ptrs_to_pin) {
+            if (global_heap.getAllocationFromInteriorPointer((void*)ptr)) {
+                visitor.visitPotentialRedundant((void*)ptr);
+            }
         }
     }
 }
@@ -846,9 +855,6 @@ static void map_ids(std::string filename) {
 
     FILE* f = fopen(filename.c_str(), "w");
     for (auto k : keys) {
-        if (k == 25024) {
-            printf("");
-        }
         fprintf(f, "%ld ->", k);
 
         std::vector<uint64_t> refs;

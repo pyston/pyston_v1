@@ -99,8 +99,15 @@ llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
 
 llvm::StringMap<const void*> relocatable_syms;
 
+// For moving GC purposes.
+std::vector<const void*>* ptrs_to_pin;
+
 void clearRelocatableSymsMap() {
     relocatable_syms.clear();
+}
+
+void setPtrsToPinVector(std::vector<const void*>* v) {
+    ptrs_to_pin = v;
 }
 
 const void* getValueOfRelocatableSym(const std::string& str) {
@@ -128,6 +135,9 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
     }
 
     relocatable_syms[name] = addr;
+    if (gc::isValidGCObject(const_cast<void*>(addr))) {
+        ptrs_to_pin->push_back(addr);
+    }
 
     llvm::Type* var_type = type->getPointerElementType();
     return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
@@ -137,6 +147,11 @@ llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
     llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
     llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
+
+    if (gc::isValidGCObject(const_cast<void*>(addr))) {
+        ptrs_to_pin->push_back(addr);
+    }
+
     return ptr_val;
 }
 

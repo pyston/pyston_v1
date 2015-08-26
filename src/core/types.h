@@ -264,6 +264,10 @@ public:
     FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
 
+    // Pointers that were written into the code that we can't move because
+    // we can't modify pointers in code.
+    std::vector<const void*> ptrs_to_pin;
+
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
@@ -298,6 +302,7 @@ public:
     // Call this when a speculation inside this version failed
     void speculationFailed();
 };
+extern std::unordered_map<CompiledFunction*, int> all_compiled_functions;
 
 typedef int FutureFlags;
 

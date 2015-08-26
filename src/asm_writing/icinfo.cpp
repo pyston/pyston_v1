@@ -54,7 +54,11 @@ void ICInvalidator::invalidateAll() {
     dependents.clear();
 }
 
-
+ICSlotInfo::~ICSlotInfo() {
+    for (void* ptr : gc_references) {
+        assert(!gc::isValidGCObject(ptr));
+    }
+}
 
 void ICSlotInfo::clear() {
     ic->clear(this);

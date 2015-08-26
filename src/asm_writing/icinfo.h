@@ -41,6 +41,7 @@ class ICInvalidator;
 struct ICSlotInfo {
 public:
     ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
+    ~ICSlotInfo();
 
     ICInfo* ic;
     int idx;        // the index inside the ic

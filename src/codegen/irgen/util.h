@@ -38,6 +38,7 @@ llvm::Constant* getConstantInt(int64_t val, llvm::Type*);
 llvm::Constant* getNullPtr(llvm::Type* t);
 
 void clearRelocatableSymsMap();
+void setPtrsToPinVector(std::vector<const void*>* v);
 const void* getValueOfRelocatableSym(const std::string& str);
 
 void dumpPrettyIR(llvm::Function* f);
