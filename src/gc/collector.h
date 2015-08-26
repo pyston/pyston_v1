@@ -15,6 +15,8 @@
 #ifndef PYSTON_GC_COLLECTOR_H
 #define PYSTON_GC_COLLECTOR_H
 
+#include "gc/gc.h"
+
 namespace pyston {
 
 class Box;
@@ -58,6 +60,15 @@ void invalidateOrderedFinalizerList();
 // assert rather than delaying of the next GC.
 void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
+
+class GCVisitorNoRedundancy : public GCVisitor {
+    virtual ~GCVisitorNoRedundancy() {}
+
+    virtual void visitRedundant(void* p) { visit(p); }
+    virtual void visitRangeRedundant(void* const* start, void* const* end) { visitRange(start, end); }
+    virtual void visitPotentialRedundant(void* p) { visitPotential(p); }
+    virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) { visitPotentialRange(start, end); }
+};
 }
 }
 

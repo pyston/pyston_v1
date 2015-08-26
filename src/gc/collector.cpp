@@ -318,10 +318,6 @@ GCRootHandle::~GCRootHandle() {
     getRootHandles()->erase(this);
 }
 
-bool GCVisitor::isValid(void* p) {
-    return global_heap.getAllocationFromInteriorPointer(p) != NULL;
-}
-
 void GCVisitor::visit(void* p) {
     if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
         ASSERT(!p || isNonheapRoot(p), "%p", p);
