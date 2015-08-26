@@ -2878,7 +2878,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
         rewrite_args->out_success = true;
 
-        void* _args[2] = {args, const_cast<std::vector<BoxedString*>*>(keyword_names)};
+        void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
         return Helper::call(val, argspec, arg1, arg2, arg3, _args);
     }
 
@@ -3243,8 +3243,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         rewrite_args = NULL;
     }
 
-    if (paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 3) {
-        // We currently only handle up to 3 arguments into the varargs tuple
+    if (paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 6) {
+        // We currently only handle up to 6 arguments into the varargs tuple
         rewrite_args = NULL;
     }
 
@@ -3338,19 +3338,18 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             if (varargs_size == 0) {
                 varargs_val = rewrite_args->rewriter->loadConst(
                     (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
-            } else if (varargs_size == 1) {
-                varargs_val
-                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create1, unused_positional_rvars[0]);
-            } else if (varargs_size == 2) {
-                varargs_val = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create2,
-                                                           unused_positional_rvars[0], unused_positional_rvars[1]);
-            } else if (varargs_size == 3) {
-                varargs_val
-                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create3, unused_positional_rvars[0],
-                                                   unused_positional_rvars[1], unused_positional_rvars[2]);
             } else {
-                // This is too late to abort the rewrite (we should have checked this earlier)
-                abort();
+                assert(varargs_size <= 6);
+                void* create_ptrs[] = {
+                    NULL,                       //
+                    (void*)BoxedTuple::create1, //
+                    (void*)BoxedTuple::create2, //
+                    (void*)BoxedTuple::create3, //
+                    (void*)BoxedTuple::create4, //
+                    (void*)BoxedTuple::create5, //
+                    (void*)BoxedTuple::create6, //
+                };
+                varargs_val = rewrite_args->rewriter->call(false, create_ptrs[varargs_size], unused_positional_rvars);
             }
 
             if (varargs_val) {
