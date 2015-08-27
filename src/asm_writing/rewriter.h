@@ -379,9 +379,6 @@ protected:
         // Loads the constant into the specified register
         void loadConstIntoReg(uint64_t val, assembler::Register reg);
 
-        // Loads the constant into any register or if already in a register just return it
-        assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
-
         llvm::SmallVector<std::pair<uint64_t, RewriterVar*>, 16> consts;
     };
 
@@ -444,13 +441,15 @@ protected:
     bool added_changing_action;
     bool marked_inside_ic;
 
-    int last_guard_action;
-
     bool done_guarding;
     bool isDoneGuarding() {
         assertPhaseEmitting();
         return done_guarding;
     }
+
+    int last_guard_action;
+    int offset_eq_jmp_slowpath;
+    int offset_ne_jmp_slowpath;
 
     // Move the original IC args back into their original registers:
     void restoreArgs();
@@ -482,6 +481,7 @@ protected:
 
     bool finishAssembly(int continue_offset) override;
 
+    void _slowpathJump(bool condition_eq);
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm);
