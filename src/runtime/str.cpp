@@ -346,10 +346,10 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
             checkAndThrowCAPIException();
             return rtn;
         } else {
-            // Note: this is deliberately not returning NotImplemented, even though
-            // that would be more usual.  I assume this behavior of CPython's is
-            // for backwards compatibility.
-            raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
+            // This is a compatibility break with CPython, which has their sq_concat method
+            // directly throw a TypeError.  Since we're not implementing this as a sq_concat,
+            // return NotImplemented for now.
+            return NotImplemented;
         }
     }
 

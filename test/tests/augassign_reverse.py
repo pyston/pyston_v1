@@ -10,7 +10,7 @@ def f():
     i += IntLike()
     print i
     try:
-        i + 1
+        1 + i
     except TypeError, e:
         print e
 f()
