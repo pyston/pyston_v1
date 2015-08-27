@@ -300,6 +300,17 @@ void Assembler::movslq(Indirect src, Register dest) {
     mov_generic(src, dest, MovType::SLQ);
 }
 
+void Assembler::clear_reg(Register reg) {
+    int reg_idx = reg.regnum;
+    // we don't need to generate a REX_W because 32bit instructions will clear the upper 32bits.
+    if (reg_idx >= 8) {
+        emitRex(REX_R | REX_B);
+        reg_idx -= 8;
+    }
+    emitByte(0x31);
+    emitModRM(0b11, reg_idx, reg_idx);
+}
+
 void Assembler::mov_generic(Indirect src, Register dest, MovType type) {
     int rex;
     switch (type) {

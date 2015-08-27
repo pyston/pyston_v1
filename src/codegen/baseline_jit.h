@@ -117,7 +117,7 @@ class JitFragmentWriter;
 // second_JitFragment:
 //      ...
 //    ; this shows how a AST_Return looks like
-//      mov    $0,%rax              ; rax contains the next block to interpret.
+//      xor    %eax,%eax            ; rax contains the next block to interpret.
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
 //      add    $0x118,%rsp          ; restore stack pointer

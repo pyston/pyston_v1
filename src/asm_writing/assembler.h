@@ -144,6 +144,8 @@ public:
     void movswq(Indirect scr, Register dest);
     void movslq(Indirect scr, Register dest);
 
+    void clear_reg(Register reg); // = xor reg, reg
+
     void mov_generic(Indirect src, Register dest, MovType type);
 
     void push(Register reg);
