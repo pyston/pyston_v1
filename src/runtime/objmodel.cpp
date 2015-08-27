@@ -2835,19 +2835,54 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
             rewrite_args->func_guarded = true;
         }
 
-        Box* rtn;
         ArgPassSpec new_argspec
             = bindObjIntoArgs(bind_obj, r_bind_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
-        return runtimeCallInternal<S>(val, rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
+        argspec = new_argspec;
+        args = new_args;
     } else {
         if (rewrite_args) {
             rewrite_args->obj = r_val;
         }
-
-        Box* rtn = runtimeCallInternal<S>(val, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
-        assert(rtn || (S == CAPI && PyErr_Occurred()));
-        return rtn;
     }
+
+    Box* rtn;
+    if (unlikely(rewrite_args && rewrite_args->rewriter->aggressiveness() < 50)) {
+        class Helper {
+        public:
+            static Box* call(Box* val, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, void** extra_args) {
+                Box** args = (Box**)extra_args[0];
+                const std::vector<BoxedString*>* keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
+                return runtimeCallInternal<S>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            }
+        };
+
+        RewriterVar::SmallVector arg_vec;
+
+        arg_vec.push_back(rewrite_args->obj);
+        arg_vec.push_back(rewrite_args->rewriter->loadConst(argspec.asInt()));
+        arg_vec.push_back(argspec.totalPassed() >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0));
+        arg_vec.push_back(argspec.totalPassed() >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0));
+        arg_vec.push_back(argspec.totalPassed() >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0));
+
+        RewriterVar* arg_array = rewrite_args->rewriter->allocate(2);
+        arg_vec.push_back(arg_array);
+        if (argspec.totalPassed() >= 4)
+            arg_array->setAttr(0, rewrite_args->args);
+        else
+            arg_array->setAttr(0, rewrite_args->rewriter->loadConst(0));
+        if (argspec.num_keywords)
+            arg_array->setAttr(8, rewrite_args->rewriter->loadConst((intptr_t)keyword_names));
+        else
+            arg_array->setAttr(8, rewrite_args->rewriter->loadConst(0));
+
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
+        rewrite_args->out_success = true;
+
+        void* _args[2] = {args, const_cast<std::vector<BoxedString*>*>(keyword_names)};
+        return Helper::call(val, argspec, arg1, arg2, arg3, _args);
+    }
+
+    return runtimeCallInternal<S>(val, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 template <ExceptionStyle S>
