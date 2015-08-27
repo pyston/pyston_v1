@@ -810,7 +810,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
     assembler->test(result_reg, result_reg);
     {
         assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
-        assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
+        assembler->clear_reg(assembler::RAX);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
         assembler->pop(assembler::R12);
         assembler->pop(assembler::R14);
@@ -904,7 +904,7 @@ void JitFragmentWriter::_emitRecordType(RewriterVar* type_recorder_var, Rewriter
 
 void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
-    assembler->mov(assembler::Immediate(0ul), assembler::RAX); // TODO: use xor
+    assembler->clear_reg(assembler::RAX);
     assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
     assembler->pop(assembler::R12);
     assembler->pop(assembler::R14);

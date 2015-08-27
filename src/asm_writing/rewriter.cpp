@@ -206,6 +206,11 @@ assembler::Register Rewriter::ConstLoader::findConst(uint64_t val, bool& found_v
 void Rewriter::ConstLoader::loadConstIntoReg(uint64_t val, assembler::Register dst_reg) {
     assert(rewriter->phase_emitting);
 
+    if (val == 0) {
+        rewriter->assembler->clear_reg(dst_reg);
+        return;
+    }
+
     if (tryRegRegMove(val, dst_reg))
         return;
 
@@ -892,7 +897,10 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
             assembler::Immediate imm = var->tryGetAsImmediate(&is_immediate);
 
             if (is_immediate) {
-                assembler->mov(imm, r);
+                if (imm.val == 0)
+                    assembler->clear_reg(r);
+                else
+                    assembler->mov(imm, r);
                 addLocationToVar(var, l);
             } else {
                 assembler::Register r2 = var->getInReg(l);
