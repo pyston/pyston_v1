@@ -155,7 +155,7 @@ int Assembler::getModeFromOffset(int offset) const {
 }
 
 void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
-    force_64bit_load = force_64bit_load || !val.fitsInto32Bit();
+    force_64bit_load = force_64bit_load || !val.fitsInto32BitSigned();
 
     int rex = force_64bit_load ? REX_W : 0;
     int dest_idx = dest.regnum;

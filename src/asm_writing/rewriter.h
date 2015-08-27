@@ -105,6 +105,24 @@ public:
     void dump() const;
 };
 static_assert(sizeof(Location) <= 8, "");
+
+struct VarLocations {
+    const llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8> vars;
+
+    VarLocations() {}
+    VarLocations(llvm::SmallVector<RewriterVar*, 8> const& vars);
+    static llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4>>, 8>
+    _varLocationsConstruct(llvm::SmallVector<RewriterVar*, 8> const& vars);
+    void arrangeAsArgs(Rewriter* rewriter);
+};
+
+struct GuardInfo {
+    uint8_t* guard_jmp_addr;
+    VarLocations var_locations;
+
+    GuardInfo(uint8_t* guard_jmp_addr, VarLocations const& var_locations)
+        : guard_jmp_addr(guard_jmp_addr), var_locations(var_locations) {}
+};
 }
 
 namespace std {
@@ -247,7 +265,6 @@ private:
     bool is_constant;
 
     uint64_t constant_value;
-    Location arg_loc;
     std::pair<int /*offset*/, int /*size*/> scratch_allocation;
 
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
@@ -277,6 +294,7 @@ public:
 
     friend class Rewriter;
     friend class JitFragmentWriter;
+    friend class VarLocations;
 };
 
 // A utility class that is similar to std::function, but stores any closure data inline rather
@@ -416,8 +434,43 @@ protected:
     LocMap<RewriterVar*> vars_by_location;
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
+    llvm::SmallVector<RewriterVar*, 8> second_slowpath_args;
 
-    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs);
+    llvm::SmallVector<GuardInfo, 8> guard_infos;
+    void emitGuardJump(bool useJne);
+    void guardCalls(int continue_offset);
+
+    void useSecondGuardDestination() {
+        assertPhaseEmitting();
+
+        for (RewriterVar* v : args) {
+            v->is_arg = false;
+        }
+        args = std::move(second_slowpath_args);
+        for (int i = 0; i < args.size(); i++) {
+            RewriterVar* v = args[i];
+            v->is_arg = true;
+        }
+
+        should_use_second_guard_destination = true;
+    }
+
+public:
+    void addSecondSlowpath(void* new_slowpath, const llvm::SmallVector<RewriterVar*, 8>& args) {
+        assertPhaseCollecting();
+        added_changing_action = false;
+        this->second_slowpath = new_slowpath;
+        action_where_second_slowpath_starts = actions.size();
+        second_slowpath_args = args;
+    }
+    bool hasAddedChangingAction() { return added_changing_action; }
+
+protected:
+    void* second_slowpath;
+    int action_where_second_slowpath_starts;
+    bool should_use_second_guard_destination;
+
+    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, LiveOutSet live_outs);
 
     std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
     template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
@@ -433,30 +486,15 @@ protected:
                 failed = true;
                 return;
             }
-            for (RewriterVar* arg : args) {
+            for (RewriterVar* arg : (second_slowpath ? second_slowpath_args : args)) {
                 arg->uses.push_back(actions.size());
             }
             assert(!added_changing_action);
-            last_guard_action = (int)actions.size();
         }
         actions.emplace_back(std::forward<F>(action));
     }
     bool added_changing_action;
     bool marked_inside_ic;
-
-    int last_guard_action;
-
-    bool done_guarding;
-    bool isDoneGuarding() {
-        assertPhaseEmitting();
-        return done_guarding;
-    }
-
-    // Move the original IC args back into their original registers:
-    void restoreArgs();
-    // Assert that our original args are correctly placed in case we need to
-    // bail out of the IC:
-    void assertArgsInPlace();
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
@@ -527,11 +565,6 @@ protected:
                 assert(p.second->isInLocation(p.first));
             }
         }
-        if (!done_guarding) {
-            for (RewriterVar* arg : args) {
-                assert(!arg->locations.empty());
-            }
-        }
 #endif
     }
 
@@ -590,6 +623,7 @@ public:
     static bool isLargeConstant(int64_t val) { return (val < (-1L << 31) || val >= (1L << 31) - 1); }
 
     friend class RewriterVar;
+    friend class VarLocations;
 };
 
 void setSlowpathFunc(uint8_t* pp_addr, void* func);
@@ -613,14 +647,16 @@ bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst
                                    int& scratch_offset, int& scratch_size, SpillMap& remapped);
 
 struct PatchpointInitializationInfo {
+    uint8_t* patchpoint_start;
     uint8_t* slowpath_start;
     uint8_t* slowpath_rtn_addr;
     uint8_t* continue_addr;
     LiveOutSet live_outs;
 
-    PatchpointInitializationInfo(uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr, uint8_t* continue_addr,
-                                 LiveOutSet live_outs)
-        : slowpath_start(slowpath_start),
+    PatchpointInitializationInfo(uint8_t* patchpoint_start, uint8_t* slowpath_start, uint8_t* slowpath_rtn_addr,
+                                 uint8_t* continue_addr, LiveOutSet live_outs)
+        : patchpoint_start(patchpoint_start),
+          slowpath_start(slowpath_start),
           slowpath_rtn_addr(slowpath_rtn_addr),
           continue_addr(continue_addr),
           live_outs(std::move(live_outs)) {}

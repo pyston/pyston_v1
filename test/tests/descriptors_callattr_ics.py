@@ -1,14 +1,6 @@
-# expected: statfail
 # run_args: -n
 # statcheck: stats['slowpath_callattr'] <= 80
-# statcheck: stats['slowpath_getattr'] <= 80
-
-# Right now this won't work because callattr involves two calls
-# one call to __get__ and then another call to the returned function.
-# Of course, if the callattr were split up into getattr and a call,
-# each could be re-written separately...
-# Not sure if this is a case worth handling or what is the best way
-# to handle it, but I'm throwing the test in here anyway to remind us.
+# statcheck: stats.get('slowpath_getattr', 0) <= 80
 
 def g():
     print 'in g'
