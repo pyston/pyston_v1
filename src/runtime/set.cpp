@@ -92,24 +92,64 @@ Box* setAdd2(Box* _self, Box* b) {
     return None;
 }
 
-Box* setNew(Box* _cls, Box* container) {
-    RELEASE_ASSERT(_cls->cls == type_cls, "");
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    RELEASE_ASSERT(isSubclass(cls, set_cls) || isSubclass(cls, frozenset_cls), "");
+// Creates a set of type 'cls' from 'container' (NULL to get an empty set).
+// Works for frozenset and normal set types.
+BoxedSet* makeNewSet(BoxedClass* cls, Box* container) {
+    assert(isSubclass(cls, frozenset_cls) || isSubclass(cls, set_cls));
 
     BoxedSet* rtn = new (cls) BoxedSet();
 
-    if (container == None)
-        return rtn;
-
-    for (Box* e : container->pyElements()) {
-        rtn->s.insert(e);
+    if (container) {
+        for (Box* e : container->pyElements()) {
+            rtn->s.insert(e);
+        }
     }
-
     return rtn;
 }
 
-static Box* _setRepr(BoxedSet* self, const char* type_name) {
+Box* frozensetNew(Box* _cls, Box* container) {
+    RELEASE_ASSERT(_cls->cls == type_cls, "");
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    RELEASE_ASSERT(isSubclass(cls, frozenset_cls), "");
+
+    // Some optimizations from CPython: frozensets can be shared:
+    if (_cls == frozenset_cls) {
+        if (!container) {
+            static Box* emptyfrozenset = PyGC_AddRoot(new (frozenset_cls) BoxedSet());
+            return emptyfrozenset;
+        }
+        if (container->cls == frozenset_cls)
+            return container;
+    }
+
+    return makeNewSet(cls, container);
+}
+
+Box* setNew(Box* _cls, Box* container) {
+    RELEASE_ASSERT(_cls->cls == type_cls, "");
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    RELEASE_ASSERT(isSubclass(cls, set_cls), "");
+
+    // Note: set.__new__ explicitly ignores the container argument.
+    return makeNewSet(cls, NULL);
+}
+
+Box* setInit(Box* _self, Box* container) {
+    RELEASE_ASSERT(PySet_Check(_self), "");
+
+    if (!container)
+        return None;
+
+    BoxedSet* self = static_cast<BoxedSet*>(_self);
+
+    for (Box* e : container->pyElements()) {
+        self->s.insert(e);
+    }
+    return None;
+}
+
+static Box* setRepr(BoxedSet* self) {
+    RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
@@ -118,7 +158,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
         if (status < 0)
             throwCAPIException();
 
-        std::string ty = std::string(type_name);
+        std::string ty = std::string(self->cls->tp_name);
         chars.insert(chars.end(), ty.begin(), ty.end());
         chars.push_back('(');
         chars.push_back('.');
@@ -130,7 +170,7 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
     }
 
     try {
-        std::string ty = std::string(type_name);
+        std::string ty = std::string(self->cls->tp_name);
         chars.insert(chars.end(), ty.begin(), ty.end());
 
         chars.push_back('(');
@@ -156,16 +196,6 @@ static Box* _setRepr(BoxedSet* self, const char* type_name) {
     }
     Py_ReprLeave((PyObject*)self);
     return boxString(llvm::StringRef(&chars[0], chars.size()));
-}
-
-Box* setRepr(BoxedSet* self) {
-    RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");
-    return _setRepr(self, "set");
-}
-
-Box* frozensetRepr(BoxedSet* self) {
-    RELEASE_ASSERT(isSubclass(self->cls, frozenset_cls), "");
-    return _setRepr(self, "frozenset");
 }
 
 Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
@@ -343,7 +373,7 @@ Box* setDifference(BoxedSet* self, BoxedTuple* args) {
         raiseExcHelper(TypeError, "descriptor 'difference' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
-    BoxedSet* rtn = (BoxedSet*)setNew(self->cls, self);
+    BoxedSet* rtn = makeNewSet(self->cls, self);
 
     for (auto container : args->pyElements()) {
         for (auto elt : container->pyElements()) {
@@ -372,7 +402,7 @@ static Box* setIssubset(BoxedSet* self, Box* container) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     if (!PyAnySet_Check(container)) {
-        container = setNew(set_cls, container);
+        container = makeNewSet(set_cls, container);
     }
     assert(PyAnySet_Check(container));
 
@@ -388,7 +418,7 @@ static Box* setIssuperset(BoxedSet* self, Box* container) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     if (!PyAnySet_Check(container)) {
-        container = setNew(set_cls, container);
+        container = makeNewSet(set_cls, container);
     }
     assert(PyAnySet_Check(container));
 
@@ -548,16 +578,17 @@ void setupSet() {
     set_iterator_cls->tp_iternext = setiter_next;
 
     set_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
-    frozenset_cls->giveAttr("__new__", set_cls->getattr(internStringMortal("__new__")));
+                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { NULL }));
+    set_cls->giveAttr("__init__",
+                      new BoxedFunction(boxRTFunction((void*)setInit, UNKNOWN, 2, 1, false, false), { NULL }));
+    frozenset_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)frozensetNew, UNKNOWN, 2, 1, false, false), { NULL }));
 
     Box* set_repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
     set_cls->giveAttr("__repr__", set_repr);
     set_cls->giveAttr("__str__", set_repr);
-
-    Box* frozenset_repr = new BoxedFunction(boxRTFunction((void*)frozensetRepr, STR, 1));
-    frozenset_cls->giveAttr("__repr__", frozenset_repr);
-    frozenset_cls->giveAttr("__str__", frozenset_repr);
+    frozenset_cls->giveAttr("__repr__", set_repr);
+    frozenset_cls->giveAttr("__str__", set_repr);
 
     std::vector<ConcreteCompilerType*> v_ss, v_sf, v_su, v_ff, v_fs, v_fu;
     v_ss.push_back(SET);
