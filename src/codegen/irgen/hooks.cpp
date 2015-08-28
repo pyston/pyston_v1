@@ -601,6 +601,48 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
     return evalMain(boxedCode, globals, locals, &pcf);
 }
 
+Box* execfile(Box* _fn, Box* globals, Box* locals) {
+    if (!PyString_Check(_fn)) {
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
+    }
+
+    BoxedString* fn = static_cast<BoxedString*>(_fn);
+
+    pickGlobalsAndLocals(globals, locals);
+
+#if LLVMREV < 217625
+    bool exists;
+    llvm_error_code code = llvm::sys::fs::exists(fn->s, exists);
+
+#if LLVMREV < 210072
+    ASSERT(code == 0, "%s: %s", code.message().c_str(), fn->s.c_str());
+#else
+    assert(!code);
+#endif
+
+#else
+    bool exists = llvm::sys::fs::exists(std::string(fn->s()));
+#endif
+
+    if (!exists)
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s().data());
+
+    AST_Module* parsed = caching_parse_file(fn->s().data());
+    assert(parsed);
+
+    CLFunction* caller_cl = getTopPythonFunction();
+    assert(caller_cl != NULL);
+    assert(caller_cl->source != NULL);
+    FutureFlags caller_future_flags = caller_cl->source->future_flags;
+    PyCompilerFlags pcf;
+    pcf.cf_flags = caller_future_flags;
+
+    CLFunction* cl = compileForEvalOrExec(parsed, parsed->body, fn, &pcf);
+    assert(cl);
+
+    return evalOrExec(cl, globals, locals);
+}
+
 Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
     if (PyTuple_Check(boxedCode)) {
         RELEASE_ASSERT(!globals, "");
