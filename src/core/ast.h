@@ -1204,7 +1204,7 @@ public:
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_exec(AST_Exec* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
-    virtual bool visit_expr(AST_Expression* node) { return false; }
+    virtual bool visit_expression(AST_Expression* node) { return false; }
     virtual bool visit_suite(AST_Suite* node) { return false; }
     virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }

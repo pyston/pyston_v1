@@ -1,6 +1,12 @@
 # I would have expected this to be valid, but cPython and pypy err out saying "name 'x' is local and global"
 
 try:
+    import __pyston__
+    __pyston__.setOption("LAZY_SCOPING_ANALYSIS", 0)
+except ImportError:
+    pass
+
+try:
     exec """
 x = 1
 def f(x):
@@ -40,7 +46,7 @@ except SyntaxError as e:
 
 try:
     exec """
-def f(*kwargs):
+def f(**kwargs):
     global kwargs
 
 print "calling"

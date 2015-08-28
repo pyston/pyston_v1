@@ -370,10 +370,7 @@ static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body
     return cl_f;
 }
 
-// TODO: CPython parses execs as Modules, not as Suites.  This is probably not too hard to change,
-// but is non-trivial since we will later decide some things (ex in scoping_analysis) based off
-// the type of the root ast node.
-static AST_Suite* parseExec(llvm::StringRef source, bool interactive = false) {
+static AST_Module* parseExec(llvm::StringRef source, bool interactive = false) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -393,13 +390,11 @@ static AST_Suite* parseExec(llvm::StringRef source, bool interactive = false) {
         }
     }
 
-    AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
-    parsedSuite->body = std::move(parsedModule->body);
-    return parsedSuite;
+    return parsedModule;
 }
 
-static CLFunction* compileExec(AST_Suite* parsedSuite, BoxedString* fn, PyCompilerFlags* flags) {
-    return compileForEvalOrExec(parsedSuite, parsedSuite->body, fn, flags);
+static CLFunction* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
+    return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
 }
 
 static AST_Expression* parseEval(llvm::StringRef source) {
@@ -520,9 +515,9 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     CLFunction* cl;
     if (type_str->s() == "exec" || type_str->s() == "single") {
         // TODO: CPython parses execs as Modules
-        if (parsed->type != AST_TYPE::Suite)
-            raiseExcHelper(TypeError, "expected Suite node, got %s", boxAst(parsed)->cls->tp_name);
-        cl = compileExec(static_cast<AST_Suite*>(parsed), filename_str, &pcf);
+        if (parsed->type != AST_TYPE::Module)
+            raiseExcHelper(TypeError, "expected Module node, got %s", boxAst(parsed)->cls->tp_name);
+        cl = compileExec(static_cast<AST_Module*>(parsed), filename_str, &pcf);
     } else if (type_str->s() == "eval") {
         if (parsed->type != AST_TYPE::Expression)
             raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
@@ -534,7 +529,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     return (Box*)cl->getCode();
 }
 
-static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
+static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
     if (globals == None)
         globals = NULL;
 
@@ -560,6 +555,19 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
         globals = unwrapAttrWrapper(globals);
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
+
+    if (globals) {
+        // From CPython (they set it to be f->f_builtins):
+        Box* globals_dict = globals;
+        if (globals->cls == module_cls)
+            globals_dict = globals->getAttrWrapper();
+        if (PyDict_GetItemString(globals_dict, "__builtins__") == NULL)
+            PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
+    }
+}
+
+static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
+    pickGlobalsAndLocals(globals, locals);
 
     if (boxedCode->cls == unicode_cls) {
         boxedCode = PyUnicode_AsUTF8String(boxedCode);
@@ -606,40 +614,7 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
             locals = t->elts[2];
     }
 
-    if (globals == None)
-        globals = NULL;
-
-    if (locals == None)
-        locals = NULL;
-
-    if (locals == NULL) {
-        locals = globals;
-    }
-
-    if (locals == NULL) {
-        locals = fastLocalsToBoxedLocals();
-    }
-
-    if (globals == NULL)
-        globals = getGlobals();
-
-    BoxedModule* module = getCurrentModule();
-    if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
-        globals = module;
-
-    if (globals->cls == attrwrapper_cls)
-        globals = unwrapAttrWrapper(globals);
-
-    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
-
-    if (globals) {
-        // From CPython (they set it to be f->f_builtins):
-        Box* globals_dict = globals;
-        if (globals->cls == module_cls)
-            globals_dict = globals->getAttrWrapper();
-        if (PyDict_GetItemString(globals_dict, "__builtins__") == NULL)
-            PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
-    }
+    pickGlobalsAndLocals(globals, locals);
 
     if (boxedCode->cls == unicode_cls) {
         boxedCode = PyUnicode_AsUTF8String(boxedCode);
@@ -650,7 +625,7 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
+        auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
         static BoxedString* string_string = internStringImmortal("<string>");
         cl = compileExec(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
