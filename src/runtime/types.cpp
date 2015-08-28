@@ -3353,6 +3353,8 @@ static void setupDefaultClassGCParticipation() {
     // hundreds of thousands of unicode strings.
     setTypeGCNone(unicode_cls);
     unicode_cls->gc_visit = unicode_visit;
+    unicode_cls->is_constant = true;
+    unicode_cls->is_user_defined = false;
 
     for (BoxedClass* cls : exception_types) {
         setTypeGCNone(cls);
