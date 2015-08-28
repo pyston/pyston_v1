@@ -110,6 +110,7 @@ public:
 
     void print();
 
+    bool hasVregsAssigned() { return has_vregs_assigned; }
     void assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info);
 };
 
