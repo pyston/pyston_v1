@@ -17,10 +17,9 @@
 
 #include "core/common.h"
 #include "core/threading.h"
+#include "gc/gc.h"
 
 namespace pyston {
-
-#define GC_KEEP_ALIVE(t) asm volatile("" : : "X"(t))
 
 template <class T> class StackRoot {
 public:

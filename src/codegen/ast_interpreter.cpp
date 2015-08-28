@@ -35,7 +35,6 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
-#include "gc/roots.h"
 #include "runtime/generator.h"
 #include "runtime/import.h"
 #include "runtime/inline/boxing.h"

@@ -23,7 +23,7 @@
 
 #include "core/common.h"
 #include "core/thread_utils.h"
-#include "gc/collector.h"
+#include "gc/gc.h"
 
 namespace pyston {
 class Box;

@@ -16,6 +16,7 @@
 #define PYSTON_ASMWRITING_REWRITER_H
 
 #include <deque>
+#include <list>
 #include <map>
 #include <memory>
 #include <tuple>

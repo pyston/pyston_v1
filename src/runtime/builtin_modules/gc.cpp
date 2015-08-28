@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "core/types.h"
-#include "gc/collector.h"
+#include "gc/gc.h"
 #include "runtime/types.h"
 
 namespace pyston {

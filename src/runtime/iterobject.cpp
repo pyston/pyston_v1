@@ -22,7 +22,6 @@
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/collector.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

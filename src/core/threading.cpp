@@ -29,7 +29,6 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
-#include "gc/collector.h"
 #include "runtime/objmodel.h" // _printStacktrace
 
 namespace pyston {

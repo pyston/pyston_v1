@@ -20,7 +20,6 @@
 #include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
-#include "gc/heap.h"
 #include "runtime/complex.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"

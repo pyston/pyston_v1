@@ -20,7 +20,6 @@
 #include "asm_writing/rewriter.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/patchpoints.h"
-#include "gc/heap.h"
 
 namespace pyston {
 

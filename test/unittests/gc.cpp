@@ -5,7 +5,7 @@
 #include "gtest/gtest.h"
 
 #include "core/types.h"
-#include "gc/gc_alloc.h"
+#include "gc/gc.h"
 #include "runtime/types.h"
 #include "unittests.h"
 

@@ -32,7 +32,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "core/util.h"
-#include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
