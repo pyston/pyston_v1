@@ -1691,8 +1691,9 @@ extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start
 }
 
 static int calculateNumVRegs(CLFunction* clfunc) {
-    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
     SourceInfo* source_info = clfunc->source.get();
+
+    CFG* cfg = source_info->cfg;
 
     // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
     // it can go, due to the fact that it can throw an exception.
@@ -1701,11 +1702,14 @@ static int calculateNumVRegs(CLFunction* clfunc) {
     // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
     // (For instance, throwing the exception will try to fetch the current statement, but we determine
     // that by looking at the cfg.)
-    if (!source_info->cfg)
-        source_info->cfg = computeCFG(source_info, source_info->body);
+    if (!cfg)
+        cfg = source_info->cfg = computeCFG(source_info, source_info->body);
 
-    source_info->cfg->assignVRegs(clfunc->param_names, scope_info);
-    return source_info->cfg->sym_vreg_map.size();
+    if (!cfg->hasVregsAssigned()) {
+        ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+        cfg->assignVRegs(clfunc->param_names, scope_info);
+    }
+    return cfg->sym_vreg_map.size();
 }
 
 Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1,
