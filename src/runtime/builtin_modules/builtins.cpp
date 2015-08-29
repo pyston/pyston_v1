@@ -588,27 +588,95 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     return None;
 }
 
-Box* hasattr(Box* obj, Box* _str) {
-    _str = coerceUnicodeToStr(_str);
+static Box* hasattrFuncHelper(Box* return_val) noexcept {
+    if (return_val)
+        return True;
 
-    if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+    if (PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_Exception))
+            return NULL;
+
+        PyErr_Clear();
+    }
+    return False;
+}
+
+template <ExceptionStyle S>
+Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                         Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    bool rewrite_success = false;
+    rearrangeArguments(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args, rewrite_success,
+                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
+    if (!rewrite_success)
+        rewrite_args = NULL;
+
+    Box* obj = arg1;
+    Box* _str = arg2;
+
+    if (rewrite_args) {
+        // We need to make sure that the attribute string will be the same.
+        // Even though the passed string might not be the exact attribute name
+        // that we end up looking up (because we need to encode it or intern it),
+        // guarding on that object means (for strings and unicode) that the string
+        // value is fixed.
+        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
+            rewrite_args = NULL;
+        else
+            rewrite_args->arg2->addGuard((intptr_t)arg2);
+    }
+
+    try {
+        _str = coerceUnicodeToStr(_str);
+    } catch (ExcInfo e) {
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        } else
+            throw e;
+    }
+
+    if (!PyString_Check(_str)) {
+        if (S == CAPI) {
+            PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    internStringMortalInplace(str);
+    if (!PyString_CHECK_INTERNED(str))
+        internStringMortalInplace(str);
 
-    Box* attr;
-    try {
-        attr = getattrInternal<ExceptionStyle::CXX>(obj, str, NULL);
-    } catch (ExcInfo e) {
-        if (e.matches(Exception))
-            return False;
-        throw e;
+    Box* rtn;
+    RewriterVar* r_rtn;
+    if (rewrite_args) {
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+        if (!grewrite_args.out_success)
+            rewrite_args = NULL;
+        else {
+            if (!rtn && !PyErr_Occurred())
+                r_rtn = rewrite_args->rewriter->loadConst(0);
+            else
+                r_rtn = grewrite_args.out_rtn;
+        }
+    } else {
+        rtn = getattrInternal<CAPI>(obj, str, NULL);
     }
 
-    Box* rtn = attr ? True : False;
-    return rtn;
+    if (rewrite_args) {
+        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn);
+
+        if (S == CXX)
+            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+        rewrite_args->out_success = true;
+        rewrite_args->out_rtn = final_rtn;
+    }
+
+    Box* r = hasattrFuncHelper(rtn);
+    if (S == CXX && !r)
+        throwCAPIException();
+    return r;
 }
 
 Box* map2(Box* f, Box* container) {
@@ -1547,8 +1615,10 @@ void setupBuiltins() {
         "setattr",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false), "setattr"));
 
-    Box* hasattr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hasattr, BOXED_BOOL, 2), "hasattr");
-    builtins_module->giveAttr("hasattr", hasattr_obj);
+    auto hasattr_func = createRTFunction(2, 0, false, false);
+    hasattr_func->internal_callable.capi_val = &hasattrFuncInternal<CAPI>;
+    hasattr_func->internal_callable.cxx_val = &hasattrFuncInternal<CXX>;
+    builtins_module->giveAttr("hasattr", new BoxedBuiltinFunctionOrMethod(hasattr_func, "hasattr"));
 
     builtins_module->giveAttr("pow", new BoxedBuiltinFunctionOrMethod(
                                          boxRTFunction((void*)powFunc, UNKNOWN, 3, 1, false, false), "pow", { None }));
