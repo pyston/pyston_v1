@@ -1249,40 +1249,6 @@ Box* powFunc(Box* x, Box* y, Box* z) {
     return rtn;
 }
 
-Box* execfile(Box* _fn) {
-    // The "globals" and "locals" arguments aren't implemented for now
-    if (!PyString_Check(_fn)) {
-        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
-    }
-
-    BoxedString* fn = static_cast<BoxedString*>(_fn);
-
-#if LLVMREV < 217625
-    bool exists;
-    llvm_error_code code = llvm::sys::fs::exists(fn->s, exists);
-
-#if LLVMREV < 210072
-    ASSERT(code == 0, "%s: %s", code.message().c_str(), fn->s.c_str());
-#else
-    assert(!code);
-#endif
-
-#else
-    bool exists = llvm::sys::fs::exists(std::string(fn->s()));
-#endif
-
-    if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->data());
-
-    // Run directly inside the current module:
-    AST_Module* ast = caching_parse_file(fn->data());
-
-    ASSERT(getTopPythonFunction()->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
-    compileAndRunModule(ast, getCurrentModule());
-
-    return None;
-}
-
 Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
     assert(!kwargs || kwargs->cls == dict_cls);
@@ -1718,8 +1684,10 @@ void setupBuiltins() {
                                             boxRTFunction((void*)coerceFunc, UNKNOWN, 2, 0, false, false), "coerce"));
     builtins_module->giveAttr("divmod",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2), "divmod"));
-    builtins_module->giveAttr("execfile",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1), "execfile"));
+
+    builtins_module->giveAttr(
+        "execfile", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 3, 2, false, false),
+                                                     "execfile", { NULL, NULL }));
 
     CLFunction* compile_func = createRTFunction(
         5, 2, false, false, ParamNames({ "source", "filename", "mode", "flags", "dont_inherit" }, "", ""));

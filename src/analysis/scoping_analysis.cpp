@@ -171,8 +171,6 @@ private:
     bool globals_from_module;
 
 public:
-    EvalExprScopeInfo(bool globals_from_module) : globals_from_module(globals_from_module) {}
-
     EvalExprScopeInfo(AST* node, bool globals_from_module) : globals_from_module(globals_from_module) {
         // Find all the global statements in the node's scope (not delving into FuncitonDefs
         // or ClassDefs) and put the names in `forced_globals`.
@@ -959,21 +957,24 @@ ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
     : parent_module(NULL), globals_from_module(globals_from_module) {
     switch (ast->type) {
         case AST_TYPE::Module:
-            assert(globals_from_module);
-            scopes[ast] = new ModuleScopeInfo();
             interned_strings = static_cast<AST_Module*>(ast)->interned_strings.get();
-            parent_module = static_cast<AST_Module*>(ast);
             break;
         case AST_TYPE::Expression:
-            scopes[ast] = new EvalExprScopeInfo(globals_from_module);
             interned_strings = static_cast<AST_Expression*>(ast)->interned_strings.get();
             break;
         case AST_TYPE::Suite:
-            scopes[ast] = new EvalExprScopeInfo(ast, globals_from_module);
             interned_strings = static_cast<AST_Suite*>(ast)->interned_strings.get();
             break;
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
+    }
+
+    if (globals_from_module) {
+        assert(ast->type == AST_TYPE::Module);
+        scopes[ast] = new ModuleScopeInfo();
+        parent_module = static_cast<AST_Module*>(ast);
+    } else {
+        scopes[ast] = new EvalExprScopeInfo(ast, globals_from_module);
     }
 }
 }

@@ -40,6 +40,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 CompiledFunction* cfForMachineFunctionName(const std::string&);
 
 extern "C" Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags);
+extern "C" Box* execfile(Box* fn, Box* globals, Box* locals);
 extern "C" Box* eval(Box* boxedCode, Box* globals, Box* locals);
 extern "C" Box* compile(Box* source, Box* filename, Box* mode, Box** _args /* flags, dont_inherit */);
 }
