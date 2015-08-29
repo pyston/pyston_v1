@@ -986,7 +986,7 @@ Box* listNew(BoxedClass* cls, Box* container) {
 Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
 
-    if (container != None) {
+    if (container) {
         listIAdd(self, container);
     }
 
@@ -1243,7 +1243,7 @@ void setupList() {
     list_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None }));
     list_cls->giveAttr("__init__",
-                       new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, 1, false, false), { None }));
+                       new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, 1, false, false), { NULL }));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2)));
     list_cls->giveAttr(

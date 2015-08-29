@@ -33,6 +33,11 @@ Box* recordType(TypeRecorder* self, Box* obj) {
     // The baseline JIT directly generates machine code for this function inside JitFragmentWriter::_emitRecordType.
     // When changing this function one has to also change the bjit code.
 
+    if (!obj) {
+        assert(PyErr_Occurred());
+        return obj;
+    }
+
     BoxedClass* cls = obj->cls;
     if (cls != self->last_seen) {
         self->last_seen = cls;

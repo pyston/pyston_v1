@@ -33,6 +33,7 @@ class ICInfo;
 class ICInvalidator;
 
 #define IC_INVALDITION_HEADER_SIZE 6
+#define IC_MEGAMORPHIC_THRESHOLD 100
 
 struct ICSlotInfo {
 public:
@@ -133,6 +134,10 @@ public:
 
     bool shouldAttempt();
     bool isMegamorphic();
+
+    // For use of the rewriter for computing aggressiveness:
+    int percentMegamorphic() const { return times_rewritten * 100 / IC_MEGAMORPHIC_THRESHOLD; }
+    int percentBackedoff() const { return retry_backoff; }
 
     friend class ICSlotRewrite;
 };

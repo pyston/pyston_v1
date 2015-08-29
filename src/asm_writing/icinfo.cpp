@@ -30,7 +30,6 @@ namespace pyston {
 
 using namespace pyston::assembler;
 
-#define MEGAMORPHIC_THRESHOLD 100
 #define MAX_RETRY_BACKOFF 1024
 
 // TODO not right place for this...
@@ -121,7 +120,7 @@ void ICSlotRewrite::commit(CommitHook* hook) {
 
     ic->times_rewritten++;
 
-    if (ic->times_rewritten == MEGAMORPHIC_THRESHOLD) {
+    if (ic->times_rewritten == IC_MEGAMORPHIC_THRESHOLD) {
         static StatCounter megamorphic_ics("megamorphic_ics");
         megamorphic_ics.log();
     }
@@ -298,6 +297,6 @@ bool ICInfo::shouldAttempt() {
 }
 
 bool ICInfo::isMegamorphic() {
-    return times_rewritten >= MEGAMORPHIC_THRESHOLD;
+    return times_rewritten >= IC_MEGAMORPHIC_THRESHOLD;
 }
 }

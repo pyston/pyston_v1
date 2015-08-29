@@ -557,6 +557,18 @@ public:
             assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
+    static BoxedTuple* create6(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4, Box* elt5) {
+        BoxedTuple* rtn = new (6) BoxedTuple();
+        rtn->elts[0] = elt0;
+        rtn->elts[1] = elt1;
+        rtn->elts[2] = elt2;
+        rtn->elts[3] = elt3;
+        rtn->elts[4] = elt4;
+        rtn->elts[5] = elt5;
+        for (int i = 0; i < rtn->size(); i++)
+            assert(gc::isValidGCObject(rtn->elts[i]));
+        return rtn;
+    }
     static BoxedTuple* create(std::initializer_list<Box*> members) {
         auto rtn = new (members.size()) BoxedTuple(members);
 

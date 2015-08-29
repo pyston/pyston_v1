@@ -30,6 +30,28 @@ struct GetattrRewriteArgs {
     bool obj_hcls_guarded;
     bool obj_shape_guarded; // "shape" as in whether there are hcls attrs and where they live
 
+    // We have have a couple different conventions for returning values from getattr-like functions.
+    // For normal code we have just two conventions:
+    // - the "normal" convention is that signalling the lack of an attribute is handled by throwing
+    //   an exception (via either CAPI or C++ means).  This is the only convention that CPython has.
+    // - our fast "no exception" convention which will return NULL and not throw an exception, not
+    //   even a CAPI exception.
+    //
+    // For the rewriter, there are three cases:
+    // - we will obey the "normal" convention (VALID_RETURN)
+    // - we will never have anything to return and there will be no exception (NO_RETURN)
+    // - we don't know which of the above two will happen (NOEXC_POSSIBLE)
+    //
+    // UNSPECIFIED is used as an invalid-default to make sure that we don't implicitly assume one
+    // of the cases when the callee didn't explicitly signal one.
+    //
+    enum ReturnConvention {
+        UNSPECIFIED,
+        NO_RETURN,
+        NOEXC_POSSIBLE,
+        VALID_RETURN,
+    } out_return_convention;
+
     GetattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
         : rewriter(rewriter),
           obj(obj),
@@ -37,7 +59,8 @@ struct GetattrRewriteArgs {
           out_success(false),
           out_rtn(NULL),
           obj_hcls_guarded(false),
-          obj_shape_guarded(false) {}
+          obj_shape_guarded(false),
+          out_return_convention(UNSPECIFIED) {}
 };
 
 struct SetattrRewriteArgs {
