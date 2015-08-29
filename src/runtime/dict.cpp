@@ -20,6 +20,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/ics.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -238,11 +239,24 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
     if (it == self->d.end()) {
         // Try calling __missing__ if this is a subclass
         if (self->cls != dict_cls) {
+            // Special-case defaultdict, assuming that it's the main time we will actually hit this.
+            // We could just use a single runtime IC here, or have a small cache that maps type->runtimeic.
+            // Or use a polymorphic runtime ic.
+            static BoxedClass* defaultdict_cls = NULL;
+            static CallattrIC defaultdict_ic;
+            if (defaultdict_cls == NULL && strcmp(self->cls->tp_name, "collections.defaultdict") == 0) {
+                defaultdict_cls = self->cls;
+            }
+
             static BoxedString* missing_str = internStringImmortal("__missing__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(1) };
             Box* r;
             try {
-                r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
+                if (self->cls == defaultdict_cls) {
+                    r = defaultdict_ic.call(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
+                } else {
+                    r = callattr(self, missing_str, callattr_flags, k, NULL, NULL, NULL, NULL);
+                }
             } catch (ExcInfo e) {
                 if (S == CAPI) {
                     setCAPIException(e);
@@ -603,9 +617,14 @@ void dictMerge(BoxedDict* self, Box* other) {
         return;
     }
 
-    static BoxedString* keys_str = internStringImmortal("keys");
-    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    Box* keys;
+    if (other->cls == attrwrapper_cls) {
+        keys = attrwrapperKeys(other);
+    } else {
+        static BoxedString* keys_str = internStringImmortal("keys");
+        CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+        keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
+    }
     assert(keys);
 
     for (Box* k : keys->pyElements()) {

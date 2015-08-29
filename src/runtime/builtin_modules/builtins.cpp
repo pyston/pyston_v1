@@ -250,15 +250,35 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
     return maxElement;
 }
 
-extern "C" Box* next(Box* iterator, Box* _default) {
-    try {
-        static BoxedString* next_str = internStringImmortal("next");
-        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
-        return callattr(iterator, next_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-    } catch (ExcInfo e) {
-        if (_default && e.matches(StopIteration))
-            return _default;
-        throw e;
+extern "C" Box* next(Box* iterator, Box* _default) noexcept {
+    if (!PyIter_Check(iterator)) {
+        PyErr_Format(PyExc_TypeError, "%.200s object is not an iterator", iterator->cls->tp_name);
+        return NULL;
+    }
+
+    Box* rtn;
+
+    if (iterator->cls->tp_iternext == slot_tp_iternext) {
+        rtn = iterator->cls->call_nextIC(iterator);
+    } else {
+        rtn = iterator->cls->tp_iternext(iterator);
+    }
+
+    if (rtn != NULL) {
+        return rtn;
+    } else if (_default != NULL) {
+        if (PyErr_Occurred()) {
+            if (!PyErr_ExceptionMatches(PyExc_StopIteration))
+                return NULL;
+            PyErr_Clear();
+        }
+        Py_INCREF(_default);
+        return _default;
+    } else if (PyErr_Occurred()) {
+        return NULL;
+    } else {
+        PyErr_SetNone(PyExc_StopIteration);
+        return NULL;
     }
 }
 
@@ -1316,6 +1336,11 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 Box* getreversed(Box* o) {
     static BoxedString* reversed_str = internStringImmortal("__reversed__");
 
+    // common case:
+    if (o->cls == list_cls) {
+        return listReversed(o);
+    }
+
     // TODO add rewriting to this?  probably want to try to avoid this path though
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(o, reversed_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
@@ -1582,8 +1607,9 @@ void setupBuiltins() {
     max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 1, true, true), "max", { None });
     builtins_module->giveAttr("max", max_obj);
 
-    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(
-                                          boxRTFunction((void*)next, UNKNOWN, 2, 1, false, false), "next", { NULL }));
+    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)next, UNKNOWN, 2, 1, false,
+                                                                                     false, ParamNames::empty(), CAPI),
+                                                                       "next", { NULL }));
 
     builtins_module->giveAttr("sum", new BoxedBuiltinFunctionOrMethod(
                                          boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), "sum", { boxInt(0) }));
