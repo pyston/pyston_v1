@@ -753,6 +753,7 @@ void CompiledFunction::speculationFailed() {
     }
 }
 
+std::unordered_map<CompiledFunction*, int> all_compiled_functions;
 CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
     : clfunc(NULL),
@@ -766,6 +767,14 @@ CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization*
       times_speculation_failed(0),
       location_map(nullptr) {
     assert((spec != NULL) + (entry_descriptor != NULL) == 1);
+
+    assert(all_compiled_functions.count(this) == 0);
+    all_compiled_functions[this] = 0;
+}
+
+CompiledFunction::~CompiledFunction() {
+    assert(all_compiled_functions.count(this) == 1);
+    all_compiled_functions.erase(this);
 }
 
 ConcreteCompilerType* CompiledFunction::getReturnType() {

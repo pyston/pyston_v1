@@ -1152,7 +1152,7 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
     BoxedListIterator* it = (BoxedListIterator*)b;
-    v->visit(it->l);
+    v->visit((void**)&it->l);
 }
 
 void BoxedList::gcHandler(GCVisitor* v, Box* b) {
@@ -1165,7 +1165,7 @@ void BoxedList::gcHandler(GCVisitor* v, Box* b) {
     int capacity = l->capacity;
     assert(capacity >= size);
     if (capacity)
-        v->visit(l->elts);
+        v->visit((void**)&l->elts);
     if (size)
         v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
 }

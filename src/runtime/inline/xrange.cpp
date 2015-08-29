@@ -122,7 +122,7 @@ public:
         Box::gcHandler(v, b);
 
         BoxedXrangeIterator* it = (BoxedXrangeIterator*)b;
-        v->visit(it->xrange);
+        v->visit((void**)&it->xrange);
     }
 };
 

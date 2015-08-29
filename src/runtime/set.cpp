@@ -30,7 +30,7 @@ void BoxedSet::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedSet* s = (BoxedSet*)b;
     for (auto&& p : s->s) {
-        v->visit(p.value);
+        v->visit((void**)&p.value);
     }
 }
 
@@ -58,7 +58,7 @@ public:
 
         BoxedSetIterator* it = (BoxedSetIterator*)b;
 
-        v->visit(it->s);
+        v->visit((void**)&it->s);
     }
 };
 

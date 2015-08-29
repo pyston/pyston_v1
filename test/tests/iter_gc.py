@@ -6,7 +6,7 @@ class C(object):
     def f(self, i):
         return i * i
     def __getitem__(self, i):
-        if i < 1000:
+        if i < 100:
             return self.f(i)
         raise IndexError(i)
 
@@ -25,7 +25,7 @@ class C2(object):
         self.n += 1
         return self.n * 2
     def next(self):
-        if self.n < 1000:
+        if self.n < 100:
             return self.f()
 
         raise StopIteration()

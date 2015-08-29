@@ -68,8 +68,8 @@ public:
         BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
 
         Box::gcHandler(v, o);
-        v->visit(o->passthrough);
-        v->visit(o->module);
+        v->visit((void**)&o->passthrough);
+        v->visit((void**)&o->module);
     }
 };
 static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");

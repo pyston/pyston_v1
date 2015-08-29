@@ -199,6 +199,7 @@ private:
 public:
     JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
                       int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block);
+    ~JitFragmentWriter() { ic_info.release(); }
 
     RewriterVar* getInterp();
     RewriterVar* imm(uint64_t val);

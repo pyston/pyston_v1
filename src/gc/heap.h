@@ -101,6 +101,7 @@ struct GCAllocation {
     GCKind kind_id : 8;
     unsigned int _reserved1 : 16;
     unsigned int kind_data : 32;
+    uint64_t id : 64;
 
     char user_data[0];
 
@@ -109,8 +110,10 @@ struct GCAllocation {
         return reinterpret_cast<GCAllocation*>(d - offsetof(GCAllocation, user_data));
     }
 };
+/*
 static_assert(sizeof(GCAllocation) <= sizeof(void*),
               "we should try to make sure the gc header is word-sized or smaller");
+              */
 
 #define MARK_BIT 0x1
 // reserved bit - along with MARK_BIT, encodes the states of finalization order
@@ -118,6 +121,8 @@ static_assert(sizeof(GCAllocation) <= sizeof(void*),
 #define FINALIZER_HAS_RUN_BIT 0x4
 
 #define ORDERING_BITS (MARK_BIT | ORDERING_EXTRA_BIT)
+
+#define NO_REUSE_BIT 0x8
 
 enum FinalizationState {
     UNREACHABLE = 0x0,
@@ -165,10 +170,20 @@ inline void clearOrderingState(GCAllocation* header) {
     header->gc_flags &= ~ORDERING_EXTRA_BIT;
 }
 
+inline bool isNoReuse(GCAllocation* header) {
+    return (header->gc_flags & NO_REUSE_BIT) != 0;
+}
+
+inline void setNoReuse(GCAllocation* header) {
+    assert(!isNoReuse(header));
+    header->gc_flags |= NO_REUSE_BIT;
+}
+
 #undef MARK_BIT
 #undef ORDERING_EXTRA_BIT
 #undef FINALIZER_HAS_RUN_BIT
 #undef ORDERING_BITS
+#undef NO_REUSE_BIT
 
 bool hasOrderedFinalizer(BoxedClass* cls);
 void finalize(Box* b);
@@ -247,8 +262,11 @@ public:
 #endif
     }
 
-    GCAllocation* alloc(size_t bytes) {
-        registerGCManagedBytes(bytes);
+    GCAllocation* alloc(size_t bytes, bool moving = false) {
+        if (!moving) {
+            // Don't register moves, they don't use more memory and they could trigger another GC...
+            registerGCManagedBytes(bytes);
+        }
         if (bytes <= 16)
             return _alloc(16, 0);
         else if (bytes <= 32)
@@ -263,7 +281,10 @@ public:
         }
     }
 
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    void move_all(ReferenceMap& refmap);
+    void map_ids(IDMap& idmap);
+
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes, bool force_copy = false);
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
@@ -396,6 +417,8 @@ private:
     };
 
 
+    // These (along with a lot of other things in small arena) need to be renamed to be
+    // easier to understand...
     Block* heads[NUM_BUCKETS];
     Block* full_heads[NUM_BUCKETS];
 
@@ -405,6 +428,8 @@ private:
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
 
+    void getPtrs(std::vector<GCAllocation*>& ptrs, Block** head);
+    void move(ReferenceMap& refmap, GCAllocation* al, size_t size);
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
@@ -584,13 +609,13 @@ public:
         return rtn;
     }
 
-    GCAllocation* alloc(size_t bytes) {
+    GCAllocation* alloc(size_t bytes, bool moving = false) {
         if (bytes > LargeArena::ALLOC_SIZE_LIMIT)
             return huge_arena.alloc(bytes);
         else if (bytes > sizes[NUM_BUCKETS - 1])
             return large_arena.alloc(bytes);
         else
-            return small_arena.alloc(bytes);
+            return small_arena.alloc(bytes, moving);
     }
 
     void destructContents(GCAllocation* alloc);
@@ -624,6 +649,9 @@ public:
 
         return NULL;
     }
+
+    void move_all(ReferenceMap& refmap) { small_arena.move_all(refmap); }
+    void map_ids(IDMap& idmap) { small_arena.map_ids(idmap); }
 
     // not thread safe:
     void freeUnmarked(std::vector<Box*>& weakly_referenced) {

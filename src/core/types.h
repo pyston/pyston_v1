@@ -223,7 +223,7 @@ struct ParamReceiveSpec {
     int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
 };
 
-class ICInvalidator {
+class ICInvalidator : public gc::GCAllocatedRuntime {
 private:
     int64_t cur_version;
     std::unordered_set<ICSlotInfo*> dependents;
@@ -234,6 +234,8 @@ public:
     void addDependent(ICSlotInfo* icentry);
     int64_t version();
     void invalidateAll();
+
+    virtual void gc_visit(GCVisitor* visitor) {};
 };
 
 // Codegen types:
@@ -261,6 +263,10 @@ public:
     llvm::Function* func; // the llvm IR object
     FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
+
+    // Pointers that were written into the code that we can't move because
+    // we can't modify pointers in code.
+    std::vector<const void*> ptrs_to_pin;
 
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
@@ -296,6 +302,7 @@ public:
     // Call this when a speculation inside this version failed
     void speculationFailed();
 };
+extern std::unordered_map<CompiledFunction*, int> all_compiled_functions;
 
 typedef int FutureFlags;
 
@@ -509,10 +516,12 @@ private:
 
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
-    Box() {}
+    Box();
 
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+
+    uint64_t id;
 
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
@@ -552,6 +561,7 @@ public:
     static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
+static_assert(offsetof(Box, id) == offsetof(struct _object, id), "");
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;

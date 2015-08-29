@@ -428,27 +428,27 @@ void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedGenerator* g = (BoxedGenerator*)b;
 
-    v->visit(g->function);
+    v->visit((void**)&g->function);
     int num_args = g->function->f->numReceivedArgs();
     if (num_args >= 1)
-        v->visit(g->arg1);
+        v->visit((void**)&g->arg1);
     if (num_args >= 2)
-        v->visit(g->arg2);
+        v->visit((void**)&g->arg2);
     if (num_args >= 3)
-        v->visit(g->arg3);
+        v->visit((void**)&g->arg3);
     if (g->args)
-        v->visit(g->args);
+        v->visit((void**)&g->args);
     if (num_args > 3)
         v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
                                reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
     if (g->returnValue)
-        v->visit(g->returnValue);
+        v->visit((void**)&g->returnValue);
     if (g->exception.type)
-        v->visit(g->exception.type);
+        v->visit((void**)&g->exception.type);
     if (g->exception.value)
-        v->visit(g->exception.value);
+        v->visit((void**)&g->exception.value);
     if (g->exception.traceback)
-        v->visit(g->exception.traceback);
+        v->visit((void**)&g->exception.traceback);
 
     if (g->running) {
         v->visitPotentialRange((void**)g->returnContext,

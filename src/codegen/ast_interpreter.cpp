@@ -65,7 +65,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  *
  * All ASTInterpreter instances have to live on the stack because otherwise the GC won't scan the fields.
  */
-class ASTInterpreter {
+class ASTInterpreter : public gc::StackObjectWithGCHandler {
 public:
     ASTInterpreter(CLFunction* clfunc, Box** vregs);
 
@@ -187,6 +187,8 @@ public:
     void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
+    void gc_visit(GCVisitor* visitor);
+
     friend struct pyston::ASTInterpreterJitInterface;
 };
 
@@ -226,6 +228,21 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 void ASTInterpreter::setGlobals(Box* globals) {
     assert(gc::isValidGCObject(globals));
     this->globals = globals;
+}
+
+void ASTInterpreter::gc_visit(GCVisitor* visitor) {
+    // Not all fields need to be visited - some should be already conservatively scanned due
+    // to the object being in the stack.
+    assert(!isValidGCObject(this));
+
+    visitor->visitRedundant((void**)&source_info->parent_module);
+    frame_info.gcVisit(visitor);
+
+    for (auto& it : getSymVRegMap()) {
+        if (vregs[it.second]) {
+            visitor->visitRedundant((void**)&vregs[it.second]);
+        }
+    }
 }
 
 ASTInterpreter::ASTInterpreter(CLFunction* clfunc, Box** vregs)

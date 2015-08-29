@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "core/common.h"
@@ -28,6 +29,8 @@
 #include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
+
+#include "codegen/irgen/util.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"
@@ -60,7 +63,7 @@ static std::unordered_set<GCRootHandle*>* getRootHandles() {
     return &root_handles;
 }
 
-static int ncollections = 0;
+int ncollections = 0;
 
 static bool gc_enabled = true;
 static bool should_not_reenter_gc = false;
@@ -69,10 +72,11 @@ enum TraceStackType {
     MarkPhase,
     FinalizationOrderingFindReachable,
     FinalizationOrderingRemoveTemporaries,
+    MapReferencesPhase,
 };
 
 class TraceStack {
-private:
+protected:
     const int CHUNK_SIZE = 256;
     const int MAX_FREE_CHUNKS = 50;
 
@@ -82,6 +86,8 @@ private:
     void** cur;
     void** start;
     void** end;
+
+    void* previous_pop = NULL;
 
     TraceStackType visit_type;
 
@@ -111,8 +117,7 @@ private:
 
 public:
     TraceStack(TraceStackType type) : visit_type(type) { get_chunk(); }
-    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : visit_type(type) {
-        get_chunk();
+    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : TraceStack(type) {
         for (void* p : roots) {
             ASSERT(!isMarked(GCAllocation::fromUserData(p)), "");
             push(p);
@@ -203,13 +208,67 @@ public:
 
 
     void* pop() {
-        if (cur > start)
-            return *--cur;
+        if (cur > start) {
+            previous_pop = *--cur;
+        } else {
+            previous_pop = pop_chunk_and_item();
+        }
 
-        return pop_chunk_and_item();
+        return previous_pop;
     }
 };
 std::vector<void**> TraceStack::free_chunks;
+
+class ReferenceMapStack : public TraceStack {
+public:
+    ReferenceMapStack(ReferenceMap* refmap) : TraceStack(TraceStackType::MapReferencesPhase), refmap(refmap) {}
+    ReferenceMapStack(ReferenceMap* refmap, const std::unordered_set<void*>& roots)
+        : TraceStack(TraceStackType::MapReferencesPhase), refmap(refmap) {
+        for (void* p : roots) {
+            push_with_source(GCAllocation::fromUserData(p));
+        }
+    }
+
+    ReferenceMap* refmap;
+
+    void push_with_source(GCAllocation* al) {
+        GCAllocation* source = global_heap.getAllocationFromInteriorPointer(previous_pop);
+        assert(refmap);
+        auto it = refmap->references.find(al);
+        if (it == refmap->references.end()) {
+            auto vec = std::make_shared<std::vector<GCAllocation*>>();
+            refmap->references.emplace(al, vec);
+            if (source) {
+                vec->push_back(source);
+            } else {
+                refmap->pinned.emplace(al);
+            }
+
+            // Don't move these for now, too likely that an object that we don't track
+            // points to them.
+            if (al->kind_id == GCKind::RUNTIME) {
+                refmap->pinned.emplace(al);
+            } else if (al->kind_id == GCKind::PYTHON) {
+                Box* b = (Box*)al->user_data;
+                if (b->cls == type_cls || b->cls == module_cls) {
+                    refmap->pinned.emplace(al);
+                }
+            }
+
+            *cur++ = al->user_data;
+            if (cur == end) {
+                chunks.push_back(start);
+                get_chunk();
+            }
+        } else {
+            if (source) {
+                it->second->push_back(source);
+            } else {
+                refmap->pinned.emplace(al);
+            }
+        }
+    }
+};
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -311,72 +370,7 @@ void invalidateOrderedFinalizerList() {
     sc_us.log(us);
 }
 
-GCRootHandle::GCRootHandle() {
-    getRootHandles()->insert(this);
-}
-GCRootHandle::~GCRootHandle() {
-    getRootHandles()->erase(this);
-}
-
-bool GCVisitor::isValid(void* p) {
-    return global_heap.getAllocationFromInteriorPointer(p) != NULL;
-}
-
-void GCVisitor::visit(void* p) {
-    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
-        ASSERT(!p || isNonheapRoot(p), "%p", p);
-        return;
-    }
-
-    ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
-    stack->push(p);
-}
-
-void GCVisitor::visitRange(void* const* start, void* const* end) {
-    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
-           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
-
-    assert((uintptr_t)start % sizeof(void*) == 0);
-    assert((uintptr_t)end % sizeof(void*) == 0);
-
-    while (start < end) {
-        visit(*start);
-        start++;
-    }
-}
-
-void GCVisitor::visitPotential(void* p) {
-    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
-    if (a) {
-        visit(a->user_data);
-    }
-}
-
-void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
-    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
-           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
-
-    assert((uintptr_t)start % sizeof(void*) == 0);
-    assert((uintptr_t)end % sizeof(void*) == 0);
-
-    while (start < end) {
-#if TRACE_GC_MARKING
-        if (global_heap.getAllocationFromInteriorPointer(*start)) {
-            if (*start >= (void*)HUGE_ARENA_START)
-                GC_TRACE_LOG("Found conservative reference to huge object %p from %p\n", *start, start);
-            else if (*start >= (void*)LARGE_ARENA_START && *start < (void*)HUGE_ARENA_START)
-                GC_TRACE_LOG("Found conservative reference to large object %p from %p\n", *start, start);
-            else
-                GC_TRACE_LOG("Found conservative reference to %p from %p\n", *start, start);
-        }
-#endif
-
-        visitPotential(*start);
-        start++;
-    }
-}
-
-static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
+__attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
 
     GCAllocation* al = GCAllocation::fromUserData(p);
@@ -410,13 +404,129 @@ static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& vis
     }
 }
 
-static void markRoots(GCVisitor& visitor) {
+GCRootHandle::GCRootHandle() {
+    getRootHandles()->insert(this);
+}
+GCRootHandle::~GCRootHandle() {
+    getRootHandles()->erase(this);
+}
+
+bool GCVisitor::isValid(void* p) {
+    return global_heap.getAllocationFromInteriorPointer(p) != NULL;
+}
+
+void GCVisitor::visitRange(void** start, void** end) {
+    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
+
+    assert((uintptr_t)start % sizeof(void*) == 0);
+    assert((uintptr_t)end % sizeof(void*) == 0);
+
+    while (start < end) {
+        visit(start);
+        start++;
+    }
+}
+
+void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
+    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
+
+    assert((uintptr_t)start % sizeof(void*) == 0);
+    assert((uintptr_t)end % sizeof(void*) == 0);
+
+    while (start < end) {
+#if TRACE_GC_MARKING
+        if (global_heap.getAllocationFromInteriorPointer(*start)) {
+            if (*start >= (void*)HUGE_ARENA_START)
+                GC_TRACE_LOG("Found conservative reference to huge object %p from %p\n", *start, start);
+            else if (*start >= (void*)LARGE_ARENA_START && *start < (void*)HUGE_ARENA_START)
+                GC_TRACE_LOG("Found conservative reference to large object %p from %p\n", *start, start);
+            else
+                GC_TRACE_LOG("Found conservative reference to %p from %p\n", *start, start);
+        }
+#endif
+
+        visitPotential(*start);
+        start++;
+    }
+}
+
+void GCVisitorMarking::visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
+    stack->push(p);
+}
+
+void GCVisitorMarking::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        stack->push(a->user_data);
+    }
+}
+
+void GCVisitorPinning::visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    ASSERT(al && al->user_data == p, "%p", p);
+    stack->push_with_source(al);
+}
+
+void GCVisitorPinning::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        // visit(a->user_data);
+        stack->refmap->pinned.emplace(a);
+        stack->push_with_source(a);
+    }
+}
+
+extern FILE* move_log;
+
+void GCVisitorReplacing::visit(void** ptr_address) {
+        assert(move_log);
+        fprintf(move_log, "    | ptr *%p = %p\n", ptr_address, *ptr_address);
+    if (*ptr_address == old_value) {
+        *ptr_address = new_value;
+    }
+}
+
+void GCVisitorHelping::visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    ASSERT(al && al->user_data == p, "%p", p);
+    id_set->emplace((uint64_t)al->id);
+}
+
+void GCVisitorHelping::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        id_set->emplace((uint64_t)a->id);
+    }
+}
+
+static void visitRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
     GC_TRACE_LOG("Looking at root handles\n");
     for (auto h : *getRootHandles()) {
-        visitor.visit(h->value);
+        visitor.visit((void**)&h->value);
     }
 
     GC_TRACE_LOG("Looking at potential root ranges\n");
@@ -426,12 +536,29 @@ static void markRoots(GCVisitor& visitor) {
 
     GC_TRACE_LOG("Looking at pending finalization list\n");
     for (auto box : pending_finalization_list) {
-        visitor.visit(box);
+        visitor.visit((void**)&box);
     }
 
     GC_TRACE_LOG("Looking at weakrefs needing callbacks list\n");
     for (auto weakref : weakrefs_needing_callback_list) {
-        visitor.visit(weakref);
+        visitor.visit((void**)&weakref);
+    }
+
+    GC_TRACE_LOG("Looking at generated code pointers\n");
+    // These need to be pinned too because GC could happen during codegen.
+    for (auto& sym : relocatable_syms) {
+        const void* ptr = &sym.second;
+        if (global_heap.getAllocationFromInteriorPointer((void*)ptr)) {
+            visitor.visitPotentialRedundant((void*)ptr);
+        }
+    }
+
+    for (auto& it : all_compiled_functions) {
+        for (const void* ptr : it.first->ptrs_to_pin) {
+            if (global_heap.getAllocationFromInteriorPointer((void*)ptr)) {
+                visitor.visitPotentialRedundant((void*)ptr);
+            }
+        }
     }
 }
 
@@ -441,7 +568,7 @@ static void finalizationOrderingFindReachable(Box* obj) {
     Timer _t("finalizationOrderingFindReachable", /*min_usec=*/10000);
 
     TraceStack stack(TraceStackType::FinalizationOrderingFindReachable);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
     stack.push(obj);
     while (void* p = stack.pop()) {
@@ -459,7 +586,7 @@ static void finalizationOrderingRemoveTemporaries(Box* obj) {
     Timer _t("finalizationOrderingRemoveTemporaries", /*min_usec=*/10000);
 
     TraceStack stack(TraceStackType::FinalizationOrderingRemoveTemporaries);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
     stack.push(obj);
     while (void* p = stack.pop()) {
@@ -525,7 +652,8 @@ static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
             GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
 #endif
 
-        assert(isMarked(al));
+        // Doesn't work with reference mapping.
+        // assert(isMarked(al));
         visitByGCKind(p, visitor);
     }
 
@@ -642,9 +770,9 @@ static void markPhase() {
 
     GC_TRACE_LOG("Looking at roots\n");
     TraceStack stack(TraceStackType::MarkPhase, roots);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
-    markRoots(visitor);
+    visitRoots(visitor);
 
     graphTraversalMarking(stack, visitor);
 
@@ -674,6 +802,25 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
     sc_us.log(us);
 }
 
+static void mapReferencesPhase(ReferenceMap& refmap) {
+    ReferenceMapStack stack(&refmap, roots);
+    GCVisitorPinning visitor(&stack);
+
+    visitRoots(visitor);
+
+    for (auto obj : objects_with_ordered_finalizers) {
+        visitor.visit((void**)&obj);
+    }
+
+    ICInfo::visitGCReferences(&visitor);
+
+    graphTraversalMarking(stack, visitor);
+}
+
+static void copyPhase(ReferenceMap& refmap) {
+    global_heap.move_all(refmap);
+}
+
 bool gcIsEnabled() {
     return gc_enabled;
 }
@@ -696,7 +843,54 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
-void runCollection() {
+static void map_ids(std::string filename) {
+    IDMap map;
+    global_heap.map_ids(map);
+
+    std::vector<uint64_t> keys;
+    for (auto& k : map) {
+        keys.push_back(k.first);
+    }
+    std::sort(keys.begin(), keys.end());
+
+    FILE* f = fopen(filename.c_str(), "w");
+    for (auto k : keys) {
+        fprintf(f, "%ld ->", k);
+
+        std::vector<uint64_t> refs;
+        for (auto id : *map[k]) {
+            refs.push_back(id);
+        }
+        std::sort(refs.begin(), refs.end());
+
+        for (auto id : refs) {
+            fprintf(f, " %ld", id);
+        }
+        fprintf(f, "\n");
+    }
+}
+
+void moveStuff() {
+    global_heap.prepareForCollection();
+
+    map_ids("start.txt");
+
+    ReferenceMap refmap;
+    mapReferencesPhase(refmap);
+
+    copyPhase(refmap);
+
+    map_ids("end.txt");
+
+    if (system("diff start.txt end.txt > /dev/null")) {
+        fprintf(stderr, "different id graph after %d collections!\n", ncollections);
+        exit(-1);
+    }
+
+    global_heap.cleanupAfterCollection();
+}
+
+void _runCollection() {
     static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
     sc.log();
@@ -757,14 +951,16 @@ void runCollection() {
         global_heap.free(GCAllocation::fromUserData(o));
     }
 
+    global_heap.cleanupAfterCollection();
+
+    moveStuff();
+
 #if TRACE_GC_MARKING
     fclose(trace_fp);
     trace_fp = NULL;
 #endif
 
     should_not_reenter_gc = false; // end non-reentrant section
-
-    global_heap.cleanupAfterCollection();
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
@@ -773,6 +969,10 @@ void runCollection() {
     sc_us.log(us);
 
     // dumpHeapStatistics();
+}
+
+void runCollection() {
+    _runCollection();
 }
 
 } // namespace gc

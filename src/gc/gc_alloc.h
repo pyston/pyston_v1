@@ -85,6 +85,10 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
         alloc->kind_data = bytes;
     }
 
+    static int id_counter = 1337;
+    alloc->id = id_counter;
+    id_counter++;
+
     void* r = alloc->user_data;
 
 #ifndef NVALGRIND

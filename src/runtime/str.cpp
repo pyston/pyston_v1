@@ -2405,7 +2405,7 @@ public:
     static void gcHandler(GCVisitor* v, Box* b) {
         Box::gcHandler(v, b);
         BoxedStringIterator* it = (BoxedStringIterator*)b;
-        v->visit(it->s);
+        v->visit((void**)&it->s);
     }
 };
 

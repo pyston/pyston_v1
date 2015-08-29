@@ -32,6 +32,8 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#define NO_SMALL_ARENA_REUSE 1
+
 namespace std {
 template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept {
     void* r = pyston::gc::gc_alloc(sizeof(pyston::Box*) * count, pyston::gc::GCKind::CONSERVATIVE);
@@ -45,6 +47,7 @@ template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p) {
 namespace pyston {
 namespace gc {
 
+static __thread bool got_cache = false;
 bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced);
 
 // lots of linked lists around here, so let's just use template functions for operations on them.
@@ -332,15 +335,15 @@ void dumpHeapStatistics(int level) {
 //////
 /// Small Arena
 
-GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
+GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes, bool force_copy) {
     Block* b = Block::forPointer(al);
 
     size_t size = b->size;
 
-    if (size >= bytes && size < bytes * 2)
+    if (!force_copy && size >= bytes && size < bytes * 2)
         return al;
 
-    GCAllocation* rtn = heap->alloc(bytes);
+    GCAllocation* rtn = heap->alloc(bytes, force_copy);
 
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
@@ -362,7 +365,13 @@ void SmallArena::free(GCAllocation* alloc) {
     int atom_idx = offset / ATOM_SIZE;
 
     assert(!b->isfree.isSet(atom_idx));
-    b->isfree.set(atom_idx);
+
+    if (NO_SMALL_ARENA_REUSE) {
+        setNoReuse(alloc);
+        memset(alloc->user_data, 0xbb, b->size - sizeof(GCAllocation));
+    } else {
+        b->isfree.set(atom_idx);
+    }
 
 #ifndef NVALGRIND
 // VALGRIND_MEMPOOL_FREE(b, ptr);
@@ -382,6 +391,10 @@ GCAllocation* SmallArena::allocationFrom(void* ptr) {
 
     if (b->isfree.isSet(atom_idx))
         return NULL;
+
+    if (isNoReuse(reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]))) {
+        return NULL;
+    }
 
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
@@ -413,6 +426,137 @@ void SmallArena::assertConsistent() {
     }
 }
 #endif
+
+void SmallArena::getPtrs(std::vector<GCAllocation*>& ptrs, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            if (isNoReuse(al)) {
+                continue;
+            }
+
+            ptrs.push_back(al);
+        }
+
+        head = &b->next;
+    }
+}
+
+extern int ncollections;
+FILE* move_log = NULL;
+
+void SmallArena::move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
+    if (!move_log) {
+        move_log = fopen("movelog.txt", "w");
+    }
+
+    if (refmap.pinned.count(old_al) == 0 && refmap.references.count(old_al) > 0) {
+        auto referencing = refmap.references[old_al];
+        assert(referencing->size() > 0);
+
+        BoxedClass* old_class = ((Box*)old_al->user_data)->cls;
+
+        GCAllocation* new_al = realloc(old_al, size, true);
+        assert(new_al);
+        assert(old_al->user_data != new_al->user_data);
+
+        fprintf(move_log, "%d) %p -> %p\n",
+                ncollections,
+                old_al->user_data, new_al->user_data);
+
+        for (GCAllocation* referencer : *referencing) {
+            // Check if it's been moved already.
+            if (refmap.moves.count(referencer) > 0) {
+                referencer = refmap.moves[referencer];
+            }
+            fprintf(move_log, "    | referencer %p\n", referencer->user_data);
+
+            assert(referencer->kind_id == GCKind::PYTHON || referencer->kind_id == GCKind::PRECISE || referencer->kind_id == GCKind::RUNTIME);
+            GCVisitorReplacing replacer(old_al->user_data, new_al->user_data);
+            visitByGCKind(referencer->user_data, replacer);
+        }
+
+        assert(refmap.moves.count(old_al) == 0);
+        refmap.moves.emplace(old_al, new_al);
+    } else if (refmap.pinned.count(old_al) == 0) {
+        // Probably a leftover from the trick we did to keep classes around.
+        free(old_al);
+    }
+}
+
+void SmallArena::move_all(ReferenceMap& refmap) {
+    assert(got_cache);
+    thread_caches.forEachValue([this, &refmap](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPtrs(ptrs, &cache->cache_free_heads[bidx]);
+            getPtrs(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                move(refmap, al, sizes[bidx]);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPtrs(ptrs, &heads[bidx]);
+        getPtrs(ptrs, &full_heads[bidx]);
+        for (GCAllocation* al : ptrs) {
+            move(refmap, al, sizes[bidx]);
+        }
+    }
+}
+
+static void map_id(IDMap& idmap, GCAllocation* al) {
+    auto it_id = idmap.find(al->id);
+    if (it_id == idmap.end()) {
+        auto set = std::make_shared<std::unordered_set<uint64_t>>();
+        idmap.emplace((uint64_t)al->id, set);
+
+        GCVisitorHelping helping(set);
+        visitByGCKind(al->user_data, helping);
+    } else {
+        assert(false);
+    }
+}
+
+void SmallArena::map_ids(IDMap& idmap) {
+    assert(got_cache);
+    thread_caches.forEachValue([this, &idmap](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPtrs(ptrs, &cache->cache_free_heads[bidx]);
+            getPtrs(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                map_id(idmap, al);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPtrs(ptrs, &heads[bidx]);
+        getPtrs(ptrs, &full_heads[bidx]);
+        for (GCAllocation* al : ptrs) {
+            map_id(idmap, al);
+        }
+    }
+}
 
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
@@ -497,16 +641,26 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
 
+            if (isNoReuse(al)) {
+                continue;
+            }
+
             clearOrderingState(al);
             if (isMarked(al)) {
                 clearMark(al);
             } else {
                 if (_doFree(al, &weakly_referenced)) {
                     // GC_TRACE_LOG("freeing %p\n", al->user_data);
-                    b->isfree.set(atom_idx);
+
+                    if (NO_SMALL_ARENA_REUSE) {
+                        setNoReuse(al);
+                        memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+                    } else {
+                        b->isfree.set(atom_idx);
 #ifndef NDEBUG
-                    memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
+                        memset(al->user_data, 0xbb, b->size - sizeof(GCAllocation));
 #endif
+                    }
                 }
             }
         }
@@ -593,8 +747,10 @@ GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
     Block** full_head = &full_heads[bucket_idx];
 
     static __thread ThreadBlockCache* cache = NULL;
-    if (!cache)
+    if (!cache) {
+        got_cache = true;
         cache = thread_caches.get();
+    }
 
     Block** cache_head = &cache->cache_free_heads[bucket_idx];
 
@@ -650,6 +806,10 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
 
             void* p = &b->atoms[atom_idx];
             GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            if (isNoReuse(al)) {
+                continue;
+            }
 
             addStatistic(stats, al, b->size);
         }

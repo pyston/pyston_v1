@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core/types.h"
+#include "gc/gc.h"
 
 namespace pyston {
 namespace gc {
@@ -80,11 +81,82 @@ bool isNonheapRoot(void* p);
 void registerPythonObject(Box* b);
 void invalidateOrderedFinalizerList();
 
+void visitByGCKind(void* p, GCVisitor& visitor);
+
 // Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
 // use these functions to mark that.  This is different from disableGC/enableGC, since it causes an
 // assert rather than delaying of the next GC.
 void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
+
+class GCVisitorNoRedundancy : public GCVisitor {
+    virtual void visitRedundant(void** ptr_address) { visit(ptr_address); }
+    virtual void visitRedundantRange(void** start, void** end) { visitRange(start, end); }
+    virtual void visitPotentialRedundant(void* p) { visitPotential(p); }
+};
+
+class TraceStack;
+class GCVisitorMarking : public GCVisitor {
+private:
+    TraceStack* stack;
+
+public:
+    GCVisitorMarking(TraceStack* stack) : stack(stack) {}
+    virtual ~GCVisitorMarking() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p);
+};
+
+class ReferenceMapStack;
+class GCVisitorPinning : public GCVisitorNoRedundancy {
+private:
+    ReferenceMapStack* stack;
+
+public:
+    GCVisitorPinning(ReferenceMapStack* stack) : stack(stack) {}
+    virtual ~GCVisitorPinning() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p);
+};
+
+class GCVisitorReplacing : public GCVisitorNoRedundancy {
+private:
+    void* old_value;
+    void* new_value;
+
+public:
+    GCVisitorReplacing(void* old_value, void* new_value) : old_value(old_value), new_value(new_value) {}
+    virtual ~GCVisitorReplacing() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p){};
+    virtual void visitPotentialRange(void* const* start, void* const* end){};
+};
+
+typedef std::unordered_map<uint64_t, std::shared_ptr<std::unordered_set<uint64_t>>> IDMap;
+class GCVisitorHelping : public GCVisitorNoRedundancy {
+private:
+    std::shared_ptr<std::unordered_set<uint64_t>> id_set;
+
+public:
+    GCVisitorHelping(std::shared_ptr<std::unordered_set<uint64_t>> set) : id_set(set) {}
+    virtual ~GCVisitorHelping() {}
+
+    virtual void visit(void** p);
+    virtual void visitPotential(void* p);
+};
+
+class GCAllocation;
+class ReferenceMap {
+public:
+    std::unordered_set<GCAllocation*> pinned;
+    std::unordered_map<GCAllocation*, GCAllocation*> moves;
+
+    // For all allocations, what other allocations point to it.
+    std::unordered_map<GCAllocation*, std::shared_ptr<std::vector<GCAllocation*>>> references;
+};
 }
 }
 
