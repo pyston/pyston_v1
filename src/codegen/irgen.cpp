@@ -442,6 +442,12 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 continue;
             }
 
+            if (p.first.s() == PASSED_GLOBALS_NAME) {
+                assert(!source->scoping->areGlobalsFromModule());
+                irstate->setGlobals(from_arg);
+                continue;
+            }
+
             ConcreteCompilerType* phi_type;
             phi_type = getTypeAtBlockStart(types, p.first, target_block);
 
@@ -606,6 +612,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // Don't add the frame info to the symbol table since we will store it separately
                 // (we manually added it during the calculation of osr_syms):
                 if (p.first.s() == FRAME_INFO_PTR_NAME)
+                    continue;
+                if (p.first.s() == PASSED_GLOBALS_NAME)
                     continue;
 
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
@@ -1008,6 +1016,9 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
 
         if (source->is_generator)
             llvm_arg_types.push_back(g.llvm_generator_type_ptr);
+
+        if (!source->scoping->areGlobalsFromModule())
+            llvm_arg_types.push_back(g.llvm_value_type_ptr);
 
         for (int i = 0; i < nargs; i++) {
             if (i == 3) {

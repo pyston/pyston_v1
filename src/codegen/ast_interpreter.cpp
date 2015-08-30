@@ -647,7 +647,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 }
 
 Box* ASTInterpreter::doOSR(AST_Jump* node) {
-    bool can_osr = ENABLE_OSR && !FORCE_INTERPRETER && source_info->scoping->areGlobalsFromModule();
+    bool can_osr = ENABLE_OSR && !FORCE_INTERPRETER;
     if (!can_osr)
         return NULL;
 
@@ -727,6 +727,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     if (created_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
+
+    if (!source_info->scoping->areGlobalsFromModule())
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GLOBALS_NAME)] = globals;
 
     sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
 
@@ -1721,7 +1724,7 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
     SourceInfo* source_info = clfunc->source.get();
 
     assert((!globals) == source_info->scoping->areGlobalsFromModule());
-    bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
+    bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER;
 
     // If the cfg hasn't been computed yet, just conservatively say that it will be a big function.
     // It shouldn't matter, since the cfg should only be NULL if this is the first execution of this
@@ -1729,8 +1732,6 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
     int num_blocks = source_info->cfg ? source_info->cfg->blocks.size() : 10000;
     int threshold = num_blocks <= 20 ? (REOPT_THRESHOLD_BASELINE / 3) : REOPT_THRESHOLD_BASELINE;
     if (unlikely(can_reopt && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || clfunc->times_interpreted > threshold))) {
-        assert(!globals);
-
         clfunc->times_interpreted = 0;
 
         EffortLevel new_effort = EffortLevel::MODERATE;
@@ -1756,15 +1757,24 @@ Box* astInterpretFunction(CLFunction* clfunc, int nargs, Box* closure, Box* gene
 
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         Box* r;
-        if (closure && generator)
-            r = optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3,
-                                                  args);
-        else if (closure)
-            r = optimized->closure_call((BoxedClosure*)closure, arg1, arg2, arg3, args);
-        else if (generator)
-            r = optimized->generator_call((BoxedGenerator*)generator, arg1, arg2, arg3, args);
-        else
+        Box* maybe_args[3];
+        int nmaybe_args = 0;
+        if (closure)
+            maybe_args[nmaybe_args++] = closure;
+        if (generator)
+            maybe_args[nmaybe_args++] = generator;
+        if (globals)
+            maybe_args[nmaybe_args++] = globals;
+        if (nmaybe_args == 0)
             r = optimized->call(arg1, arg2, arg3, args);
+        else if (nmaybe_args == 1)
+            r = optimized->call1(maybe_args[0], arg1, arg2, arg3, args);
+        else if (nmaybe_args == 2)
+            r = optimized->call2(maybe_args[0], maybe_args[1], arg1, arg2, arg3, args);
+        else {
+            assert(nmaybe_args == 3);
+            r = optimized->call3(maybe_args[0], maybe_args[1], maybe_args[2], arg1, arg2, arg3, args);
+        }
 
         if (optimized->exception_style == CXX)
             return r;

@@ -3669,32 +3669,46 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 }
 
 template <ExceptionStyle S>
-static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* oarg1,
-                         Box* oarg2, Box* oarg3, Box** oargs) noexcept(S == CAPI) {
+static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                         Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) noexcept(S == CAPI) {
     if (S != chosen_cf->exception_style) {
         if (S == CAPI) {
             try {
-                return callChosenCF<CXX>(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+                return callChosenCF<CXX>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 return NULL;
             }
         } else {
-            Box* r = callChosenCF<CAPI>(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+            Box* r = callChosenCF<CAPI>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
             if (!r)
                 throwCAPIException();
             return r;
         }
     }
 
-    if (closure && generator)
-        return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
-    else if (closure)
-        return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
-    else if (generator)
-        return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
-    else
+    assert((globals == NULL)
+           == (!chosen_cf->clfunc->source || chosen_cf->clfunc->source->scoping->areGlobalsFromModule()));
+
+    Box* maybe_args[3];
+    int nmaybe_args = 0;
+    if (closure)
+        maybe_args[nmaybe_args++] = closure;
+    if (generator)
+        maybe_args[nmaybe_args++] = generator;
+    if (globals)
+        maybe_args[nmaybe_args++] = globals;
+
+    if (nmaybe_args == 0)
         return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+    else if (nmaybe_args == 1)
+        return chosen_cf->call1(maybe_args[0], oarg1, oarg2, oarg3, oargs);
+    else if (nmaybe_args == 2)
+        return chosen_cf->call2(maybe_args[0], maybe_args[1], oarg1, oarg2, oarg3, oargs);
+    else {
+        assert(nmaybe_args == 3);
+        return chosen_cf->call3(maybe_args[0], maybe_args[1], maybe_args[2], oarg1, oarg2, oarg3, oargs);
+    }
 }
 
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
@@ -3786,8 +3800,6 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         }
     }
 
-    ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
-
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
 
@@ -3803,6 +3815,8 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
         if (closure)
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(0)));
+        if (globals)
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(0)));
         if (num_output_args >= 1)
             arg_vec.push_back(rewrite_args->arg1);
         if (num_output_args >= 2)
@@ -3840,10 +3854,10 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     // code and calls that target to builtins.
     if (f->source) {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
-        r = callChosenCF<S>(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+        r = callChosenCF<S>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
     } else {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-        r = callChosenCF<S>(chosen_cf, closure, generator, oarg1, oarg2, oarg3, oargs);
+        r = callChosenCF<S>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
     }
 
     if (!r) {
@@ -5665,7 +5679,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 }
             }
         } else {
-            assert(globals->cls == dict_cls);
+            ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
             BoxedDict* d = static_cast<BoxedDict*>(globals);
 
             rewriter.reset(NULL);
@@ -5725,7 +5739,7 @@ Box* getFromGlobals(Box* globals, BoxedString* name) {
     }
 }
 
-void setGlobal(Box* globals, BoxedString* name, Box* value) {
+extern "C" void setGlobal(Box* globals, BoxedString* name, Box* value) {
     if (globals->cls == attrwrapper_cls) {
         globals = unwrapAttrWrapper(globals);
         RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);

@@ -267,6 +267,9 @@ public:
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
         Box* (*closure_generator_call)(BoxedClosure*, BoxedGenerator*, Box*, Box*, Box*, Box**);
         Box* (*generator_call)(BoxedGenerator*, Box*, Box*, Box*, Box**);
+        Box* (*call1)(Box*, Box*, Box*, Box*, Box**);
+        Box* (*call2)(Box*, Box*, Box*, Box*, Box*, Box**);
+        Box* (*call3)(Box*, Box*, Box*, Box*, Box*, Box*, Box**);
         void* code;
         uintptr_t code_start;
     };
