@@ -1123,23 +1123,33 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
         return sm->sm_callable;
     } else if (descr->cls == wrapperdescr_cls) {
-        BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
-        Box* inst = obj;
-        Box* owner = obj->cls;
+        if (for_call) {
+            if (rewrite_args) {
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = r_descr;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                *r_bind_obj_out = rewrite_args->obj;
+            }
+            *bind_obj_out = obj;
+            return descr;
+        } else {
+            BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
+            Box* inst = obj;
+            Box* owner = obj->cls;
+            Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
 
-        Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
+            if (rewrite_args) {
+                // TODO: inline this?
+                RewriterVar* r_rtn = rewrite_args->rewriter->call(
+                    /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr,
+                    rewrite_args->obj, r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
 
-        if (rewrite_args) {
-            // TODO: inline this?
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr, rewrite_args->obj,
-                r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
-
-            rewrite_args->out_success = true;
-            rewrite_args->out_rtn = r_rtn;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = r_rtn;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            }
+            return r;
         }
-        return r;
     }
 
     return NULL;

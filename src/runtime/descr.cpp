@@ -471,6 +471,106 @@ Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* s
     return BoxedWrapperObject::__call__(wrapper, args, kw);
 }
 
+template <ExceptionStyle S>
+Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                     Box* arg2, Box* arg3, Box** args,
+                                     const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    if (S == CAPI) {
+        try {
+            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+
+    STAT_TIMER(t0, "us_timer_boxedwrapperdecsriptor_call", (_self->cls->is_user_defined ? 10 : 20));
+
+    assert(_self->cls == wrapperdescr_cls);
+    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
+
+    int flags = self->wrapper->flags;
+    wrapperfunc wrapper = self->wrapper->wrapper;
+    assert(self->wrapper->offset > 0);
+
+    ParamReceiveSpec paramspec(1, 0, true, false);
+    if (flags == PyWrapperFlag_KEYWORDS) {
+        paramspec = ParamReceiveSpec(1, 0, true, true);
+    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
+        paramspec = ParamReceiveSpec(1, 0, true, false);
+    } else if (flags == PyWrapperFlag_1ARG) {
+        paramspec = ParamReceiveSpec(1, 0, false, false);
+    } else if (flags == PyWrapperFlag_2ARG) {
+        paramspec = ParamReceiveSpec(2, 0, false, false);
+    } else {
+        RELEASE_ASSERT(0, "%d", flags);
+    }
+
+    Box** oargs = NULL;
+
+    bool rewrite_success = false;
+    rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
+                       arg2, arg3, args, oargs, keyword_names);
+
+    if (paramspec.takes_varargs)
+        assert(arg2 && arg2->cls == tuple_cls);
+
+    if (!rewrite_success)
+        rewrite_args = NULL;
+
+    Box* rtn;
+    if (flags == PyWrapperFlag_KEYWORDS) {
+        wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
+        rtn = (*wk)(arg1, arg2, self->wrapped, arg3);
+
+        if (rewrite_args) {
+            auto rewriter = rewrite_args->rewriter;
+            rewrite_args->out_rtn
+                = rewriter->call(true, (void*)wk, rewrite_args->arg1, rewrite_args->arg2,
+                                 rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)), rewrite_args->arg3);
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
+        rtn = (*wrapper)(arg1, arg2, self->wrapped);
+
+        if (rewrite_args) {
+            auto rewriter = rewrite_args->rewriter;
+            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)));
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+    } else if (flags == PyWrapperFlag_1ARG) {
+        wrapperfunc_1arg wrapper_1arg = (wrapperfunc_1arg)wrapper;
+        rtn = (*wrapper_1arg)(arg1, self->wrapped);
+
+        if (rewrite_args) {
+            auto rewriter = rewrite_args->rewriter;
+            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1,
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(1)));
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+    } else if (flags == PyWrapperFlag_2ARG) {
+        rtn = (*wrapper)(arg1, arg2, self->wrapped);
+
+        if (rewrite_args) {
+            auto rewriter = rewrite_args->rewriter;
+            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)));
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+    } else {
+        RELEASE_ASSERT(0, "%d", flags);
+    }
+
+    checkAndThrowCAPIException();
+    assert(rtn && "should have set + thrown an exception!");
+    return rtn;
+}
+
 void BoxedWrapperDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     assert(_o->cls == wrapperdescr_cls);
     BoxedWrapperDescriptor* o = static_cast<BoxedWrapperDescriptor*>(_o);
@@ -543,110 +643,26 @@ template <ExceptionStyle S>
 Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                  Box* arg3, Box** args,
                                  const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    if (S == CAPI) {
-        try {
-            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return NULL;
-        }
-    }
-
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == wrapperobject_cls);
     BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
 
-    int flags = self->descr->wrapper->flags;
-    wrapperfunc wrapper = self->descr->wrapper->wrapper;
     assert(self->descr->wrapper->offset > 0);
+    RewriterVar* r_obj = NULL;
+    Box** new_args = NULL;
+    if (argspec.totalPassed() >= 3)
+        new_args = (Box**)alloca(sizeof(Box*) * (argspec.totalPassed() + 1 - 3));
 
-    if (rewrite_args && !rewrite_args->func_guarded) {
-        rewrite_args->obj->addAttrGuard(offsetof(BoxedWrapperObject, descr), (intptr_t)self->descr);
+    if (rewrite_args) {
+        if (!rewrite_args->func_guarded)
+            rewrite_args->obj->addAttrGuard(offsetof(BoxedWrapperObject, descr), (intptr_t)self->descr);
+        r_obj = rewrite_args->obj->getAttr(offsetof(BoxedWrapperObject, obj), Location::forArg(0));
     }
-
-    ParamReceiveSpec paramspec(0, 0, true, false);
-    if (flags == PyWrapperFlag_KEYWORDS) {
-        paramspec = ParamReceiveSpec(0, 0, true, true);
-    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
-        paramspec = ParamReceiveSpec(0, 0, true, false);
-    } else if (flags == PyWrapperFlag_1ARG) {
-        paramspec = ParamReceiveSpec(0, 0, false, false);
-    } else if (flags == PyWrapperFlag_2ARG) {
-        paramspec = ParamReceiveSpec(1, 0, false, false);
-    } else {
-        RELEASE_ASSERT(0, "%d", flags);
-    }
-
-    Box** oargs = NULL;
-
-    bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->descr->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, oargs, keyword_names);
-
-    if (paramspec.takes_varargs)
-        assert(arg1 && arg1->cls == tuple_cls);
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    Box* rtn;
-    if (flags == PyWrapperFlag_KEYWORDS) {
-        wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-        rtn = (*wk)(self->obj, arg1, self->descr->wrapped, arg2);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            auto r_obj = rewrite_args->obj->getAttr(offsetof(BoxedWrapperObject, obj), Location::forArg(0));
-            rewrite_args->out_rtn = rewriter->call(
-                true, (void*)wk, r_obj, rewrite_args->arg1,
-                rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(2)), rewrite_args->arg2);
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
-        rtn = (*wrapper)(self->obj, arg1, self->descr->wrapped);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            auto r_obj = rewrite_args->obj->getAttr(offsetof(BoxedWrapperObject, obj), Location::forArg(0));
-            rewrite_args->out_rtn
-                = rewriter->call(true, (void*)wrapper, r_obj, rewrite_args->arg1,
-                                 rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(2)));
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else if (flags == PyWrapperFlag_1ARG) {
-        wrapperfunc_1arg wrapper_1arg = (wrapperfunc_1arg)wrapper;
-        rtn = (*wrapper_1arg)(self->obj, self->descr->wrapped);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            auto r_obj = rewrite_args->obj->getAttr(offsetof(BoxedWrapperObject, obj), Location::forArg(0));
-            rewrite_args->out_rtn = rewriter->call(
-                true, (void*)wrapper, r_obj, rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(1)));
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else if (flags == PyWrapperFlag_2ARG) {
-        rtn = (*wrapper)(self->obj, arg1, self->descr->wrapped);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            auto r_obj = rewrite_args->obj->getAttr(offsetof(BoxedWrapperObject, obj), Location::forArg(0));
-            rewrite_args->out_rtn
-                = rewriter->call(true, (void*)wrapper, r_obj, rewrite_args->arg1,
-                                 rewriter->loadConst((intptr_t)self->descr->wrapped, Location::forArg(2)));
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else {
-        RELEASE_ASSERT(0, "%d", flags);
-    }
-
-    checkAndThrowCAPIException();
-    assert(rtn && "should have set + thrown an exception!");
-    return rtn;
+    ArgPassSpec new_argspec
+        = bindObjIntoArgs(self->obj, r_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
+    return BoxedWrapperDescriptor::tppCall<S>(self->descr, rewrite_args, new_argspec, arg1, arg2, arg3, new_args,
+                                              keyword_names);
 }
 
 void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
@@ -711,6 +727,8 @@ void setupDescr() {
     wrapperdescr_cls->giveAttr("__doc__",
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
+    wrapperdescr_cls->tpp_call.capi_val = BoxedWrapperDescriptor::tppCall<CAPI>;
+    wrapperdescr_cls->tpp_call.cxx_val = BoxedWrapperDescriptor::tppCall<CXX>;
     add_operators(wrapperdescr_cls);
     wrapperdescr_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperDescrRepr, UNKNOWN, 1)));
     wrapperdescr_cls->freeze();
