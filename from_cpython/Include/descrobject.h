@@ -24,6 +24,8 @@ typedef PyObject *(*wrapperfunc)(PyObject *self, PyObject *args,
 typedef PyObject *(*wrapperfunc_kwds)(PyObject *self, PyObject *args,
                                       void *wrapped, PyObject *kwds);
 
+typedef PyObject *(*wrapperfunc_1arg)(PyObject *self, void *wrapped);
+
 struct wrapperbase {
     char *name;
     int offset;
@@ -38,6 +40,8 @@ struct wrapperbase {
 #define PyWrapperFlag_KEYWORDS 1 /* wrapper function takes keyword args */
 #define PyWrapperFlag_PYSTON   2 /* wrapper function is a Pyston function */
 #define PyWrapperFlag_BOOL     4 /* not really a wrapper, just set a bool field */
+#define PyWrapperFlag_1ARG     8 /* wrapper function takes 1 argument */
+#define PyWrapperFlag_2ARG    16 /* wrapper function takes 2 arguments */
 
 /* Various kinds of descriptor objects */
 
