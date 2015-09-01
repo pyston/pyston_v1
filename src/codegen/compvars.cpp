@@ -1878,8 +1878,10 @@ public:
     }
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* attr = internStringImmortal("__nonzero__");
+        if (cls == None->cls)
+            return makeBool(false);
 
+        static BoxedString* attr = internStringImmortal("__nonzero__");
         bool no_attribute = false;
         ConcreteCompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, &no_attribute);
