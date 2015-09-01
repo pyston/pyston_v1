@@ -1042,6 +1042,7 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
     }
 
     CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, exception_style, entry_descriptor);
+    setPointersInCodeStorage(&cf->pointers_in_code);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real

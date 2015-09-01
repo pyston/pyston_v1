@@ -435,6 +435,7 @@ static void markRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at generated code pointers\n");
 #if MOVING_GC
     ICInfo::visitGCReferences(&visitor);
+    CompiledFunction::visitAllCompiledFunctions(&visitor);
 #endif
 }
 

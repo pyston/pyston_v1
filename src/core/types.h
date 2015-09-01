@@ -262,6 +262,9 @@ public:
     FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
 
+    // Pointers that were written directly into the code, which the GC should be aware of.
+    std::vector<const void*> pointers_in_code;
+
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
@@ -298,6 +301,8 @@ public:
 
     // Call this when a speculation inside this version failed
     void speculationFailed();
+
+    static void visitAllCompiledFunctions(GCVisitor* visitor);
 };
 
 typedef int FutureFlags;

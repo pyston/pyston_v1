@@ -98,10 +98,18 @@ llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
 // It's slightly easier to emit them as integers (there are primitive integer constants but not pointer constants),
 // but doing it this way makes it clearer what's going on.
 
-llvm::StringMap<const void*> relocatable_syms;
+static llvm::StringMap<const void*> relocatable_syms;
+
+// Pointer to a vector where we want to keep track of all the pointers written directly into
+// the compiled code, which the GC needs to be aware of.
+std::vector<const void*>* pointers_in_code;
 
 void clearRelocatableSymsMap() {
     relocatable_syms.clear();
+}
+
+void setPointersInCodeStorage(std::vector<const void*>* v) {
+    pointers_in_code = v;
 }
 
 const void* getValueOfRelocatableSym(const std::string& str) {
@@ -130,6 +138,13 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
 
     relocatable_syms[name] = addr;
 
+#if MOVING_GC
+    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
+    if (al) {
+        pointers_in_code->push_back(al->user_data);
+    }
+#endif
+
     llvm::Type* var_type = type->getPointerElementType();
     return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
 }
@@ -138,6 +153,14 @@ llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
     llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
     llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
+
+#if MOVING_GC
+    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
+    if (al) {
+        pointers_in_code->push_back(al->user_data);
+    }
+#endif
+
     return ptr_val;
 }
 
