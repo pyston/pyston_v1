@@ -47,8 +47,8 @@ public:
 
     void operator=(Box* b) { value = b; }
 
-    operator Box*() { return value; }
     Box* operator->() { return value; }
+    Box* get() { return value; }
 };
 
 bool isNonheapRoot(void* p);

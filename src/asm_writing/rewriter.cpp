@@ -1376,6 +1376,10 @@ void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
     rewrite->addDependenceOn(invalidator);
 }
 
+void Rewriter::gc_visit(GCVisitor* visitor) {
+    rewrite->gc_visit(visitor);
+}
+
 Location Rewriter::allocScratch() {
     assertPhaseEmitting();
 

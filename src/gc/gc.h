@@ -44,6 +44,15 @@ namespace pyston {
 class Box;
 
 namespace gc {
+class GCVisitable;
+}
+
+namespace threading {
+void pushGCObject(gc::GCVisitable* obj);
+void popGCObject(gc::GCVisitable* obj);
+}
+
+namespace gc {
 
 class TraceStack;
 class GCVisitor {
@@ -156,25 +165,40 @@ public:
 
 // This is a way to call gc_visit on objects whose lifetime is bound to the stack,
 // but may be contained within a unique_ptr or some other container.
-class ScanningHandle {
-    GCVisitable* obj;
+template <typename T> class UniqueScanningHandle {
+    T* obj = NULL;
 
 public:
-    void push();
-    void pop();
-
-    ScanningHandle(GCVisitable* obj) : obj(obj) {
+    UniqueScanningHandle(T* obj) : obj(obj) {
 #if MOVING_GC
         if (obj) {
-            push();
+            threading::pushGCObject(obj);
         }
 #endif
     }
 
-    ~ScanningHandle() {
+    ~UniqueScanningHandle() {
 #if MOVING_GC
         if (obj) {
-            pop();
+            threading::popGCObject(obj);
+        }
+#endif
+        delete obj;
+    }
+
+    T* operator->() { return obj; }
+    T* get() { return obj; }
+    void reset(T* t = nullptr) {
+#if MOVING_GC
+        if (obj) {
+            threading::popGCObject(obj);
+        }
+#endif
+        delete obj;
+        obj = t;
+#if MOVING_GC
+        if (t) {
+            threading::pushGCObject(t);
         }
 #endif
     }

@@ -45,14 +45,6 @@ template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p) {
 namespace pyston {
 namespace gc {
 
-void ScanningHandle::push() {
-    threading::pushGCObject(obj);
-}
-
-void ScanningHandle::pop() {
-    threading::popGCObject(obj);
-}
-
 bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced);
 
 // lots of linked lists around here, so let's just use template functions for operations on them.
