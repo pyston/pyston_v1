@@ -55,10 +55,10 @@ public:
 }
 
 /// DenseSet - This implements a dense probed hash-table based set.
-template<typename ValueT, typename ValueInfoT = DenseMapInfo<ValueT> >
+template<typename ValueT, typename ValueInfoT = DenseMapInfo<ValueT>, int MinSize = 64>
 class DenseSet {
   typedef DenseMap<ValueT, detail::DenseSetEmpty, ValueInfoT,
-                   detail::DenseSetPair<ValueT>> MapTy;
+                   detail::DenseSetPair<ValueT>, MinSize> MapTy;
   static_assert(sizeof(typename MapTy::value_type) == sizeof(ValueT),
                 "DenseMap buckets unexpectedly large!");
   MapTy TheMap;

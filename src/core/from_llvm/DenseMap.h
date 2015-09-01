@@ -73,7 +73,7 @@ template <
 class DenseMapIterator;
 
 template <typename DerivedT, typename KeyT, typename ValueT, typename KeyInfoT,
-          typename BucketT>
+          typename BucketT, int MinSize = 64>
 class DenseMapBase {
 public:
   typedef unsigned size_type;
@@ -114,7 +114,7 @@ public:
 
     // If the capacity of the array is huge, and the # elements used is small,
     // shrink the array.
-    if (getNumEntries() * 4 < getNumBuckets() && getNumBuckets() > 64) {
+    if (getNumEntries() * 4 < getNumBuckets() && getNumBuckets() > MinSize) {
       shrink_and_clear();
       return;
     }
@@ -338,7 +338,7 @@ protected:
 
   template <typename OtherBaseT>
   void copyFrom(
-      const DenseMapBase<OtherBaseT, KeyT, ValueT, KeyInfoT, BucketT> &other) {
+      const DenseMapBase<OtherBaseT, KeyT, ValueT, KeyInfoT, BucketT, MinSize> &other) {
     assert(&other != this);
     assert(getNumBuckets() == other.getNumBuckets());
 
@@ -565,13 +565,14 @@ public:
 
 template <typename KeyT, typename ValueT,
           typename KeyInfoT = DenseMapInfo<KeyT>,
-          typename BucketT = detail::DenseMapPair<KeyT, ValueT>>
-class DenseMap : public DenseMapBase<DenseMap<KeyT, ValueT, KeyInfoT, BucketT>,
-                                     KeyT, ValueT, KeyInfoT, BucketT> {
+          typename BucketT = detail::DenseMapPair<KeyT, ValueT>,
+          int MinSize = 64>
+class DenseMap : public DenseMapBase<DenseMap<KeyT, ValueT, KeyInfoT, BucketT, MinSize>,
+                                     KeyT, ValueT, KeyInfoT, BucketT, MinSize> {
   // Lift some types from the dependent base class into this class for
   // simplicity of referring to them.
-  typedef DenseMapBase<DenseMap, KeyT, ValueT, KeyInfoT, BucketT> BaseT;
-  friend class DenseMapBase<DenseMap, KeyT, ValueT, KeyInfoT, BucketT>;
+  typedef DenseMapBase<DenseMap, KeyT, ValueT, KeyInfoT, BucketT, MinSize> BaseT;
+  friend class DenseMapBase<DenseMap, KeyT, ValueT, KeyInfoT, BucketT, MinSize>;
 
   BucketT *Buckets;
   unsigned NumEntries;
@@ -649,7 +650,7 @@ public:
     unsigned OldNumBuckets = NumBuckets;
     BucketT *OldBuckets = Buckets;
 
-    allocateBuckets(std::max<unsigned>(64, static_cast<unsigned>(NextPowerOf2(AtLeast-1))));
+    allocateBuckets(std::max<unsigned>(MinSize, static_cast<unsigned>(NextPowerOf2(AtLeast-1))));
     assert(Buckets);
     if (!OldBuckets) {
       this->BaseT::initEmpty();
@@ -669,7 +670,7 @@ public:
     // Reduce the number of buckets.
     unsigned NewNumBuckets = 0;
     if (OldNumEntries)
-      NewNumBuckets = std::max(64, 1 << (Log2_32_Ceil(OldNumEntries) + 1));
+      NewNumBuckets = std::max(MinSize, 1 << (Log2_32_Ceil(OldNumEntries) + 1));
     if (NewNumBuckets == NumBuckets) {
       this->BaseT::initEmpty();
       return;
@@ -716,15 +717,15 @@ private:
 
 template <typename KeyT, typename ValueT, unsigned InlineBuckets = 4,
           typename KeyInfoT = DenseMapInfo<KeyT>,
-          typename BucketT = detail::DenseMapPair<KeyT, ValueT>>
+          typename BucketT = detail::DenseMapPair<KeyT, ValueT>, int MinSize = 64>
 class SmallDenseMap
     : public DenseMapBase<
           SmallDenseMap<KeyT, ValueT, InlineBuckets, KeyInfoT, BucketT>, KeyT,
-          ValueT, KeyInfoT, BucketT> {
+          ValueT, KeyInfoT, BucketT, MinSize> {
   // Lift some types from the dependent base class into this class for
   // simplicity of referring to them.
-  typedef DenseMapBase<SmallDenseMap, KeyT, ValueT, KeyInfoT, BucketT> BaseT;
-  friend class DenseMapBase<SmallDenseMap, KeyT, ValueT, KeyInfoT, BucketT>;
+  typedef DenseMapBase<SmallDenseMap, KeyT, ValueT, KeyInfoT, BucketT, MinSize> BaseT;
+  friend class DenseMapBase<SmallDenseMap, KeyT, ValueT, KeyInfoT, BucketT, MinSize>;
 
   unsigned Small : 1;
   unsigned NumEntries : 31;
@@ -873,7 +874,7 @@ public:
 
   void grow(unsigned AtLeast) {
     if (AtLeast >= InlineBuckets)
-      AtLeast = std::max<unsigned>(64, NextPowerOf2(AtLeast-1));
+      AtLeast = std::max<unsigned>(MinSize, NextPowerOf2(AtLeast-1));
 
     if (Small) {
       if (AtLeast < InlineBuckets)
@@ -931,8 +932,8 @@ public:
     unsigned NewNumBuckets = 0;
     if (OldSize) {
       NewNumBuckets = 1 << (Log2_32_Ceil(OldSize) + 1);
-      if (NewNumBuckets > InlineBuckets && NewNumBuckets < 64u)
-        NewNumBuckets = 64;
+      if (NewNumBuckets > InlineBuckets && NewNumBuckets < (unsigned)MinSize)
+        NewNumBuckets = MinSize;
     }
     if ((Small && NewNumBuckets <= InlineBuckets) ||
         (!Small && NewNumBuckets == getLargeRep()->NumBuckets)) {
