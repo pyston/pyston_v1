@@ -1,3 +1,6 @@
+// This file was copied from https://llvm.org/svn/llvm-project/llvm/trunk/include/llvm/ADT/DenseSet.h?p=230300
+// and came with the following license:
+
 //===- llvm/ADT/DenseSet.h - Dense probed hash table ------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
@@ -11,12 +14,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ADT_DENSESET_H
-#define LLVM_ADT_DENSESET_H
 
-#include "llvm/ADT/DenseMap.h"
+// Modifications were made for Pyston, using the following license:
 
-namespace llvm {
+// Copyright (c) 2014-2015 Dropbox, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef PYSTON_CORE_FROMLLVM_DENSESET_H
+#define PYSTON_CORE_FROMLLVM_DENSESET_H
+
+#include "core/from_llvm/DenseMap.h"
+
+namespace pyston {
 
 namespace detail {
 struct DenseSetEmpty {};
@@ -157,6 +177,6 @@ public:
   }
 };
 
-} // end namespace llvm
+} // end namespace pyston
 
 #endif

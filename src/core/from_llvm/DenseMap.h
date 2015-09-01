@@ -1,3 +1,6 @@
+// This file was copied from https://llvm.org/svn/llvm-project/llvm/trunk/include/llvm/ADT/DenseMap.h?p=230300
+// and came with the following license:
+
 //===- llvm/ADT/DenseMap.h - Dense probed hash table ------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
@@ -11,15 +14,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ADT_DENSEMAP_H
-#define LLVM_ADT_DENSEMAP_H
 
-#include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/Support/AlignOf.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Support/PointerLikeTypeTraits.h"
-#include "llvm/Support/type_traits.h"
+// Modifications were made for Pyston, using the following license:
+
+// Copyright (c) 2014-2015 Dropbox, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef PYSTON_CORE_FROMLLVM_DENSEMAP_H
+#define PYSTON_CORE_FROMLLVM_DENSEMAP_H
+
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -29,7 +43,17 @@
 #include <new>
 #include <utility>
 
-namespace llvm {
+#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/Support/AlignOf.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/PointerLikeTypeTraits.h"
+#include "llvm/Support/type_traits.h"
+
+namespace pyston {
+
+// This should only take effect for this header file:
+using namespace llvm;
 
 namespace detail {
 // We extend a pair to allow users to override the bucket type with their own
@@ -1055,6 +1079,6 @@ capacity_in_bytes(const DenseMap<KeyT, ValueT, KeyInfoT> &X) {
   return X.getMemorySize();
 }
 
-} // end namespace llvm
+} // end namespace pyston
 
 #endif
