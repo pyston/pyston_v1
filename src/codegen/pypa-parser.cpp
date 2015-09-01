@@ -438,8 +438,8 @@ struct expr_dispatcher {
         AST_BinOp* binop = new AST_BinOp();
         location(binop, c);
         binop->op_type = AST_TYPE::Add;
-        binop->right = readItem(c.real, interned_strings);
-        binop->left = imag;
+        binop->left = readItem(c.real, interned_strings);
+        binop->right = imag;
         return binop;
     }
 

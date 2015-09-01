@@ -2118,6 +2118,18 @@ extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
     if (o->cls == float_cls)
         return o;
 
+    PyNumberMethods* m;
+    m = o->cls->tp_as_number;
+    if (m && m->nb_float) { /* This should include subclasses of float */
+        PyObject* res = m->nb_float(o);
+        if (res && !PyFloat_Check(res)) {
+            PyErr_Format(PyExc_TypeError, "__float__ returned non-float (type %.200s)", res->cls->tp_name);
+            Py_DECREF(res);
+            return NULL;
+        }
+        return res;
+    }
+
     if (PyInt_Check(o))
         return boxFloat(((BoxedInt*)o)->n);
     else if (PyLong_Check(o)) {
@@ -2127,8 +2139,7 @@ extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
         return boxFloat(result);
     }
 
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    return PyFloat_FromString(o, NULL);
 }
 
 extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
