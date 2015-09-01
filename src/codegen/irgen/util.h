@@ -17,12 +17,17 @@
 
 #include <string>
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
 class Constant;
 class Function;
 class Type;
+}
+
+namespace gc {
+class GCVisitor;
 }
 
 namespace pyston {
@@ -36,6 +41,8 @@ llvm::Constant* getNullPtr(llvm::Type* t);
 
 void clearRelocatableSymsMap();
 const void* getValueOfRelocatableSym(const std::string& str);
+
+void visitRelocatableSymsMap(gc::GCVisitor* visitor);
 
 void dumpPrettyIR(llvm::Function* f);
 }

@@ -624,6 +624,15 @@ int JitFragmentWriter::finishCompilation() {
 
     void* next_fragment_start = (uint8_t*)block->code + assembler->bytesWritten();
     code_block.fragmentFinished(assembler->bytesWritten(), num_bytes_overlapping, next_fragment_start);
+
+#if MOVING_GC
+    // If JitFragmentWriter is destroyed, we don't necessarily want the ICInfo to be destroyed also,
+    // because it may contain a list of references to pointers in generated code that still exists
+    // and we need to keep those around.
+    // TODO: When should these ICInfo be freed?
+    registerGCTrackedICInfo(ic_info.release());
+#endif
+
     return num_bytes_exit;
 }
 

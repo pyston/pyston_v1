@@ -18,8 +18,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
+#include "codegen/irgen/util.h"
 #include "core/common.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -429,6 +431,11 @@ static void markRoots(GCVisitor& visitor) {
     for (auto weakref : weakrefs_needing_callback_list) {
         visitor.visit(weakref);
     }
+
+    GC_TRACE_LOG("Looking at generated code pointers\n");
+#if MOVING_GC
+    ICInfo::visitGCReferences(&visitor);
+#endif
 }
 
 static void finalizationOrderingFindReachable(Box* obj) {
