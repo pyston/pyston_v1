@@ -56,6 +56,8 @@ private:
     bool saved;
     ucontext_t ucontext;
 
+    std::deque<gc::GCVisitable*> gc_objs_stacks;
+
 public:
     void* stack_start;
 
@@ -99,6 +101,13 @@ public:
 
     ucontext_t* getContext() { return &ucontext; }
 
+    void pushGCObject(gc::GCVisitable* obj) { gc_objs_stacks.push_back(obj); }
+
+    void popGCObject(gc::GCVisitable* obj) {
+        ASSERT(gc_objs_stacks.back() == obj, "push/pop of stack-bound object out of order");
+        gc_objs_stacks.pop_back();
+    }
+
     void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
         previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
         this->stack_start = new_stack_start;
@@ -132,6 +141,10 @@ public:
             v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
 #endif
         }
+
+        for (auto& obj : gc_objs_stacks) {
+            obj->gc_visit(v);
+        }
     }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
@@ -147,6 +160,14 @@ void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_lim
 void popGenerator() {
     assert(current_internal_thread_state);
     current_internal_thread_state->popGenerator();
+}
+
+void pushGCObject(gc::GCVisitable* obj) {
+    current_internal_thread_state->pushGCObject(obj);
+}
+
+void popGCObject(gc::GCVisitable* obj) {
+    current_internal_thread_state->popGCObject(obj);
 }
 
 // These are guarded by threading_lock

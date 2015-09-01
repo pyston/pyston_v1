@@ -31,6 +31,7 @@ class BoxedGenerator;
 
 namespace gc {
 class GCVisitor;
+class GCVisitable;
 }
 
 #if ENABLE_SAMPLING_PROFILER
@@ -61,6 +62,8 @@ void visitAllStacks(gc::GCVisitor* v);
 void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit);
 void popGenerator();
 
+void pushGCObject(gc::GCVisitable* obj);
+void popGCObject(gc::GCVisitable* obj);
 
 #ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1
