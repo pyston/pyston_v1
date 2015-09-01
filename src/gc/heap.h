@@ -254,9 +254,19 @@ public:
         else if (bytes <= 32)
             return _alloc(32, 1);
         else {
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    return _alloc(sizes[i], i);
+            int begin = 2;
+            int end = NUM_BUCKETS - 1;
+            int current = (begin & end) + ((begin ^ end) >> 1);
+
+            while (begin <= end) {
+                if (sizes[current] >= bytes && sizes[current - 1] < bytes) {
+                    return _alloc(sizes[current], current);
+                } else if (bytes > sizes[current]) {
+                    begin = current + 1;
+                    current = (begin & end) + ((begin ^ end) >> 1);
+                } else {
+                    end = current - 1;
+                    current = (begin & end) + ((begin ^ end) >> 1);
                 }
             }
             return NULL;
