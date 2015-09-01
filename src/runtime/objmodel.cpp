@@ -1123,23 +1123,33 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
         return sm->sm_callable;
     } else if (descr->cls == wrapperdescr_cls) {
-        BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
-        Box* inst = obj;
-        Box* owner = obj->cls;
+        if (for_call) {
+            if (rewrite_args) {
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = r_descr;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                *r_bind_obj_out = rewrite_args->obj;
+            }
+            *bind_obj_out = obj;
+            return descr;
+        } else {
+            BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
+            Box* inst = obj;
+            Box* owner = obj->cls;
+            Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
 
-        Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
+            if (rewrite_args) {
+                // TODO: inline this?
+                RewriterVar* r_rtn = rewrite_args->rewriter->call(
+                    /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr,
+                    rewrite_args->obj, r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
 
-        if (rewrite_args) {
-            // TODO: inline this?
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr, rewrite_args->obj,
-                r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
-
-            rewrite_args->out_success = true;
-            rewrite_args->out_rtn = r_rtn;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = r_rtn;
+                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            }
+            return r;
         }
-        return r;
     }
 
     return NULL;
@@ -2446,20 +2456,20 @@ extern "C" bool nonzero(Box* obj) {
     static BoxedString* len_str = internStringImmortal("__len__");
 
     // try __nonzero__
-    GetattrRewriteArgs grewrite_args(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
-    Box* func = getclsattrInternal(obj, nonzero_str, rewriter ? &grewrite_args : NULL);
-    if (!grewrite_args.out_success)
+    CallRewriteArgs crewrite_args(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
+    Box* rtn = callattrInternal0<CXX>(obj, nonzero_str, CLASS_ONLY, rewriter ? &crewrite_args : NULL, ArgPassSpec(0));
+    if (!crewrite_args.out_success)
         rewriter.reset();
 
-    if (!func) {
+    if (!rtn) {
         // try __len__
-        grewrite_args
-            = GetattrRewriteArgs(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
-        func = getclsattrInternal(obj, len_str, rewriter ? &grewrite_args : NULL);
-        if (!grewrite_args.out_success)
+        crewrite_args
+            = CallRewriteArgs(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
+        rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, rewriter ? &crewrite_args : NULL, ArgPassSpec(0));
+        if (!crewrite_args.out_success)
             rewriter.reset();
 
-        if (func == NULL) {
+        if (rtn == NULL) {
             ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
                        || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                        || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
@@ -2475,11 +2485,8 @@ extern "C" bool nonzero(Box* obj) {
             return true;
         }
     }
-    CallRewriteArgs cargs(rewriter.get(), grewrite_args.out_rtn,
-                          rewriter ? rewriter->getReturnDestination() : Location());
-    Box* rtn = runtimeCallInternal0<CXX>(func, rewriter ? &cargs : NULL, ArgPassSpec(0));
-    if (cargs.out_success) {
-        RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, cargs.out_rtn);
+    if (crewrite_args.out_success) {
+        RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, crewrite_args.out_rtn);
         rewriter->commitReturning(b);
     }
     return nonzeroHelper(rtn);
