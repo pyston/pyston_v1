@@ -24,6 +24,7 @@
 
 #include "codegen/irgen/future.h"
 #include "core/contiguous_map.h"
+#include "core/from_llvm/DenseMap.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -707,7 +708,8 @@ struct BoxAndHash {
 
 class BoxedDict : public Box {
 public:
-    typedef llvm::DenseMap<BoxAndHash, Box*, BoxAndHash::Comparisons> DictMap;
+    typedef pyston::DenseMap<BoxAndHash, Box*, BoxAndHash::Comparisons, detail::DenseMapPair<BoxAndHash, Box*>,
+                             /* MinSize= */ 8> DictMap;
 
     DictMap d;
 

@@ -15,8 +15,7 @@
 #ifndef PYSTON_RUNTIME_SET_H
 #define PYSTON_RUNTIME_SET_H
 
-#include "llvm/ADT/DenseSet.h"
-
+#include "core/from_llvm/DenseSet.h"
 #include "core/types.h"
 #include "runtime/types.h"
 
@@ -29,7 +28,7 @@ extern "C" Box* createSet();
 
 class BoxedSet : public Box {
 public:
-    typedef llvm::DenseSet<BoxAndHash, BoxAndHash::Comparisons> Set;
+    typedef pyston::DenseSet<BoxAndHash, BoxAndHash::Comparisons, /* MinSize= */ 8> Set;
     Set s;
     Box** weakreflist; /* List of weak references */
 
