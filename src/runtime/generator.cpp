@@ -28,7 +28,6 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/collector.h"
 #include "runtime/ctxswitching.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

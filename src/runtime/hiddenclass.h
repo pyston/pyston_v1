@@ -21,7 +21,6 @@
 
 #include "core/contiguous_map.h"
 #include "core/types.h"
-#include "gc/gc_alloc.h"
 
 namespace pyston {
 

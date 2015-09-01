@@ -14,7 +14,6 @@
 
 #include "core/common.h"
 #include "core/types.h"
-#include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 

@@ -648,7 +648,6 @@ public:
 };
 
 extern Heap global_heap;
-void dumpHeapStatistics(int level);
 
 } // namespace gc
 } // namespace pyston

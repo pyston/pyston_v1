@@ -14,7 +14,6 @@
 
 #include "runtime/set.h"
 
-#include "gc/collector.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {

@@ -19,7 +19,6 @@
 #include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/options.h"
-#include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/traceback.h"
 #include "runtime/types.h"

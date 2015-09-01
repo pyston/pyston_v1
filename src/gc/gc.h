@@ -15,11 +15,29 @@
 #ifndef PYSTON_GC_GC_H
 #define PYSTON_GC_GC_H
 
-namespace pyston {
-namespace gc {
+#include <deque>
 
-// GOAL: Eventually, move any declaration that needs to be visible outside the gc/ folder
-// to this file and only expose this header.
+// Files outside of the gc/ folder should only import gc.h or gc_alloc.h
+// which are the "public" memory management interface.
+
+#define GC_KEEP_ALIVE(t) asm volatile("" : : "X"(t))
+
+#define TRACE_GC_MARKING 0
+#if TRACE_GC_MARKING
+extern FILE* trace_fp;
+#define GC_TRACE_LOG(...) fprintf(pyston::gc::trace_fp, __VA_ARGS__)
+#else
+#define GC_TRACE_LOG(...)
+#endif
+
+struct _PyWeakReference;
+typedef struct _PyWeakReference PyWeakReference;
+
+namespace pyston {
+
+class Box;
+
+namespace gc {
 
 class TraceStack;
 class GCVisitor {
@@ -64,6 +82,31 @@ enum class GCKind : uint8_t {
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
 extern "C" void* gc_realloc(void* ptr, size_t bytes);
 extern "C" void gc_free(void* ptr);
+
+// Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,
+// but does not seem to pause manual calls to gc.collect().  So, callers should check gcIsEnabled(),
+// if appropriate, before calling runCollection().
+bool gcIsEnabled();
+void disableGC();
+void enableGC();
+
+void runCollection();
+
+void dumpHeapStatistics(int level);
+
+// These are exposed since the GC isn't necessarily responsible for calling finalizeres.
+void callPendingDestructionLogic();
+extern std::deque<Box*> pending_finalization_list;
+extern std::deque<PyWeakReference*> weakrefs_needing_callback_list;
+
+// These should only be used for debugging outside of the GC module. Except for functions that print
+// some debugging information, it should be possible to replace calls to these functions with true
+// without changing the behavior of the program.
+
+// If p is a valid gc-allocated pointer (or a non-heap root)
+bool isValidGCMemory(void* p);
+// Whether p is valid gc memory and is set to have Python destructor semantics applied
+bool isValidGCObject(void* p);
 
 // Use this if a C++ object needs to be allocated in our heap.
 class GCAllocatedRuntime {

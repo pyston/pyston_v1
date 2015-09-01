@@ -22,7 +22,6 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/collector.h"
 #include "gc/roots.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
