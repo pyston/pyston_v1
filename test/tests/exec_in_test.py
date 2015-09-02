@@ -218,3 +218,9 @@ exec s in g, l
 
 for i in xrange(5):
     print list(l['f'](5)(1, 2, 3, 4, 5))
+
+d = dict(x=1, y=0)
+exec """
+def g():
+    print sorted(globals().items())
+""" in d

@@ -2180,6 +2180,11 @@ private:
         sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
             = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
 
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            sorted_symbol_table[internString(PASSED_GLOBALS_NAME)]
+                = new ConcreteCompilerVariable(UNKNOWN, irstate->getGlobals(), true);
+        }
+
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
         // It would be nice to directly pass all variables as arguments, instead of packing them into
@@ -2559,6 +2564,11 @@ public:
         int initial_args = stackmap_args.size();
 
         stackmap_args.push_back(irstate->getFrameInfoVar());
+
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            stackmap_args.push_back(irstate->getGlobals());
+            pp->addFrameVar(PASSED_GLOBALS_NAME, UNKNOWN);
+        }
 
         assert(INT->llvmType() == g.i64);
         if (ENABLE_JIT_OBJECT_CACHE) {
