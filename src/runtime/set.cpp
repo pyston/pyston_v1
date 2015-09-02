@@ -71,6 +71,14 @@ Box* setiteratorNext(BoxedSetIterator* self) {
     return self->next();
 }
 
+Box* setiter_next(Box* _self) noexcept {
+    RELEASE_ASSERT(_self->cls == set_iterator_cls, "");
+    BoxedSetIterator* self = (BoxedSetIterator*)_self;
+    if (!self->hasNext())
+        return NULL;
+    return self->next();
+}
+
 Box* setiteratorIter(BoxedSetIterator* self) {
     RELEASE_ASSERT(self->cls == set_iterator_cls, "");
     return self;
@@ -537,6 +545,7 @@ void setupSet() {
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->freeze();
+    set_iterator_cls->tp_iternext = setiter_next;
 
     set_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));

@@ -65,31 +65,35 @@ i1 listiterHasnextUnboxed(Box* s) {
     return ans;
 }
 
-template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
+Box* listiter_next(Box* s) noexcept {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    if (!self->l) {
-        if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
-            return NULL;
-        } else
-            raiseExcHelper(StopIteration, "");
-    }
+    if (!self->l)
+        return NULL;
 
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
         self->l = NULL;
-        if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
-            return NULL;
-        } else
-            raiseExcHelper(StopIteration, "");
+        return NULL;
     }
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
     return rtn;
 }
+
+template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
+    Box* rtn = listiter_next(s);
+    if (!rtn) {
+        if (S == CAPI) {
+            PyErr_SetObject(StopIteration, None);
+            return NULL;
+        } else
+            raiseExcHelper(StopIteration, "");
+    }
+    return rtn;
+}
+
 // force instantiation:
 template Box* listiterNext<CAPI>(Box*);
 template Box* listiterNext<CXX>(Box*);
@@ -114,16 +118,23 @@ i1 listreviterHasnextUnboxed(Box* s) {
     return self->pos >= 0;
 }
 
-Box* listreviterNext(Box* s) {
+Box* listreviter_next(Box* s) noexcept {
     assert(s->cls == list_reverse_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
-        raiseExcHelper(StopIteration, "");
+        return NULL;
     }
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos--;
+    return rtn;
+}
+
+Box* listreviterNext(Box* s) {
+    Box* rtn = listreviter_next(s);
+    if (!rtn)
+        raiseExcHelper(StopIteration, "");
     return rtn;
 }
 

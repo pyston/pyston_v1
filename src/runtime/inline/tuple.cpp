@@ -43,16 +43,24 @@ i1 tupleiterHasnextUnboxed(Box* s) {
     return self->pos < self->t->size();
 }
 
-Box* tupleiterNext(Box* s) {
+Box* tupleiter_next(Box* s) noexcept {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
     if (!(self->pos >= 0 && self->pos < self->t->size())) {
-        raiseExcHelper(StopIteration, "");
+        return NULL;
     }
 
     Box* rtn = self->t->elts[self->pos];
     self->pos++;
+    return rtn;
+}
+
+Box* tupleiterNext(Box* s) {
+    Box* rtn = tupleiter_next(s);
+    if (!rtn) {
+        raiseExcHelper(StopIteration, "");
+    }
     return rtn;
 }
 }

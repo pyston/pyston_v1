@@ -848,8 +848,8 @@ void setupDict() {
     dict_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterIter, typeFromClass(dict_iterator_cls), 1)));
     dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1)));
-
     dict_iterator_cls->freeze();
+    dict_iterator_cls->tp_iternext = dictiter_next;
 
     // Manually set some tp_* slots *after* calling freeze() -> fixup_slot_dispatchers().
     // fixup_slot_dispatchers will insert a wrapper like slot_tp_init into tp_init, which calls the python-level
