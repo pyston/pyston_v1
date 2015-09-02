@@ -55,6 +55,14 @@ void popGCObject(gc::GCVisitable* obj);
 namespace gc {
 
 class TraceStack;
+
+// The base version of the GC visitor is used for marking, in conjuction with a TraceStack.
+//
+// Conceptually, GCVisitor should be abstract and the 'marking' behavior should be specific
+// to a subclass of GCVisitor. However, that requires the use of virtual functions which
+// introduce an overhead. Eventually if we really need multiple different kinds of visitors
+// we will need some dispatching mechanism but for now, since the moving GC is still WIP,
+// the virtualness property is #if'd out for the regular use case with only mark-and-sweep.
 class GCVisitor {
 private:
     TraceStack* stack;
@@ -68,10 +76,17 @@ public:
         if (p)
             visit(p);
     }
+#if MOVING_GC
+    virtual void visit(void* p);
+    virtual void visitRange(void* const* start, void* const* end);
+    virtual void visitPotential(void* p);
+    virtual void visitPotentialRange(void* const* start, void* const* end);
+#else
     void visit(void* p);
     void visitRange(void* const* start, void* const* end);
     void visitPotential(void* p);
     void visitPotentialRange(void* const* start, void* const* end);
+#endif
 
     // Some object have fields with pointers to Pyston heap objects that we are confident are
     // already being scanned elsewhere.
