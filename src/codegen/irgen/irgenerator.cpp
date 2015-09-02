@@ -534,7 +534,7 @@ bool isIsDefinedName(llvm::StringRef name) {
 
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings) {
     // TODO could cache this
-    return interned_strings.get("!is_defined_" + std::string(name.s()));
+    return interned_strings.get(("!is_defined_" + name.s()).str());
 }
 
 class IRGeneratorImpl : public IRGenerator {
