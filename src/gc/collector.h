@@ -59,6 +59,8 @@ bool isNonheapRoot(void* p);
 void registerPythonObject(Box* b);
 void invalidateOrderedFinalizerList();
 
+void visitByGCKind(void* p, GCVisitor& visitor);
+
 // Debugging/validation helpers: if a GC should not happen in certain sections (ex during unwinding),
 // use these functions to mark that.  This is different from disableGC/enableGC, since it causes an
 // assert rather than delaying of the next GC.
@@ -103,6 +105,22 @@ public:
     void visitPotential(void* p) MOVING_OVERRIDE;
 };
 
+// Visits the fields and replaces it with new_values if it was equal to old_value.
+class GCVisitorReplacing : public GCVisitor {
+private:
+    void* old_value;
+    void* new_value;
+
+    void _visit(void** p) MOVING_OVERRIDE;
+
+public:
+    GCVisitorReplacing(void* old_value, void* new_value) : old_value(old_value), new_value(new_value) {}
+    virtual ~GCVisitorReplacing() {}
+
+    void visitPotential(void* p) MOVING_OVERRIDE{};
+    void visitPotentialRange(void** start, void** end) MOVING_OVERRIDE{};
+};
+
 class GCAllocation;
 class ReferenceMap {
 public:
@@ -112,6 +130,9 @@ public:
 
     // Map from objects O to all objects that contain a reference to O.
     std::unordered_map<GCAllocation*, std::vector<GCAllocation*>> references;
+
+    // Track movement (reallocation) of objects.
+    std::unordered_map<GCAllocation*, GCAllocation*> moves;
 };
 }
 }

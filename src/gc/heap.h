@@ -249,7 +249,6 @@ public:
     }
 
     GCAllocation* alloc(size_t bytes) {
-        registerGCManagedBytes(bytes);
         if (bytes <= 16)
             return _alloc(16, 0);
         else if (bytes <= 32)
@@ -267,6 +266,9 @@ public:
     void forEachReference(std::function<void(GCAllocation*, size_t)>);
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+
+    GCAllocation* forceRelocate(GCAllocation* alloc);
+
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
@@ -589,12 +591,31 @@ public:
     }
 
     GCAllocation* alloc(size_t bytes) {
+        registerGCManagedBytes(bytes);
         if (bytes > LargeArena::ALLOC_SIZE_LIMIT)
             return huge_arena.alloc(bytes);
         else if (bytes > sizes[NUM_BUCKETS - 1])
             return large_arena.alloc(bytes);
         else
             return small_arena.alloc(bytes);
+    }
+
+    // Slightly different than realloc in that:
+    // 1) The size is the same, so we calls alloc in the SmallArena.
+    // 2) Uses a variant of alloc that doesn't register a change in the number of bytes allocated.
+    // 3) Always reallocates the object to a different address.
+    GCAllocation* forceRelocate(GCAllocation* alloc) {
+        GCAllocation* rtn = NULL;
+        if (large_arena.contains(alloc)) {
+            ASSERT(false, "large arena moves not supported yet");
+        } else if (huge_arena.contains(alloc)) {
+            ASSERT(false, "huge arena moves not supported yet");
+        } else {
+            assert(small_arena.contains(alloc));
+            rtn = small_arena.forceRelocate(alloc);
+        }
+
+        return rtn;
     }
 
     void destructContents(GCAllocation* alloc);

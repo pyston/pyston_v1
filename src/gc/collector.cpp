@@ -63,7 +63,7 @@ static std::unordered_set<GCRootHandle*>* getRootHandles() {
     return &root_handles;
 }
 
-static int ncollections = 0;
+int ncollections = 0;
 
 static bool gc_enabled = true;
 static bool should_not_reenter_gc = false;
@@ -388,6 +388,41 @@ void invalidateOrderedFinalizerList() {
     sc_us.log(us);
 }
 
+__attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
+    assert(((intptr_t)p) % 8 == 0);
+
+    GCAllocation* al = GCAllocation::fromUserData(p);
+    visitor.setSource(al);
+
+    GCKind kind_id = al->kind_id;
+    if (kind_id == GCKind::UNTRACKED) {
+        // Nothing to do here.
+    } else if (kind_id == GCKind::CONSERVATIVE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PRECISE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
+    } else if (kind_id == GCKind::RUNTIME) {
+        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(p);
+        runtime_obj->gc_visit(&visitor);
+    } else {
+        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    }
+}
+
 GCRootHandle::GCRootHandle() {
     getRootHandles()->insert(this);
 }
@@ -470,38 +505,9 @@ void GCVisitorPinning::visitPotential(void* p) {
     }
 }
 
-static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
-    assert(((intptr_t)p) % 8 == 0);
-
-    GCAllocation* al = GCAllocation::fromUserData(p);
-    visitor.setSource(al);
-
-    GCKind kind_id = al->kind_id;
-    if (kind_id == GCKind::UNTRACKED) {
-        // Nothing to do here.
-    } else if (kind_id == GCKind::CONSERVATIVE) {
-        uint32_t bytes = al->kind_data;
-        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
-    } else if (kind_id == GCKind::PRECISE) {
-        uint32_t bytes = al->kind_data;
-        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-    } else if (kind_id == GCKind::PYTHON) {
-        Box* b = reinterpret_cast<Box*>(p);
-        BoxedClass* cls = b->cls;
-
-        if (cls) {
-            // The cls can be NULL since we use 'new' to construct them.
-            // An arbitrary amount of stuff can happen between the 'new' and
-            // the call to the constructor (ie the args get evaluated), which
-            // can trigger a collection.
-            ASSERT(cls->gc_visit, "%s", getTypeName(b));
-            cls->gc_visit(&visitor, b);
-        }
-    } else if (kind_id == GCKind::RUNTIME) {
-        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(p);
-        runtime_obj->gc_visit(&visitor);
-    } else {
-        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+void GCVisitorReplacing::_visit(void** ptr_address) {
+    if (*ptr_address == old_value) {
+        *ptr_address = new_value;
     }
 }
 
@@ -790,14 +796,51 @@ static void mapReferencesPhase(ReferenceMap& refmap) {
     graphTraversalMarking(worklist, visitor);
 }
 
-static void move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
+#define MOVE_LOG 1
+static FILE* move_log;
+
+static void move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
+#if MOVE_LOG
+    if (!move_log) {
+        move_log = fopen("movelog.txt", "w");
+    }
+#endif
+
     // Only move objects that are in the reference map (unreachable objects
     // won't be in the reference map).
-    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
-        auto& referencing = refmap.references[al];
+    if (refmap.pinned.count(old_al) == 0 && refmap.references.count(old_al) > 0) {
+        auto& referencing = refmap.references[old_al];
         assert(referencing.size() > 0);
-        // GCAllocation* new_al = realloc(al, size);
-    } else if (refmap.pinned.count(al) == 0) {
+
+        GCAllocation* new_al = global_heap.forceRelocate(old_al);
+        assert(new_al);
+        assert(old_al->user_data != new_al->user_data);
+
+#if MOVE_LOG
+        // Write the moves that have happened to file, for debugging.
+        fprintf(move_log, "%d) %p -> %p\n", ncollections, old_al->user_data, new_al->user_data);
+#endif
+
+        for (GCAllocation* referencer : referencing) {
+            // If the whatever is pointing to the object we just moved has also been moved,
+            // then we need to update the pointer in that moved object.
+            if (refmap.moves.count(referencer) > 0) {
+                referencer = refmap.moves[referencer];
+            }
+
+#if MOVE_LOG
+            fprintf(move_log, "    | referencer %p\n", referencer->user_data);
+#endif
+
+            assert(referencer->kind_id == GCKind::PYTHON || referencer->kind_id == GCKind::PRECISE
+                   || referencer->kind_id == GCKind::RUNTIME);
+            GCVisitorReplacing replacer(old_al->user_data, new_al->user_data);
+            visitByGCKind(referencer->user_data, replacer);
+        }
+
+        assert(refmap.moves.count(old_al) == 0);
+        refmap.moves.emplace(old_al, new_al);
+    } else if (refmap.pinned.count(old_al) == 0) {
         // TODO: This probably should not happen.
     }
 }

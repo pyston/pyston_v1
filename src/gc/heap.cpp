@@ -354,6 +354,26 @@ GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     return rtn;
 }
 
+GCAllocation* SmallArena::forceRelocate(GCAllocation* al) {
+    Block* b = Block::forPointer(al);
+
+    size_t size = b->size;
+
+    // Don't register moves, they don't use more memory and they could trigger another GC.
+    GCAllocation* rtn = alloc(size);
+
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+    memcpy(rtn, al, size);
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#else
+    memcpy(rtn, al, size);
+#endif
+
+    free(al);
+    return rtn;
+}
+
 void SmallArena::free(GCAllocation* alloc) {
     Block* b = Block::forPointer(alloc);
     size_t size = b->size;
@@ -714,8 +734,6 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
 #define LARGE_CHUNK_INDEX(obj, section) (((char*)(obj) - (char*)(section)) >> CHUNK_BITS)
 
 GCAllocation* LargeArena::alloc(size_t size) {
-    registerGCManagedBytes(size);
-
     LOCK_REGION(heap->lock);
 
     // printf ("allocLarge %zu\n", size);
@@ -937,8 +955,6 @@ void LargeArena::_freeLargeObj(LargeObj* obj) {
 
 
 GCAllocation* HugeArena::alloc(size_t size) {
-    registerGCManagedBytes(size);
-
     LOCK_REGION(heap->lock);
 
     size_t total_size = size + sizeof(HugeObj);
