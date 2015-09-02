@@ -2401,6 +2401,17 @@ public:
         return characters[c & UCHAR_MAX];
     }
 
+    static Box* next_capi(Box* _self) noexcept {
+        assert(_self->cls == str_iterator_cls);
+        auto self = (BoxedStringIterator*)_self;
+        if (!hasnextUnboxed(self))
+            return NULL;
+
+        char c = *self->it;
+        ++self->it;
+        return characters[c & UCHAR_MAX];
+    }
+
     static void gcHandler(GCVisitor* v, Box* b) {
         Box::gcHandler(v, b);
         BoxedStringIterator* it = (BoxedStringIterator*)b;
@@ -2796,6 +2807,7 @@ void setupStr() {
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
+    str_iterator_cls->tp_iternext = BoxedStringIterator::next_capi;
 
     str_cls->tp_as_buffer = &string_as_buffer;
     str_cls->tp_print = string_print;

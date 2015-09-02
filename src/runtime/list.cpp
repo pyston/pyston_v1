@@ -1267,12 +1267,13 @@ void setupList() {
     list_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_iterator_cls), 1)));
 
-    CLFunction* listiter_next = boxRTFunction((void*)listiterNext<CXX>, UNKNOWN, 1);
-    addRTFunction(listiter_next, (void*)listiterNext<CAPI>, UNKNOWN, CAPI);
-    list_iterator_cls->giveAttr("next", new BoxedFunction(listiter_next));
+    CLFunction* listiter_next_func = boxRTFunction((void*)listiterNext<CXX>, UNKNOWN, 1);
+    addRTFunction(listiter_next_func, (void*)listiterNext<CAPI>, UNKNOWN, CAPI);
+    list_iterator_cls->giveAttr("next", new BoxedFunction(listiter_next_func));
 
     list_iterator_cls->freeze();
     list_iterator_cls->tpp_hasnext = listiterHasnextUnboxed;
+    list_iterator_cls->tp_iternext = listiter_next;
 
     list_reverse_iterator_cls->giveAttr("__name__", boxString("listreverseiterator"));
 
@@ -1284,6 +1285,7 @@ void setupList() {
     list_reverse_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listreviterNext, UNKNOWN, 1)));
 
     list_reverse_iterator_cls->freeze();
+    list_reverse_iterator_cls->tp_iternext = listreviter_next;
 }
 
 void teardownList() {

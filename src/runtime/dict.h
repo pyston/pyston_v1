@@ -49,6 +49,7 @@ Box* dictIterItems(Box* self);
 Box* dictIterIter(Box* self);
 Box* dictIterHasnext(Box* self);
 i1 dictIterHasnextUnboxed(Box* self);
+Box* dictiter_next(Box* self) noexcept;
 Box* dictIterNext(Box* self);
 
 class BoxedDictView : public Box {

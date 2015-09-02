@@ -102,6 +102,18 @@ public:
         return boxBool(xrangeIteratorHasnextUnboxed(s));
     }
 
+    static Box* xrangeIterator_next(Box* s) noexcept {
+        assert(s->cls == xrange_iterator_cls);
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
+
+        if (!xrangeIteratorHasnextUnboxed(s))
+            return NULL;
+
+        i64 rtn = self->cur;
+        self->cur += self->step;
+        return boxInt(rtn);
+    }
+
     static i64 xrangeIteratorNextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
@@ -228,5 +240,6 @@ void setupXrange() {
 
     xrange_iterator_cls->freeze();
     xrange_iterator_cls->tpp_hasnext = BoxedXrangeIterator::xrangeIteratorHasnextUnboxed;
+    xrange_iterator_cls->tp_iternext = BoxedXrangeIterator::xrangeIterator_next;
 }
 }

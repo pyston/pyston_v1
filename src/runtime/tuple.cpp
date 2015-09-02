@@ -625,6 +625,7 @@ void setupTuple() {
 
     tuple_iterator_cls->freeze();
     tuple_iterator_cls->tpp_hasnext = tupleiterHasnextUnboxed;
+    tuple_iterator_cls->tp_iternext = tupleiter_next;
 }
 
 void teardownTuple() {

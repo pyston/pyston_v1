@@ -56,12 +56,12 @@ Box* dictIterHasnext(Box* s) {
     return boxBool(dictIterHasnextUnboxed(s));
 }
 
-Box* dictIterNext(Box* s) {
+Box* dictiter_next(Box* s) noexcept {
     assert(s->cls == dict_iterator_cls);
     BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
 
     if (self->it == self->itEnd)
-        raiseExcHelper(StopIteration, "");
+        return NULL;
 
     Box* rtn = nullptr;
     if (self->type == BoxedDictIterator::KeyIterator) {
@@ -72,6 +72,13 @@ Box* dictIterNext(Box* s) {
         rtn = BoxedTuple::create({ self->it->first.value, self->it->second });
     }
     ++self->it;
+    return rtn;
+}
+
+Box* dictIterNext(Box* s) {
+    auto* rtn = dictiter_next(s);
+    if (!rtn)
+        raiseExcHelper(StopIteration, "");
     return rtn;
 }
 
