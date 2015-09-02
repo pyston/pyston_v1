@@ -17,7 +17,6 @@
 #include <cstdio>
 #include <iostream>
 #include <set>
-#include <sstream>
 #include <stdint.h>
 
 #include "llvm/Analysis/Passes.h"
@@ -30,6 +29,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #endif
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/Instrumentation.h"
@@ -960,16 +960,16 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
 }
 
 static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel effort, const OSREntryDescriptor* entry) {
-    static int num_functions = 0;
-
-    std::ostringstream os;
+    static llvm::StringMap<int> used_module_names;
+    std::string name;
+    llvm::raw_string_ostream os(name);
     os << nameprefix;
     os << "_e" << (int)effort;
-    if (entry) {
+    if (entry)
         os << "_osr" << entry->backedge->target->idx;
-    }
-    os << '_' << num_functions;
-    num_functions++;
+    // in order to generate a unique id add the number of times we encountered this name to end of the string.
+    auto& times = used_module_names[os.str()];
+    os << '_' << ++times;
     return os.str();
 }
 
