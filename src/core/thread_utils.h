@@ -280,6 +280,14 @@ public:
             map[pthread_self()] = s;
             ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
         }
+
+#ifndef NDEBUG
+        {
+            LOCK_REGION(&lock);
+            ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
+        }
+#endif
+
         return &s->val;
     }
 };
