@@ -67,26 +67,35 @@ class GCVisitor {
 private:
     TraceStack* stack;
 
+#if MOVING_GC
+    virtual void _visit(void** ptr_address);
+    virtual void _visitRange(void** start, void** end);
+#else
+    void _visit(void** ptr_address);
+    void _visitRange(void** start, void** end);
+#endif
+    virtual void _visitRedundant(void** ptr_address) {}
+    virtual void _visitRangeRedundant(void** start, void** end) {}
+
 public:
     GCVisitor(TraceStack* stack) : stack(stack) {}
     virtual ~GCVisitor() {}
 
-    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
-    void visitIf(void* p) {
-        if (p)
-            visit(p);
-    }
 #if MOVING_GC
-    virtual void visit(void* p);
-    virtual void visitRange(void* const* start, void* const* end);
     virtual void visitPotential(void* p);
-    virtual void visitPotentialRange(void* const* start, void* const* end);
+    virtual void visitPotentialRange(void** start, void** end);
 #else
-    void visit(void* p);
-    void visitRange(void* const* start, void* const* end);
     void visitPotential(void* p);
-    void visitPotentialRange(void* const* start, void* const* end);
+    void visitPotentialRange(void** start, void** end);
 #endif
+
+    // The purpose of writing the visit function is to avoid (void**) casts
+    // which are clumbersome to write at every use of the visit function and
+    // error-prone (might accidently cast void* to void**).
+    template <typename T> void visit(T** ptr_address) { _visit(reinterpret_cast<void**>(ptr_address)); }
+    template <typename T> void visitRange(T** start, T** end) {
+        _visitRange(reinterpret_cast<void**>(start), reinterpret_cast<void**>(end));
+    }
 
     // Some object have fields with pointers to Pyston heap objects that we are confident are
     // already being scanned elsewhere.
@@ -97,10 +106,14 @@ public:
     // In a moving collector, every reference needs to be visited since the pointer value could
     // change. We don't have a moving collector yet, but it's good practice to call visit every
     // pointer value and no-op to avoid the performance hit of the mark-and-sweep case.
-    virtual void visitRedundant(void* p) {}
-    virtual void visitRedundantRange(void** start, void** end) {}
+    template <typename T> void visitRedundant(T** ptr_address) {
+        _visitRedundant(reinterpret_cast<void**>(ptr_address));
+    }
+    template <typename T> void visitRangeRedundant(T** start, T** end) {
+        _visitRangeRedundant(reinterpret_cast<void**>(start), reinterpret_cast<void**>(end));
+    }
     virtual void visitPotentialRedundant(void* p) {}
-    virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) {}
+    virtual void visitPotentialRangeRedundant(void** start, void** end) {}
 
     // Visit pointers to objects that we know cannot be moved.
     // This is often used to scan a pointer that's a copy of a pointer stored in a place that

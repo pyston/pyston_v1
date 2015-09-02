@@ -62,13 +62,15 @@ void startGCUnexpectedRegion();
 void endGCUnexpectedRegion();
 
 class GCVisitorNoRedundancy : public GCVisitor {
+public:
+    void _visitRedundant(void** ptr_address) override { visit(ptr_address); }
+    void _visitRangeRedundant(void** start, void** end) override { visitRange(start, end); }
+
+public:
     virtual ~GCVisitorNoRedundancy() {}
 
-    virtual void visitRedundant(void* p) { visit(p); }
-    virtual void visitRangeRedundant(void* const* start, void* const* end) { visitRange(start, end); }
-    virtual void visitPotentialRedundant(void* p) { visitPotential(p); }
-    virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) { visitPotentialRange(start, end); }
-    virtual bool shouldVisitRedundants() { return true; }
+    void visitPotentialRedundant(void* p) override { visitPotential(p); }
+    void visitPotentialRangeRedundant(void** start, void** end) override { visitPotentialRange(start, end); }
 };
 }
 }

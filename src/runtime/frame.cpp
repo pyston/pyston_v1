@@ -82,8 +82,8 @@ public:
 
         auto f = static_cast<BoxedFrame*>(b);
 
-        v->visit(f->_code);
-        v->visit(f->_globals);
+        v->visit(&f->_code);
+        v->visit(&f->_globals);
     }
 
     static void simpleDestructor(Box* b) {
