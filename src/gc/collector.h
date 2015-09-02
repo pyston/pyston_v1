@@ -15,6 +15,10 @@
 #ifndef PYSTON_GC_COLLECTOR_H
 #define PYSTON_GC_COLLECTOR_H
 
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "gc/gc.h"
 
 namespace pyston {
@@ -71,6 +75,43 @@ public:
 
     void visitPotentialRedundant(void* p) override { visitPotential(p); }
     void visitPotentialRangeRedundant(void** start, void** end) override { visitPotentialRange(start, end); }
+};
+
+//
+// Code to prototype a moving GC.
+//
+
+class ReferenceMapWorklist;
+
+#if MOVING_GC
+#define MOVING_OVERRIDE override
+#else
+#define MOVING_OVERRIDE
+#endif
+
+// Bulds the reference map, and also determine which objects cannot be moved.
+class GCVisitorPinning : public GCVisitorNoRedundancy {
+private:
+    ReferenceMapWorklist* worklist;
+
+    void _visit(void** ptr_address) MOVING_OVERRIDE;
+
+public:
+    GCVisitorPinning(ReferenceMapWorklist* worklist) : worklist(worklist) {}
+    virtual ~GCVisitorPinning() {}
+
+    void visitPotential(void* p) MOVING_OVERRIDE;
+};
+
+class GCAllocation;
+class ReferenceMap {
+public:
+    // Pinned objects are objects that should not be moved (their pointer value should
+    // never change).
+    std::unordered_set<GCAllocation*> pinned;
+
+    // Map from objects O to all objects that contain a reference to O.
+    std::unordered_map<GCAllocation*, std::vector<GCAllocation*>> references;
 };
 }
 }

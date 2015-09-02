@@ -30,6 +30,7 @@
 #include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
+#include "runtime/util.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"
@@ -67,14 +68,12 @@ static int ncollections = 0;
 static bool gc_enabled = true;
 static bool should_not_reenter_gc = false;
 
-enum TraceStackType {
-    MarkPhase,
-    FinalizationOrderingFindReachable,
-    FinalizationOrderingRemoveTemporaries,
-};
-
-class TraceStack {
-private:
+// This is basically a stack. However, for optimization purposes,
+// blocks of memory are allocated at once when things need to be pushed.
+//
+// For performance, this should not have virtual methods.
+class ChunkedStack {
+protected:
     const int CHUNK_SIZE = 256;
     const int MAX_FREE_CHUNKS = 50;
 
@@ -84,8 +83,6 @@ private:
     void** cur;
     void** start;
     void** end;
-
-    TraceStackType visit_type;
 
     void get_chunk() {
         if (free_chunks.size()) {
@@ -98,12 +95,14 @@ private:
         cur = start;
         end = start + CHUNK_SIZE;
     }
+
     void release_chunk(void** chunk) {
         if (free_chunks.size() == MAX_FREE_CHUNKS)
             free(chunk);
         else
             free_chunks.push_back(chunk);
     }
+
     void pop_chunk() {
         start = chunks.back();
         chunks.pop_back();
@@ -111,29 +110,79 @@ private:
         cur = end;
     }
 
-public:
-    TraceStack(TraceStackType type) : visit_type(type) { get_chunk(); }
-    TraceStack(TraceStackType type, const std::unordered_set<void*>& roots) : visit_type(type) {
-        get_chunk();
-        for (void* p : roots) {
-            ASSERT(!isMarked(GCAllocation::fromUserData(p)), "");
-            push(p);
+    void* pop_chunk_and_item() {
+        release_chunk(start);
+        if (chunks.size()) {
+            pop_chunk();
+            assert(cur == end);
+            return *--cur; // no need for any bounds checks here since we're guaranteed we're CHUNK_SIZE from the start
+        } else {
+            // We emptied the stack, but we should prepare a new chunk in case another item
+            // gets added onto the stack.
+            get_chunk();
+            return NULL;
         }
     }
-    ~TraceStack() {
-        RELEASE_ASSERT(end - cur == CHUNK_SIZE, "destroying non-empty TraceStack");
 
-        // We always have a block available in case we want to push items onto the TraceStack,
+public:
+    ChunkedStack() { get_chunk(); }
+    ~ChunkedStack() {
+        RELEASE_ASSERT(end - cur == CHUNK_SIZE, "destroying non-empty ChunkedStack");
+        // We always have a block available in case we want to push items onto the TraversalWorklist,
         // but that chunk needs to be released after use to avoid a memory leak.
         release_chunk(start);
     }
 
+    void* pop() {
+        if (cur > start)
+            return *--cur;
+
+        return pop_chunk_and_item();
+    }
+
     void push(void* p) {
+        *cur++ = p;
+        if (cur == end) {
+            chunks.push_back(start);
+            get_chunk();
+        }
+    }
+};
+std::vector<void**> ChunkedStack::free_chunks;
+
+enum TraversalType {
+    MarkPhase,
+    FinalizationOrderingFindReachable,
+    FinalizationOrderingRemoveTemporaries,
+    MapReferencesPhase,
+};
+
+class Worklist {
+protected:
+    ChunkedStack stack;
+
+public:
+    void* next() { return stack.pop(); }
+};
+
+class TraversalWorklist : public Worklist {
+    TraversalType visit_type;
+
+public:
+    TraversalWorklist(TraversalType type) : visit_type(type) {}
+    TraversalWorklist(TraversalType type, const std::unordered_set<void*>& roots) : TraversalWorklist(type) {
+        for (void* p : roots) {
+            ASSERT(!isMarked(GCAllocation::fromUserData(p)), "");
+            addWork(p);
+        }
+    }
+
+    void addWork(void* p) {
         GC_TRACE_LOG("Pushing %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
         switch (visit_type) {
-            case TraceStackType::MarkPhase:
+            case TraversalType::MarkPhase:
 // Use this to print the directed edges of the GC graph traversal.
 // i.e. print every a -> b where a is a pointer and b is something a references
 #if 0
@@ -162,7 +211,7 @@ public:
                 break;
             // See PyPy's finalization ordering algorithm:
             // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
-            case TraceStackType::FinalizationOrderingFindReachable:
+            case TraversalType::FinalizationOrderingFindReachable:
                 if (orderingState(al) == FinalizationState::UNREACHABLE) {
                     setOrderingState(al, FinalizationState::TEMPORARY);
                 } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
@@ -171,7 +220,7 @@ public:
                     return;
                 }
                 break;
-            case TraceStackType::FinalizationOrderingRemoveTemporaries:
+            case TraversalType::FinalizationOrderingRemoveTemporaries:
                 if (orderingState(al) == FinalizationState::TEMPORARY) {
                     setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
                 } else {
@@ -182,36 +231,62 @@ public:
                 assert(false);
         }
 
-        *cur++ = p;
-        if (cur == end) {
-            chunks.push_back(start);
-            get_chunk();
-        }
-    }
-
-    void* pop_chunk_and_item() {
-        release_chunk(start);
-        if (chunks.size()) {
-            pop_chunk();
-            assert(cur == end);
-            return *--cur; // no need for any bounds checks here since we're guaranteed we're CHUNK_SIZE from the start
-        } else {
-            // We emptied the stack, but we should prepare a new chunk in case another item
-            // gets added onto the stack.
-            get_chunk();
-            return NULL;
-        }
-    }
-
-
-    void* pop() {
-        if (cur > start)
-            return *--cur;
-
-        return pop_chunk_and_item();
+        stack.push(p);
     }
 };
-std::vector<void**> TraceStack::free_chunks;
+
+class ReferenceMapWorklist : public Worklist {
+    ReferenceMap* refmap;
+
+public:
+    ReferenceMapWorklist(ReferenceMap* refmap) : refmap(refmap) {}
+    ReferenceMapWorklist(ReferenceMap* refmap, const std::unordered_set<void*>& roots) : refmap(refmap) {
+        for (void* p : roots) {
+            addWork(GCAllocation::fromUserData(p), NULL);
+        }
+    }
+
+    void addWork(GCAllocation* al, GCAllocation* source) {
+        assert(refmap);
+
+        auto it = refmap->references.find(al);
+        if (it == refmap->references.end()) {
+            refmap->references.emplace(al, std::vector<GCAllocation*>());
+            auto& vec = refmap->references[al];
+
+            if (source) {
+                // We found that there exists a pointer from `source` to `al`
+                vec.push_back(source);
+            } else {
+                // No source => this is a root. We should pin roots.
+                refmap->pinned.emplace(al);
+            }
+
+            // Pin these types of objects - they are likely to be untracked at
+            // this time.
+            if (al->kind_id == GCKind::RUNTIME) {
+                pin(al);
+            } else if (al->kind_id == GCKind::PYTHON) {
+                Box* b = (Box*)al->user_data;
+                if (b->cls == type_cls || b->cls == module_cls) {
+                    pin(al);
+                }
+            }
+
+            stack.push(al->user_data);
+        } else {
+            if (source) {
+                // We found that there exists a pointer from `source` to `al`
+                it->second.push_back(source);
+            } else {
+                // No source => this is a root. We should pin roots.
+                pin(al);
+            }
+        }
+    }
+
+    void pin(GCAllocation* al) { refmap->pinned.emplace(al); }
+};
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -328,7 +403,7 @@ void GCVisitor::_visit(void** ptr_address) {
     }
 
     ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
-    stack->push(p);
+    worklist->addWork(p);
 }
 
 void GCVisitor::_visitRange(void** start, void** end) {
@@ -347,7 +422,7 @@ void GCVisitor::_visitRange(void** start, void** end) {
 void GCVisitor::visitPotential(void* p) {
     GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
     if (a) {
-        stack->push(a->user_data);
+        worklist->addWork(a->user_data);
     }
 }
 
@@ -375,10 +450,31 @@ void GCVisitor::visitPotentialRange(void** start, void** end) {
     }
 }
 
+void GCVisitorPinning::_visit(void** ptr_address) {
+    void* p = *ptr_address;
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
+    ASSERT(al->user_data == p, "%p", p);
+    worklist->addWork(al, source);
+}
+
+void GCVisitorPinning::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        worklist->pin(a);
+        worklist->addWork(a, source);
+    }
+}
+
 static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
     assert(((intptr_t)p) % 8 == 0);
 
     GCAllocation* al = GCAllocation::fromUserData(p);
+    visitor.setSource(al);
 
     GCKind kind_id = al->kind_id;
     if (kind_id == GCKind::UNTRACKED) {
@@ -409,7 +505,7 @@ static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& vis
     }
 }
 
-static void markRoots(GCVisitor& visitor) {
+static void visitRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
     threading::visitAllStacks(&visitor);
 
@@ -445,11 +541,11 @@ static void finalizationOrderingFindReachable(Box* obj) {
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_1");
     Timer _t("finalizationOrderingFindReachable", /*min_usec=*/10000);
 
-    TraceStack stack(TraceStackType::FinalizationOrderingFindReachable);
-    GCVisitor visitor(&stack);
+    TraversalWorklist worklist(TraversalType::FinalizationOrderingFindReachable);
+    GCVisitor visitor(&worklist);
 
-    stack.push(obj);
-    while (void* p = stack.pop()) {
+    worklist.addWork(obj);
+    while (void* p = worklist.next()) {
         sc_marked_objs.log();
 
         visitByGCKind(p, visitor);
@@ -463,11 +559,11 @@ static void finalizationOrderingRemoveTemporaries(Box* obj) {
     static StatCounter sc_us("us_gc_mark_finalizer_ordering_2");
     Timer _t("finalizationOrderingRemoveTemporaries", /*min_usec=*/10000);
 
-    TraceStack stack(TraceStackType::FinalizationOrderingRemoveTemporaries);
-    GCVisitor visitor(&stack);
+    TraversalWorklist worklist(TraversalType::FinalizationOrderingRemoveTemporaries);
+    GCVisitor visitor(&worklist);
 
-    stack.push(obj);
-    while (void* p = stack.pop()) {
+    worklist.addWork(obj);
+    while (void* p = worklist.next()) {
         GCAllocation* al = GCAllocation::fromUserData(p);
         assert(orderingState(al) != FinalizationState::UNREACHABLE);
         visitByGCKind(p, visitor);
@@ -513,12 +609,12 @@ static void orderFinalizers() {
     sc_us.log(us);
 }
 
-static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
+static void graphTraversalMarking(Worklist& worklist, GCVisitor& visitor) {
     static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
     static StatCounter sc_marked_objs("gc_marked_object_count");
     Timer _t("traversing", /*min_usec=*/10000);
 
-    while (void* p = stack.pop()) {
+    while (void* p = worklist.next()) {
         sc_marked_objs.log();
 
         GCAllocation* al = GCAllocation::fromUserData(p);
@@ -530,7 +626,9 @@ static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
             GC_TRACE_LOG("Looking at non-python allocation %p\n", p);
 #endif
 
-        assert(isMarked(al));
+        // Won't work once we visit objects in more ways than just marking them.
+        assert(isMarked(al) || MOVING_GC);
+
         visitByGCKind(p, visitor);
     }
 
@@ -646,12 +744,12 @@ static void markPhase() {
     GC_TRACE_LOG("Starting collection %d\n", ncollections);
 
     GC_TRACE_LOG("Looking at roots\n");
-    TraceStack stack(TraceStackType::MarkPhase, roots);
-    GCVisitor visitor(&stack);
+    TraversalWorklist worklist(TraversalType::MarkPhase, roots);
+    GCVisitor visitor(&worklist);
 
-    markRoots(visitor);
+    visitRoots(visitor);
 
-    graphTraversalMarking(stack, visitor);
+    graphTraversalMarking(worklist, visitor);
 
     // Objects with finalizers cannot be freed in any order. During the call to a finalizer
     // of an object, the finalizer expects the object's references to still point to valid
@@ -677,6 +775,55 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
 
     long us = _t.end();
     sc_us.log(us);
+}
+
+static void mapReferencesPhase(ReferenceMap& refmap) {
+    ReferenceMapWorklist worklist(&refmap, roots);
+    GCVisitorPinning visitor(&worklist);
+
+    visitRoots(visitor);
+
+    for (auto obj : objects_with_ordered_finalizers) {
+        visitor.visit((void**)&obj);
+    }
+
+    graphTraversalMarking(worklist, visitor);
+}
+
+static void move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
+    // Only move objects that are in the reference map (unreachable objects
+    // won't be in the reference map).
+    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
+        auto& referencing = refmap.references[al];
+        assert(referencing.size() > 0);
+        // GCAllocation* new_al = realloc(al, size);
+    } else if (refmap.pinned.count(al) == 0) {
+        // TODO: This probably should not happen.
+    }
+}
+
+// Move objects around memory randomly. The purpose is to test whether the rest
+// of the program is able to support a moving collector (e.g. if all pointers are
+// being properly scanned by the GC).
+//
+// The way it works is very simple.
+// 1) Perform a mark phase where for every object, make a list of the location of
+//    all pointers to that object (make a reference map).
+//    Pin certain types of objects as necessary (e.g. conservatively scanned).
+// 2) Reallocate all non-pinned object. Update the value for every pointer locations
+//    from the map built in (1)
+static void testMoving() {
+    global_heap.prepareForCollection();
+
+    ReferenceMap refmap;
+    mapReferencesPhase(refmap);
+
+    // Reallocate (aka 'move') all objects in the small heap to a different
+    // location. This is not useful in terms of performance, but it is useful
+    // to check if the rest of the program is able to support moving collectors.
+    global_heap.forEachSmallArenaReference([&refmap](GCAllocation* al, size_t size) { move(refmap, al, size); });
+
+    global_heap.cleanupAfterCollection();
 }
 
 bool gcIsEnabled() {
@@ -762,14 +909,18 @@ void runCollection() {
         global_heap.free(GCAllocation::fromUserData(o));
     }
 
+    global_heap.cleanupAfterCollection();
+
+#if MOVING_GC
+    testMoving();
+#endif
+
 #if TRACE_GC_MARKING
     fclose(trace_fp);
     trace_fp = NULL;
 #endif
 
     should_not_reenter_gc = false; // end non-reentrant section
-
-    global_heap.cleanupAfterCollection();
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);

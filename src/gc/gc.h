@@ -54,9 +54,10 @@ void popGCObject(gc::GCVisitable* obj);
 
 namespace gc {
 
-class TraceStack;
+class GCAllocation;
+class TraversalWorklist;
 
-// The base version of the GC visitor is used for marking, in conjuction with a TraceStack.
+// The base version of the GC visitor is used for marking, in conjuction with a TraversalWorklist.
 //
 // Conceptually, GCVisitor should be abstract and the 'marking' behavior should be specific
 // to a subclass of GCVisitor. However, that requires the use of virtual functions which
@@ -65,7 +66,11 @@ class TraceStack;
 // the virtualness property is #if'd out for the regular use case with only mark-and-sweep.
 class GCVisitor {
 private:
-    TraceStack* stack;
+    TraversalWorklist* worklist = NULL;
+
+protected:
+    // The origin object of the current visit calls.
+    GCAllocation* source = NULL;
 
 #if MOVING_GC
     virtual void _visit(void** ptr_address);
@@ -78,7 +83,8 @@ private:
     virtual void _visitRangeRedundant(void** start, void** end) {}
 
 public:
-    GCVisitor(TraceStack* stack) : stack(stack) {}
+    GCVisitor() {}
+    GCVisitor(TraversalWorklist* worklist) : worklist(worklist) {}
     virtual ~GCVisitor() {}
 
 #if MOVING_GC
@@ -122,6 +128,8 @@ public:
     // change that later for performance.
     void visitNonRelocatable(void* p) { visitPotential(p); }
     void visitNonRelocatableRange(void** start, void** end) { visitPotentialRange(start, end); }
+
+    void setSource(GCAllocation* al) { source = al; }
 };
 
 enum class GCKind : uint8_t {

@@ -93,6 +93,7 @@ inline void registerGCManagedBytes(size_t bytes) {
 
 
 class Heap;
+class ReferenceMap;
 struct HeapStatistics;
 
 typedef uint8_t kindid_t;
@@ -263,6 +264,8 @@ public:
         }
     }
 
+    void forEachReference(std::function<void(GCAllocation*, size_t)>);
+
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* al);
 
@@ -405,6 +408,7 @@ private:
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
 
+    void getPointersInBlockChain(std::vector<GCAllocation*>& ptrs, Block** head);
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
@@ -624,6 +628,9 @@ public:
 
         return NULL;
     }
+
+    // Calls the function for every object in the small heap.
+    void forEachSmallArenaReference(std::function<void(GCAllocation*, size_t)> f) { small_arena.forEachReference(f); }
 
     // not thread safe:
     void freeUnmarked(std::vector<Box*>& weakly_referenced) {
