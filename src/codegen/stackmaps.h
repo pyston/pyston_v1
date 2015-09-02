@@ -90,6 +90,15 @@ public:
             llvm::SmallVector<StackMap::Record::Location, 1> locations;
         };
         llvm::SmallVector<LocationEntry, 2> locations;
+
+        const LocationEntry* findEntry(unsigned offset) const {
+            for (const LocationMap::LocationTable::LocationEntry& e : locations) {
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    return &e;
+                }
+            }
+            return NULL;
+        }
     };
 
     llvm::StringMap<LocationTable> names;

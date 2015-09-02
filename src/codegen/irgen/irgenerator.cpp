@@ -56,6 +56,7 @@ IRGenState::IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* sou
       scratch_space(NULL),
       frame_info(NULL),
       frame_info_arg(NULL),
+      globals(NULL),
       scratch_size(0) {
     assert(cf->func);
     assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
@@ -244,6 +245,26 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
     return source->scoping->getScopeInfoForNode(node);
 }
 
+void IRGenState::setGlobals(llvm::Value* globals) {
+    assert(!source_info->scoping->areGlobalsFromModule());
+    assert(!this->globals);
+    this->globals = globals;
+}
+
+llvm::Value* IRGenState::getGlobals() {
+    if (!globals) {
+        assert(source_info->scoping->areGlobalsFromModule());
+        this->globals = embedRelocatablePtr(source_info->parent_module, g.llvm_value_type_ptr);
+    }
+    return this->globals;
+}
+
+llvm::Value* IRGenState::getGlobalsIfCustom() {
+    if (source_info->scoping->areGlobalsFromModule())
+        return getNullPtr(g.llvm_value_type_ptr);
+    return getGlobals();
+}
+
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
@@ -351,9 +372,6 @@ public:
         // Perf note: it seems to be more efficient to separately allocate the "builder" member,
         // even though we could allocate it in-line; maybe it's infrequently used enough that it's better
         // to not have it take up cache space.
-
-        RELEASE_ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(),
-                       "jit doesn't support custom globals yet");
 
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);
@@ -508,6 +526,7 @@ const std::string CREATED_CLOSURE_NAME = "#created_closure";
 const std::string PASSED_CLOSURE_NAME = "#passed_closure";
 const std::string PASSED_GENERATOR_NAME = "#passed_generator";
 const std::string FRAME_INFO_PTR_NAME = "#frame_info_ptr";
+const std::string PASSED_GLOBALS_NAME = "#passed_globals";
 
 bool isIsDefinedName(llvm::StringRef name) {
     return startswith(name, "!is_defined_");
@@ -741,7 +760,7 @@ private:
                 module->decvref(emitter);
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
-                                                     embedParentModulePtr());
+                                                     irstate->getGlobals());
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
                 converted_module->decvref(emitter);
@@ -1072,14 +1091,14 @@ private:
             ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
-            llvm_args.push_back(embedParentModulePtr());
+            llvm_args.push_back(irstate->getGlobals());
             llvm_args.push_back(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
-            llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
+            llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
                                                  embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         }
@@ -1147,7 +1166,7 @@ private:
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
-            llvm::Value* module = embedParentModulePtr();
+            llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
@@ -1402,7 +1421,7 @@ private:
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
         assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, NULL, {});
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, irstate->getGlobalsIfCustom(), {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1465,8 +1484,7 @@ private:
             assert(created_closure);
         }
 
-        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, NULL, defaults);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, irstate->getGlobalsIfCustom(), defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -1694,11 +1712,18 @@ private:
         assert(vst != ScopeInfo::VarScopeType::DEREF);
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-            // TODO do something special here so that it knows to only emit a monomorphic inline cache?
-            auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
-            ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
-            module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
-            module->decvref(emitter);
+            if (irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+                auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
+                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
+                module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
+                module->decvref(emitter);
+            } else {
+                auto converted = val->makeConverted(emitter, val->getBoxType());
+                emitter.createCall3(unw_info, g.funcs.setGlobal, irstate->getGlobals(),
+                                    embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr),
+                                    converted->getValue());
+                converted->decvref(emitter);
+            }
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
@@ -1825,7 +1850,7 @@ private:
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
         static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
-        llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
+        llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
                                                 embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
 
         ConcreteCompilerVariable* converted_msg = NULL;
@@ -1906,7 +1931,7 @@ private:
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
-            emitter.createCall2(unw_info, g.funcs.delGlobal, embedParentModulePtr(),
+            emitter.createCall2(unw_info, g.funcs.delGlobal, irstate->getGlobals(),
                                 embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr));
             return;
         }
@@ -2154,6 +2179,11 @@ private:
 
         sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
             = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
+
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            sorted_symbol_table[internString(PASSED_GLOBALS_NAME)]
+                = new ConcreteCompilerVariable(UNKNOWN, irstate->getGlobals(), true);
+        }
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
@@ -2535,6 +2565,11 @@ public:
 
         stackmap_args.push_back(irstate->getFrameInfoVar());
 
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            stackmap_args.push_back(irstate->getGlobals());
+            pp->addFrameVar(PASSED_GLOBALS_NAME, UNKNOWN);
+        }
+
         assert(INT->llvmType() == g.i64);
         if (ENABLE_JIT_OBJECT_CACHE) {
             llvm::Value* v;
@@ -2697,6 +2732,11 @@ public:
 
         if (irstate->getSourceInfo()->is_generator) {
             symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI, true);
+            ++AI;
+        }
+
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            irstate->setGlobals(AI);
             ++AI;
         }
 

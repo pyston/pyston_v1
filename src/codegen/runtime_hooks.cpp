@@ -209,6 +209,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(delitem);
     GET(getGlobal);
     GET(delGlobal);
+    GET(setGlobal);
     GET(binop);
     GET(compare);
     GET(augbinop);

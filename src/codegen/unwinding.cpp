@@ -332,28 +332,31 @@ public:
         }
     }
 
+    llvm::ArrayRef<StackMap::Record::Location> findLocations(llvm::StringRef name) {
+        assert(id.type == PythonFrameId::COMPILED);
+
+        CompiledFunction* cf = getCF();
+        uint64_t ip = getId().ip;
+
+        assert(ip > cf->code_start);
+        unsigned offset = ip - cf->code_start;
+
+        assert(cf->location_map);
+        const LocationMap::LocationTable& table = cf->location_map->names[name];
+        assert(table.locations.size());
+
+        auto entry = table.findEntry(offset);
+        if (!entry)
+            return {};
+        assert(entry->locations.size());
+        return entry->locations;
+    }
+
     AST_stmt* getCurrentStatement() {
         if (id.type == PythonFrameId::COMPILED) {
-            CompiledFunction* cf = getCF();
-            uint64_t ip = getId().ip;
-
-            assert(ip > cf->code_start);
-            unsigned offset = ip - cf->code_start;
-
-            assert(cf->location_map);
-            const LocationMap::LocationTable& table = cf->location_map->names["!current_stmt"];
-            assert(table.locations.size());
-
-            // printf("Looking for something at offset %d (total ip: %lx)\n", offset, ip);
-            for (const LocationMap::LocationTable::LocationEntry& e : table.locations) {
-                // printf("(%d, %d]\n", e.offset, e.offset + e.length);
-                if (e.offset < offset && offset <= e.offset + e.length) {
-                    // printf("Found it\n");
-                    assert(e.locations.size() == 1);
-                    return reinterpret_cast<AST_stmt*>(readLocation(e.locations[0]));
-                }
-            }
-            RELEASE_ASSERT(0, "no frame info found at offset 0x%x / ip 0x%lx!", offset, ip);
+            auto locations = findLocations("!current_stmt");
+            RELEASE_ASSERT(locations.size() == 1, "%ld", locations.size());
+            return reinterpret_cast<AST_stmt*>(readLocation(locations[0]));
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getCurrentStatementForInterpretedFrame((void*)id.bp);
         }
@@ -363,8 +366,13 @@ public:
     Box* getGlobals() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
-            assert(cf->clfunc->source->scoping->areGlobalsFromModule());
-            return cf->clfunc->source->parent_module;
+            if (cf->clfunc->source->scoping->areGlobalsFromModule())
+                return cf->clfunc->source->parent_module;
+            auto locations = findLocations(PASSED_GLOBALS_NAME);
+            assert(locations.size() == 1);
+            Box* r = (Box*)readLocation(locations[0]);
+            ASSERT(gc::isValidGCObject(r), "%p", r);
+            return r;
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getGlobalsForInterpretedFrame((void*)id.bp);
         }
@@ -869,17 +877,14 @@ DeoptState getDeoptState() {
                 if (!startswith(p.first(), "!is_defined_"))
                     continue;
 
-                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                    if (e.offset < offset && offset <= e.offset + e.length) {
-                        const auto& locs = e.locations;
+                auto e = p.second.findEntry(offset);
+                if (e) {
+                    auto locs = e->locations;
 
-                        assert(locs.size() == 1);
-                        uint64_t v = frame_iter->readLocation(locs[0]);
-                        if ((v & 1) == 0)
-                            is_undefined.insert(p.first().substr(12));
-
-                        break;
-                    }
+                    assert(locs.size() == 1);
+                    uint64_t v = frame_iter->readLocation(locs[0]);
+                    if ((v & 1) == 0)
+                        is_undefined.insert(p.first().substr(12));
                 }
             }
 
@@ -890,22 +895,21 @@ DeoptState getDeoptState() {
                 if (is_undefined.count(p.first()))
                     continue;
 
-                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                    if (e.offset < offset && offset <= e.offset + e.length) {
-                        const auto& locs = e.locations;
+                auto e = p.second.findEntry(offset);
+                if (e) {
+                    auto locs = e->locations;
 
-                        llvm::SmallVector<uint64_t, 1> vals;
-                        // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
+                    llvm::SmallVector<uint64_t, 1> vals;
+                    // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
 
-                        for (auto& loc : locs) {
-                            vals.push_back(frame_iter->readLocation(loc));
-                        }
-
-                        Box* v = e.type->deserializeFromFrame(vals);
-                        // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                        ASSERT(gc::isValidGCObject(v), "%p", v);
-                        d->d[boxString(p.first())] = v;
+                    for (auto& loc : locs) {
+                        vals.push_back(frame_iter->readLocation(loc));
                     }
+
+                    Box* v = e->type->deserializeFromFrame(vals);
+                    // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
+                    ASSERT(gc::isValidGCObject(v), "%p", v);
+                    d->d[boxString(p.first())] = v;
                 }
             }
         } else {
@@ -964,17 +968,14 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
             if (!startswith(p.first(), "!is_defined_"))
                 continue;
 
-            for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                if (e.offset < offset && offset <= e.offset + e.length) {
-                    const auto& locs = e.locations;
+            auto e = p.second.findEntry(offset);
+            if (e) {
+                const auto& locs = e->locations;
 
-                    assert(locs.size() == 1);
-                    uint64_t v = impl->readLocation(locs[0]);
-                    if ((v & 1) == 0)
-                        is_undefined.insert(p.first().substr(12));
-
-                    break;
-                }
+                assert(locs.size() == 1);
+                uint64_t v = impl->readLocation(locs[0]);
+                if ((v & 1) == 0)
+                    is_undefined.insert(p.first().substr(12));
             }
         }
 
@@ -988,46 +989,43 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
             if (is_undefined.count(p.first()))
                 continue;
 
-            for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                if (e.offset < offset && offset <= e.offset + e.length) {
-                    const auto& locs = e.locations;
+            auto e = p.second.findEntry(offset);
+            if (e) {
+                const auto& locs = e->locations;
 
-                    llvm::SmallVector<uint64_t, 1> vals;
-                    // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
-                    // printf("%ld locs\n", locs.size());
+                llvm::SmallVector<uint64_t, 1> vals;
+                // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
+                // printf("%ld locs\n", locs.size());
 
-                    for (auto& loc : locs) {
-                        auto v = impl->readLocation(loc);
-                        vals.push_back(v);
-                        // printf("%d %d %d: 0x%lx\n", loc.type, loc.regnum, loc.offset, v);
-                        // dump((void*)v);
-                    }
-
-                    Box* v = e.type->deserializeFromFrame(vals);
-                    // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                    assert(gc::isValidGCObject(v));
-                    d->d[boxString(p.first())] = v;
+                for (auto& loc : locs) {
+                    auto v = impl->readLocation(loc);
+                    vals.push_back(v);
+                    // printf("%d %d %d: 0x%lx\n", loc.type, loc.regnum, loc.offset, v);
+                    // dump((void*)v);
                 }
+
+                Box* v = e->type->deserializeFromFrame(vals);
+                // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
+                assert(gc::isValidGCObject(v));
+                d->d[boxString(p.first())] = v;
             }
         }
 
         closure = NULL;
         if (cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
-            for (const LocationMap::LocationTable::LocationEntry& e :
-                 cf->location_map->names[PASSED_CLOSURE_NAME].locations) {
-                if (e.offset < offset && offset <= e.offset + e.length) {
-                    const auto& locs = e.locations;
+            auto e = cf->location_map->names[PASSED_CLOSURE_NAME].findEntry(offset);
+            if (e) {
+                const auto& locs = e->locations;
 
-                    llvm::SmallVector<uint64_t, 1> vals;
+                llvm::SmallVector<uint64_t, 1> vals;
 
-                    for (auto& loc : locs) {
-                        vals.push_back(impl->readLocation(loc));
-                    }
-
-                    Box* v = e.type->deserializeFromFrame(vals);
-                    assert(gc::isValidGCObject(v));
-                    closure = static_cast<BoxedClosure*>(v);
+                for (auto& loc : locs) {
+                    vals.push_back(impl->readLocation(loc));
                 }
+
+                Box* v = e->type->deserializeFromFrame(vals);
+                assert(gc::isValidGCObject(v));
+                closure = static_cast<BoxedClosure*>(v);
             }
         }
 

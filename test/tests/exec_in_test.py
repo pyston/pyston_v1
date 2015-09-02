@@ -199,3 +199,28 @@ print l
 
 exec s
 print __doc__
+
+
+# Create a function that needs all three extra arguments:
+# is a generator, takes a closure, and takes custom globals
+s = """
+def f(x):
+    def g(a, b, c, d, e):
+        for i in xrange(start, x):
+            print a, b, c, d, e
+            yield i
+    return g
+"""
+
+g = {'start':2}
+l = {}
+exec s in g, l
+
+for i in xrange(5):
+    print list(l['f'](5)(1, 2, 3, 4, 5))
+
+d = dict(x=1, y=0)
+exec """
+def g():
+    print sorted(globals().items())
+""" in d
