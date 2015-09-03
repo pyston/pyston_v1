@@ -43,6 +43,7 @@ public:
 
 Box* dictGetitem(BoxedDict* self, Box* k);
 
+Box* dict_iter(Box* s) noexcept;
 Box* dictIterKeys(Box* self);
 Box* dictIterValues(Box* self);
 Box* dictIterItems(Box* self);

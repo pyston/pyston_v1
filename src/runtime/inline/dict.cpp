@@ -23,10 +23,14 @@ BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
     : d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
 }
 
-Box* dictIterKeys(Box* s) {
+Box* dict_iter(Box* s) noexcept {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::KeyIterator);
+}
+
+Box* dictIterKeys(Box* s) {
+    return dict_iter(s);
 }
 
 Box* dictIterValues(Box* s) {

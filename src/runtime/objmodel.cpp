@@ -5229,8 +5229,7 @@ extern "C" Box* getPystonIter(Box* o) {
 }
 
 extern "C" Box* getiterHelper(Box* o) {
-    static BoxedString* getitem_str = internStringImmortal("__getitem__");
-    if (typeLookup(o->cls, getitem_str, NULL))
+    if (PySequence_Check(o))
         return new BoxedSeqIter(o, 0);
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
 }

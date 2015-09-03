@@ -16,6 +16,7 @@ c2.b = 5
 
 def p():
     print sorted(c1.__dict__.items()), sorted(c2.__dict__.items())
+    print sorted(list(iter(c1.__dict__))), sorted(list(iter(c2.__dict__)))
 
 p()
 

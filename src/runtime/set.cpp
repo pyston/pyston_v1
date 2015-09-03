@@ -699,6 +699,7 @@ void setupSet() {
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->freeze();
     set_iterator_cls->tp_iternext = setiter_next;
+    set_iterator_cls->tp_iter = PyObject_SelfIter;
 
     set_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, false, false), { NULL }));
     set_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)setInit, UNKNOWN, 2, false, false), { NULL }));

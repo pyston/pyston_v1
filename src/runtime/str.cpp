@@ -2834,6 +2834,7 @@ void setupStr() {
     str_iterator_cls->freeze();
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
     str_iterator_cls->tp_iternext = BoxedStringIterator::next_capi;
+    str_iterator_cls->tp_iter = PyObject_SelfIter;
 
     str_cls->tp_as_buffer = &string_as_buffer;
     str_cls->tp_print = string_print;

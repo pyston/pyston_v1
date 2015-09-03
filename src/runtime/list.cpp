@@ -1383,6 +1383,7 @@ void setupList() {
     list_iterator_cls->freeze();
     list_iterator_cls->tpp_hasnext = listiterHasnextUnboxed;
     list_iterator_cls->tp_iternext = listiter_next;
+    list_iterator_cls->tp_iter = PyObject_SelfIter;
 
     list_reverse_iterator_cls->giveAttr("__name__", boxString("listreverseiterator"));
 
@@ -1395,6 +1396,7 @@ void setupList() {
 
     list_reverse_iterator_cls->freeze();
     list_reverse_iterator_cls->tp_iternext = listreviter_next;
+    list_reverse_iterator_cls->tp_iter = PyObject_SelfIter;
 }
 
 void teardownList() {
