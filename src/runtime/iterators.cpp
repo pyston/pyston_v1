@@ -63,13 +63,14 @@ public:
         return &_end;
     }
 
-    void gc_visit(GCVisitor* v) {
+    void gc_visit(GCVisitor* v) override {
         if (iterator)
             v->visit(iterator);
         if (value)
             v->visit(value);
     }
 };
+
 
 template <typename T> class BoxIteratorIndex : public BoxIteratorImpl {
 private:
@@ -115,7 +116,7 @@ public:
         return &_end;
     }
 
-    void gc_visit(GCVisitor* v) {
+    void gc_visit(GCVisitor* v) override {
         if (obj)
             v->visit(obj);
     }

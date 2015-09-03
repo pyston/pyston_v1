@@ -2844,7 +2844,7 @@ public:
     // As a special-case, a NULL value for final_dest means that this helper block should
     // instead propagate the exception out of the function.
     llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                     AST_stmt* current_stmt) {
+                                     AST_stmt* current_stmt) override {
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         llvm::PHINode*& phi_node = capi_phis[final_dest];
 
@@ -2906,7 +2906,7 @@ public:
         return capi_exc_dest;
     }
 
-    llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) {
+    llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) override {
         llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
         if (cxx_exc_dest)
             return cxx_exc_dest;
