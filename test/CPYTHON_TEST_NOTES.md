@@ -23,7 +23,6 @@ test_builtin            execfile scoping issue
 test_class              needs ellipsis
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
 test_collections        assertion failed when doing vars(collections.namedtuple('Point', 'x y')(11, 12))
-test_complex            need complex.__nonzero__
 test_contextlib         lock.locked attributes
 test_datetime           needs _PyObject_GetDictPtr
 test_decimal            I think we need to copy decimaltestdata from cpython
@@ -47,7 +46,6 @@ test_generators         crash when sending non-None to a just-started generator
 test_genexps            parser not raising a SyntaxError when assigning to a genexp
 test_global             SyntaxWarnings for global statements after uses
 test_grammar            bug in our tokenizer
-test_index              slice.indices, old-styl-class __mul__
 test_io                 memory/gc issue?
 test_iterlen            [unknown]
 test_itertools          [unknown]
