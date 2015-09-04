@@ -86,6 +86,14 @@ public:
     virtual void visitRedundantRange(void** start, void** end) {}
     virtual void visitPotentialRedundant(void* p) {}
     virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) {}
+
+    // Visit pointers to objects that we know cannot be moved.
+    // This is often used to scan a pointer that's a copy of a pointer stored in a place that
+    // we cannot easily scanned (like generated code).
+    // This default to visitPotential for now (which also cannot be moved) but we may want to
+    // change that later for performance.
+    void visitNonRelocatable(void* p) { visitPotential(p); }
+    void visitNonRelocatableRange(void** start, void** end) { visitPotentialRange(start, end); }
 };
 
 enum class GCKind : uint8_t {

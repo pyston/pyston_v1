@@ -27,6 +27,10 @@
 
 namespace pyston {
 
+namespace gc {
+class GCVisitor;
+}
+
 class TypeRecorder;
 
 class ICInfo;
@@ -42,6 +46,8 @@ public:
     ICInfo* ic;
     int idx;        // the index inside the ic
     int num_inside; // the number of stack frames that are currently inside this slot
+
+    std::vector<void*> gc_references;
 
     void clear();
 };
@@ -85,7 +91,7 @@ public:
     void gc_visit(gc::GCVisitor* visitor);
 
     void addDependenceOn(ICInvalidator&);
-    void commit(CommitHook* hook);
+    void commit(CommitHook* hook, std::vector<void*> gc_references);
     void abort();
 
     const ICInfo* getICInfo() { return ic; }
@@ -124,6 +130,7 @@ public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
            int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet live_outs,
            assembler::GenericRegister return_register, TypeRecorder* type_recorder);
+    ~ICInfo();
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
     int getSlotSize() { return slot_size; }
@@ -142,7 +149,11 @@ public:
     int percentBackedoff() const { return retry_backoff; }
 
     friend class ICSlotRewrite;
+    static void visitGCReferences(gc::GCVisitor* visitor);
 };
+
+void registerGCTrackedICInfo(ICInfo* ic);
+void deregisterGCTrackedICInfo(ICInfo* ic);
 
 class ICSetupInfo;
 struct CompiledFunction;
