@@ -1389,6 +1389,12 @@ void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
 
 void Rewriter::gc_visit(GCVisitor* visitor) {
     rewrite->gc_visit(visitor);
+
+    // A GC could happen during a rewrite, so we need to scan the list of references
+    // both as it is being built and after the rewrite commits.
+    for (auto& reference : gc_references) {
+        visitor->visitNonRelocatable(reference);
+    }
 }
 
 Location Rewriter::allocScratch() {
