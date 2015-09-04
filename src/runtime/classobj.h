@@ -81,6 +81,11 @@ public:
             v->visit(&o->inst_cls);
     }
 };
+
+Box* instance_getattro(Box* cls, Box* attr) noexcept;
+class GetattrRewriteArgs;
+template <ExceptionStyle S>
+Box* instanceGetattroInternal(Box* self, Box* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI);
 }
 
 #endif
