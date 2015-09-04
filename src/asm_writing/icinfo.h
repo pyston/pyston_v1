@@ -82,6 +82,8 @@ public:
 
     ICSlotInfo* prepareEntry();
 
+    void gc_visit(gc::GCVisitor* visitor);
+
     void addDependenceOn(ICInvalidator&);
     void commit(CommitHook* hook);
     void abort();

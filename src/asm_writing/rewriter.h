@@ -28,6 +28,7 @@
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
 #include "core/threading.h"
+#include "gc/gc.h"
 
 namespace pyston {
 
@@ -331,7 +332,7 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 // non-NULL fake pointer, definitely legit
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
 
-class Rewriter : public ICSlotRewrite::CommitHook {
+class Rewriter : public ICSlotRewrite::CommitHook, public gc::GCVisitable {
 private:
     class RegionAllocator {
     public:
@@ -585,6 +586,8 @@ public:
     void commitReturning(RewriterVar* rtn);
 
     void addDependenceOn(ICInvalidator&);
+
+    void gc_visit(gc::GCVisitor* visitor);
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 

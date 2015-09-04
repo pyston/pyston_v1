@@ -1550,7 +1550,7 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
     }
 
 #if 0
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getclsattr"));
+    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getclsattr"));
 
     if (rewriter.get()) {
         //rewriter->trap();
@@ -1562,7 +1562,7 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
             rewriter->commit();
         }
 #else
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getclsattr"));
 
     if (rewriter.get()) {
@@ -1993,7 +1993,7 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
 #endif
     }
 
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
+    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
 
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_getattr_patchable");
@@ -2262,7 +2262,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
         return;
     }
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
     setattrofunc tp_setattro = obj->cls->tp_setattro;
@@ -2360,7 +2360,7 @@ extern "C" bool nonzero(Box* obj) {
     static StatCounter slowpath_nonzero("slowpath_nonzero");
     slowpath_nonzero.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "nonzero"));
 
     RewriterVar* r_obj = NULL;
@@ -2456,16 +2456,18 @@ extern "C" bool nonzero(Box* obj) {
     static BoxedString* len_str = internStringImmortal("__len__");
 
     // try __nonzero__
-    CallRewriteArgs crewrite_args(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
-    Box* rtn = callattrInternal0<CXX>(obj, nonzero_str, CLASS_ONLY, rewriter ? &crewrite_args : NULL, ArgPassSpec(0));
+    CallRewriteArgs crewrite_args(rewriter.get(), r_obj,
+                                  rewriter.get() ? rewriter->getReturnDestination() : Location());
+    Box* rtn
+        = callattrInternal0<CXX>(obj, nonzero_str, CLASS_ONLY, rewriter.get() ? &crewrite_args : NULL, ArgPassSpec(0));
     if (!crewrite_args.out_success)
         rewriter.reset();
 
     if (!rtn) {
         // try __len__
         crewrite_args
-            = CallRewriteArgs(rewriter.get(), r_obj, rewriter ? rewriter->getReturnDestination() : Location());
-        rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, rewriter ? &crewrite_args : NULL, ArgPassSpec(0));
+            = CallRewriteArgs(rewriter.get(), r_obj, rewriter.get() ? rewriter->getReturnDestination() : Location());
+        rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, rewriter.get() ? &crewrite_args : NULL, ArgPassSpec(0));
         if (!crewrite_args.out_success)
             rewriter.reset();
 
@@ -2738,7 +2740,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     static StatCounter slowpath_unboxedlen("slowpath_unboxedlen");
     slowpath_unboxedlen.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unboxedLen"));
 
     BoxedInt* lobj;
@@ -2932,7 +2934,7 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
     // Uncomment this to help debug if callsites aren't getting rewritten:
     // printf("Slowpath call: %p (%s.%s)\n", return_addr, obj->cls->tp_name, attr->c_str());
 
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "callattr"));
+    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "callattr"));
     Box* rtn;
 
     LookupScope scope = flags.cls_only ? CLASS_ONLY : CLASS_OR_INST;
@@ -4055,7 +4057,8 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
         assert(argspec.num_keywords == keyword_names->size());
         num_orig_args++;
     }
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "runtimeCall"));
+    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "runtimeCall"));
+
     Box* rtn;
 
 #if 0 && STAT_TIMERS
@@ -4258,7 +4261,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    gc::UniqueScanningHandle<Rewriter> rewriter((Rewriter*)NULL);
     // Currently can't patchpoint user-defined binops since we can't assume that just because
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
@@ -4295,7 +4298,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_augbinop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    gc::UniqueScanningHandle<Rewriter> rewriter((Rewriter*)NULL);
     // Currently can't patchpoint user-defined binops since we can't assume that just because
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
@@ -4596,7 +4599,7 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
     slowpath_compare.log();
     static StatCounter nopatch_compare("nopatch_compare");
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "compare"));
 
     if (rewriter.get()) {
@@ -4655,11 +4658,11 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     BoxedString* op_name = getOpName(op_type);
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unaryop"));
 
     Box* rtn = NULL;
-    if (rewriter) {
+    if (rewriter.get()) {
         CallRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rtn = callattrInternal0<CXX>(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
         if (srewrite_args.out_success && rtn)
@@ -4893,7 +4896,7 @@ extern "C" Box* getitem(Box* target, Box* slice) {
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
     Box* rtn;
@@ -4927,7 +4930,7 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
     Box* rtn;
@@ -4956,7 +4959,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     static StatCounter slowpath_setitem("slowpath_setitem");
     slowpath_setitem.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
 
     static BoxedString* setitem_str = internStringImmortal("__setitem__");
@@ -4992,7 +4995,7 @@ extern "C" void delitem(Box* target, Box* slice) {
     static StatCounter slowpath_delitem("slowpath_delitem");
     slowpath_delitem.log();
 
-    std::unique_ptr<Rewriter> rewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
 
     static BoxedString* delitem_str = internStringImmortal("__delitem__");
@@ -5155,7 +5158,7 @@ extern "C" Box* createBoxedIterWrapper(Box* o) {
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
     STAT_TIMER(t0, "us_timer_slowpath_createBoxedIterWrapperIfNeeded", 10);
 
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
+    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), 1, "createBoxedIterWrapperIfNeeded"));
 
     static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
@@ -5646,7 +5649,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
     }
 
     { /* anonymous scope to make sure destructors get run before we err out */
-        std::unique_ptr<Rewriter> rewriter(
+        gc::UniqueScanningHandle<Rewriter> rewriter(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "getGlobal"));
 
         Box* r;

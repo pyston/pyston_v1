@@ -44,6 +44,15 @@ namespace pyston {
 class Box;
 
 namespace gc {
+class GCVisitable;
+}
+
+namespace threading {
+void pushGCObject(gc::GCVisitable* obj);
+void popGCObject(gc::GCVisitable* obj);
+}
+
+namespace gc {
 
 class TraceStack;
 class GCVisitor {
@@ -128,16 +137,73 @@ bool isValidGCMemory(void* p);
 // Whether p is valid gc memory and is set to have Python destructor semantics applied
 bool isValidGCObject(void* p);
 
-// Use this if a C++ object needs to be allocated in our heap.
-class GCAllocatedRuntime {
+// Situation: Sometimes, we allocate an object on the stack (e.g. ASTInterpreter) who fields may be pointers
+// to objects in the Pyston heap. These pointers need to be scanned by the GC. Since the GC scans the entire
+// stack conservatively, these fields will be scanned. However, it is also possible that the stack-allocated
+// object points to a non-Pyston heap object which contains pointers to Pyston heap objects. In that case, the
+// conservative scanner won't get to those pointers.
+//
+// As such, objects who contain pointers to pointers to Pyston heap objects need a GC handler function.
+
+// Runtime objects who need to be visited by the GC should inherit from this.
+class GCVisitable {
 public:
-    virtual ~GCAllocatedRuntime() {}
+    virtual ~GCVisitable() = default;
+    virtual void gc_visit(GCVisitor* visitor) = 0;
+};
+
+// Use this if a C++ object needs to be allocated in our heap.
+class GCAllocatedRuntime : public GCVisitable {
+public:
+    virtual ~GCAllocatedRuntime() = default;
 
     void* operator new(size_t size) __attribute__((visibility("default"))) { return gc_alloc(size, GCKind::RUNTIME); }
     void operator delete(void* ptr) __attribute__((visibility("default"))) { gc_free(ptr); }
 
     virtual void gc_visit(GCVisitor* visitor) = 0;
 };
+
+// This is a way to call gc_visit on objects whose lifetime is bound to the stack,
+// but may be contained within a unique_ptr or some other container.
+template <typename T> class UniqueScanningHandle {
+    T* obj = NULL;
+
+public:
+    UniqueScanningHandle(T* obj) : obj(obj) {
+#if MOVING_GC
+        if (obj) {
+            threading::pushGCObject(obj);
+        }
+#endif
+    }
+
+    ~UniqueScanningHandle() {
+#if MOVING_GC
+        if (obj) {
+            threading::popGCObject(obj);
+        }
+#endif
+        delete obj;
+    }
+
+    T* operator->() { return obj; }
+    T* get() { return obj; }
+    void reset(T* t = nullptr) {
+#if MOVING_GC
+        if (obj) {
+            threading::popGCObject(obj);
+        }
+#endif
+        delete obj;
+        obj = t;
+#if MOVING_GC
+        if (t) {
+            threading::pushGCObject(t);
+        }
+#endif
+    }
+};
+
 } // namespace gc
 }
 
