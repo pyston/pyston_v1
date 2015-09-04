@@ -659,8 +659,11 @@ void setupSet() {
     set_cls->giveAttr("difference_update",
                       new BoxedFunction(boxRTFunction((void*)setDifferenceUpdate, UNKNOWN, 1, 0, true, false)));
     set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("issubset", set_cls->getattr(internStringMortal("issubset")));
     set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("issuperset", set_cls->getattr(internStringMortal("issuperset")));
     set_cls->giveAttr("isdisjoint", new BoxedFunction(boxRTFunction((void*)setIsdisjoint, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("isdisjoint", set_cls->getattr(internStringMortal("isdisjoint")));
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
     set_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)setPop, UNKNOWN, 1)));

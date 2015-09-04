@@ -2,7 +2,7 @@
 
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "../test/testsuite/lib/sqlalchemy/lib"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "../test/lib/sqlalchemy/lib"))
 
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
