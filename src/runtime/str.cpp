@@ -1149,7 +1149,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
 
     if (PyIndex_Check(rhs)) {
         Box* index = PyNumber_Index(rhs);
-        if (PyErr_Occurred()) {
+        if (!index) {
             throwCAPIException();
         }
         rhs = index;

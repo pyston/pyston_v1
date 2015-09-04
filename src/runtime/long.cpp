@@ -72,6 +72,12 @@ extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }
 
+extern "C" PyObject* _PyLong_Copy(PyLongObject* src) noexcept {
+    BoxedLong* rtn = new BoxedLong();
+    mpz_init_set(((BoxedLong*)src)->n, rtn->n);
+    return rtn;
+}
+
 extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) noexcept {
     unsigned PY_LONG_LONG bytes;
     int one = 1;

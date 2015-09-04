@@ -2071,7 +2071,7 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
         return res;
     }
     if (PyLong_Check(o)) { /* A long subclass without nb_long */
-        return o;
+        return _PyLong_Copy((PyLongObject*)o);
     }
     trunc_func = PyObject_GetAttr(o, trunc_name);
     if (trunc_func) {
