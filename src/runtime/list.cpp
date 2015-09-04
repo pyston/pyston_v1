@@ -657,26 +657,54 @@ extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) 
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
-    if (rhs->cls != int_cls) {
-        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
-    }
+    static BoxedString* index_str = internStringImmortal("__index__");
 
-    int n = static_cast<BoxedInt*>(rhs)->n;
+    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
+    if (n == -1 && PyErr_Occurred())
+        throwCAPIException();
+
     int s = self->size;
 
     BoxedList* rtn = new BoxedList();
     rtn->ensure(n * s);
     if (s == 1) {
-        for (int i = 0; i < n; i++) {
+        for (long i = 0; i < n; i++) {
             listAppendInternal(rtn, self->elts->elts[0]);
         }
     } else {
-        for (int i = 0; i < n; i++) {
+        for (long i = 0; i < n; i++) {
             listAppendArrayInternal(rtn, &self->elts->elts[0], s);
         }
     }
 
     return rtn;
+}
+
+Box* listImul(BoxedList* self, Box* rhs) {
+    static BoxedString* index_str = internStringImmortal("__index__");
+
+    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
+    if (n == -1 && PyErr_Occurred())
+        throwCAPIException();
+
+    int s = self->size;
+
+    self->ensure(n * s);
+    if (n == 0) {
+        listSetitemSliceInt64(self, 0, s, 1, NULL);
+    } else if (n == 1) {
+        return self;
+    } else if (s == 1) {
+        for (long i = 1; i < n; i++) {
+            listAppendInternal(self, self->elts->elts[0]);
+        }
+    } else {
+        for (long i = 1; i < n; i++) {
+            listAppendArrayInternal(self, &self->elts->elts[0], s);
+        }
+    }
+
+    return self;
 }
 
 Box* listIAdd(BoxedList* self, Box* _rhs) {
@@ -1230,6 +1258,7 @@ void setupList() {
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));
     list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
     list_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
+    list_cls->giveAttr("__imul__", new BoxedFunction(boxRTFunction((void*)listImul, LIST, 2)));
 
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));

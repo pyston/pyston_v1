@@ -75,6 +75,9 @@ PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int) PYSTON_N
 */
 PyAPI_FUNC(int) _PyLong_Sign(PyObject *v) PYSTON_NOEXCEPT;
 
+// Pyston change: copied from CPython/Include/longintrepr.h
+/* Return a copy of src. */
+PyAPI_FUNC(PyObject *) _PyLong_Copy(PyLongObject *src) PYSTON_NOEXCEPT;
 
 /* _PyLong_NumBits.  Return the number of bits needed to represent the
    absolute value of a long.  For example, this returns 1 for 1 and -1, 2

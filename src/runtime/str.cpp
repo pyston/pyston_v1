@@ -1146,9 +1146,24 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
     int n;
+
+    if (PyIndex_Check(rhs)) {
+        Box* index = PyNumber_Index(rhs);
+        if (!index) {
+            throwCAPIException();
+        }
+        rhs = index;
+    }
+
     if (PyInt_Check(rhs))
         n = static_cast<BoxedInt*>(rhs)->n;
-    else
+    else if (isSubclass(rhs->cls, long_cls)) {
+        n = _PyLong_AsInt(rhs);
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
+            raiseExcHelper(OverflowError, "cannot fit 'long' into index-sized integer");
+        }
+    } else
         return NotImplemented;
     if (n <= 0)
         return EmptyString;
