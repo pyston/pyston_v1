@@ -91,6 +91,7 @@ class ReferenceMapWorklist;
 #define MOVING_OVERRIDE
 #endif
 
+#if MOVING_GC
 // Bulds the reference map, and also determine which objects cannot be moved.
 class GCVisitorPinning : public GCVisitorNoRedundancy {
 private:
@@ -134,6 +135,7 @@ public:
     // Track movement (reallocation) of objects.
     std::unordered_map<GCAllocation*, GCAllocation*> moves;
 };
+#endif
 }
 }
 
