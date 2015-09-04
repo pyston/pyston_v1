@@ -65,9 +65,9 @@ public:
 
     void gc_visit(GCVisitor* v) override {
         if (iterator)
-            v->visit(iterator);
+            v->visit(&iterator);
         if (value)
-            v->visit(value);
+            v->visit(&value);
     }
 };
 
@@ -118,7 +118,7 @@ public:
 
     void gc_visit(GCVisitor* v) override {
         if (obj)
-            v->visit(obj);
+            v->visit(&obj);
     }
 };
 }

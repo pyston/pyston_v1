@@ -96,11 +96,11 @@ bool IN_SHUTDOWN = false;
 std::vector<BoxedClass*> exception_types;
 
 void FrameInfo::gcVisit(GCVisitor* visitor) {
-    visitor->visit(boxedLocals);
-    visitor->visit(exc.traceback);
-    visitor->visit(exc.type);
-    visitor->visit(exc.value);
-    visitor->visit(frame_obj);
+    visitor->visit(&boxedLocals);
+    visitor->visit(&exc.traceback);
+    visitor->visit(&exc.type);
+    visitor->visit(&exc.value);
+    visitor->visit(&frame_obj);
 }
 
 // Analogue of PyType_GenericAlloc (default tp_alloc), but should only be used for Pyston classes!
@@ -328,14 +328,14 @@ Box* Box::hasnextOrNullIC() {
 
 void Box::gcHandler(GCVisitor* v, Box* b) {
     if (b->cls) {
-        v->visit(b->cls);
+        v->visit(&b->cls);
 
         if (b->cls->instancesHaveHCAttrs()) {
             HCAttrs* attrs = b->getHCAttrsPtr();
 
-            v->visit(attrs->hcls);
+            v->visit(&attrs->hcls);
             if (attrs->attr_list)
-                v->visit(attrs->attr_list);
+                v->visit(&attrs->attr_list);
         }
 
         if (b->cls->instancesHaveDictAttrs()) {
@@ -346,7 +346,7 @@ void Box::gcHandler(GCVisitor* v, Box* b) {
             BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(b->cls);
             BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
             for (int i = 0; i < heap_cls->nslots(); i++) {
-                v->visit(*((Box**)((char*)b + slotOffsets[i])));
+                v->visit(&*((Box**)((char*)b + slotOffsets[i])));
             }
         }
     } else {
@@ -437,28 +437,28 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
 
     // TODO eventually f->name should always be non-NULL, then there'd be no need for this check
     if (f->name)
-        v->visit(f->name);
+        v->visit(&f->name);
 
     if (f->modname)
-        v->visit(f->modname);
+        v->visit(&f->modname);
 
     if (f->doc)
-        v->visit(f->doc);
+        v->visit(&f->doc);
 
     if (f->closure)
-        v->visit(f->closure);
+        v->visit(&f->closure);
 
     if (f->globals)
-        v->visit(f->globals);
+        v->visit(&f->globals);
 
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunctionBase constructor
     if (f->ndefaults) {
         assert(f->defaults);
-        v->visit(f->defaults);
+        v->visit(&f->defaults);
         // do a conservative scan since there can be NULLs in there:
-        v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults->elts[0]),
-                               reinterpret_cast<void* const*>(&f->defaults->elts[f->ndefaults]));
+        v->visitPotentialRange(reinterpret_cast<void**>(&f->defaults->elts[0]),
+                               reinterpret_cast<void**>(&f->defaults->elts[f->ndefaults]));
     }
 }
 
@@ -559,7 +559,7 @@ Box* BoxedModule::getLongConstant(llvm::StringRef ast_str) {
 }
 
 template <typename A, typename B, typename C> void visitContiguousMap(GCVisitor* v, ContiguousMap<A, B, C>& map) {
-    v->visitRange((void* const*)&map.vector()[0], (void* const*)&map.vector()[map.size()]);
+    v->visitRange(const_cast<B*>(&map.vector()[0]), const_cast<B*>(&map.vector()[map.size()]));
 }
 
 void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
@@ -574,7 +574,7 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
     visitContiguousMap(v, d->imaginary_constants);
     visitContiguousMap(v, d->long_constants);
     if (!d->keep_alive.empty())
-        v->visitRange((void**)&d->keep_alive[0], (void**)((&d->keep_alive[0]) + d->keep_alive.size()));
+        v->visitRange(&d->keep_alive[0], ((&d->keep_alive[0]) + d->keep_alive.size()));
 }
 
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
@@ -1365,20 +1365,20 @@ void BoxedHeapClass::gcHandler(GCVisitor* v, Box* b) {
     BoxedClass* cls = (BoxedClass*)b;
 
     if (cls->tp_base)
-        v->visit(cls->tp_base);
+        v->visit(&cls->tp_base);
     if (cls->tp_dict)
-        v->visit(cls->tp_dict);
+        v->visit(&cls->tp_dict);
     if (cls->tp_mro)
-        v->visit(cls->tp_mro);
+        v->visit(&cls->tp_mro);
     if (cls->tp_bases)
-        v->visit(cls->tp_bases);
+        v->visit(&cls->tp_bases);
     if (cls->tp_subclasses)
-        v->visit(cls->tp_subclasses);
+        v->visit(&cls->tp_subclasses);
 
     if (cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* hcls = static_cast<BoxedHeapClass*>(cls);
         assert(hcls->ht_name);
-        v->visit(hcls->ht_name);
+        v->visit(&hcls->ht_name);
     }
 }
 
@@ -1428,9 +1428,9 @@ void BoxedInstanceMethod::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
-    v->visit(im->obj);
-    v->visit(im->func);
-    v->visit(im->im_class);
+    v->visit(&im->obj);
+    v->visit(&im->func);
+    v->visit(&im->im_class);
 }
 
 void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
@@ -1439,13 +1439,13 @@ void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
     BoxedProperty* prop = (BoxedProperty*)b;
 
     if (prop->prop_get)
-        v->visit(prop->prop_get);
+        v->visit(&prop->prop_get);
     if (prop->prop_set)
-        v->visit(prop->prop_set);
+        v->visit(&prop->prop_set);
     if (prop->prop_del)
-        v->visit(prop->prop_del);
+        v->visit(&prop->prop_del);
     if (prop->prop_doc)
-        v->visit(prop->prop_doc);
+        v->visit(&prop->prop_doc);
 }
 
 void BoxedStaticmethod::gcHandler(GCVisitor* v, Box* b) {
@@ -1454,7 +1454,7 @@ void BoxedStaticmethod::gcHandler(GCVisitor* v, Box* b) {
     BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
 
     if (sm->sm_callable)
-        v->visit(sm->sm_callable);
+        v->visit(&sm->sm_callable);
 }
 
 void BoxedClassmethod::gcHandler(GCVisitor* v, Box* b) {
@@ -1463,7 +1463,7 @@ void BoxedClassmethod::gcHandler(GCVisitor* v, Box* b) {
     BoxedClassmethod* cm = (BoxedClassmethod*)b;
 
     if (cm->cm_callable)
-        v->visit(cm->cm_callable);
+        v->visit(&cm->cm_callable);
 }
 
 void BoxedSlice::gcHandler(GCVisitor* v, Box* b) {
@@ -1473,15 +1473,15 @@ void BoxedSlice::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedSlice* sl = static_cast<BoxedSlice*>(b);
 
-    v->visit(sl->start);
-    v->visit(sl->stop);
-    v->visit(sl->step);
+    v->visit(&sl->start);
+    v->visit(&sl->stop);
+    v->visit(&sl->step);
 }
 
 static int call_gc_visit(PyObject* val, void* arg) {
     if (val) {
         GCVisitor* v = static_cast<GCVisitor*>(arg);
-        v->visit(val);
+        v->visit(&val);
     }
     return 0;
 }
@@ -1500,11 +1500,11 @@ void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
 
     BoxedClosure* c = (BoxedClosure*)b;
     if (c->parent)
-        v->visit(c->parent);
+        v->visit(&c->parent);
 
     for (int i = 0; i < c->nelts; i++) {
         if (c->elts[i])
-            v->visit(c->elts[i]);
+            v->visit(&c->elts[i]);
     }
 }
 
@@ -2193,7 +2193,7 @@ public:
         Box::gcHandler(v, b);
 
         AttrWrapperIter* self = (AttrWrapperIter*)b;
-        v->visit(self->hcls);
+        v->visit(&self->hcls);
     }
 
     static Box* hasnext(Box* _self);
@@ -2228,7 +2228,7 @@ public:
         Box::gcHandler(v, b);
 
         AttrWrapper* aw = (AttrWrapper*)b;
-        v->visit(aw->b);
+        v->visit(&aw->b);
     }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
@@ -3258,8 +3258,8 @@ void unicode_visit(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     PyUnicodeObject* u = (PyUnicodeObject*)b;
-    v->visit(u->str);
-    v->visit(u->defenc);
+    v->visit(&u->str);
+    v->visit(&u->defenc);
 }
 
 extern "C" PyUnicodeObject* unicode_empty;

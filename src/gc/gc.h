@@ -54,24 +54,54 @@ void popGCObject(gc::GCVisitable* obj);
 
 namespace gc {
 
-class TraceStack;
+class GCAllocation;
+class TraversalWorklist;
+
+// The base version of the GC visitor is used for marking, in conjuction with a TraversalWorklist.
+//
+// Conceptually, GCVisitor should be abstract and the 'marking' behavior should be specific
+// to a subclass of GCVisitor. However, that requires the use of virtual functions which
+// introduce an overhead. Eventually if we really need multiple different kinds of visitors
+// we will need some dispatching mechanism but for now, since the moving GC is still WIP,
+// the virtualness property is #if'd out for the regular use case with only mark-and-sweep.
 class GCVisitor {
 private:
-    TraceStack* stack;
+    TraversalWorklist* worklist = NULL;
+
+protected:
+    // The origin object of the current visit calls.
+    GCAllocation* source = NULL;
+
+#if MOVING_GC
+    virtual void _visit(void** ptr_address);
+    virtual void _visitRange(void** start, void** end);
+#else
+    void _visit(void** ptr_address);
+    void _visitRange(void** start, void** end);
+#endif
+    virtual void _visitRedundant(void** ptr_address) {}
+    virtual void _visitRangeRedundant(void** start, void** end) {}
 
 public:
-    GCVisitor(TraceStack* stack) : stack(stack) {}
+    GCVisitor() {}
+    GCVisitor(TraversalWorklist* worklist) : worklist(worklist) {}
     virtual ~GCVisitor() {}
 
-    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
-    void visitIf(void* p) {
-        if (p)
-            visit(p);
-    }
-    void visit(void* p);
-    void visitRange(void* const* start, void* const* end);
+#if MOVING_GC
+    virtual void visitPotential(void* p);
+    virtual void visitPotentialRange(void** start, void** end);
+#else
     void visitPotential(void* p);
-    void visitPotentialRange(void* const* start, void* const* end);
+    void visitPotentialRange(void** start, void** end);
+#endif
+
+    // The purpose of writing the visit function is to avoid (void**) casts
+    // which are clumbersome to write at every use of the visit function and
+    // error-prone (might accidently cast void* to void**).
+    template <typename T> void visit(T** ptr_address) { _visit(reinterpret_cast<void**>(ptr_address)); }
+    template <typename T> void visitRange(T** start, T** end) {
+        _visitRange(reinterpret_cast<void**>(start), reinterpret_cast<void**>(end));
+    }
 
     // Some object have fields with pointers to Pyston heap objects that we are confident are
     // already being scanned elsewhere.
@@ -82,10 +112,14 @@ public:
     // In a moving collector, every reference needs to be visited since the pointer value could
     // change. We don't have a moving collector yet, but it's good practice to call visit every
     // pointer value and no-op to avoid the performance hit of the mark-and-sweep case.
-    virtual void visitRedundant(void* p) {}
-    virtual void visitRedundantRange(void** start, void** end) {}
+    template <typename T> void visitRedundant(T** ptr_address) {
+        _visitRedundant(reinterpret_cast<void**>(ptr_address));
+    }
+    template <typename T> void visitRangeRedundant(T** start, T** end) {
+        _visitRangeRedundant(reinterpret_cast<void**>(start), reinterpret_cast<void**>(end));
+    }
     virtual void visitPotentialRedundant(void* p) {}
-    virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) {}
+    virtual void visitPotentialRangeRedundant(void** start, void** end) {}
 
     // Visit pointers to objects that we know cannot be moved.
     // This is often used to scan a pointer that's a copy of a pointer stored in a place that
@@ -94,6 +128,8 @@ public:
     // change that later for performance.
     void visitNonRelocatable(void* p) { visitPotential(p); }
     void visitNonRelocatableRange(void** start, void** end) { visitPotentialRange(start, end); }
+
+    void setSource(GCAllocation* al) { source = al; }
 };
 
 enum class GCKind : uint8_t {

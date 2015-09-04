@@ -29,24 +29,25 @@ namespace pyston {
 
 void HiddenClass::gc_visit(GCVisitor* visitor) {
     // Visit children even for the dict-backed case, since children will just be empty
-    visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
-    visitor->visit(attrwrapper_child);
+    visitor->visitRange(const_cast<HiddenClass**>(&children.vector()[0]),
+                        const_cast<HiddenClass**>(&children.vector()[children.size()]));
+    visitor->visit(&attrwrapper_child);
 
     if (children.empty()) {
         for (auto p : attr_offsets)
-            visitor->visit(p.first);
+            visitor->visit(&p.first);
     } else {
 #if MOVING_GC
         // If we have any children, the attr_offsets map will be a subset of the child's map.
         for (const auto& p : attr_offsets)
-            visitor->visitRedundant(p.first);
+            visitor->visitRedundant(const_cast<BoxedString**>(&p.first));
 #endif
     }
 
 #if MOVING_GC
     // The children should have the entries of the keys of the 'children' map in the attr_offsets map.
     for (const auto& p : children) {
-        visitor->visitRedundant(p.first);
+        visitor->visitRedundant(const_cast<BoxedString**>(&p.first));
     }
 #endif
 }

@@ -564,13 +564,13 @@ void BoxedTuple::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
     BoxedTuple* t = (BoxedTuple*)b;
-    v->visitRange((void* const*)&t->elts[0], (void* const*)&t->elts[t->size()]);
+    v->visitRange(&t->elts[0], &t->elts[t->size()]);
 }
 
 extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
     BoxedTupleIterator* it = (BoxedTupleIterator*)b;
-    v->visit(it->t);
+    v->visit(&it->t);
 }
 
 void setupTuple() {

@@ -54,9 +54,9 @@ public:
 
         Box::gcHandler(v, o);
         if (o->bases)
-            v->visit(o->bases);
+            v->visit(&o->bases);
         if (o->name)
-            v->visit(o->name);
+            v->visit(&o->name);
     }
 };
 
@@ -78,7 +78,7 @@ public:
 
         Box::gcHandler(v, o);
         if (o->inst_cls)
-            v->visit(o->inst_cls);
+            v->visit(&o->inst_cls);
     }
 };
 }

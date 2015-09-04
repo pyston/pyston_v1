@@ -28,7 +28,7 @@ typedef int (*update_callback)(PyTypeObject*, void*);
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
-    v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
+    v->visitPotentialRange((void**)b, (void**)((char*)b + b->cls->tp_basicsize));
 }
 
 extern "C" void conservativeAndBasesGCHandler(GCVisitor* v, Box* b) noexcept {

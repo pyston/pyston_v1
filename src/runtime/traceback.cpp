@@ -40,12 +40,12 @@ void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
     BoxedTraceback* self = static_cast<BoxedTraceback*>(b);
 
     if (self->py_lines)
-        v->visit(self->py_lines);
+        v->visit(&self->py_lines);
     if (self->tb_next)
-        v->visit(self->tb_next);
+        v->visit(&self->tb_next);
 
-    v->visit(self->line.file);
-    v->visit(self->line.func);
+    v->visit(&self->line.file);
+    v->visit(&self->line.func);
 
     Box::gcHandler(v, b);
 }

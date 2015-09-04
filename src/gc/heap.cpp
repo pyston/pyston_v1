@@ -354,6 +354,26 @@ GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     return rtn;
 }
 
+GCAllocation* SmallArena::forceRelocate(GCAllocation* al) {
+    Block* b = Block::forPointer(al);
+
+    size_t size = b->size;
+
+    // Don't register moves, they don't use more memory and they could trigger another GC.
+    GCAllocation* rtn = alloc(size);
+
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+    memcpy(rtn, al, size);
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#else
+    memcpy(rtn, al, size);
+#endif
+
+    free(al);
+    return rtn;
+}
+
 void SmallArena::free(GCAllocation* alloc) {
     Block* b = Block::forPointer(alloc);
     size_t size = b->size;
@@ -413,6 +433,53 @@ void SmallArena::assertConsistent() {
     }
 }
 #endif
+
+void SmallArena::getPointersInBlockChain(std::vector<GCAllocation*>& ptrs, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            ptrs.push_back(al);
+        }
+
+        head = &b->next;
+    }
+}
+
+void SmallArena::forEachReference(std::function<void(GCAllocation*, size_t)> f) {
+    thread_caches.forEachValue([this, &f](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPointersInBlockChain(ptrs, &cache->cache_free_heads[bidx]);
+            getPointersInBlockChain(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                f(al, sizes[bidx]);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPointersInBlockChain(ptrs, &heads[bidx]);
+        getPointersInBlockChain(ptrs, &full_heads[bidx]);
+
+        for (GCAllocation* al : ptrs) {
+            f(al, sizes[bidx]);
+        }
+    }
+}
 
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
@@ -667,8 +734,6 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
 #define LARGE_CHUNK_INDEX(obj, section) (((char*)(obj) - (char*)(section)) >> CHUNK_BITS)
 
 GCAllocation* LargeArena::alloc(size_t size) {
-    registerGCManagedBytes(size);
-
     LOCK_REGION(heap->lock);
 
     // printf ("allocLarge %zu\n", size);
@@ -890,8 +955,6 @@ void LargeArena::_freeLargeObj(LargeObj* obj) {
 
 
 GCAllocation* HugeArena::alloc(size_t size) {
-    registerGCManagedBytes(size);
-
     LOCK_REGION(heap->lock);
 
     size_t total_size = size + sizeof(HugeObj);
