@@ -139,3 +139,33 @@ s2 = set([1, 5])
 
 s1.intersection_update(s2)
 print sorted(s1)
+
+def test_set_creation(base):
+    print "Testing with base =", base
+    # set.__new__ should not iterate through the argument.
+    # sqlalchemy overrides init and expects to be able to do the iteration there.
+    def g():
+        for i in xrange(5):
+            print "iterating", i
+            yield i
+
+    print "Calling __new__:"
+    s = base.__new__(base, g())
+    print "Calling __init__:"
+    s.__init__(g())
+
+    print "Trying subclassing"
+    class MySet(base):
+        def __new__(cls, g):
+            print "starting new"
+            r = base.__new__(cls, g)
+            print "ending new"
+            return r
+        def __init__(self, g):
+            print "starting init"
+            print list(g)
+
+
+    print MySet(g())
+test_set_creation(set)
+test_set_creation(frozenset)

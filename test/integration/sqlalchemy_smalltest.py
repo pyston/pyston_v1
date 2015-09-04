@@ -44,7 +44,12 @@ import sqlalchemy.testing
 class Requirements(object):
     def __getattr__(self, n):
         def inner(f):
-            return f
+            if n == "predictable_gc":
+                def f2(*args, **kw):
+                    return
+                return f2
+            else:
+                return f
         inner.not_ = lambda: inner
         return inner
 sqlalchemy.testing.config.requirements = sqlalchemy.testing.requires = Requirements()
@@ -55,11 +60,6 @@ test_files = glob.glob(TEST_DIR + "/test*.py") + glob.glob(TEST_DIR + "/*/test*.
 # These are the ones that pass on CPython (ie that we've stubbed enough of their testing
 # infrastructure to run):
 MODULES_TO_TEST = ['test.engine.test_parseconnect', 'test.ext.test_compiler', 'test.dialect.test_pyodbc', 'test.dialect.test_sybase', 'test.dialect.test_mxodbc', 'test.sql.test_inspect', 'test.sql.test_operators', 'test.sql.test_ddlemit', 'test.sql.test_cte', 'test.base.test_dependency', 'test.base.test_except', 'test.base.test_inspect', 'test.base.test_events', 'test.orm.test_inspect', 'test.orm.test_descriptor']
-
-# These are currently broken on Pyston:
-MODULES_TO_TEST.remove("test.sql.test_operators")
-MODULES_TO_TEST.remove("test.base.test_events")
-MODULES_TO_TEST.remove("test.orm.test_descriptor")
 
 passed = []
 failed = []
@@ -84,6 +84,9 @@ for fn in test_files:
             n = n()
             for t in dir(n):
                 if not t.startswith("test_"):
+                    continue
+                if nname == "SubclassGrowthTest" and t == "test_subclass":
+                    # This test should be marked as requiring predictable_pc
                     continue
                 print "Running", t
                 n.setup()

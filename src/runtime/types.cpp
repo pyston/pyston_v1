@@ -1602,6 +1602,8 @@ extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod
 }
 
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
+    if (!v->name)
+        return (BoxedString*)PyString_FromFormat("<function <name_missing?> at %p>", v);
     return (BoxedString*)PyString_FromFormat("<function %s at %p>", PyString_AsString(v->name), v);
 }
 
