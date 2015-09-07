@@ -1440,6 +1440,8 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
             if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
                 return slotTpGetattrHookInternal<S>(obj, attr, rewrite_args);
+            } else if (obj->cls->tp_getattro == instance_getattro) {
+                return instanceGetattroInternal<S>(obj, attr, rewrite_args);
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
