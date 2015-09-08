@@ -1078,6 +1078,30 @@ static PyObject* binary_op(PyObject* v, PyObject* w, const int op_slot, const ch
     return result;
 }
 
+static PyObject* binary_iop1(PyObject* v, PyObject* w, const int iop_slot, const int op_slot) {
+    PyNumberMethods* mv = v->cls->tp_as_number;
+    if (mv != NULL && PyType_HasFeature((v)->cls, Py_TPFLAGS_HAVE_INPLACEOPS)) {
+        binaryfunc slot = NB_BINOP(mv, iop_slot);
+        if (slot) {
+            PyObject* x = (slot)(v, w);
+            if (x != Py_NotImplemented) {
+                return x;
+            }
+            Py_DECREF(x);
+        }
+    }
+    return binary_op1(v, w, op_slot);
+}
+
+static PyObject* binary_iop(PyObject* v, PyObject* w, const int iop_slot, const int op_slot, const char* op_name) {
+    PyObject* result = binary_iop1(v, w, iop_slot, op_slot);
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return binop_type_error(v, w, op_name);
+    }
+    return result;
+}
+
 /*
   Calling scheme used for ternary operations:
 
@@ -1436,18 +1460,77 @@ Fail:
 }
 
 extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PySequenceMethods* m;
+
+    if (o == NULL)
+        return null_error();
+
+    m = o->cls->tp_as_sequence;
+    if (m && m->sq_repeat)
+        return m->sq_repeat(o, count);
+
+    /* Instances of user classes defining a __mul__() method only
+       have an nb_multiply slot, not an sq_repeat slot. so we fall back
+       to nb_multiply if o appears to be a sequence. */
+    if (PySequence_Check(o)) {
+        PyObject* n, *result;
+        n = PyInt_FromSsize_t(count);
+        if (n == NULL)
+            return NULL;
+        result = binary_op1(o, n, NB_SLOT(nb_multiply));
+        Py_DECREF(n);
+        if (result != Py_NotImplemented)
+            return result;
+        Py_DECREF(result);
+    }
+    return type_error("'%.200s' object can't be repeated", o);
 }
 
-extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PySequence_InPlaceConcat(PyObject* s, PyObject* o) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL || o == NULL)
+        return null_error();
+
+    m = s->cls->tp_as_sequence;
+    if (m && PyType_HasFeature((s)->cls, Py_TPFLAGS_HAVE_INPLACEOPS) && m->sq_inplace_concat)
+        return m->sq_inplace_concat(s, o);
+    if (m && m->sq_concat)
+        return m->sq_concat(s, o);
+
+    if (PySequence_Check(s) && PySequence_Check(o)) {
+        PyObject* result = binary_iop1(s, o, NB_SLOT(nb_inplace_add), NB_SLOT(nb_add));
+        if (result != Py_NotImplemented)
+            return result;
+        Py_DECREF(result);
+    }
+    return type_error("'%.200s' object can't be concatenated", s);
 }
 
 extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PySequenceMethods* m;
+
+    if (o == NULL)
+        return null_error();
+
+    m = o->cls->tp_as_sequence;
+    if (m && PyType_HasFeature((o)->cls, Py_TPFLAGS_HAVE_INPLACEOPS) && m->sq_inplace_repeat)
+        return m->sq_inplace_repeat(o, count);
+    if (m && m->sq_repeat)
+        return m->sq_repeat(o, count);
+
+    if (PySequence_Check(o)) {
+        PyObject* n, *result;
+        n = PyInt_FromSsize_t(count);
+        if (n == NULL)
+            return NULL;
+        result = binary_iop1(o, n, NB_SLOT(nb_inplace_multiply), NB_SLOT(nb_multiply));
+        Py_DECREF(n);
+        if (result != Py_NotImplemented)
+            return result;
+        Py_DECREF(result);
+    }
+    return type_error("'%.200s' object can't be repeated", o);
 }
 
 extern "C" PyObject* PySequence_GetItem(PyObject* s, Py_ssize_t i) noexcept {
@@ -1539,13 +1622,67 @@ extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
     }
 }
 
-extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+extern "C" int PySequence_SetSlice(PyObject* s, Py_ssize_t i1, Py_ssize_t i2, PyObject* o) noexcept {
+    PySequenceMethods* m;
+    PyMappingMethods* mp;
+
+    if (s == NULL) {
+        null_error();
+        return -1;
+    }
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_ass_slice) {
+        if (i1 < 0 || i2 < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(s);
+                if (l < 0)
+                    return -1;
+                if (i1 < 0)
+                    i1 += l;
+                if (i2 < 0)
+                    i2 += l;
+            }
+        }
+        return m->sq_ass_slice(s, i1, i2, o);
+    } else if ((mp = s->cls->tp_as_mapping) && mp->mp_ass_subscript) {
+        int res;
+        PyObject* slice = _PySlice_FromIndices(i1, i2);
+        if (!slice)
+            return -1;
+        res = mp->mp_ass_subscript(s, slice, o);
+        Py_DECREF(slice);
+        return res;
+    }
+
+    type_error("'%.200s' object doesn't support slice assignment", s);
     return -1;
 }
 
 extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    PySequenceMethods* m;
+
+    if (o == NULL) {
+        null_error();
+        return -1;
+    }
+
+    m = o->cls->tp_as_sequence;
+    if (m && m->sq_ass_slice) {
+        if (i1 < 0 || i2 < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(o);
+                if (l < 0)
+                    return -1;
+                if (i1 < 0)
+                    i1 += l;
+                if (i2 < 0)
+                    i2 += l;
+            }
+        }
+        return m->sq_ass_slice(o, i1, i2, (PyObject*)NULL);
+    }
+    type_error("'%.200s' object doesn't support slice deletion", o);
     return -1;
 }
 
@@ -1657,7 +1794,7 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     assert(obj && obj->cls);
 
     // Our check, since we don't currently fill in tp_as_number:
-    if (PyInt_Check(obj) || PyLong_Check(obj) || PyFloat_Check(obj))
+    if (PyInt_Check(obj) || PyLong_Check(obj) || PyFloat_Check(obj) || PyComplex_Check(obj))
         return true;
 
     // The CPython check:
@@ -1669,7 +1806,7 @@ extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
         return binop(lhs, rhs, AST_TYPE::Add);
     } catch (ExcInfo e) {
         setCAPIException(e);
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1677,7 +1814,7 @@ extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Sub);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1686,7 +1823,7 @@ extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mult);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1695,14 +1832,18 @@ extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Div);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
 
-extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_FloorDivide(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::FloorDiv);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return nullptr;
+    }
 }
 
 extern "C" PyObject* PyNumber_TrueDivide(PyObject* lhs, PyObject* rhs) noexcept {
@@ -1710,7 +1851,7 @@ extern "C" PyObject* PyNumber_TrueDivide(PyObject* lhs, PyObject* rhs) noexcept 
         return binop(lhs, rhs, AST_TYPE::TrueDiv);
     } catch (ExcInfo e) {
         setCAPIException(e);
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1718,7 +1859,7 @@ extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mod);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1749,11 +1890,21 @@ extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    PyNumberMethods* m;
+
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_positive)
+        return (*m->nb_positive)(o);
+
+    return type_error("bad operand type for unary +: '%.200s'", o);
 }
 
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
+    if (o == Py_None)
+        return type_error("bad operand type for abs(): '%.200s'", o);
+
     try {
         return abs_(o);
     } catch (ExcInfo e) {
@@ -1775,7 +1926,7 @@ extern "C" PyObject* PyNumber_Lshift(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::LShift);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1784,7 +1935,7 @@ extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::RShift);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1793,7 +1944,7 @@ extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitAnd);
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return nullptr;
     }
 }
@@ -1802,7 +1953,8 @@ extern "C" PyObject* PyNumber_Xor(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitXor);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return nullptr;
     }
 }
 
@@ -1810,73 +1962,117 @@ extern "C" PyObject* PyNumber_Or(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitOr);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return nullptr;
     }
 }
 
-extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceAdd(PyObject* v, PyObject* w) noexcept {
+    PyObject* result = binary_iop1(v, w, NB_SLOT(nb_inplace_add), NB_SLOT(nb_add));
+    if (result == Py_NotImplemented) {
+        PySequenceMethods* m = v->cls->tp_as_sequence;
+        Py_DECREF(result);
+        if (m != NULL) {
+            binaryfunc f = NULL;
+            if (PyType_HasFeature((v)->cls, Py_TPFLAGS_HAVE_INPLACEOPS))
+                f = m->sq_inplace_concat;
+            if (f == NULL)
+                f = m->sq_concat;
+            if (f != NULL)
+                return (*f)(v, w);
+        }
+        result = binop_type_error(v, w, "+=");
+    }
+    return result;
 }
 
-extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_subtract), NB_SLOT(nb_subtract), "-=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+static PyObject* sequence_repeat(ssizeargfunc repeatfunc, PyObject* seq, PyObject* n) {
+    Py_ssize_t count;
+    if (PyIndex_Check(n)) {
+        count = PyNumber_AsSsize_t(n, PyExc_OverflowError);
+        if (count == -1 && PyErr_Occurred())
+            return NULL;
+    } else {
+        return type_error("can't multiply sequence by "
+                          "non-int of type '%.200s'",
+                          n);
+    }
+    return (*repeatfunc)(seq, count);
 }
 
-extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject* v, PyObject* w) noexcept {
+    PyObject* result = binary_iop1(v, w, NB_SLOT(nb_inplace_multiply), NB_SLOT(nb_multiply));
+    if (result == Py_NotImplemented) {
+        ssizeargfunc f = NULL;
+        PySequenceMethods* mv = v->cls->tp_as_sequence;
+        PySequenceMethods* mw = w->cls->tp_as_sequence;
+        Py_DECREF(result);
+        if (mv != NULL) {
+            if (PyType_HasFeature((v)->cls, Py_TPFLAGS_HAVE_INPLACEOPS))
+                f = mv->sq_inplace_repeat;
+            if (f == NULL)
+                f = mv->sq_repeat;
+            if (f != NULL)
+                return sequence_repeat(f, v, w);
+        } else if (mw != NULL) {
+            /* Note that the right hand operand should not be
+             * mutated in this case so sq_inplace_repeat is not
+             * used. */
+            if (mw->sq_repeat)
+                return sequence_repeat(mw->sq_repeat, w, v);
+        }
+        result = binop_type_error(v, w, "*=");
+    }
+    return result;
 }
 
-extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceDivide(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_divide), NB_SLOT(nb_divide), "/=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_floor_divide), NB_SLOT(nb_floor_divide), "//=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_true_divide), NB_SLOT(nb_true_divide), "/=");
 }
 
-extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_remainder), NB_SLOT(nb_remainder), "%=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlacePower(PyObject* v, PyObject* w, PyObject* z) noexcept {
+    if (PyType_HasFeature((v)->cls, Py_TPFLAGS_HAVE_INPLACEOPS) && v->cls->tp_as_number
+        && v->cls->tp_as_number->nb_inplace_power != NULL) {
+        return ternary_op(v, w, z, NB_SLOT(nb_inplace_power), "**=");
+    } else {
+        return ternary_op(v, w, z, NB_SLOT(nb_power), "**=");
+    }
 }
 
-extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceLshift(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_lshift), NB_SLOT(nb_lshift), "<<=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceRshift(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_rshift), NB_SLOT(nb_rshift), ">>=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceAnd(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_and), NB_SLOT(nb_and), "%=");
 }
 
-extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_InPlaceXor(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_xor), NB_SLOT(nb_xor), "^=");
+}
+
+extern "C" PyObject* PyNumber_InPlaceOr(PyObject* v, PyObject* w) noexcept {
+    return binary_iop(v, w, NB_SLOT(nb_inplace_or), NB_SLOT(nb_or), "|=");
 }
 
 extern "C" int PyNumber_Coerce(PyObject** pv, PyObject** pw) noexcept {
