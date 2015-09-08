@@ -490,6 +490,9 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
         v_size = 0;
         v_elts = NULL;
     } else {
+        if (self == v) // handle self assignment by creating a copy
+            v = _listSlice(self, 0, self->size, 1, self->size);
+
         v_as_seq = RootedBox(PySequence_Fast(v, "can only assign an iterable"));
         if (v_as_seq == NULL)
             throwCAPIException();
@@ -501,9 +504,6 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
         else
             v_elts = NULL;
     }
-
-    if (self == v) // handle self assignment by creating a copy
-        v = _listSlice(self, 0, self->size, 1, self->size);
 
     int delts = v_size - (stop - start);
     int remaining_elts = self->size - stop;
