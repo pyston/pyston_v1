@@ -2821,7 +2821,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
             r_val = grewrite_args.out_rtn;
         }
     } else {
-        val = getattrInternalEx<CXX>(obj, attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
+        val = getattrInternalEx<S>(obj, attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
     }
 
     if (val == NULL) {
