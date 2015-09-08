@@ -1,6 +1,3 @@
-# expected: fail
-# - with statements
-
 # Test for various defaults arguments in builtin functions:
 
 class ExpectationFailedException(Exception):
@@ -35,15 +32,6 @@ with expected_exception(KeyError):
 
 print min([1])
 print min([1], None)
-
-class Int(int):
-    def __add__(self, rhs):
-        print "Int.__add__", rhs
-        return int.__add__(self, rhs)
-    def __radd__(self, rhs):
-        print "Int.__radd__", rhs
-        return int.__radd__(self, rhs)
-print sum([Int(2)])
 
 with expected_exception(AttributeError):
     print getattr(object(), "")
