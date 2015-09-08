@@ -38,28 +38,28 @@ namespace pyston {
 
 DS_DEFINE_RWLOCK(codegen_rwlock);
 
-CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
-                       std::unique_ptr<SourceInfo> source)
+CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),
-      paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+      num_args(num_args),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
       source(std::move(source)),
       param_names(this->source->ast, this->source->getInternedStrings()),
       always_use_version(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
-    assert(num_args >= num_defaults);
 }
 
-CLFunction::CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
-                       const ParamNames& param_names)
+CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
     : code_obj(NULL),
-      paramspec(num_args, num_defaults, takes_varargs, takes_kwargs),
+      num_args(num_args),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
       source(nullptr),
       param_names(param_names),
       always_use_version(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
-    assert(num_args >= num_defaults);
 }
 
 BoxedCode* CLFunction::getCode() {
@@ -84,7 +84,7 @@ void CLFunction::addVersion(CompiledFunction* compiled) {
             && compiled->spec->accepts_all_inputs && compiled->spec->boxed_return_value)
             always_use_version = compiled;
 
-        assert(compiled->spec->arg_types.size() == paramspec.totalReceived());
+        assert(compiled->spec->arg_types.size() == numReceivedArgs());
         versions.push_back(compiled);
     } else {
         osr_versions[compiled->entry_descriptor] = compiled;

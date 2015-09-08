@@ -694,7 +694,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_ifu{ BOXED_INT, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    CLFunction* cl = createRTFunction(3, 1, false, false);
+    CLFunction* cl = createRTFunction(3, false, false);
     addRTFunction(cl, float_func, UNKNOWN, v_ifu);
     addRTFunction(cl, int_func, UNKNOWN, v_uuu);
     int_cls->giveAttr(name, new BoxedFunction(cl, { None }));
@@ -1134,7 +1134,7 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction(2, 0, false, false);
+    CLFunction* cl = createRTFunction(2, false, false);
     addRTFunction(cl, int_func, UNKNOWN, v_ii);
     addRTFunction(cl, float_func, BOXED_FLOAT, v_if);
     addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
@@ -1149,7 +1149,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction(2, 0, false, false);
+    CLFunction* cl = createRTFunction(2, false, false);
     addRTFunction(cl, int_func, rtn_type, v_ii);
     addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
     int_cls->giveAttr(name, new BoxedFunction(cl));
@@ -1246,7 +1246,7 @@ void setupInt() {
     int_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
 
     auto int_new
-        = boxRTFunction((void*)intNew<CXX>, UNKNOWN, 3, 2, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
+        = boxRTFunction((void*)intNew<CXX>, UNKNOWN, 3, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
     addRTFunction(int_new, (void*)intNew<CAPI>, UNKNOWN, CAPI);
     int_cls->giveAttr("__new__", new BoxedFunction(int_new, { boxInt(0), NULL }));
 

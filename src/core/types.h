@@ -354,7 +354,9 @@ class CLFunction {
     BoxedCode* code_obj;
 
 public:
-    ParamReceiveSpec paramspec;
+    int num_args;
+    bool takes_varargs, takes_kwargs;
+    //ParamReceiveSpec paramspec;
 
     std::unique_ptr<SourceInfo> source;
     ParamNames param_names;
@@ -379,12 +381,11 @@ public:
                                         Box**, const std::vector<BoxedString*>*> InternalCallable;
     InternalCallable internal_callable;
 
-    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
-               std::unique_ptr<SourceInfo> source);
-    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names);
+    CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source);
+    CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names);
     ~CLFunction();
 
-    int numReceivedArgs() { return paramspec.totalReceived(); }
+    int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
 
     BoxedCode* getCode();
 
@@ -397,11 +398,10 @@ public:
     }
 };
 
-CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+CLFunction* createRTFunction(int num_args, bool takes_varargs, bool takes_kwargs,
                              const ParamNames& param_names = ParamNames::empty());
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
-                          ExceptionStyle exception_style = CXX);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs, bool takes_kwargs,
+                          const ParamNames& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX);
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
                           const ParamNames& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);

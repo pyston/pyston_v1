@@ -894,26 +894,25 @@ void setupImport() {
 
     null_importer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NullImporter");
     null_importer_cls->giveAttr(
-        "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, 1, false, false), { None }));
-    null_importer_cls->giveAttr(
-        "find_module",
-        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)nullImporterFindModule, NONE, 2, 1, false, false),
-                                         "find_module", { None }));
+        "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, false, false), { None }));
+    null_importer_cls->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(
+                                                   boxRTFunction((void*)nullImporterFindModule, NONE, 2, false, false),
+                                                   "find_module", { None }));
     null_importer_cls->freeze();
     imp_module->giveAttr("NullImporter", null_importer_cls);
 
     CLFunction* find_module_func
-        = boxRTFunction((void*)impFindModule, UNKNOWN, 2, 1, false, false, ParamNames({ "name", "path" }, "", ""));
+        = boxRTFunction((void*)impFindModule, UNKNOWN, 2, false, false, ParamNames({ "name", "path" }, "", ""));
     imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None }));
 
     CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
                                                  ParamNames({ "name", "file", "pathname", "description" }, "", ""));
     imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
-    imp_module->giveAttr(
-        "load_source", new BoxedBuiltinFunctionOrMethod(
-                           boxRTFunction((void*)impLoadSource, UNKNOWN, 3, 1, false, false), "load_source", { NULL }));
+    imp_module->giveAttr("load_source",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impLoadSource, UNKNOWN, 3, false, false),
+                                                          "load_source", { NULL }));
 
-    CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, 1, false, false,
+    CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, false, false,
                                                   ParamNames({ "name", "pathname", "file" }, "", ""));
     imp_module->giveAttr("load_dynamic", new BoxedBuiltinFunctionOrMethod(load_dynamic_func, "load_dynamic", { None }));
 

@@ -389,7 +389,7 @@ done:
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* complex_func, void* float_func,
                      void* int_func, void* boxed_func) {
-    CLFunction* cl = createRTFunction(2, 0, false, false);
+    CLFunction* cl = createRTFunction(2, false, false);
     addRTFunction(cl, complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
     addRTFunction(cl, float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
     addRTFunction(cl, int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
@@ -1224,7 +1224,7 @@ static PyMethodDef complex_methods[] = {
 };
 
 void setupComplex() {
-    auto complex_new = boxRTFunction((void*)complexNew<CXX>, UNKNOWN, 3, 2, false, false,
+    auto complex_new = boxRTFunction((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
                                      ParamNames({ "", "real", "imag" }, "", ""), CXX);
     addRTFunction(complex_new, (void*)complexNew<CAPI>, UNKNOWN, CAPI);
     complex_cls->giveAttr("__new__", new BoxedFunction(complex_new, { NULL, NULL }));
@@ -1248,7 +1248,7 @@ void setupComplex() {
     complex_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)complexRSub, UNKNOWN, 2)));
     complex_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)complexRDiv, UNKNOWN, 2)));
     complex_cls->giveAttr("__pow__",
-                          new BoxedFunction(boxRTFunction((void*)complexPow, UNKNOWN, 3, 1, false, false), { None }));
+                          new BoxedFunction(boxRTFunction((void*)complexPow, UNKNOWN, 3, false, false), { None }));
     complex_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)complexMod, UNKNOWN, 2)));
     complex_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)complexDivmod, BOXED_TUPLE, 2)));
     complex_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)complexFloordiv, UNKNOWN, 2)));

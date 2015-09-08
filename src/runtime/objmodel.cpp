@@ -3501,7 +3501,9 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
                        argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
-    for (int arg_idx = paramspec.num_args - paramspec.num_defaults; arg_idx < paramspec.num_args; arg_idx++) {
+    // There can be more defaults than arguments.
+    for (int arg_idx = std::max(0, paramspec.num_args - paramspec.num_defaults); arg_idx < paramspec.num_args;
+         arg_idx++) {
         if (params_filled[arg_idx])
             continue;
 
@@ -3536,13 +3538,15 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     slowpath_callfunc.log();
 
     CLFunction* f = func->f;
-    ParamReceiveSpec paramspec = f->paramspec;
+    ParamReceiveSpec paramspec = func->getParamspec();
 
     if (rewrite_args) {
         if (!rewrite_args->func_guarded) {
             rewrite_args->obj->addGuard((intptr_t)func);
-            rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
         }
+        // This covers the cases where the function gets freed, as well as
+        // when the defaults get changed.
+        rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
     }
 
     Box** oargs;

@@ -91,8 +91,7 @@ void setupBool() {
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
     bool_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)boolHash, BOXED_INT, 1)));
 
-    bool_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None }));
+    bool_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, false, false), { None }));
 
     bool_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)boolAnd, BOXED_BOOL, 2)));
     bool_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)boolOr, BOXED_BOOL, 2)));

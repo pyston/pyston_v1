@@ -678,7 +678,7 @@ void setupDescr() {
     member_descriptor_cls->freeze();
 
     property_cls->giveAttr("__init__",
-                           new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false,
+                           new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, false, false,
                                                            ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
                                              { NULL, NULL, NULL, NULL }));
     property_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3)));
@@ -698,23 +698,23 @@ void setupDescr() {
     property_cls->freeze();
 
     staticmethod_cls->giveAttr("__init__",
-                               new BoxedFunction(boxRTFunction((void*)staticmethodInit, UNKNOWN, 5, 4, false, false),
+                               new BoxedFunction(boxRTFunction((void*)staticmethodInit, UNKNOWN, 5, false, false),
                                                  { None, None, None, None }));
     staticmethod_cls->giveAttr(
-        "__get__", new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, 1, false, false), { None }));
+        "__get__", new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, false, false), { None }));
     staticmethod_cls->freeze();
 
 
-    classmethod_cls->giveAttr("__init__",
-                              new BoxedFunction(boxRTFunction((void*)classmethodInit, UNKNOWN, 5, 4, false, false),
-                                                { None, None, None, None }));
     classmethod_cls->giveAttr(
-        "__get__", new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, 1, false, false), { None }));
+        "__init__",
+        new BoxedFunction(boxRTFunction((void*)classmethodInit, UNKNOWN, 5, false, false), { None, None, None, None }));
+    classmethod_cls->giveAttr(
+        "__get__", new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, false, false), { None }));
     classmethod_cls->freeze();
 
     method_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::descr_get, UNKNOWN, 3,
                                                                     ParamNames::empty(), CAPI)));
-    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, 0, true, true);
+    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, true, true);
     method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
     method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
     method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
@@ -722,8 +722,8 @@ void setupDescr() {
     method_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)methodRepr, UNKNOWN, 1)));
     method_cls->freeze();
 
-    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
-                                                                           UNKNOWN, 2, 0, true, true)));
+    wrapperdescr_cls->giveAttr(
+        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__, UNKNOWN, 2, true, true)));
     wrapperdescr_cls->giveAttr("__doc__",
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
@@ -735,7 +735,7 @@ void setupDescr() {
     assert(wrapperdescr_cls->tp_descr_get == BoxedWrapperDescriptor::descr_get);
 
     wrapperobject_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
+        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, true, true)));
     wrapperobject_cls->tpp_call.capi_val = BoxedWrapperObject::tppCall<CAPI>;
     wrapperobject_cls->tpp_call.cxx_val = BoxedWrapperObject::tppCall<CXX>;
     wrapperobject_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperObjectRepr, UNKNOWN, 1)));

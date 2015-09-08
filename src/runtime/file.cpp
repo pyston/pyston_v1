@@ -1751,8 +1751,7 @@ void setupFile() {
     file_cls->tp_dealloc = fileDestructor;
     file_cls->has_safe_tp_dealloc = true;
 
-    file_cls->giveAttr("read",
-                       new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
+    file_cls->giveAttr("read", new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, false, false), { boxInt(-1) }));
 
     CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
@@ -1779,7 +1778,7 @@ void setupFile() {
     file_cls->giveAttr("mode",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
 
-    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, 2, false, false),
+    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, false, false),
                                                     { boxString("r"), boxInt(-1) }));
 
     for (auto& md : file_methods) {
