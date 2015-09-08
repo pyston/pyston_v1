@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "analysis/scoping_analysis.h"
 #include "core/common.h"
@@ -1329,11 +1330,13 @@ public:
 void print_ast(AST* ast);
 class PrintVisitor : public ASTVisitor {
 private:
+    llvm::raw_ostream& stream;
     int indent;
     void printIndent();
+    void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
-    PrintVisitor(int indent = 0) : indent(indent) {}
+    PrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
     virtual ~PrintVisitor() {}
 
     virtual bool visit_alias(AST_alias* node);
