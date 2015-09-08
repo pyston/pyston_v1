@@ -1606,20 +1606,54 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* s, Py_ssize_t i1, Py_ssize_t 
     return type_error("'%.200s' object is unsliceable", s);
 }
 
-extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+extern "C" int PySequence_SetItem(PyObject* s, Py_ssize_t i, PyObject* o) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL) {
+        null_error();
+        return -1;
+    }
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_ass_item) {
+        if (i < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(s);
+                if (l < 0)
+                    return -1;
+                i += l;
+            }
+        }
+        return m->sq_ass_item(s, i, o);
+    }
+
+    type_error("'%.200s' object does not support item assignment", s);
     return -1;
 }
 
-extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
-    try {
-        // Not sure if this is really the same:
-        delitem(o, boxInt(i));
-        return 0;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
+extern "C" int PySequence_DelItem(PyObject* s, Py_ssize_t i) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL) {
+        null_error();
         return -1;
     }
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_ass_item) {
+        if (i < 0) {
+            if (m->sq_length) {
+                Py_ssize_t l = (*m->sq_length)(s);
+                if (l < 0)
+                    return -1;
+                i += l;
+            }
+        }
+        return m->sq_ass_item(s, i, (PyObject*)NULL);
+    }
+
+    type_error("'%.200s' object doesn't support item deletion", s);
+    return -1;
 }
 
 extern "C" int PySequence_SetSlice(PyObject* s, Py_ssize_t i1, Py_ssize_t i2, PyObject* o) noexcept {
