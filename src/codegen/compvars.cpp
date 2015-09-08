@@ -57,6 +57,12 @@ CompilerType::Result CompilerType::hasattr(BoxedString* attr) {
     return Result::Yes;
 }
 
+std::vector<CompilerType*> CompilerType::unpackTypes(int num_into) {
+    assert((CompilerType*)this != UNKNOWN);
+
+    return UNKNOWN->unpackTypes(num_into);
+}
+
 void ConcreteCompilerType::serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) {
 #ifndef NDEBUG
     if (llvmType() == g.i1) {
@@ -489,6 +495,10 @@ public:
             rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val, true));
         }
         return rtn;
+    }
+
+    std::vector<CompilerType*> unpackTypes(int num_into) override {
+        return std::vector<CompilerType*>(num_into, UNKNOWN);
     }
 };
 
@@ -2505,6 +2515,14 @@ public:
             e->incvref();
 
         return *var->getValue();
+    }
+
+    std::vector<CompilerType*> unpackTypes(int num_into) override {
+        if (num_into != elt_types.size()) {
+            return ValuedCompilerType::unpackTypes(num_into);
+        }
+
+        return elt_types;
     }
 };
 
