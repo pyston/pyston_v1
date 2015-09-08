@@ -66,7 +66,7 @@ public:
     void unconnectFrom(CFGBlock* successor);
 
     void push_back(AST_stmt* node) { body.push_back(node); }
-    void print();
+    void print(llvm::raw_ostream& stream = llvm::outs());
 };
 
 // Control Flow Graph
@@ -108,7 +108,7 @@ public:
         blocks.push_back(block);
     }
 
-    void print();
+    void print(llvm::raw_ostream& stream = llvm::outs());
 
     bool hasVregsAssigned() { return has_vregs_assigned; }
     void assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info);

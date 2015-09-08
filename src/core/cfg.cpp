@@ -56,26 +56,26 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
                                   successor->predecessors.end());
 }
 
-void CFGBlock::print() {
-    printf("Block %d", idx);
+void CFGBlock::print(llvm::raw_ostream& stream) {
+    stream << "Block " << idx;
     if (info)
-        printf(" '%s'", info);
+        stream << " '" << info << "'";
 
-    printf("; Predecessors:");
+    stream << "; Predecessors:";
     for (int j = 0; j < predecessors.size(); j++) {
-        printf(" %d", predecessors[j]->idx);
+        stream << " " << predecessors[j]->idx;
     }
-    printf(" Successors:");
+    stream << " Successors:";
     for (int j = 0; j < successors.size(); j++) {
-        printf(" %d", successors[j]->idx);
+        stream << " " << successors[j]->idx;
     }
-    printf("\n");
+    stream << "\n";
 
     PrintVisitor pv(4);
     for (int j = 0; j < body.size(); j++) {
-        printf("    ");
+        stream << "    ";
         body[j]->accept(&pv);
-        printf("\n");
+        stream << "\n";
     }
 }
 
@@ -2518,11 +2518,11 @@ public:
     }
 };
 
-void CFG::print() {
-    printf("CFG:\n");
-    printf("%ld blocks\n", blocks.size());
+void CFG::print(llvm::raw_ostream& stream) {
+    stream << "CFG:\n";
+    stream << blocks.size() << " blocks\n";
     for (int i = 0; i < blocks.size(); i++)
-        blocks[i]->print();
+        blocks[i]->print(stream);
 }
 
 class AssignVRegsVisitor : public NoopASTVisitor {

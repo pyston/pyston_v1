@@ -1060,14 +1060,14 @@ void print_ast(AST* ast) {
 
 void PrintVisitor::printIndent() {
     for (int i = 0; i < indent; i++) {
-        putchar(' ');
+        stream << ' ';
     }
 }
 
 bool PrintVisitor::visit_alias(AST_alias* node) {
-    printf("%s", node->name.c_str());
+    stream << node->name.s();
     if (node->asname.s().size())
-        printf(" as %s", node->asname.c_str());
+        stream << " as " << node->asname.s();
     return true;
 }
 
@@ -1076,11 +1076,11 @@ bool PrintVisitor::visit_arguments(AST_arguments* node) {
     int ndefault = node->defaults.size();
     for (int i = 0; i < nargs; i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
 
         node->args[i]->accept(this);
         if (i >= nargs - ndefault) {
-            printf("=");
+            stream << "=";
             node->defaults[i - (nargs - ndefault)]->accept(this);
         }
     }
@@ -1088,10 +1088,10 @@ bool PrintVisitor::visit_arguments(AST_arguments* node) {
 }
 
 bool PrintVisitor::visit_assert(AST_Assert* node) {
-    printf("assert ");
+    stream << "assert ";
     node->test->accept(this);
     if (node->msg) {
-        printf(", ");
+        stream << ", ";
         node->msg->accept(this);
     }
     return true;
@@ -1100,49 +1100,49 @@ bool PrintVisitor::visit_assert(AST_Assert* node) {
 bool PrintVisitor::visit_assign(AST_Assign* node) {
     for (int i = 0; i < node->targets.size(); i++) {
         node->targets[i]->accept(this);
-        printf(" = ");
+        stream << " = ";
     }
     node->value->accept(this);
     return true;
 }
 
-static void printOp(AST_TYPE::AST_TYPE op_type) {
+void PrintVisitor::printOp(AST_TYPE::AST_TYPE op_type) {
     switch (op_type) {
         case AST_TYPE::Add:
-            putchar('+');
+            stream << '+';
             break;
         case AST_TYPE::BitAnd:
-            putchar('&');
+            stream << '&';
             break;
         case AST_TYPE::BitOr:
-            putchar('|');
+            stream << '|';
             break;
         case AST_TYPE::BitXor:
-            putchar('^');
+            stream << '^';
             break;
         case AST_TYPE::Div:
-            putchar('/');
+            stream << '/';
             break;
         case AST_TYPE::LShift:
-            printf("<<");
+            stream << "<<";
             break;
         case AST_TYPE::RShift:
-            printf(">>");
+            stream << ">>";
             break;
         case AST_TYPE::Pow:
-            printf("**");
+            stream << "**";
             break;
         case AST_TYPE::Mod:
-            putchar('%');
+            stream << '%';
             break;
         case AST_TYPE::Mult:
-            putchar('*');
+            stream << '*';
             break;
         case AST_TYPE::Sub:
-            putchar('-');
+            stream << '-';
             break;
         default:
-            printf("<%d>", op_type);
+            stream << "<" << (int)op_type << ">";
             break;
     }
 }
@@ -1150,14 +1150,14 @@ static void printOp(AST_TYPE::AST_TYPE op_type) {
 bool PrintVisitor::visit_augassign(AST_AugAssign* node) {
     node->target->accept(this);
     printOp(node->op_type);
-    putchar('=');
+    stream << '=';
     node->value->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_augbinop(AST_AugBinOp* node) {
     node->left->accept(this);
-    printf("=");
+    stream << '=';
     printOp(node->op_type);
     node->right->accept(this);
     return true;
@@ -1165,8 +1165,8 @@ bool PrintVisitor::visit_augbinop(AST_AugBinOp* node) {
 
 bool PrintVisitor::visit_attribute(AST_Attribute* node) {
     node->value->accept(this);
-    putchar('.');
-    printf("%s", node->attr.c_str());
+    stream << '.';
+    stream << node->attr.s();
     return true;
 }
 
@@ -1185,10 +1185,10 @@ bool PrintVisitor::visit_boolop(AST_BoolOp* node) {
             continue;
         switch (node->op_type) {
             case AST_TYPE::And:
-                printf(" and ");
+                stream << " and ";
                 break;
             case AST_TYPE::Or:
-                printf(" or ");
+                stream << " or ";
                 break;
             default:
                 ASSERT(0, "%d", node->op_type);
@@ -1199,40 +1199,40 @@ bool PrintVisitor::visit_boolop(AST_BoolOp* node) {
 }
 
 bool PrintVisitor::visit_break(AST_Break* node) {
-    printf("break");
+    stream << "break";
     return true;
 }
 
 bool PrintVisitor::visit_call(AST_Call* node) {
     node->func->accept(this);
-    printf("(");
+    stream << "(";
 
     bool prevarg = false;
     for (int i = 0; i < node->args.size(); i++) {
         if (prevarg)
-            printf(", ");
+            stream << ", ";
         node->args[i]->accept(this);
         prevarg = true;
     }
     for (int i = 0; i < node->keywords.size(); i++) {
         if (prevarg)
-            printf(", ");
+            stream << ", ";
         node->keywords[i]->accept(this);
         prevarg = true;
     }
     if (node->starargs) {
         if (prevarg)
-            printf(", ");
+            stream << ", ";
         node->starargs->accept(this);
         prevarg = true;
     }
     if (node->kwargs) {
         if (prevarg)
-            printf(", ");
+            stream << ", ";
         node->kwargs->accept(this);
         prevarg = true;
     }
-    printf(")");
+    stream << ")";
     return true;
 }
 
@@ -1241,7 +1241,7 @@ bool PrintVisitor::visit_compare(AST_Compare* node) {
 
     for (int i = 0; i < node->ops.size(); i++) {
         std::string symbol = getOpSymbol(node->ops[i]);
-        printf(" %s ", symbol.c_str());
+        stream << " " << symbol << " ";
 
         node->comparators[i]->accept(this);
     }
@@ -1250,13 +1250,13 @@ bool PrintVisitor::visit_compare(AST_Compare* node) {
 }
 
 bool PrintVisitor::visit_comprehension(AST_comprehension* node) {
-    printf("for ");
+    stream << "for ";
     node->target->accept(this);
-    printf(" in ");
+    stream << " in ";
     node->iter->accept(this);
 
     for (AST_expr* i : node->ifs) {
-        printf(" if ");
+        stream << " if ";
         i->accept(this);
     }
 
@@ -1265,22 +1265,22 @@ bool PrintVisitor::visit_comprehension(AST_comprehension* node) {
 
 bool PrintVisitor::visit_classdef(AST_ClassDef* node) {
     for (int i = 0, n = node->decorator_list.size(); i < n; i++) {
-        printf("@");
+        stream << "@";
         node->decorator_list[i]->accept(this);
-        printf("\n");
+        stream << "\n";
         printIndent();
     }
-    printf("class %s(", node->name.c_str());
+    stream << "class " << node->name.s() << "(";
     for (int i = 0, n = node->bases.size(); i < n; i++) {
         if (i)
-            printf(", ");
+            stream << ", ";
         node->bases[i]->accept(this);
     }
-    printf(")");
+    stream << ")";
 
     indent += 4;
     for (int i = 0, n = node->body.size(); i < n; i++) {
-        printf("\n");
+        stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
@@ -1290,87 +1290,87 @@ bool PrintVisitor::visit_classdef(AST_ClassDef* node) {
 }
 
 bool PrintVisitor::visit_continue(AST_Continue* node) {
-    printf("continue");
+    stream << "continue";
     return true;
 }
 
 bool PrintVisitor::visit_delete(AST_Delete* node) {
-    printf("del ");
+    stream << "del ";
     for (int i = 0; i < node->targets.size(); i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->targets[i]->accept(this);
     }
     return true;
 }
 
 bool PrintVisitor::visit_dict(AST_Dict* node) {
-    printf("{");
+    stream << "{";
     for (int i = 0; i < node->keys.size(); i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->keys[i]->accept(this);
-        printf(":");
+        stream << ":";
         node->values[i]->accept(this);
     }
-    printf("}");
+    stream << "}";
     return true;
 }
 
 bool PrintVisitor::visit_dictcomp(AST_DictComp* node) {
-    printf("{");
+    stream << "{";
     node->key->accept(this);
-    printf(":");
+    stream << ":";
     node->value->accept(this);
     for (auto c : node->generators) {
-        printf(" ");
+        stream << " ";
         c->accept(this);
     }
-    printf("}");
+    stream << "}";
     return true;
 }
 
 bool PrintVisitor::visit_ellipsis(AST_Ellipsis*) {
-    printf("...");
+    stream << "...";
     return true;
 }
 
 bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
-    printf("except");
+    stream << "except";
     if (node->type) {
-        printf(" ");
+        stream << " ";
         node->type->accept(this);
     }
     if (node->name) {
-        printf(" as ");
+        stream << " as ";
         node->name->accept(this);
     }
-    printf(":\n");
+    stream << ":\n";
 
     indent += 4;
     for (AST* subnode : node->body) {
         printIndent();
         subnode->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     indent -= 4;
     return true;
 }
 
 bool PrintVisitor::visit_exec(AST_Exec* node) {
-    printf("exec ");
+    stream << "exec ";
 
     node->body->accept(this);
     if (node->globals) {
-        printf(" in ");
+        stream << " in ";
         node->globals->accept(this);
 
         if (node->locals) {
-            printf(", ");
+            stream << ", ";
             node->locals->accept(this);
         }
     }
-    printf("\n");
+    stream << "\n";
     return true;
 }
 
@@ -1381,32 +1381,32 @@ bool PrintVisitor::visit_expr(AST_Expr* node) {
 bool PrintVisitor::visit_extslice(AST_ExtSlice* node) {
     for (int i = 0; i < node->dims.size(); ++i) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->dims[i]->accept(this);
     }
     return true;
 }
 
 bool PrintVisitor::visit_for(AST_For* node) {
-    printf("<for loop>\n");
+    stream << "<for loop>\n";
     return true;
 }
 
 bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
     for (auto d : node->decorator_list) {
-        printf("@");
+        stream << "@";
         d->accept(this);
-        printf("\n");
+        stream << "\n";
         printIndent();
     }
 
-    printf("def %s(", node->name.c_str());
+    stream << "def " << node->name.s() << "(";
     node->args->accept(this);
-    printf(")");
+    stream << ")";
 
     indent += 4;
     for (int i = 0; i < node->body.size(); i++) {
-        printf("\n");
+        stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
@@ -1415,36 +1415,36 @@ bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
 }
 
 bool PrintVisitor::visit_generatorexp(AST_GeneratorExp* node) {
-    printf("[");
+    stream << "[";
     node->elt->accept(this);
     for (auto c : node->generators) {
-        printf(" ");
+        stream << " ";
         c->accept(this);
     }
-    printf("]");
+    stream << "]";
     return true;
 }
 
 bool PrintVisitor::visit_global(AST_Global* node) {
-    printf("global ");
+    stream << "global ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
-            printf(", ");
-        printf("%s", node->names[i].c_str());
+            stream << ", ";
+        stream << node->names[i].s();
     }
     return true;
 }
 
 bool PrintVisitor::visit_if(AST_If* node) {
-    printf("if ");
+    stream << "if ";
     node->test->accept(this);
-    printf(":\n");
+    stream << ":\n";
 
     indent += 4;
     for (int i = 0; i < node->body.size(); i++) {
         printIndent();
         node->body[i]->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     indent -= 4;
 
@@ -1456,14 +1456,14 @@ bool PrintVisitor::visit_if(AST_If* node) {
             elif = true;
 
         if (elif) {
-            printf("el");
+            stream << "el";
         } else {
-            printf("else:\n");
+            stream << "else:\n";
             indent += 4;
         }
         for (int i = 0; i < node->orelse.size(); i++) {
             if (i)
-                printf("\n");
+                stream << "\n";
             printIndent();
             node->orelse[i]->accept(this);
         }
@@ -1475,28 +1475,28 @@ bool PrintVisitor::visit_if(AST_If* node) {
 
 bool PrintVisitor::visit_ifexp(AST_IfExp* node) {
     node->body->accept(this);
-    printf(" if ");
+    stream << " if ";
     node->test->accept(this);
-    printf(" else ");
+    stream << " else ";
     node->orelse->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_import(AST_Import* node) {
-    printf("import ");
+    stream << "import ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->names[i]->accept(this);
     }
     return true;
 }
 
 bool PrintVisitor::visit_importfrom(AST_ImportFrom* node) {
-    printf("from %s import ", node->module.c_str());
+    stream << "from " << node->module.s() << " import ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->names[i]->accept(this);
     }
     return true;
@@ -1507,111 +1507,111 @@ bool PrintVisitor::visit_index(AST_Index* node) {
 }
 
 bool PrintVisitor::visit_invoke(AST_Invoke* node) {
-    printf("invoke %d %d: ", node->normal_dest->idx, node->exc_dest->idx);
+    stream << "invoke " << node->normal_dest->idx << " " << node->exc_dest->idx << ": ";
     node->stmt->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_lambda(AST_Lambda* node) {
-    printf("lambda ");
+    stream << "lambda ";
     node->args->accept(this);
-    printf(": ");
+    stream << ": ";
     node->body->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
-    printf(":");
+    stream << ":";
     switch (node->opcode) {
         case AST_LangPrimitive::CHECK_EXC_MATCH:
-            printf("CHECK_EXC_MATCH");
+            stream << "CHECK_EXC_MATCH";
             break;
         case AST_LangPrimitive::LANDINGPAD:
-            printf("LANDINGPAD");
+            stream << "LANDINGPAD";
             break;
         case AST_LangPrimitive::LOCALS:
-            printf("LOCALS");
+            stream << "LOCALS";
             break;
         case AST_LangPrimitive::GET_ITER:
-            printf("GET_ITER");
+            stream << "GET_ITER";
             break;
         case AST_LangPrimitive::IMPORT_FROM:
-            printf("IMPORT_FROM");
+            stream << "IMPORT_FROM";
             break;
         case AST_LangPrimitive::IMPORT_NAME:
-            printf("IMPORT_NAME");
+            stream << "IMPORT_NAME";
             break;
         case AST_LangPrimitive::IMPORT_STAR:
-            printf("IMPORT_STAR");
+            stream << "IMPORT_STAR";
             break;
         case AST_LangPrimitive::NONE:
-            printf("NONE");
+            stream << "NONE";
             break;
         case AST_LangPrimitive::NONZERO:
-            printf("NONZERO");
+            stream << "NONZERO";
             break;
         case AST_LangPrimitive::SET_EXC_INFO:
-            printf("SET_EXC_INFO");
+            stream << "SET_EXC_INFO";
             break;
         case AST_LangPrimitive::UNCACHE_EXC_INFO:
-            printf("UNCACHE_EXC_INFO");
+            stream << "UNCACHE_EXC_INFO";
             break;
         case AST_LangPrimitive::HASNEXT:
-            printf("HASNEXT");
+            stream << "HASNEXT";
             break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }
-    printf("(");
+    stream << "(";
     for (int i = 0, n = node->args.size(); i < n; ++i) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->args[i]->accept(this);
     }
-    printf(")");
+    stream << ")";
     return true;
 }
 
 bool PrintVisitor::visit_list(AST_List* node) {
-    printf("[");
+    stream << "[";
     for (int i = 0, n = node->elts.size(); i < n; ++i) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->elts[i]->accept(this);
     }
-    printf("]");
+    stream << "]";
     return true;
 }
 
 bool PrintVisitor::visit_listcomp(AST_ListComp* node) {
-    printf("[");
+    stream << "[";
     node->elt->accept(this);
     for (auto c : node->generators) {
-        printf(" ");
+        stream << " ";
         c->accept(this);
     }
-    printf("]");
+    stream << "]";
     return true;
 }
 
 bool PrintVisitor::visit_keyword(AST_keyword* node) {
-    printf("%s=", node->arg.c_str());
+    stream << node->arg.s() << "=";
     node->value->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_module(AST_Module* node) {
-    // printf("<module>\n");
+    // stream << "<module>\n";
     for (int i = 0; i < node->body.size(); i++) {
         node->body[i]->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     return true;
 }
 
 bool PrintVisitor::visit_expression(AST_Expression* node) {
     node->body->accept(this);
-    printf("\n");
+    stream << "\n";
     return true;
 }
 
@@ -1619,26 +1619,26 @@ bool PrintVisitor::visit_suite(AST_Suite* node) {
     for (int i = 0; i < node->body.size(); i++) {
         printIndent();
         node->body[i]->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     return true;
 }
 
 bool PrintVisitor::visit_name(AST_Name* node) {
-    printf("%s", node->id.c_str());
+    stream << node->id.s();
     // printf("%s(%d)", node->id.c_str(), node->ctx_type);
     return false;
 }
 
 bool PrintVisitor::visit_num(AST_Num* node) {
     if (node->num_type == AST_Num::INT) {
-        printf("%ld", node->n_int);
+        stream << node->n_int;
     } else if (node->num_type == AST_Num::LONG) {
-        printf("%sL", node->n_long.c_str());
+        stream << node->n_long << "L";
     } else if (node->num_type == AST_Num::FLOAT) {
-        printf("%f", node->n_float);
+        stream << node->n_float;
     } else if (node->num_type == AST_Num::COMPLEX) {
-        printf("%fj", node->n_float);
+        stream << node->n_float << "j";
     } else {
         RELEASE_ASSERT(0, "");
     }
@@ -1646,53 +1646,53 @@ bool PrintVisitor::visit_num(AST_Num* node) {
 }
 
 bool PrintVisitor::visit_pass(AST_Pass* node) {
-    printf("pass");
+    stream << "pass";
     return true;
 }
 
 bool PrintVisitor::visit_print(AST_Print* node) {
-    printf("print ");
+    stream << "print ";
     if (node->dest) {
-        printf(">>");
+        stream << ">>";
         node->dest->accept(this);
-        printf(", ");
+        stream << ", ";
     }
     for (int i = 0; i < node->values.size(); i++) {
         if (i > 0)
-            printf(", ");
+            stream << ", ";
         node->values[i]->accept(this);
     }
     if (!node->nl)
-        printf(",");
+        stream << ",";
     return true;
 }
 
 bool PrintVisitor::visit_raise(AST_Raise* node) {
-    printf("raise");
+    stream << "raise";
     if (node->arg0) {
-        printf(" ");
+        stream << " ";
         node->arg0->accept(this);
     }
     if (node->arg1) {
-        printf(", ");
+        stream << ", ";
         node->arg1->accept(this);
     }
     if (node->arg2) {
-        printf(", ");
+        stream << ", ";
         node->arg2->accept(this);
     }
     return true;
 }
 
 bool PrintVisitor::visit_repr(AST_Repr* node) {
-    printf("`");
+    stream << "`";
     node->value->accept(this);
-    printf("`");
+    stream << "`";
     return true;
 }
 
 bool PrintVisitor::visit_return(AST_Return* node) {
-    printf("return ");
+    stream << "return ";
     return false;
 }
 
@@ -1701,55 +1701,55 @@ bool PrintVisitor::visit_set(AST_Set* node) {
     // but we sometimes generate it (ex in set comprehension lowering).
     // Just to make it clear when printing, print empty set literals as "SET{}".
     if (!node->elts.size())
-        printf("SET");
+        stream << "SET";
 
-    printf("{");
+    stream << "{";
 
     bool first = true;
     for (auto e : node->elts) {
         if (!first)
-            printf(", ");
+            stream << ", ";
         first = false;
 
         e->accept(this);
     }
 
-    printf("}");
+    stream << "}";
     return true;
 }
 
 bool PrintVisitor::visit_setcomp(AST_SetComp* node) {
-    printf("{");
+    stream << "{";
     node->elt->accept(this);
     for (auto c : node->generators) {
-        printf(" ");
+        stream << " ";
         c->accept(this);
     }
-    printf("}");
+    stream << "}";
     return true;
 }
 
 bool PrintVisitor::visit_slice(AST_Slice* node) {
-    printf("<slice>(");
+    stream << "<slice>(";
     if (node->lower)
         node->lower->accept(this);
     if (node->upper || node->step)
-        putchar(':');
+        stream << ':';
     if (node->upper)
         node->upper->accept(this);
     if (node->step) {
-        putchar(':');
+        stream << ':';
         node->step->accept(this);
     }
-    printf(")");
+    stream << ")";
     return true;
 }
 
 bool PrintVisitor::visit_str(AST_Str* node) {
     if (node->str_type == AST_Str::STR) {
-        printf("\"%s\"", node->str_data.c_str());
+        stream << "\"" << node->str_data << "\"";
     } else if (node->str_type == AST_Str::UNICODE) {
-        printf("<unicode value>");
+        stream << "<unicode value>";
     } else {
         RELEASE_ASSERT(0, "%d", node->str_type);
     }
@@ -1758,19 +1758,19 @@ bool PrintVisitor::visit_str(AST_Str* node) {
 
 bool PrintVisitor::visit_subscript(AST_Subscript* node) {
     node->value->accept(this);
-    printf("[");
+    stream << "[";
     node->slice->accept(this);
-    printf("]");
+    stream << "]";
     return true;
 }
 
 bool PrintVisitor::visit_tryexcept(AST_TryExcept* node) {
-    printf("try:\n");
+    stream << "try:\n";
     indent += 4;
     for (AST* subnode : node->body) {
         printIndent();
         subnode->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     indent -= 4;
     for (AST_ExceptHandler* handler : node->handlers) {
@@ -1780,12 +1780,12 @@ bool PrintVisitor::visit_tryexcept(AST_TryExcept* node) {
 
     if (node->orelse.size()) {
         printIndent();
-        printf("else:\n");
+        stream << "else:\n";
         indent += 4;
         for (AST* subnode : node->orelse) {
             printIndent();
             subnode->accept(this);
-            printf("\n");
+            stream << "\n";
         }
         indent -= 4;
     }
@@ -1796,32 +1796,32 @@ bool PrintVisitor::visit_tryfinally(AST_TryFinally* node) {
     if (node->body.size() == 1 && node->body[0]->type == AST_TYPE::TryExcept) {
         node->body[0]->accept(this);
         printIndent();
-        printf("finally:\n");
+        stream << "finally:\n";
 
         indent += 4;
         for (AST* subnode : node->finalbody) {
             printIndent();
             subnode->accept(this);
-            printf("\n");
+            stream << "\n";
         }
         indent -= 4;
     } else {
-        printf("try:\n");
+        stream << "try:\n";
         indent += 4;
         for (AST* subnode : node->body) {
             printIndent();
             subnode->accept(this);
-            printf("\n");
+            stream << "\n";
         }
         indent -= 4;
 
         printIndent();
-        printf("finally:\n");
+        stream << "finally:\n";
         indent += 4;
         for (AST* subnode : node->finalbody) {
             printIndent();
             subnode->accept(this);
-            printf("\n");
+            stream << "\n";
         }
         indent -= 4;
     }
@@ -1829,64 +1829,64 @@ bool PrintVisitor::visit_tryfinally(AST_TryFinally* node) {
 }
 
 bool PrintVisitor::visit_tuple(AST_Tuple* node) {
-    printf("(");
+    stream << "(";
     int n = node->elts.size();
     for (int i = 0; i < n; i++) {
         if (i)
-            printf(", ");
+            stream << ", ";
         node->elts[i]->accept(this);
     }
     if (n == 1)
-        printf(",");
-    printf(")");
+        stream << ",";
+    stream << ")";
     return true;
 }
 
 bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
     switch (node->op_type) {
         case AST_TYPE::Invert:
-            printf("~");
+            stream << "~";
             break;
         case AST_TYPE::Not:
-            printf("not ");
+            stream << "not ";
             break;
         case AST_TYPE::UAdd:
-            printf("+");
+            stream << "+";
             break;
         case AST_TYPE::USub:
-            printf("-");
+            stream << "-";
             break;
         default:
             RELEASE_ASSERT(0, "%s", getOpName(node->op_type)->c_str());
             break;
     }
-    printf("(");
+    stream << "(";
     node->operand->accept(this);
-    printf(")");
+    stream << ")";
     return true;
 }
 
 bool PrintVisitor::visit_while(AST_While* node) {
-    printf("while ");
+    stream << "while ";
     node->test->accept(this);
-    printf("\n");
+    stream << "\n";
 
     indent += 4;
     for (int i = 0; i < node->body.size(); i++) {
         printIndent();
         node->body[i]->accept(this);
-        printf("\n");
+        stream << "\n";
     }
     indent -= 4;
 
     if (node->orelse.size()) {
         printIndent();
-        printf("else\n");
+        stream << "else\n";
         indent += 4;
         for (int i = 0; i < node->orelse.size(); i++) {
             printIndent();
             node->orelse[i]->accept(this);
-            printf("\n");
+            stream << "\n";
         }
         indent -= 4;
     }
@@ -1894,18 +1894,18 @@ bool PrintVisitor::visit_while(AST_While* node) {
 }
 
 bool PrintVisitor::visit_with(AST_With* node) {
-    printf("with ");
+    stream << "with ";
     node->context_expr->accept(this);
     if (node->optional_vars) {
-        printf(" as ");
+        stream << " as ";
         node->optional_vars->accept(this);
-        printf(":\n");
+        stream << ":\n";
     }
 
     indent += 4;
     for (int i = 0; i < node->body.size(); i++) {
         if (i > 0)
-            printf("\n");
+            stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
@@ -1915,21 +1915,21 @@ bool PrintVisitor::visit_with(AST_With* node) {
 }
 
 bool PrintVisitor::visit_yield(AST_Yield* node) {
-    printf("yield ");
+    stream << "yield ";
     if (node->value)
         node->value->accept(this);
     return true;
 }
 
 bool PrintVisitor::visit_branch(AST_Branch* node) {
-    printf("if ");
+    stream << "if ";
     node->test->accept(this);
-    printf(" goto %d else goto %d", node->iftrue->idx, node->iffalse->idx);
+    stream << " goto " << node->iftrue->idx << " else goto " << node->iffalse->idx;
     return true;
 }
 
 bool PrintVisitor::visit_jump(AST_Jump* node) {
-    printf("goto %d", node->target->idx);
+    stream << "goto " << node->target->idx;
     return true;
 }
 
@@ -1938,17 +1938,17 @@ bool PrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
     // node->value->accept(this);
     // printf(", '%s')", node->attr.c_str());
     node->value->accept(this);
-    printf(":%s", node->attr.c_str());
+    stream << ":" << node->attr.s();
     return true;
 }
 
 bool PrintVisitor::visit_makefunction(AST_MakeFunction* node) {
-    printf("make_");
+    stream << "make_";
     return false;
 }
 
 bool PrintVisitor::visit_makeclass(AST_MakeClass* node) {
-    printf("make_");
+    stream << "make_";
     return false;
 }
 
