@@ -57,6 +57,7 @@ public:
     virtual BoxedClass* guaranteedClass() = 0;
     virtual Box* deserializeFromFrame(const FrameVals& vals) = 0;
     virtual int numFrameArgs() = 0;
+    virtual std::vector<CompilerType*> unpackTypes(int num_into);
 };
 
 typedef std::unordered_map<CompilerVariable*, CompilerVariable*> DupCache;

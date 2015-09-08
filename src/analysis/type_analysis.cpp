@@ -177,8 +177,10 @@ private:
                 break;
             case AST_TYPE::Tuple: {
                 AST_Tuple* tt = ast_cast<AST_Tuple>(target);
+                auto val_types = t->unpackTypes(tt->elts.size());
+                assert(val_types.size() == tt->elts.size());
                 for (int i = 0; i < tt->elts.size(); i++) {
-                    _doSet(tt->elts[i], UNKNOWN);
+                    _doSet(tt->elts[i], val_types[i]);
                 }
                 break;
             }
