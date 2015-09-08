@@ -26,6 +26,7 @@
 
 #include "codegen/codegen.h"
 #include "codegen/patchpoints.h"
+#include "core/cfg.h"
 #include "core/common.h"
 #include "gc/gc.h"
 #include "runtime/types.h"
@@ -112,6 +113,10 @@ void setPointersInCodeStorage(std::vector<const void*>* v) {
     pointers_in_code = v;
 }
 
+void setRelocatableSym(const std::string& str, const void* ptr) {
+    relocatable_syms[str] = ptr;
+}
+
 const void* getValueOfRelocatableSym(const std::string& str) {
     auto it = relocatable_syms.find(str);
     if (it != relocatable_syms.end())
@@ -121,10 +126,6 @@ const void* getValueOfRelocatableSym(const std::string& str) {
 
 llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::StringRef shared_name) {
     assert(addr);
-
-    if (!ENABLE_JIT_OBJECT_CACHE)
-        return embedConstantPtr(addr, type);
-
     std::string name;
     if (!shared_name.empty()) {
         llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, true);
@@ -133,10 +134,16 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
         assert(!relocatable_syms.count(name));
         name = shared_name;
     } else {
-        name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
-    }
+        name = (llvm::Twine("ptr_") + llvm::Twine(g.cur_cfg->getIndexForPtr((void*)addr))).str();
 
-    relocatable_syms[name] = addr;
+        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(name, true);
+        if (gv) {
+            if (gv->getType() != type)
+                return llvm::ConstantExpr::getBitCast(gv, type);
+            return gv;
+        }
+        assert(!relocatable_syms.count(name));
+    }
 
 #if MOVING_GC
     gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
@@ -149,10 +156,18 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
     return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
 }
 
-llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
-    assert(type);
-    llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-    llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
+llvm::Constant* embedMaterializeNode(AST* addr, llvm::Type* type) {
+    assert(addr);
+
+    std::string name = (llvm::Twine("mat_") + llvm::Twine(g.cur_cfg->getIndexForASTNode(addr))).str();
+
+    llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(name, true);
+    if (gv) {
+        if (gv->getType() != type)
+            return llvm::ConstantExpr::getBitCast(gv, type);
+        return gv;
+    }
+    assert(!relocatable_syms.count(name));
 
 #if MOVING_GC
     gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
@@ -161,7 +176,46 @@ llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     }
 #endif
 
-    return ptr_val;
+    llvm::Type* var_type = type->getPointerElementType();
+    return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
+}
+
+llvm::Constant* embedRelocatableStr(BoxedString* boxed_str, llvm::Type* type) {
+    if (g.cur_cfg->ptr_constants_map.count(boxed_str)) {
+        return embedRelocatablePtr(boxed_str, type);
+    }
+
+    llvm::StringRef str = boxed_str->s();
+    for (char c : str) {
+        assert(isalnum(c) || c == '_');
+    }
+
+    std::string name = (llvm::Twine("str_") + str).str();
+    llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(name, true);
+    if (gv) {
+        if (gv->getType() != type)
+            return llvm::ConstantExpr::getBitCast(gv, type);
+        return gv;
+    }
+    assert(!relocatable_syms.count(name));
+    // name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+
+#if MOVING_GC
+    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
+    if (al) {
+        pointers_in_code->push_back(al->user_data);
+    }
+#endif
+
+    llvm::Type* var_type = type->getPointerElementType();
+    return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
+}
+
+llvm::Constant* embedConstantStr(llvm::StringRef str) {
+    llvm::Constant* const_data = llvm::ConstantDataArray::getString(g.context, str);
+    //auto* gv = new llvm::GlobalVariable(*g.cur_module, const_data->getType(), true, llvm::GlobalVariable::PrivateLinkage, const_data);
+    //return llvm::ConstantExpr::getBitCast(gv, g.i8_ptr);
+    return new llvm::GlobalVariable(*g.cur_module, const_data->getType(), true, llvm::GlobalVariable::PrivateLinkage, const_data);
 }
 
 llvm::Constant* getNullPtr(llvm::Type* t) {
@@ -228,31 +282,6 @@ public:
                         }
                         ii->setArgOperand(i, llvm::MapValue(op, VMap, flags, type_remapper, this));
                         continue;
-                    } else {
-#if LLVMREV < 235483
-                        assert(pp_id != -1);
-                        void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
-
-                        bool lookup_success = true;
-                        std::string name;
-                        if (addr == (void*)None) {
-                            name = "None";
-                        } else {
-                            name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
-                        }
-
-                        if (!lookup_success) {
-                            llvm::Constant* int_val
-                                = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8);
-                            ii->setArgOperand(i, ptr_val);
-                            continue;
-                        } else {
-                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8));
-                        }
-#else
-                        assert(0);
-#endif
                     }
                 }
                 return ii;

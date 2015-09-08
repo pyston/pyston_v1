@@ -848,8 +848,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
         if (jit)
-            v.var = jit->emitImportName(level, froms, module_name);
-        v.o = import(level, froms.o, module_name);
+            v.var = jit->emitImportName(level, froms, internStringImmortal(module_name));
+        v.o = import(level, froms.o, boxString(module_name));
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -1215,7 +1215,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                     assert(getSymVRegMap().count(target->id));
                     assert(getSymVRegMap()[target->id] == target->vreg);
                     if (vregs[target->vreg] == 0) {
-                        assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                        assertNameDefined(0, target->id.getBox(), NameError, true /* local_var_msg */);
                         return Value();
                     }
 
@@ -1530,7 +1530,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                 return v;
             }
 
-            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            assertNameDefined(0, node->id.getBox(), UnboundLocalError, true);
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
@@ -1617,7 +1617,7 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
         auto& d = static_cast<BoxedDict*>(boxed_locals)->d;
         auto it = d.find(name.getBox());
         if (it == d.end()) {
-            assertNameDefined(0, name.c_str(), NameError, false /* local_var_msg */);
+            assertNameDefined(0, name.getBox(), NameError, false /* local_var_msg */);
         }
         d.erase(it);
     } else if (boxed_locals->cls == attrwrapper_cls) {

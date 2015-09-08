@@ -17,6 +17,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "llvm/ADT/StringSwitch.h"
+
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "codegen/compvars.h"
@@ -42,8 +44,6 @@ int ICSetupInfo::totalSize() const {
     return num_slots * slot_size + call_size;
 }
 
-static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
-
 ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
                                      TypeRecorder* type_recorder) {
     ICSetupInfo* rtn = new ICSetupInfo(type, num_slots, slot_size, has_return_value, type_recorder);
@@ -52,6 +52,22 @@ ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int num_slots, int s
     assert(rtn->totalSize() > CALL_ONLY_SIZE);
 
     return rtn;
+}
+
+ICSetupInfo* ICSetupInfo::initialize(llvm::StringRef str) {
+    llvm::SmallVector<llvm::StringRef, 16> v;
+    str.split(v, "|", -1, false);
+    assert(v.size() >= 4);
+    int type_as_int = 0;
+    int num_slots = 0;
+    int slot_size = 0;
+    if (!v[0].getAsInteger(10, type_as_int) && !v[2].getAsInteger(10, num_slots) && !v[3].getAsInteger(10, slot_size) && num_slots && slot_size)
+        return initialize(v[1] == "1", num_slots, slot_size, (ICType)type_as_int, NULL);
+    return NULL;
+}
+
+std::string ICSetupInfo::toString() const {
+    return (llvm::Twine((int)type) + "|" + llvm::Twine(hasReturnValue()) + "|" + llvm::Twine(num_slots) + "|" + llvm::Twine(slot_size)).str();
 }
 
 int PatchpointInfo::patchpointSize() {
@@ -103,8 +119,9 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
                                                        .locations = std::move(locations) }));
 
         cur_arg += num_args;
+
     }
-    assert(cur_arg - frameStackmapArgsStart() == numFrameStackmapArgs());
+    assert(cur_arg - frameStackmapArgsStart() == numFrameStackmapArgs() -1);
 }
 
 static int extractScratchOffset(PatchpointInfo* pp, StackMap::Record* r) {
@@ -158,8 +175,10 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         int stack_size = stack_size_record.stack_size;
 
 
-        RELEASE_ASSERT(new_patchpoints.size() > r->id, "");
-        PatchpointInfo* pp = new_patchpoints[r->id].first;
+        auto& f = r->locations[r->locations.size()-1];
+        assert(f.type == StackMap::Record::Location::ConstIndex);
+        char* c = (char*)stackmap->constants[f.offset];
+        PatchpointInfo* pp = PatchpointInfo::create(cf, c);
         assert(pp);
 
         if (VERBOSITY() >= 2) {
@@ -167,6 +186,9 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
                    r->offset + pp->patchpointSize());
         }
 
+        if (!(r->locations.size() == pp->totalStackmapArgs())){
+            printf("%zu %d\n", r->locations.size(), pp->totalStackmapArgs());
+        }
         assert(r->locations.size() == pp->totalStackmapArgs());
 
         int scratch_rbp_offset = extractScratchOffset(pp, r);
@@ -218,6 +240,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
             // or save them across the call.
             initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size, LiveOutSet(),
                                   frame_remapped);
+
             continue;
         }
 
@@ -264,31 +287,90 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         // TODO: unsafe.  hard to use a unique_ptr here though.
         cf->ics.push_back(icinfo.release());
     }
-
-    for (auto& e : new_patchpoints) {
-        PatchpointInfo* pp = e.first;
-        const ICSetupInfo* ic = pp->getICInfo();
-        if (ic)
-            delete ic;
-        delete pp;
-    }
-    new_patchpoints.clear();
 }
 
-PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
-                                       void* func_addr) {
+PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args) {
     if (icinfo == NULL)
         assert(num_ic_stackmap_args == 0);
-
-    auto* r = new PatchpointInfo(parent_cf, icinfo, num_ic_stackmap_args);
-    r->id = new_patchpoints.size();
-    new_patchpoints.push_back(std::make_pair(r, func_addr));
-    return r;
+    return new PatchpointInfo(parent_cf, icinfo, num_ic_stackmap_args);
 }
 
-void* PatchpointInfo::getSlowpathAddr(unsigned int pp_id) {
-    RELEASE_ASSERT(pp_id < new_patchpoints.size(), "");
-    return new_patchpoints[pp_id].second;
+CompilerType* getTypeFromString(llvm::StringRef type_str, int& num_parsed) {
+    CompilerType* type = llvm::StringSwitch<CompilerType*>(type_str)
+            .Case("i64", INT)
+            .Case("AnyBox", UNKNOWN)
+            .Case("bool", BOOL)
+            .Case("double", FLOAT)
+            .Case("generator", GENERATOR)
+            .Case("NormalType(dict)", DICT)
+            .Case("NormalType(list)", LIST)
+            .Case("NormalType(str)", STR)
+            .Case("NormalType(tuple)", BOXED_TUPLE)
+            .Case("NormalType(function)", typeFromClass(function_cls))
+            .Case("closure", CLOSURE)
+            .Case("FrameInfo", FRAME_INFO)
+            .Case("undefType", UNDEF)
+            .Default(nullptr);
+
+    if (!type) {
+        if (type_str.startswith("tuple(")) {
+            llvm::StringRef vars_str = type_str.substr(strlen("tuple("));
+            llvm::SmallVector<llvm::StringRef, 8> vars;
+            vars_str.rtrim(")").split(vars, ",", -1, false);
+            std::vector<CompilerType*> types;
+            for (llvm::StringRef tuple_var : vars) {
+                RELEASE_ASSERT(!tuple_var.trim().startswith("tuple"), "parser cant't currently handled nested tuples");
+                types.push_back(getTypeFromString(tuple_var.trim(), num_parsed));
+            }
+            type = makeTupleType(types);
+            --num_parsed; // "tuple(" doen't count
+        } else if (type == 0 && type_str.startswith("NormalType("))
+            type = UNKNOWN;
+
+        RELEASE_ASSERT(type, "unknown type %s", type_str.str().c_str());
+    }
+    ++num_parsed;
+    return type;
+}
+
+std::string PatchpointInfo::toString() {
+    std::string str;
+    llvm::raw_string_ostream stream(str);
+    if (getICInfo())
+        stream << getICInfo()->toString();
+    stream << "^";
+    for (auto&& v : getFrameVars()) {
+        stream << v.name;
+        stream << ":";
+        stream << v.type->debugName();
+        stream << "|";
+    }
+    return stream.str();
+}
+
+PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, llvm::StringRef frame_str) {
+    llvm::SmallVector<llvm::StringRef, 2> v;
+    frame_str.split(v, "^", -1, true);
+    assert(v.size() == 2);
+    llvm::StringRef icinfo_str = v[0];
+    llvm::StringRef frame_vars_str = v[1];
+
+    ICSetupInfo* icinfo = icinfo_str.empty() ? NULL : ICSetupInfo::initialize(icinfo_str);
+    llvm::SmallVector<llvm::StringRef, 16> frame_vars;
+    frame_vars_str.split(frame_vars, "|", -1, false);
+    int num_frame_args = 0;
+    auto* pp = new PatchpointInfo(parent_cf, icinfo, 0);
+    for (llvm::StringRef name_type_str : frame_vars) {
+        llvm::SmallVector<llvm::StringRef, 2> name_type;
+        name_type_str.split(name_type, ":", -1, false);
+        assert(name_type.size() == 2);
+        int num_parsed = 0;
+        CompilerType* type = getTypeFromString(name_type[1], num_parsed);
+        num_frame_args += num_parsed;
+        pp->addFrameVar(name_type[0], type);
+    }
+    pp->setNumFrameArgs(num_frame_args + icStackmapArgsStart() + 1);
+    return pp;
 }
 
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {

@@ -605,7 +605,7 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
         std::string str = name;
         BoxedList* silly_list = new BoxedList();
         listAppendInternal(silly_list, boxString("__doc__"));
-        return import(0, silly_list, str);
+        return import(0, silly_list, boxString(str));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -680,8 +680,8 @@ Box* nullImporterFindModule(Box* self, Box* fullname, Box* path) {
     return None;
 }
 
-extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name) {
-    return importModuleLevel(module_name, getGlobals(), from_imports, level);
+extern "C" Box* import(int level, Box* from_imports, BoxedString* module_name) {
+    return importModuleLevel(module_name->s(), getGlobals(), from_imports, level);
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {

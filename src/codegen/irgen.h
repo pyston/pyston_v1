@@ -102,6 +102,8 @@ public:
 
     virtual Box* getIntConstant(int64_t n) = 0;
     virtual Box* getFloatConstant(double d) = 0;
+
+    virtual llvm::Value* getFuncDecl(llvm::Value* func_in_other_module) = 0;
 };
 
 extern const std::string CREATED_CLOSURE_NAME;
@@ -111,9 +113,13 @@ extern const std::string PASSED_GENERATOR_NAME;
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
 bool isIsDefinedName(llvm::StringRef name);
 
+CompiledFunction* createCF(llvm::StringRef name, SourceInfo* source, ParamNames* param_names,
+                           const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                           ExceptionStyle exception_style, FunctionSpecialization* spec);
+
 CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef nameprefix);
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef name);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is
 // potentially-undefined.  If it is potentially-undefined, we have to generate control-flow

@@ -17,7 +17,6 @@
 #include <cstdio>
 #include <iostream>
 #include <lz4frame.h>
-#include <openssl/evp.h>
 #include <unordered_map>
 
 #include "llvm/Analysis/Passes.h"
@@ -203,40 +202,41 @@ public:
     }
 };
 
+void HashOStream::write_impl(const char* ptr, size_t size) {
+    EVP_DigestUpdate(md_ctx, ptr, size);
+}
+uint64_t HashOStream::current_pos() const {
+    return 0;
+}
+
+HashOStream::HashOStream() {
+    md_ctx = EVP_MD_CTX_create();
+    RELEASE_ASSERT(md_ctx, "");
+    int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
+    RELEASE_ASSERT(ret == 1, "");
+}
+HashOStream::~HashOStream() {
+    EVP_MD_CTX_destroy(md_ctx);
+}
+
+std::string HashOStream::getHash() {
+    flush();
+    unsigned char md_value[EVP_MAX_MD_SIZE];
+    unsigned int md_len = 0;
+    int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
+    RELEASE_ASSERT(ret == 1, "");
+
+    std::string str;
+    str.reserve(md_len * 2 + 1);
+    llvm::raw_string_ostream stream(str);
+    for (int i = 0; i < md_len; ++i)
+        stream.write_hex(md_value[i]);
+    return stream.str();
+}
+
+
 class PystonObjectCache : public llvm::ObjectCache {
 private:
-    // Stream which calculates the SHA256 hash of the data writen to.
-    class HashOStream : public llvm::raw_ostream {
-        EVP_MD_CTX* md_ctx;
-
-        void write_impl(const char* ptr, size_t size) override { EVP_DigestUpdate(md_ctx, ptr, size); }
-        uint64_t current_pos() const override { return 0; }
-
-    public:
-        HashOStream() {
-            md_ctx = EVP_MD_CTX_create();
-            RELEASE_ASSERT(md_ctx, "");
-            int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
-            RELEASE_ASSERT(ret == 1, "");
-        }
-        ~HashOStream() { EVP_MD_CTX_destroy(md_ctx); }
-
-        std::string getHash() {
-            flush();
-            unsigned char md_value[EVP_MAX_MD_SIZE];
-            unsigned int md_len = 0;
-            int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
-            RELEASE_ASSERT(ret == 1, "");
-
-            std::string str;
-            str.reserve(md_len * 2 + 1);
-            llvm::raw_string_ostream stream(str);
-            for (int i = 0; i < md_len; ++i)
-                stream.write_hex(md_value[i]);
-            return stream.str();
-        }
-    };
-
     llvm::SmallString<128> cache_dir;
     std::string module_identifier;
     std::string hash_before_codegen;
@@ -258,15 +258,16 @@ public:
     virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj)
 #endif
     {
-        RELEASE_ASSERT(module_identifier == M->getModuleIdentifier(), "");
-        RELEASE_ASSERT(!hash_before_codegen.empty(), "");
-
         llvm::SmallString<128> cache_file = cache_dir;
-        llvm::sys::path::append(cache_file, hash_before_codegen);
+        llvm::sys::path::append(cache_file, g.cur_cfg_hash + ".o");
         if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directories(cache_dir.str()))
             return;
 
-        CompressedFile::writeFile(cache_file, Obj.getBuffer());
+        FILE* f = fopen(cache_file.str().str().c_str(), "wb");
+        llvm::StringRef ref = Obj.getBuffer();
+        fwrite(ref.data(), 1, ref.size(), f);
+        fclose(f);
+
     }
 
 #if LLVMREV < 215566
@@ -275,53 +276,9 @@ public:
     virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M)
 #endif
     {
-        static StatCounter jit_objectcache_hits("num_jit_objectcache_hits");
         static StatCounter jit_objectcache_misses("num_jit_objectcache_misses");
-
-        module_identifier = M->getModuleIdentifier();
-
-        // Generate a hash for the module
-        HashOStream hash_stream;
-        llvm::WriteBitcodeToFile(M, hash_stream);
-        hash_before_codegen = hash_stream.getHash();
-
-        llvm::SmallString<128> cache_file = cache_dir;
-        llvm::sys::path::append(cache_file, hash_before_codegen);
-        if (!llvm::sys::fs::exists(cache_file.str())) {
-#if 0
-            // This code helps with identifying why we got a cache miss for a file.
-            // - clear the cache directory
-            // - run pyston
-            // - run pyston a second time
-            // - Now look for "*_second.ll" files in the cache directory and compare them to the "*_first.ll" IR dump
-            std::string llvm_ir;
-            llvm::raw_string_ostream sstr(llvm_ir);
-            M->print(sstr, 0);
-            sstr.flush();
-
-            llvm::sys::fs::create_directories(cache_dir.str());
-            std::string filename = cache_dir.str().str() + "/" + module_identifier + "_first.ll";
-            if (llvm::sys::fs::exists(filename))
-                filename = cache_dir.str().str() + "/" + module_identifier + "_second.ll";
-            FILE* f = fopen(filename.c_str(), "wt");
-            ASSERT(f, "%s", strerror(errno));
-            fwrite(llvm_ir.c_str(), 1, llvm_ir.size(), f);
-            fclose(f);
-#endif
-
-            // This file isn't in our cache
-            jit_objectcache_misses.log();
-            return NULL;
-        }
-
-        std::unique_ptr<llvm::MemoryBuffer> mem_buff = CompressedFile::getFile(cache_file);
-        if (!mem_buff) {
-            jit_objectcache_misses.log();
-            return NULL;
-        }
-
-        jit_objectcache_hits.log();
-        return mem_buff;
+        jit_objectcache_misses.log();
+        return NULL;
     }
 
     void cleanupCacheDirectory() {

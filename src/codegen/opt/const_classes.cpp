@@ -38,6 +38,10 @@ using namespace llvm;
 
 namespace pyston {
 
+llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
+    RELEASE_ASSERT(0, "unimplemented");
+}
+
 class ConstClassesPass : public FunctionPass {
 private:
     void* getGVAddr(GlobalVariable* gv) {

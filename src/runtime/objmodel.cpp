@@ -253,17 +253,17 @@ extern "C" void assertFail(Box* assertion_type, Box* msg) {
     }
 }
 
-extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg) {
+extern "C" void assertNameDefined(bool b, BoxedString* name, BoxedClass* exc_cls, bool local_var_msg) {
     if (!b) {
         if (local_var_msg)
-            raiseExcHelper(exc_cls, "local variable '%s' referenced before assignment", name);
+            raiseExcHelper(exc_cls, "local variable '%s' referenced before assignment", name->c_str());
         else
-            raiseExcHelper(exc_cls, "name '%s' is not defined", name);
+            raiseExcHelper(exc_cls, "name '%s' is not defined", name->c_str());
     }
 }
 
-extern "C" void assertFailDerefNameDefined(const char* name) {
-    raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name);
+extern "C" void assertFailDerefNameDefined(BoxedString* name) {
+    raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name->c_str());
 }
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, llvm::StringRef attr) {
@@ -5632,7 +5632,7 @@ extern "C" void delGlobal(Box* globals, BoxedString* name) {
 
         auto it = d->d.find(name);
         assert(name->data()[name->size()] == '\0');
-        assertNameDefined(it != d->d.end(), name->data(), NameError, false /* local_var_msg */);
+        assertNameDefined(it != d->d.end(), name, NameError, false /* local_var_msg */);
         d->d.erase(it);
     }
 }
@@ -5866,7 +5866,7 @@ extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr) {
     auto it = d.find(attr);
     if (it == d.end()) {
         assert(attr->data()[attr->size()] == '\0');
-        assertNameDefined(0, attr->data(), NameError, false /* local_var_msg */);
+        assertNameDefined(0, attr, NameError, false /* local_var_msg */);
     }
     d.erase(it);
 }

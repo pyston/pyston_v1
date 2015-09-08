@@ -20,10 +20,14 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Memory.h"
 
+#include "codegen/codegen.h"
+#include "codegen/irgen/irgenerator.h"
 #include "codegen/irgen/util.h"
+#include "core/cfg.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 // This code was copy-pasted from SectionMemoryManager.cpp;
 // TODO eventually I should remove this using directive
@@ -210,6 +214,51 @@ uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
     uint64_t base = (uint64_t)getValueOfRelocatableSym(name);
     if (base)
         return base;
+
+    llvm::StringRef name_str(name);
+    if (name_str.startswith("mat_")) {
+        llvm::StringRef num = name_str.substr(strlen("mat_"));
+        int n = -1;
+        bool err = num.getAsInteger(10, n);
+        assert(!err && g.cur_cfg);
+        RELEASE_ASSERT(g.cur_cfg->mat_constants.size() > n && n >= 0, "");
+        AST* node = g.cur_cfg->mat_constants[n];
+        BoxedModule* parent_module = (BoxedModule*)getValueOfRelocatableSym("cParentModule");
+        assert(parent_module);
+        if (node->type == AST_TYPE::Str) {
+            AST_Str* str_node = (AST_Str*)node;
+            if (str_node->str_type == AST_Str::STR)
+                return (uint64_t)parent_module->getStringConstant(str_node->str_data, true);
+            else if (str_node->str_type == AST_Str::UNICODE)
+                return (uint64_t)parent_module->getUnicodeConstant(str_node->str_data);
+            else
+                RELEASE_ASSERT(0, "unknown str type");
+        } else if (node->type == AST_TYPE::Num) {
+            AST_Num* num_node = (AST_Num*)node;
+            if (num_node->num_type == AST_Num::LONG)
+                return (uint64_t)parent_module->getLongConstant(num_node->n_long);
+            else if (num_node->num_type == AST_Num::COMPLEX)
+                return (uint64_t)parent_module->getPureImaginaryConstant(num_node->n_float);
+            else
+                RELEASE_ASSERT(0, "unknown num type");
+        } else if (node->type == AST_TYPE::Name) {
+            AST_Name* name_node = (AST_Name*)node;
+            return (uint64_t)name_node->id.getBox();
+        } else if (node->type == AST_TYPE::FunctionDef || node->type == AST_TYPE::ClassDef || node->type == AST_TYPE::Lambda) {
+            return (uint64_t)getWrappedFunction(node);
+        } else
+            RELEASE_ASSERT(0, "unknown type");
+    } else if (name_str.startswith("str_")) {
+        llvm::StringRef real_name = name_str.substr(strlen("str_"));
+        assert(g.cur_cfg);
+        return (uint64_t)internStringImmortal(real_name);
+    } else if (name_str.startswith("ptr_")) {
+        llvm::StringRef num = name_str.substr(strlen("ptr_"));
+        int n = -1;
+        bool err = num.getAsInteger(10, n);
+        assert(!err && g.cur_cfg && g.cur_cfg->ptr_constants.size() > n);
+        return (uint64_t)g.cur_cfg->ptr_constants[n];
+    }
 
     base = RTDyldMemoryManager::getSymbolAddress(name);
     if (base)

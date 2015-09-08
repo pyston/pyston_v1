@@ -31,9 +31,14 @@ class GCVisitor;
 }
 
 namespace pyston {
+class AST;
+class AST_Jump;
+class BoxedString;
 
 llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type*, llvm::StringRef shared_name = llvm::StringRef());
-llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);
+llvm::Constant* embedMaterializeNode(AST* addr, llvm::Type*);
+llvm::Constant* embedRelocatableStr(BoxedString* boxed_str, llvm::Type*);
+llvm::Constant* embedConstantStr(llvm::StringRef str);
 llvm::Constant* getConstantInt(int64_t val);
 llvm::Constant* getConstantDouble(double val);
 llvm::Constant* getConstantInt(int64_t val, llvm::Type*);
@@ -41,6 +46,7 @@ llvm::Constant* getNullPtr(llvm::Type* t);
 
 void clearRelocatableSymsMap();
 void setPointersInCodeStorage(std::vector<const void*>* v);
+void setRelocatableSym(const std::string& str, const void* ptr);
 const void* getValueOfRelocatableSym(const std::string& str);
 
 void visitRelocatableSymsMap(gc::GCVisitor* visitor);
