@@ -567,7 +567,7 @@ extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
     try {
         return o->nonzeroIC();
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        setCAPIException(e);
         return -1;
     }
 }

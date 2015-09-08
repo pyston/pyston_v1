@@ -1,4 +1,3 @@
-# expected: fail
 import operator
 import unittest
 

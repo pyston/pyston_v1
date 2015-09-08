@@ -54,7 +54,6 @@ test_list               longs as slice indices
 test_long               sys.long_info
 test_module             unicode docstrings
 test_mutants            unknown failure
-test_operator           PyNumber_Absolute()
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_pep277             segfaults
 test_pep352             various unique bugs
