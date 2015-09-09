@@ -370,12 +370,12 @@ static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body
     return cl_f;
 }
 
-static AST_Module* parseExec(llvm::StringRef source, bool interactive = false) {
+static AST_Module* parseExec(llvm::StringRef source, FutureFlags future_flags, bool interactive = false) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
     const char* code = source.data();
-    AST_Module* parsedModule = parse_string(code);
+    AST_Module* parsedModule = parse_string(code, future_flags);
 
     if (interactive) {
         for (int i = 0; i < parsedModule->body.size(); ++i) {
@@ -397,7 +397,7 @@ static CLFunction* compileExec(AST_Module* parsedModule, BoxedString* fn, PyComp
     return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
 }
 
-static AST_Expression* parseEval(llvm::StringRef source) {
+static AST_Expression* parseEval(llvm::StringRef source, FutureFlags future_flags) {
     const char* code = source.data();
 
     // TODO error message if parse fails or if it isn't an expr
@@ -409,7 +409,7 @@ static AST_Expression* parseEval(llvm::StringRef source) {
     while (*code == ' ' || *code == '\t' || *code == '\n' || *code == '\r')
         code++;
 
-    AST_Module* parsedModule = parse_string(code);
+    AST_Module* parsedModule = parse_string(code, future_flags);
     if (parsedModule->body.size() == 0)
         raiseSyntaxError("unexpected EOF while parsing", 0, 0, "<string>", "");
 
@@ -496,11 +496,11 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
 
         if (type_str->s() == "exec") {
-            parsed = parseExec(source_str);
+            parsed = parseExec(source_str, future_flags);
         } else if (type_str->s() == "eval") {
-            parsed = parseEval(source_str);
+            parsed = parseEval(source_str, future_flags);
         } else if (type_str->s() == "single") {
-            parsed = parseExec(source_str, true);
+            parsed = parseExec(source_str, future_flags, true);
         } else {
             raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
         }
@@ -578,7 +578,11 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s());
+        CLFunction* caller_cl = getTopPythonFunction();
+        assert(caller_cl != NULL);
+        assert(caller_cl->source != NULL);
+
+        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
         static BoxedString* string_string = internStringImmortal("<string>");
         cl = compileEval(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
@@ -627,7 +631,7 @@ Box* execfile(Box* _fn, Box* globals, Box* locals) {
     if (!exists)
         raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s().data());
 
-    AST_Module* parsed = caching_parse_file(fn->s().data());
+    AST_Module* parsed = caching_parse_file(fn->s().data(), /* future_flags = */ 0);
     assert(parsed);
 
     CLFunction* caller_cl = getTopPythonFunction();
@@ -667,7 +671,11 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
+        CLFunction* caller_cl = getTopPythonFunction();
+        assert(caller_cl != NULL);
+        assert(caller_cl->source != NULL);
+
+        auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
         static BoxedString* string_string = internStringImmortal("<string>");
         cl = compileExec(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {

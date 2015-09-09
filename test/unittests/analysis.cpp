@@ -26,7 +26,7 @@ protected:
 
 TEST_F(AnalysisTest, augassign) {
     const std::string fn("test/unittests/analysis_listcomp.py");
-    AST_Module* module = caching_parse_file(fn.c_str());
+    AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
     ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
@@ -59,7 +59,7 @@ TEST_F(AnalysisTest, augassign) {
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     const std::string fn("test/unittests/analysis_osr.py");
-    AST_Module* module = caching_parse_file(fn.c_str());
+    AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
     ScopingAnalysis *scoping = new ScopingAnalysis(module, true);

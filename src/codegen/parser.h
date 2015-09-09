@@ -15,14 +15,15 @@
 #ifndef PYSTON_CODEGEN_PARSER_H
 #define PYSTON_CODEGEN_PARSER_H
 
+#include "core/types.h"
+
 namespace pyston {
 
 class AST_Module;
 
-AST_Module* parse_string(const char* code);
-
-AST_Module* parse_file(const char* fn);
-AST_Module* caching_parse_file(const char* fn);
+AST_Module* parse_string(const char* code, FutureFlags inherited_flags);
+AST_Module* parse_file(const char* fn, FutureFlags inherited_flags);
+AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags);
 }
 
 #endif

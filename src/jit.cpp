@@ -418,7 +418,7 @@ static int main(int argc, char** argv) {
         if (command != NULL) {
             try {
                 main_module = createModule(boxString("__main__"), "<string>");
-                AST_Module* m = parse_string(command);
+                AST_Module* m = parse_string(command, /* future_flags = */ 0);
                 compileAndRunModule(m, main_module);
                 rtncode = 0;
             } catch (ExcInfo e) {
@@ -457,7 +457,7 @@ static int main(int argc, char** argv) {
 
                 main_module = createModule(boxString("__main__"), fn);
                 try {
-                    AST_Module* ast = caching_parse_file(fn);
+                    AST_Module* ast = caching_parse_file(fn, /* future_flags = */ 0);
                     compileAndRunModule(ast, main_module);
                 } catch (ExcInfo e) {
                     setCAPIException(e);
@@ -487,7 +487,7 @@ static int main(int argc, char** argv) {
                 add_history(line);
 
                 try {
-                    AST_Module* m = parse_string(line);
+                    AST_Module* m = parse_string(line, /* future_flags = */ 0);
 
                     Timer _t("repl");
 

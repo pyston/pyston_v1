@@ -1012,12 +1012,16 @@ static std::string getParserCommandLine(const char* fn) {
     return std::string("/usr/bin/python -S ") + parse_ast_fn.str().str() + " " + fn;
 }
 
-AST_Module* parse_string(const char* code) {
-    if (ENABLE_PYPA_PARSER) {
-        AST_Module* rtn = pypa_parse_string(code);
+AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
+    inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
+
+    if (ENABLE_PYPA_PARSER || inherited_flags) {
+        AST_Module* rtn = pypa_parse_string(code, inherited_flags);
         RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
         return rtn;
     }
+
+    ASSERT(!inherited_flags, "the old cpython parser doesn't support specifying initial future flags");
 
     int size = strlen(code);
     char buf[] = "pystontmp_XXXXXX";
@@ -1033,17 +1037,17 @@ AST_Module* parse_string(const char* code) {
     fputc('\n', f);
     fclose(f);
 
-    AST_Module* m = parse_file(tmp.c_str());
+    AST_Module* m = parse_file(tmp.c_str(), inherited_flags);
     removeDirectoryIfExists(tmpdir);
 
     return m;
 }
 
-AST_Module* parse_file(const char* fn) {
+AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {
-        AST_Module* rtn = pypa_parse(fn);
+        AST_Module* rtn = pypa_parse(fn, inherited_flags);
         RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
         return rtn;
     }
@@ -1070,9 +1074,9 @@ AST_Module* parse_file(const char* fn) {
 
 const char* getMagic() {
     if (ENABLE_PYPA_PARSER)
-        return "a\ncM";
+        return "a\ncN";
     else
-        return "a\ncm";
+        return "a\ncn";
 }
 
 #define MAGIC_STRING_LENGTH 4
@@ -1080,7 +1084,9 @@ const char* getMagic() {
 #define CHECKSUM_LENGTH 1
 
 // Does at least one of: returns a valid file_data vector, or fills in 'module'
-static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, AST_Module*& module) {
+static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, AST_Module*& module,
+                                  FutureFlags inherited_flags) {
+    inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
     FILE* cache_fp = fopen(cache_fn.c_str(), "w");
 
     if (DEBUG_PARSING) {
@@ -1110,8 +1116,8 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
     file_data.insert(file_data.end(), (char*)&checksum, (char*)&checksum + CHECKSUM_LENGTH);
     checksum = 0;
 
-    if (ENABLE_PYPA_PARSER) {
-        module = pypa_parse(fn);
+    if (ENABLE_PYPA_PARSER || inherited_flags) {
+        module = pypa_parse(fn, inherited_flags);
         RELEASE_ASSERT(module, "unknown parse error");
 
         if (!cache_fp)
@@ -1121,6 +1127,7 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
         checksum = p.second;
         bytes_written += p.first;
     } else {
+        ASSERT(!inherited_flags, "the old cpython parser doesn't support specifying initial future flags");
         FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
         char buf[80];
         while (true) {
@@ -1157,7 +1164,7 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
 // Parsing the file is somewhat expensive since we have to shell out to cpython;
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
-AST_Module* caching_parse_file(const char* fn) {
+AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags) {
     std::ostringstream oss;
     if (DEBUG_PARSING) {
         oss << "caching_parse_file() on " << fn << '\n';
@@ -1192,7 +1199,7 @@ AST_Module* caching_parse_file(const char* fn) {
                     if (ferror(cache_fp)) {
                         oss << "encountered io error reading from the file\n";
                         AST_Module* mod = 0;
-                        file_data = _reparse(fn, cache_fn, mod);
+                        file_data = _reparse(fn, cache_fn, mod, inherited_flags);
                         if (mod)
                             return mod;
                         assert(file_data.size());
@@ -1295,7 +1302,7 @@ AST_Module* caching_parse_file(const char* fn) {
             file_data.clear();
 
             AST_Module* mod = 0;
-            file_data = _reparse(fn, cache_fn, mod);
+            file_data = _reparse(fn, cache_fn, mod, inherited_flags);
             if (mod)
                 return mod;
             assert(file_data.size());

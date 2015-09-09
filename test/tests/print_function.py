@@ -52,3 +52,9 @@ except TypeError:
 
 for i in xrange(10):
     print()
+
+# These two should output "1 2"
+exec """print(1, 2)"""
+eval("print(1, 2)")
+# This one should output "(1, 2)"
+exec compile("print(1, 2)", "<string>", "exec", dont_inherit=True)
