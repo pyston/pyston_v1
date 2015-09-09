@@ -85,7 +85,7 @@ Box* dictCopy(BoxedDict* self) {
         raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     BoxedDict* r = new BoxedDict();
-    r->d.insert(self->d.begin(), self->d.end());
+    r->d = self->d;
     return r;
 }
 
@@ -576,11 +576,11 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
     if (self->d.size() != rhs->d.size())
         return False;
 
-    for (const auto& p : *self) {
+    for (const auto& p : self->d) {
         auto it = rhs->d.find(p.first);
         if (it == rhs->d.end())
             return False;
-        if (!nonzero(compare(p.second, it->second, AST_TYPE::Eq)))
+        if (!PyEq()(p.second, it->second))
             return False;
     }
 
