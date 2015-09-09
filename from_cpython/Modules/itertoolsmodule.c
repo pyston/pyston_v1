@@ -1956,7 +1956,8 @@ product_next(productobject *lz)
             Py_DECREF(old_result);
         }
         /* Now, we've got the only copy so we can update it in-place */
-        assert (npools==0 || 2 /*Pyston change, was: Py_REFCNT(result)*/ == 1);
+        // Pyston change: safe to comment this out since we will always create a new tuple:
+        // assert (npools==0 || Py_REFCNT(result) == 1);
 
         /* Update the pool indices right-to-left.  Only advance to the
            next pool when the previous one rolls-over */
