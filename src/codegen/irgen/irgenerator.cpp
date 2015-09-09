@@ -2990,10 +2990,9 @@ CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_s
         std::unique_ptr<SourceInfo> si(
             new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->getFn()));
         if (args)
-            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.s().size(),
-                                args->kwarg.s().size(), std::move(si));
+            cl = new CLFunction(args->args.size(), args->vararg.s().size(), args->kwarg.s().size(), std::move(si));
         else
-            cl = new CLFunction(0, 0, 0, 0, std::move(si));
+            cl = new CLFunction(0, false, false, std::move(si));
     }
     return cl;
 }

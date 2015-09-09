@@ -892,16 +892,19 @@ public:
         std::vector<Sig*> sigs;
         CLFunction* clf = rtfunc->f;
 
+        assert(!rtfunc->can_change_defaults);
+
         for (int i = 0; i < clf->versions.size(); i++) {
             CompiledFunction* cf = clf->versions[i];
 
             FunctionSpecialization* fspec = cf->spec;
 
             Sig* type_sig = new Sig();
+            auto paramspec = rtfunc->getParamspec();
             type_sig->rtn_type = fspec->rtn_type;
-            type_sig->ndefaults = clf->paramspec.num_defaults;
-            type_sig->takes_varargs = clf->paramspec.takes_varargs;
-            type_sig->takes_kwargs = clf->paramspec.takes_kwargs;
+            type_sig->ndefaults = paramspec.num_defaults;
+            type_sig->takes_varargs = paramspec.takes_varargs;
+            type_sig->takes_kwargs = paramspec.takes_kwargs;
 
             if (stripfirst) {
                 assert(fspec->arg_types.size() >= 1);
@@ -1671,11 +1674,15 @@ public:
         if (argspec.num_keywords || argspec.has_starargs || argspec.has_kwargs)
             return NULL;
 
+        // We can handle can_change_defaults=true functions by just returning NULL here,
+        // but I don't think we should be running into that case.
+        RELEASE_ASSERT(!rtattr_func->can_change_defaults, "could handle this but unexpected");
+
         CLFunction* cl = rtattr_func->f;
         assert(cl);
 
-        ParamReceiveSpec paramspec = cl->paramspec;
-        if (paramspec.takes_varargs || paramspec.takes_kwargs)
+        ParamReceiveSpec paramspec = rtattr_func->getParamspec();
+        if (cl->takes_varargs || paramspec.takes_kwargs)
             return NULL;
 
         RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
@@ -1745,6 +1752,7 @@ public:
         new_args.push_back(var);
         new_args.insert(new_args.end(), args.begin(), args.end());
 
+        RELEASE_ASSERT(!rtattr_func->can_change_defaults, "");
         for (int i = args.size() + 1; i < paramspec.num_args; i++) {
             // TODO should _call() be able to take llvm::Value's directly?
             auto value = rtattr_func->defaults->elts[i - paramspec.num_args + paramspec.num_defaults];

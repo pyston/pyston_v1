@@ -577,12 +577,10 @@ void setupSet() {
     set_iterator_cls->freeze();
     set_iterator_cls->tp_iternext = setiter_next;
 
-    set_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { NULL }));
-    set_cls->giveAttr("__init__",
-                      new BoxedFunction(boxRTFunction((void*)setInit, UNKNOWN, 2, 1, false, false), { NULL }));
-    frozenset_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)frozensetNew, UNKNOWN, 2, 1, false, false), { NULL }));
+    set_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, false, false), { NULL }));
+    set_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)setInit, UNKNOWN, 2, false, false), { NULL }));
+    frozenset_cls->giveAttr("__new__",
+                            new BoxedFunction(boxRTFunction((void*)frozensetNew, UNKNOWN, 2, false, false), { NULL }));
 
     Box* set_repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
     set_cls->giveAttr("__repr__", set_repr);
@@ -606,7 +604,7 @@ void setupSet() {
     v_fu.push_back(UNKNOWN);
 
     auto add = [&](const char* name, void* func) {
-        CLFunction* func_obj = createRTFunction(2, 0, false, false);
+        CLFunction* func_obj = createRTFunction(2, false, false);
         addRTFunction(func_obj, (void*)func, SET, v_ss);
         addRTFunction(func_obj, (void*)func, SET, v_sf);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
@@ -645,19 +643,19 @@ void setupSet() {
     set_cls->giveAttr("discard", new BoxedFunction(boxRTFunction((void*)setDiscard, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
-    set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
-    set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, true, false)));
+    set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttr("union", set_cls->getattr(internStringMortal("union")));
     set_cls->giveAttr("intersection",
-                      new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
+                      new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttr("intersection", set_cls->getattr(internStringMortal("intersection")));
     set_cls->giveAttr("intersection_update",
-                      new BoxedFunction(boxRTFunction((void*)setIntersectionUpdate, UNKNOWN, 1, 0, true, false)));
+                      new BoxedFunction(boxRTFunction((void*)setIntersectionUpdate, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttr("intersection_update", set_cls->getattr(internStringMortal("intersection_update")));
-    set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttr("difference", set_cls->getattr(internStringMortal("difference")));
     set_cls->giveAttr("difference_update",
-                      new BoxedFunction(boxRTFunction((void*)setDifferenceUpdate, UNKNOWN, 1, 0, true, false)));
+                      new BoxedFunction(boxRTFunction((void*)setDifferenceUpdate, UNKNOWN, 1, true, false)));
     set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
     frozenset_cls->giveAttr("issubset", set_cls->getattr(internStringMortal("issubset")));
     set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));

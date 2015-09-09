@@ -322,7 +322,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         if (!bm->hasattr(builtins_str))
             bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
 
-        clfunc = new CLFunction(0, 0, false, false, std::move(si));
+        clfunc = new CLFunction(0, false, false, std::move(si));
     }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
@@ -365,7 +365,7 @@ static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body
 
     std::unique_ptr<SourceInfo> si(
         new SourceInfo(getCurrentModule(), scoping, future_flags, source, std::move(body), fn));
-    CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
+    CLFunction* cl_f = new CLFunction(0, false, false, std::move(si));
 
     return cl_f;
 }
@@ -890,9 +890,8 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     return (char*)new_cf->code;
 }
 
-CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
-                             const ParamNames& param_names) {
-    return new CLFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
+CLFunction* createRTFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names) {
+    return new CLFunction(num_args, takes_varargs, takes_kwargs, param_names);
 }
 
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names,
@@ -901,16 +900,16 @@ CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args,
     assert(param_names.vararg.str() == "");
     assert(param_names.kwarg.str() == "");
 
-    return boxRTFunction(f, rtn_type, num_args, 0, false, false, param_names, exception_style);
+    return boxRTFunction(f, rtn_type, num_args, false, false, param_names, exception_style);
 }
 
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs, const ParamNames& param_names, ExceptionStyle exception_style) {
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, bool takes_varargs, bool takes_kwargs,
+                          const ParamNames& param_names, ExceptionStyle exception_style) {
     assert(!param_names.takes_param_names || num_args == param_names.args.size());
     assert(takes_varargs || param_names.vararg.str() == "");
     assert(takes_kwargs || param_names.kwarg.str() == "");
 
-    CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
+    CLFunction* cl_f = createRTFunction(num_args, takes_varargs, takes_kwargs, param_names);
 
     addRTFunction(cl_f, f, rtn_type, exception_style);
     return cl_f;

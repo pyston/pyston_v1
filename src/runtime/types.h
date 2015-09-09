@@ -762,8 +762,8 @@ public:
     BoxedClosure* closure;
     Box* globals;
 
-    int ndefaults;
-    GCdArray* defaults;
+    BoxedTuple* defaults;
+    bool can_change_defaults;
 
     ICInvalidator dependent_ics;
 
@@ -774,7 +774,11 @@ public:
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                      Box* globals = NULL);
+                      Box* globals = NULL, bool can_change_defaults = false);
+
+    ParamReceiveSpec getParamspec() {
+        return ParamReceiveSpec(f->num_args, defaults ? defaults->size() : 0, f->takes_varargs, f->takes_kwargs);
+    }
 };
 
 class BoxedFunction : public BoxedFunctionBase {
@@ -783,7 +787,7 @@ public:
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  Box* globals = NULL);
+                  Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
 

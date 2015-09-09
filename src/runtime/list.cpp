@@ -1205,7 +1205,7 @@ void setupList() {
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
-    CLFunction* getitem = createRTFunction(2, 0, false, false);
+    CLFunction* getitem = createRTFunction(2, false, false);
     addRTFunction(getitem, (void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(getitem, (void*)listGetitemSlice<CXX>, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, CXX);
     addRTFunction(getitem, (void*)listGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
@@ -1218,7 +1218,7 @@ void setupList() {
 
     list_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)listGetslice, LIST, 3)));
 
-    CLFunction* setitem = createRTFunction(3, 0, false, false);
+    CLFunction* setitem = createRTFunction(3, false, false);
     addRTFunction(setitem, (void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });
     addRTFunction(setitem, (void*)listSetitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE, UNKNOWN });
     addRTFunction(setitem, (void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN, UNKNOWN });
@@ -1226,7 +1226,7 @@ void setupList() {
 
     list_cls->giveAttr("__setslice__", new BoxedFunction(boxRTFunction((void*)listSetslice, NONE, 4)));
 
-    CLFunction* delitem = createRTFunction(2, 0, false, false);
+    CLFunction* delitem = createRTFunction(2, false, false);
     addRTFunction(delitem, (void*)listDelitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(delitem, (void*)listDelitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
     addRTFunction(delitem, (void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
@@ -1250,7 +1250,7 @@ void setupList() {
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
     list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1)));
 
-    list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None }));
+    list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, false, false), { None }));
 
     list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2)));
     list_cls->giveAttr("extend", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
@@ -1263,19 +1263,18 @@ void setupList() {
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));
 
-    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSortFunc, NONE, 4, 3, false, false,
+    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSortFunc, NONE, 4, false, false,
                                                                ParamNames({ "", "cmp", "key", "reverse" }, "", "")),
                                                  { None, None, False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
 
-    list_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None }));
+    list_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, false, false), { None }));
     list_cls->giveAttr("__init__",
-                       new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, 1, false, false), { NULL }));
+                       new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, false, false), { NULL }));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2)));
-    list_cls->giveAttr(
-        "index", new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 4, 2, false, false), { NULL, NULL }));
+    list_cls->giveAttr("index",
+                       new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 4, false, false), { NULL, NULL }));
     list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1)));
 

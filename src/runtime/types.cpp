@@ -355,7 +355,15 @@ void Box::gcHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
-    : in_weakreflist(NULL), f(f), closure(NULL), ndefaults(0), defaults(NULL), modname(NULL), name(NULL), doc(NULL) {
+    : in_weakreflist(NULL),
+      f(f),
+      closure(NULL),
+      defaults(NULL),
+      can_change_defaults(false),
+      modname(NULL),
+      name(NULL),
+      doc(NULL) {
+
     if (f->source) {
         assert(f->source->scoping->areGlobalsFromModule());
         Box* globals_for_name = f->source->parent_module;
@@ -367,29 +375,32 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
         this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
-
-    assert(f->paramspec.num_defaults == ndefaults);
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
-                                                BoxedClosure* closure, Box* globals)
+                                                BoxedClosure* closure, Box* globals, bool can_change_defaults)
     : in_weakreflist(NULL),
       f(f),
       closure(closure),
       globals(globals),
-      ndefaults(0),
       defaults(NULL),
+      can_change_defaults(can_change_defaults),
       modname(NULL),
       name(NULL),
       doc(NULL) {
     assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
 
     if (defaults.size()) {
-        // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
-        // and a GC can happen within this constructor:
-        this->defaults = new (defaults.size()) GCdArray();
-        memcpy(this->defaults->elts, defaults.begin(), defaults.size() * sizeof(Box*));
-        this->ndefaults = defaults.size();
+        // HAX copy+modify the BoxedTuple constructor so that we can put NULLs into the tuple.
+        // We are going to separately be careful to make sure that those NULLs don't escape
+        // to the user (see functionDefaults)
+        this->defaults = BoxedTuple::create(defaults.size());
+        int i = 0;
+        for (auto e : defaults) {
+            assert(!e || gc::isValidGCObject(e));
+            this->defaults->elts[i] = e;
+            ++i;
+        }
     }
 
     if (f->source) {
@@ -412,15 +423,14 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
-
-    assert(f->paramspec.num_defaults == ndefaults);
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
-BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure, Box* globals)
-    : BoxedFunctionBase(f, defaults, closure, globals) {
+BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure, Box* globals,
+                             bool can_change_defaults)
+    : BoxedFunctionBase(f, defaults, closure, globals, can_change_defaults) {
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
     // some builtin functions that are BoxedFunctions but really ought to be a type that
@@ -451,15 +461,7 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
     if (f->globals)
         v->visit(&f->globals);
 
-    // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
-    // since we could be collecting from inside a BoxedFunctionBase constructor
-    if (f->ndefaults) {
-        assert(f->defaults);
-        v->visit(&f->defaults);
-        // do a conservative scan since there can be NULLs in there:
-        v->visitPotentialRange(reinterpret_cast<void**>(&f->defaults->elts[0]),
-                               reinterpret_cast<void**>(&f->defaults->elts[f->ndefaults]));
-    }
+    v->visit(&f->defaults);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
@@ -586,7 +588,7 @@ extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure, globals);
+    return new BoxedFunction(f, defaults, closure, globals, /* can_change_defaults = */ true);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -1676,9 +1678,12 @@ static Box* functionCode(Box* self, void*) {
 static Box* functionDefaults(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
-    if (!func->ndefaults)
+    if (!func->defaults)
         return None;
-    return BoxedTuple::create(func->ndefaults, &func->defaults->elts[0]);
+    for (auto e : *func->defaults) {
+        RELEASE_ASSERT(e, "this function's defaults should not be available");
+    }
+    return func->defaults;
 }
 
 static Box* functionGlobals(Box* self, void*) {
@@ -1696,29 +1701,26 @@ static Box* functionGlobals(Box* self, void*) {
 }
 
 static void functionSetDefaults(Box* b, Box* v, void*) {
-    RELEASE_ASSERT(v, "can't delete __defaults__");
-
     assert(b->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
 
-    if (v == None)
-        v = EmptyTuple;
+    // I guess this could happen if the user tried to do something like `min.__defaults__ = ()`.
+    // In CPython that would be an AttributeError, but I think we might allow it to get to this point.
+    // The better way to handle this would be to not add the __defaults__ descriptor to the
+    // builtin_function_or_method_cls so that it would be an AttributeError to try to access it,
+    // and leave this assert.
+    RELEASE_ASSERT(func->can_change_defaults, "trying to change the defaults on a non-defaults-changable function.");
 
-    if (!PyTuple_Check(v)) {
+    if (v == None)
+        v = NULL;
+    else if (v && !PyTuple_Check(v)) {
         raiseExcHelper(TypeError, "__defaults__ must be set to a tuple object");
     }
 
     BoxedTuple* t = static_cast<BoxedTuple*>(v);
 
-    if (t->size() == func->ndefaults) {
-        for (int i = 0; i < func->ndefaults; i++) {
-            func->defaults->elts[i] = t->elts[i];
-        }
-        return;
-    } else {
-        RELEASE_ASSERT(0, "can't change number of defaults on a function for now");
-    }
-    abort();
+    func->defaults = t;
+    func->dependent_ics.invalidateAll();
 }
 
 static Box* functionNonzero(BoxedFunction* self) {
@@ -3410,6 +3412,21 @@ static Box* getsetSet(Box* self, Box* obj, Box* val) {
     }
 }
 
+static Box* getsetDelete(Box* self, Box* obj) {
+    assert(obj != NULL && obj != None);
+
+    BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+    if (isSubclass(self->cls, pyston_getset_cls)) {
+        getset_descr->set(obj, NULL, getset_descr->closure);
+        return None;
+    } else {
+        RELEASE_ASSERT(isSubclass(self->cls, capi_getset_cls), "");
+        getset_descr->set(obj, NULL, getset_descr->closure);
+        checkAndThrowCAPIException();
+        return None;
+    }
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -3661,11 +3678,12 @@ void setupRuntime() {
     attrwrapperiter_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                                  sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
-    // TODO: add explicit __get__ and __set__ methods to these
     pyston_getset_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)getsetGet, UNKNOWN, 3)));
     capi_getset_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)getsetGet, UNKNOWN, 3)));
     pyston_getset_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)getsetSet, UNKNOWN, 3)));
     capi_getset_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)getsetSet, UNKNOWN, 3)));
+    pyston_getset_cls->giveAttr("__delete__", new BoxedFunction(boxRTFunction((void*)getsetDelete, UNKNOWN, 2)));
+    capi_getset_cls->giveAttr("__delete__", new BoxedFunction(boxRTFunction((void*)getsetDelete, UNKNOWN, 2)));
     pyston_getset_cls->freeze();
     capi_getset_cls->freeze();
 
@@ -3673,7 +3691,7 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, false, false)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls,
                                            new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2)),
@@ -3683,15 +3701,15 @@ void setupRuntime() {
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
-    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
+    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, true, true);
     typeCallObj->internal_callable.cxx_val = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
     type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
-    type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNewGeneric, UNKNOWN, 4, 2, false, false),
-                                                    { NULL, NULL }));
+    type_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)typeNewGeneric, UNKNOWN, 4, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
@@ -3712,7 +3730,7 @@ void setupRuntime() {
     none_cls->freeze();
 
     module_cls->giveAttr("__init__",
-                         new BoxedFunction(boxRTFunction((void*)moduleInit, UNKNOWN, 3, 1, false, false), { NULL }));
+                         new BoxedFunction(boxRTFunction((void*)moduleInit, UNKNOWN, 3, false, false), { NULL }));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
     module_cls->giveAttr("__dict__", dict_descr);
     module_cls->freeze();
@@ -3767,8 +3785,7 @@ void setupRuntime() {
     function_cls->giveAttr("func_doc", function_cls->getattr(internStringMortal("__doc__")));
     function_cls->giveAttr("__globals__", new (pyston_getset_cls) BoxedGetsetDescriptor(functionGlobals, NULL, NULL));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
-    function_cls->giveAttr("__call__",
-                           new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
+    function_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
     function_cls->giveAttr("__code__", function_cls->getattr(internStringMortal("func_code")));
@@ -3793,13 +3810,13 @@ void setupRuntime() {
     builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)instancemethodNew, UNKNOWN, 4, 1, false, false), { NULL }));
+        "__new__", new BoxedFunction(boxRTFunction((void*)instancemethodNew, UNKNOWN, 4, false, false), { NULL }));
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
-    instancemethod_cls->giveAttr(
-        "__get__", new BoxedFunction(boxRTFunction((void*)instancemethodGet, UNKNOWN, 3, 0, false, false)));
-    instancemethod_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)instancemethodCall, UNKNOWN, 1, 0, true, true)));
+    instancemethod_cls->giveAttr("__get__",
+                                 new BoxedFunction(boxRTFunction((void*)instancemethodGet, UNKNOWN, 3, false, false)));
+    instancemethod_cls->giveAttr("__call__",
+                                 new BoxedFunction(boxRTFunction((void*)instancemethodCall, UNKNOWN, 1, true, true)));
     instancemethod_cls->giveAttr(
         "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
     instancemethod_cls->giveAttr("__func__", instancemethod_cls->getattr(internStringMortal("im_func")));
@@ -3812,7 +3829,7 @@ void setupRuntime() {
                                                                        offsetof(BoxedInstanceMethod, im_class), true));
 
     slice_cls->giveAttr("__new__",
-                        new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));
+                        new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, false, false), { NULL, None }));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1)));
     slice_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)sliceHash, UNKNOWN, 1)));
     slice_cls->giveAttr("indices", new BoxedFunction(boxRTFunction((void*)sliceIndices, BOXED_TUPLE, 2)));
@@ -3825,13 +3842,13 @@ void setupRuntime() {
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
-        "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, 1, false, false), { NULL }));
+        "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, false, false), { NULL }));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::delitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("setdefault",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
-        "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, 1, false, false), { None }));
+        "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, false, false), { None }));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
@@ -3849,7 +3866,7 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("update",
-                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 1, 0, true, true)));
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 1, true, true)));
     attrwrapper_cls->freeze();
 
     attrwrapperiter_cls->giveAttr("__hasnext__",

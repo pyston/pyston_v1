@@ -204,7 +204,7 @@ void setupSuper() {
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
 
     super_cls->giveAttr("__init__",
-                        new BoxedFunction(boxRTFunction((void*)superInit, UNKNOWN, 3, 1, false, false), { NULL }));
+                        new BoxedFunction(boxRTFunction((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
 
     super_cls->giveAttr("__thisclass__",
                         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, type)));

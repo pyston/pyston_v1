@@ -61,7 +61,7 @@ Box* BoxedCode::firstlineno(Box* b, void*) {
 Box* BoxedCode::argcount(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
 
-    return boxInt(static_cast<BoxedCode*>(b)->f->paramspec.num_args);
+    return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
 }
 
 Box* BoxedCode::varnames(Box* b, void*) {

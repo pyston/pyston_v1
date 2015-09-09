@@ -496,7 +496,7 @@ void setupGenerator() {
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend<CXX>, UNKNOWN, 2)));
-    auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, 2, false, false), { NULL, NULL });
+    auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
     generator_cls->giveAttr("throw", gthrow);
 
     generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));

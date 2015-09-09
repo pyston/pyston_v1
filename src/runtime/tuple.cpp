@@ -577,8 +577,8 @@ void setupTuple() {
     tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedTupleIterator::gcHandler, 0, 0,
                                                 sizeof(BoxedTupleIterator), false, "tuple");
 
-    tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
-    CLFunction* getitem = createRTFunction(2, 0, 0, 0);
+    tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, true, true)));
+    CLFunction* getitem = createRTFunction(2, 0, 0);
     addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, BOXED_INT });
     addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, SLICE });
     addRTFunction(getitem, (void*)tupleGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN },
@@ -588,7 +588,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
-    tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 4, 2, false, false),
+    tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 4, false, false),
                                                    { boxInt(0), boxInt(std::numeric_limits<Py_ssize_t>::max()) }));
     tuple_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)tupleCount, BOXED_INT, 2)));
 

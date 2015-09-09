@@ -1498,11 +1498,9 @@ void setupClassobj() {
         = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
                                  offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
 
-    classobj_cls->giveAttr("__new__",
-                           new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, 0, false, false)));
+    classobj_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, false, false)));
 
-    classobj_cls->giveAttr("__call__",
-                           new BoxedFunction(boxRTFunction((void*)classobjCall, UNKNOWN, 1, 0, true, true)));
+    classobj_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)classobjCall, UNKNOWN, 1, true, true)));
 
     classobj_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)classobjGetattribute, UNKNOWN, 2)));
@@ -1534,8 +1532,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
     instance_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)instanceIter, UNKNOWN, 1)));
     instance_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)instanceNext, UNKNOWN, 1)));
-    instance_cls->giveAttr("__call__",
-                           new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
+    instance_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, true, true)));
     instance_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instanceEq, UNKNOWN, 2)));
     instance_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)instanceNe, UNKNOWN, 2)));
     instance_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)instanceLt, UNKNOWN, 2)));

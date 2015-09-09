@@ -212,7 +212,7 @@ void setupXrange() {
 
     xrange_cls->giveAttr(
         "__new__",
-        new BoxedFunction(boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, 2, false, false), { NULL, NULL }));
+        new BoxedFunction(boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, false, false), { NULL, NULL }));
     xrange_cls->giveAttr("__iter__",
                          new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
     xrange_cls->giveAttr(

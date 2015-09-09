@@ -1229,7 +1229,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_lfu{ UNKNOWN, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    CLFunction* cl = createRTFunction(3, 1, false, false);
+    CLFunction* cl = createRTFunction(3, false, false);
     addRTFunction(cl, float_func, UNKNOWN, v_lfu);
     addRTFunction(cl, long_func, UNKNOWN, v_uuu);
     long_cls->giveAttr(name, new BoxedFunction(cl, { None }));
@@ -1453,8 +1453,8 @@ void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
-    long_cls->giveAttr(
-        "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
+    long_cls->giveAttr("__new__",
+                       new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, false, false), { boxInt(0), NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));

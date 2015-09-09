@@ -200,7 +200,7 @@ void setupThread() {
     assert(thread_module);
 
     thread_module->giveAttr("start_new_thread", new BoxedBuiltinFunctionOrMethod(
-                                                    boxRTFunction((void*)startNewThread, BOXED_INT, 3, 1, false, false),
+                                                    boxRTFunction((void*)startNewThread, BOXED_INT, 3, false, false),
                                                     "start_new_thread", { NULL }));
     thread_module->giveAttr("allocate_lock", new BoxedBuiltinFunctionOrMethod(
                                                  boxRTFunction((void*)allocateLock, UNKNOWN, 0), "allocate_lock"));
@@ -215,8 +215,8 @@ void setupThread() {
 
     thread_lock_cls->giveAttr("__module__", boxString("thread"));
     thread_lock_cls->giveAttr(
-        "acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, 1, false, false),
-                                     { boxInt(1) }));
+        "acquire",
+        new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, false, false), { boxInt(1) }));
     thread_lock_cls->giveAttr("release", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::release, NONE, 1)));
     thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr(internStringMortal("acquire")));
     thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr(internStringMortal("release")));

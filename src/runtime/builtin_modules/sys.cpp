@@ -605,8 +605,8 @@ void setupSys() {
         "exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0), "exc_info"));
     sys_module->giveAttr("exc_clear",
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcClear, NONE, 0), "exc_clear"));
-    sys_module->giveAttr("exit", new BoxedBuiltinFunctionOrMethod(
-                                     boxRTFunction((void*)sysExit, NONE, 1, 1, false, false), "exit", { None }));
+    sys_module->giveAttr("exit", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExit, NONE, 1, false, false),
+                                                                  "exit", { None }));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
@@ -617,7 +617,7 @@ void setupSys() {
     sys_module->giveAttr("executable", boxString(Py_GetProgramFullPath()));
 
     sys_module->giveAttr("_getframe",
-                         new BoxedFunction(boxRTFunction((void*)sysGetFrame, UNKNOWN, 1, 1, false, false), { NULL }));
+                         new BoxedFunction(boxRTFunction((void*)sysGetFrame, UNKNOWN, 1, false, false), { NULL }));
     sys_module->giveAttr(
         "getdefaultencoding",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetDefaultEncoding, STR, 0), "getdefaultencoding"));
@@ -655,7 +655,7 @@ void setupSys() {
     sys_flags_cls = new (0) BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false,
                                            static_cast<BoxedString*>(boxString("flags")));
     sys_flags_cls->giveAttr("__new__",
-                            new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, 0, true, true)));
+                            new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
 #define ADD(name)                                                                                                      \
     sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))

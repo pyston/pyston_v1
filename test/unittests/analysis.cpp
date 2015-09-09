@@ -72,7 +72,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
     std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
                     fn.c_str()), scoping, future_flags, func, func->body, boxString(fn)));
-    CLFunction* clfunc = new CLFunction(0, 0, false, false, std::move(si));
+    CLFunction* clfunc = new CLFunction(0, false, false, std::move(si));
 
     CFG* cfg = computeCFG(clfunc->source.get(), func->body);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);

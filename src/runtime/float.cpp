@@ -935,7 +935,7 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
     v_fu.push_back(BOXED_FLOAT);
     v_fu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction(2, 0, false, false);
+    CLFunction* cl = createRTFunction(2, false, false);
     addRTFunction(cl, float_func, rtn_type, v_ff);
     addRTFunction(cl, int_func, rtn_type, v_fi);
     addRTFunction(cl, boxed_func, UNKNOWN, v_fu);
@@ -948,7 +948,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_fiu{ BOXED_FLOAT, BOXED_INT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_fuu{ BOXED_FLOAT, UNKNOWN, UNKNOWN };
 
-    CLFunction* cl = createRTFunction(3, 1, false, false);
+    CLFunction* cl = createRTFunction(3, false, false);
     addRTFunction(cl, float_func, rtn_type, v_ffu);
     addRTFunction(cl, int_func, rtn_type, v_fiu);
     addRTFunction(cl, boxed_func, UNKNOWN, v_fuu);
@@ -1650,7 +1650,7 @@ void setupFloat() {
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);
     _addFunc("__rsub__", BOXED_FLOAT, (void*)floatRSubFloat, (void*)floatRSubInt, (void*)floatRSub);
 
-    auto float_new = boxRTFunction((void*)floatNew<CXX>, UNKNOWN, 2, 1, false, false, ParamNames::empty(), CXX);
+    auto float_new = boxRTFunction((void*)floatNew<CXX>, UNKNOWN, 2, false, false, ParamNames::empty(), CXX);
     addRTFunction(float_new, (void*)floatNew<CAPI>, UNKNOWN, CAPI);
     float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
 

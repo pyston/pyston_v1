@@ -39,3 +39,13 @@ add(A(), B())
 add(A(), C())
 add(B(), B())
 add(B(), C())
+
+
+class Int(int):
+    def __add__(self, rhs):
+        print "Int.__add__", rhs
+        return int.__add__(self, rhs)
+    def __radd__(self, rhs):
+        print "Int.__radd__", rhs
+        return int.__radd__(self, rhs)
+print sum([Int(2)])
