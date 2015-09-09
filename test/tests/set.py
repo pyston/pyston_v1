@@ -128,8 +128,12 @@ for i in xrange(10):
 
 for s1 in set(range(5)), frozenset(range(5)):
     for s2 in compare_to:
-        print type(s2), sorted(s2), s1.issubset(s2), s1.issuperset(s2), s1 == s2, s1 != s2, sorted(s1.difference(s2)), s1.isdisjoint(s2), sorted(s1.union(s2)), sorted(s1.intersection(s2))
-
+        print type(s2), sorted(s2), s1.issubset(s2), s1.issuperset(s2), sorted(s1.difference(s2)), s1.isdisjoint(s2), sorted(s1.union(s2)), sorted(s1.intersection(s2))
+        print s1 == s2, s1 != s2
+        try:
+            print s1 < s2, s1 <= s2, s1 > s2, s1 >= s2
+        except Exception as e:
+            print e
 f = float('nan')
 s = set([f])
 print f in s, f == list(s)[0]
