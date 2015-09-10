@@ -89,6 +89,12 @@ def termios_ext():
             ]))
 
 @unique
+def mmap_ext():
+    return Extension("mmap", sources = map(relpath, [
+            "Modules/mmapmodule.c",
+            ]))
+
+@unique
 def pyexpat_ext():
     define_macros = [('HAVE_EXPAT_CONFIG_H', '1'),]
     expat_sources = map(relpath, ['Modules/expat/xmlparse.c',
@@ -136,7 +142,9 @@ ext_modules = [future_builtins_ext(),
                ctypes_test_ext(),
                grp_ext(),
                curses_ext(),
-               termios_ext()]
+               termios_ext(),
+               mmap_ext(),
+               ]
 
 builtin_headers = map(relpath, glob.glob("Include/*.h"))
 
