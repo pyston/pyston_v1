@@ -1770,8 +1770,9 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
 }
 
 static Box* instancemethodCall(BoxedInstanceMethod* self, Box* args, Box* kwargs) {
-    RELEASE_ASSERT(self->cls == instancemethod_cls, "");
-    Py_FatalError("unimplemented");
+    // Not the most effficient, but it works:
+    return runtimeCallInternal<CXX>(self, NULL, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
+    // TODO add a tpp_call
 }
 
 Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {

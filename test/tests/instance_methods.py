@@ -43,3 +43,5 @@ def f(m):
 
 f(C.foo)
 f(C().foo)
+
+C().foo.__call__()

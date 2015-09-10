@@ -2479,7 +2479,7 @@ extern "C" bool nonzero(Box* obj) {
                        || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
                        || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
                        || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
-                       || obj->cls == wrapperdescr_cls,
+                       || obj->cls == wrapperdescr_cls || obj->cls == wrapperobject_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {
@@ -2817,7 +2817,8 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
         val = getattrInternalEx<S>(obj, attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
-        if (!grewrite_args.out_success) {
+        // TODO: maybe callattrs should have return conventions as well.
+        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
             rewrite_args = NULL;
         } else if (val) {
             r_val = grewrite_args.out_rtn;
@@ -2859,6 +2860,10 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
         class Helper {
         public:
             static Box* call(Box* val, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, void** extra_args) {
+                if (!val) {
+                    assert(S == CAPI);
+                    return NULL;
+                }
                 Box** args = (Box**)extra_args[0];
                 const std::vector<BoxedString*>* keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
                 return runtimeCallInternal<S>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
