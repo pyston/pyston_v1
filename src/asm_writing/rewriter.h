@@ -608,6 +608,7 @@ public:
     friend class RewriterVar;
 };
 
+void* getSlowpathFunc(uint8_t* pp_addr);
 void setSlowpathFunc(uint8_t* pp_addr, void* func);
 
 struct GRCompare {

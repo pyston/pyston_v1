@@ -162,7 +162,6 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         PatchpointInfo* pp = new_patchpoints[r->id].first;
         assert(pp);
 
-        void* slowpath_func = PatchpointInfo::getSlowpathAddr(r->id);
         if (VERBOSITY() >= 2) {
             printf("Processing pp %ld; [%d, %d)\n", reinterpret_cast<int64_t>(pp), r->offset,
                    r->offset + pp->patchpointSize());
@@ -178,8 +177,13 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         uint8_t* start_addr = (uint8_t*)pp->parentFunction()->code + r->offset;
         uint8_t* end_addr = start_addr + pp->patchpointSize();
 
+#if LLVMREV < 235483
+        void* slowpath_func = PatchpointInfo::getSlowpathAddr(r->id);
         if (ENABLE_JIT_OBJECT_CACHE)
             setSlowpathFunc(start_addr, slowpath_func);
+#else
+        void* slowpath_func = getSlowpathFunc(start_addr);
+#endif
 
         //*start_addr = 0xcc;
         // start_addr++;

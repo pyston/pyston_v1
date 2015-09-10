@@ -332,11 +332,16 @@ private:
         std::vector<llvm::Value*> pp_args;
         pp_args.push_back(getConstantInt(pp_id, g.i64));
         pp_args.push_back(getConstantInt(pp_size, g.i32));
+
+#if LLVMREV < 235483
         if (ENABLE_JIT_OBJECT_CACHE)
             // add fixed dummy dest pointer, we will replace it with the correct address during stackmap processing
             pp_args.push_back(embedConstantPtr((void*)-1L, g.i8_ptr));
         else
             pp_args.push_back(func);
+#else
+        pp_args.push_back(func);
+#endif
         pp_args.push_back(getConstantInt(args.size(), g.i32));
 
         pp_args.insert(pp_args.end(), args.begin(), args.end());
