@@ -153,7 +153,7 @@ extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
 
 static void mywrite(const char* name, FILE* fp, const char* format, va_list va) noexcept {
     PyObject* file;
-    PyObject* error_type, *error_value, *error_traceback;
+    PyObject *error_type, *error_value, *error_traceback;
 
     PyErr_Fetch(&error_type, &error_value, &error_traceback);
     file = PySys_GetObject(name);
@@ -215,7 +215,7 @@ void prependToSysPath(llvm::StringRef path) {
 static BoxedClass* sys_flags_cls;
 class BoxedSysFlags : public Box {
 public:
-    Box* division_warning, *bytes_warning, *no_user_site, *optimize;
+    Box *division_warning, *bytes_warning, *no_user_site, *optimize;
 
     BoxedSysFlags() {
         auto zero = boxInt(0);
@@ -272,8 +272,8 @@ void setEncodingAndErrors() {
     char* errors = nullptr;
     int free_codeset = 0;
     int overridden = 0;
-    PyObject* sys_stream, *sys_isatty;
-    char* saved_locale, *loc_codeset;
+    PyObject *sys_stream, *sys_isatty;
+    char *saved_locale, *loc_codeset;
 
     if ((p = Py_GETENV("PYTHONIOENCODING")) && *p != '\0') {
         p = icodeset = codeset = strdup(p);
@@ -391,7 +391,7 @@ extern "C" const char* Py_GetPlatform() noexcept {
 }
 
 static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {
-    PyObject* exc, *value, *tb;
+    PyObject *exc, *value, *tb;
     if (!PyArg_UnpackTuple(args, "excepthook", 3, 3, &exc, &value, &tb))
         return NULL;
     PyErr_Display(exc, value, tb);

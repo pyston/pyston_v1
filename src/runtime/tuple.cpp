@@ -436,7 +436,7 @@ static int64_t tuple_hash(BoxedTuple* v) noexcept {
 }
 
 static PyObject* tuplerichcompare(PyObject* v, PyObject* w, int op) noexcept {
-    BoxedTuple* vt, *wt;
+    BoxedTuple *vt, *wt;
     Py_ssize_t i;
     Py_ssize_t vlen, wlen;
 
@@ -520,7 +520,7 @@ static PyObject* tuplerichcompare(PyObject* v, PyObject* w, int op) noexcept {
 
 static PyObject* tupleslice(PyTupleObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) {
     PyTupleObject* np;
-    PyObject** src, **dest;
+    PyObject **src, **dest;
     Py_ssize_t i;
     Py_ssize_t len;
     if (ilow < 0)

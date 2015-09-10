@@ -992,7 +992,7 @@ extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) noexcep
             return 1;
 
         int res = 0, reclimit;
-        PyObject* exception, *value, *tb;
+        PyObject *exception, *value, *tb;
         PyErr_Fetch(&exception, &value, &tb);
         /* Temporarily bump the recursion limit, so that in the most
            common case PyObject_IsSubclass will not raise a recursion

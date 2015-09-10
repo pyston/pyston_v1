@@ -362,7 +362,7 @@ public:
     struct Block {
         union {
             struct {
-                Block* next, **prev;
+                Block *next, **prev;
                 uint32_t size;
                 uint16_t num_obj;
                 uint8_t min_obj_index;
@@ -451,7 +451,7 @@ private:
     };
 
     struct LargeObj {
-        LargeObj* next, **prev;
+        LargeObj *next, **prev;
         size_t size;
         GCAllocation data[0];
 
@@ -526,7 +526,7 @@ public:
 
 private:
     struct HugeObj {
-        HugeObj* next, **prev;
+        HugeObj *next, **prev;
         size_t size;
         GCAllocation data[0];
 

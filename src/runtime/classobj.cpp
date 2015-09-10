@@ -25,7 +25,7 @@
 namespace pyston {
 
 extern "C" {
-BoxedClass* classobj_cls, *instance_cls;
+BoxedClass *classobj_cls, *instance_cls;
 }
 
 
@@ -1040,7 +1040,7 @@ static PyObject* instance_ipow(PyObject* v, PyObject* w, PyObject* z) noexcept {
 }
 
 static PyObject* instance_index(PyObject* self) noexcept {
-    PyObject* func, *res;
+    PyObject *func, *res;
 
     static BoxedString* index_str = internStringImmortal("__index__");
     if ((func = instance_getattro(self, index_str)) == NULL) {

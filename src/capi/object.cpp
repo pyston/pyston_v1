@@ -645,7 +645,7 @@ extern "C" void Py_ReprLeave(PyObject* obj) noexcept {
 static int adjust_tp_compare(int c) {
     if (PyErr_Occurred()) {
         if (c != -1 && c != -2) {
-            PyObject* t, *v, *tb;
+            PyObject *t, *v, *tb;
             PyErr_Fetch(&t, &v, &tb);
             if (PyErr_Warn(PyExc_RuntimeWarning, "tp_compare didn't return -1 or -2 "
                                                  "for exception") < 0) {
@@ -832,7 +832,7 @@ static int try_3way_compare(PyObject* v, PyObject* w) {
 */
 /* Pyston change: static*/ int default_3way_compare(PyObject* v, PyObject* w) {
     int c;
-    const char* vname, *wname;
+    const char *vname, *wname;
 
     if (v->cls == w->cls) {
         /* When comparing these pointers, they must be cast to

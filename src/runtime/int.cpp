@@ -197,7 +197,7 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
     char* end;
     long x;
     Py_ssize_t slen;
-    PyObject* sobj, *srepr;
+    PyObject *sobj, *srepr;
 
     if ((base != 0 && base < 2) || base > 36) {
         PyErr_SetString(PyExc_ValueError, "int() base must be >= 2 and <= 36");
@@ -1124,7 +1124,7 @@ extern "C" Box* intBitLength(BoxedInt* v) {
 }
 
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
-    std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
+    std::vector<ConcreteCompilerType *> v_ii, v_if, v_iu;
     assert(BOXED_INT);
     v_ii.push_back(UNKNOWN);
     v_ii.push_back(BOXED_INT);
@@ -1142,7 +1142,7 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
 }
 
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
-    std::vector<ConcreteCompilerType*> v_ii, v_iu;
+    std::vector<ConcreteCompilerType *> v_ii, v_iu;
     assert(BOXED_INT);
     v_ii.push_back(UNKNOWN);
     v_ii.push_back(BOXED_INT);

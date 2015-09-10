@@ -67,7 +67,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
     }
 
     if (!skip) {
-        PyObject* mro, *res, *tmp, *dict;
+        PyObject *mro, *res, *tmp, *dict;
         PyTypeObject* starttype;
         descrgetfunc f;
         Py_ssize_t i, n;

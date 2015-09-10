@@ -123,7 +123,7 @@ private:
 public:
     struct ExceptionState {
         llvm::BasicBlock* from_block;
-        ConcreteCompilerVariable* exc_type, *exc_value, *exc_tb;
+        ConcreteCompilerVariable *exc_type, *exc_value, *exc_tb;
         ExceptionState(llvm::BasicBlock* from_block, ConcreteCompilerVariable* exc_type,
                        ConcreteCompilerVariable* exc_value, ConcreteCompilerVariable* exc_tb)
             : from_block(from_block), exc_type(exc_type), exc_value(exc_value), exc_tb(exc_tb) {}

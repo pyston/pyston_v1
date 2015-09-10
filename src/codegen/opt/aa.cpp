@@ -121,11 +121,11 @@ public:
         }
 
         {
-            const GetElementPtrInst* GIa, *GIb;
+            const GetElementPtrInst *GIa, *GIb;
             GIa = dyn_cast<GetElementPtrInst>(LocA.Ptr);
             GIb = dyn_cast<GetElementPtrInst>(LocB.Ptr);
             if (GIa && GIb) {
-                const Value* baseA, *baseB;
+                const Value *baseA, *baseB;
                 baseA = GIa->getPointerOperand();
                 baseB = GIb->getPointerOperand();
                 assert(baseA);

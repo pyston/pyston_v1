@@ -117,7 +117,7 @@ const int OPCODE_ADD = 0b000, OPCODE_SUB = 0b101;
 class X86MCWriter : public MCWriter {
 private:
     uint8_t* addr;
-    uint8_t* const start_addr, *const end_addr;
+    uint8_t *const start_addr, *const end_addr;
     int pops_required;
 
     inline void _emitByte(uint8_t b) {

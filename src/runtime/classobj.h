@@ -36,7 +36,7 @@ class BoxedClass;
 class BoxedClassobj;
 class BoxedInstance;
 extern "C" {
-extern BoxedClass* classobj_cls, *instance_cls;
+extern BoxedClass *classobj_cls, *instance_cls;
 }
 
 class BoxedClassobj : public Box {

@@ -858,7 +858,7 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     uint8_t* pp_start = rewrite->getSlotStart() + assembler->bytesWritten();
     constexpr int call_size = 16;
 #ifndef NDEBUG
-    for (int i=0; i<pp_size + call_size; ++i)
+    for (int i = 0; i < pp_size + call_size; ++i)
         assembler->trap();
 #else
     assembler->skipBytes(pp_size + call_size);

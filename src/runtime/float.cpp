@@ -927,7 +927,7 @@ extern "C" void printFloat(double d) {
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,
                      void* boxed_func) {
-    std::vector<ConcreteCompilerType*> v_ff, v_fi, v_fu;
+    std::vector<ConcreteCompilerType *> v_ff, v_fi, v_fu;
     v_ff.push_back(BOXED_FLOAT);
     v_ff.push_back(BOXED_FLOAT);
     v_fi.push_back(BOXED_FLOAT);
@@ -1497,7 +1497,7 @@ extern "C" PyObject* _Py_double_round(double x, int ndigits) noexcept {
 
     double rounded, m;
     Py_ssize_t buflen, mybuflen = 100;
-    char* buf, *buf_end, shortbuf[100], * mybuf = shortbuf;
+    char *buf, *buf_end, shortbuf[100], *mybuf = shortbuf;
     int decpt, sign, val, halfway_case;
     PyObject* result = NULL;
     _Py_SET_53BIT_PRECISION_HEADER;

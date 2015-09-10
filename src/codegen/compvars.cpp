@@ -81,7 +81,7 @@ std::string ValuedCompilerType<llvm::Value*>::debugName() {
 }
 
 struct RawInstanceMethod {
-    CompilerVariable* obj, *func, *im_class;
+    CompilerVariable *obj, *func, *im_class;
 
     RawInstanceMethod(CompilerVariable* obj, CompilerVariable* func, CompilerVariable* im_class)
         : obj(obj), func(func), im_class(im_class) {}
@@ -91,7 +91,7 @@ class InstanceMethodType : public ValuedCompilerType<RawInstanceMethod*> {
 private:
     static std::unordered_map<std::pair<CompilerType*, CompilerType*>, InstanceMethodType*> made;
 
-    CompilerType* obj_type, *function_type;
+    CompilerType *obj_type, *function_type;
     InstanceMethodType(CompilerType* obj_type, CompilerType* function_type)
         : obj_type(obj_type), function_type(function_type) {}
 
@@ -1011,14 +1011,16 @@ public:
     }
 
     void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr, CompilerVariable* v) override {
-        llvm::CallSite call(emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("int", g.i8_ptr),
-                                  embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
+        llvm::CallSite call(
+            emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("int", g.i8_ptr),
+                                embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
         call.setDoesNotReturn();
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr) override {
-        llvm::CallSite call(emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("int", g.i8_ptr),
-                                  embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
+        llvm::CallSite call(
+            emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("int", g.i8_ptr),
+                                embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
         call.setDoesNotReturn();
     }
 
@@ -1050,7 +1052,8 @@ public:
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
-        llvm::CallSite call(emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr)));
+        llvm::CallSite call(
+            emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr)));
         call.setDoesNotReturn();
         return new ConcreteCompilerVariable(INT, llvm::UndefValue::get(g.i64), true);
     }
@@ -1186,7 +1189,8 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        llvm::CallSite call(emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr)));
+        llvm::CallSite call(
+            emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr)));
         call.setDoesNotReturn();
         return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
@@ -1272,14 +1276,16 @@ public:
     }
 
     void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr, CompilerVariable* v) override {
-        llvm::CallSite call(emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("float", g.i8_ptr),
-                                  embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
+        llvm::CallSite call(
+            emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("float", g.i8_ptr),
+                                embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
         call.setDoesNotReturn();
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr) override {
-        llvm::CallSite call(emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("float", g.i8_ptr),
-                                  embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
+        llvm::CallSite call(
+            emitter.createCall3(info.unw_info, g.funcs.raiseAttributeErrorStr, embedConstantPtr("float", g.i8_ptr),
+                                embedConstantPtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64)));
         call.setDoesNotReturn();
     }
 
@@ -1438,7 +1444,8 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        llvm::CallSite call(emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("float", g.i8_ptr)));
+        llvm::CallSite call(
+            emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("float", g.i8_ptr)));
         call.setDoesNotReturn();
         return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
@@ -1957,7 +1964,7 @@ public:
     }
 };
 std::unordered_map<BoxedClass*, NormalObjectType*> NormalObjectType::made;
-ConcreteCompilerType* STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE;
+ConcreteCompilerType *STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE;
 
 class ClosureType : public ConcreteCompilerType {
 public:
@@ -2220,7 +2227,8 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        llvm::CallSite call(emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("bool", g.i8_ptr)));
+        llvm::CallSite call(
+            emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("bool", g.i8_ptr)));
         call.setDoesNotReturn();
         return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
@@ -2379,12 +2387,12 @@ public:
 
                     if (target_exception_style == CAPI) {
                         emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,
-                                                                 embedConstantPtr("tuple", g.i8_ptr), CAPI);
+                                           embedConstantPtr("tuple", g.i8_ptr), CAPI);
                         emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
                                                                getNullPtr(g.llvm_value_type_ptr));
                     } else {
                         llvm::CallSite call(emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
-                                                                 embedConstantPtr("tuple", g.i8_ptr), CXX));
+                                                               embedConstantPtr("tuple", g.i8_ptr), CXX));
                         call.setDoesNotReturn();
                     }
                     return undefVariable();
@@ -2651,6 +2659,6 @@ llvm::Value* i1FromBool(IREmitter& emitter, ConcreteCompilerVariable* v) {
 }
 
 
-ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET, *LONG, *BOXED_COMPLEX;
+ConcreteCompilerType *LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET, *LONG, *BOXED_COMPLEX;
 
 } // namespace pyston

@@ -114,7 +114,7 @@ static PyObject* normalizestring(const char* string) {
 
 PyObject* _PyCodec_Lookup(const char* encoding) noexcept {
     // PyInterpreterState *interp; Pyston change
-    PyObject* result, * args = NULL, *v;
+    PyObject *result, *args = NULL, *v;
     Py_ssize_t i, len;
 
     if (encoding == NULL) {
@@ -234,7 +234,7 @@ static PyObject* codec_getitem(const char* encoding, int index) {
 /* Helper function to create an incremental codec. */
 
 static PyObject* codec_getincrementalcodec(const char* encoding, const char* errors, const char* attrname) {
-    PyObject* codecs, *ret, *inccodec;
+    PyObject *codecs, *ret, *inccodec;
 
     codecs = _PyCodec_Lookup(encoding);
     if (codecs == NULL)
@@ -254,7 +254,7 @@ static PyObject* codec_getincrementalcodec(const char* encoding, const char* err
 /* Helper function to create a stream codec. */
 
 static PyObject* codec_getstreamcodec(const char* encoding, PyObject* stream, const char* errors, const int index) {
-    PyObject* codecs, *streamcodec, *codeccls;
+    PyObject *codecs, *streamcodec, *codeccls;
 
     codecs = _PyCodec_Lookup(encoding);
     if (codecs == NULL)
@@ -306,7 +306,7 @@ PyObject* PyCodec_StreamWriter(const char* encoding, PyObject* stream, const cha
 
 PyObject* PyCodec_Encode(PyObject* object, const char* encoding, const char* errors) noexcept {
     PyObject* encoder = NULL;
-    PyObject* args = NULL, * result = NULL;
+    PyObject *args = NULL, *result = NULL;
     PyObject* v;
 
     encoder = PyCodec_Encoder(encoding);
@@ -348,7 +348,7 @@ onError:
 
 PyObject* PyCodec_Decode(PyObject* object, const char* encoding, const char* errors) noexcept {
     PyObject* decoder = NULL;
-    PyObject* args = NULL, * result = NULL;
+    PyObject *args = NULL, *result = NULL;
     PyObject* v;
 
     decoder = PyCodec_Decoder(encoding);

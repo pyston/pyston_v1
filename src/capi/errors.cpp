@@ -138,7 +138,7 @@ extern "C" void PyErr_SetNone(PyObject* exception) noexcept {
 /* Call when an exception has occurred but there is no way for Python
    to handle it.  Examples: exception in __del__ or during GC. */
 extern "C" void PyErr_WriteUnraisable(PyObject* obj) noexcept {
-    PyObject* f, *t, *v, *tb;
+    PyObject *f, *t, *v, *tb;
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
     if (f != NULL) {
@@ -273,7 +273,7 @@ extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb
             err = PyTraceBack_Print(tb, f);
         if (err == 0 && PyObject_HasAttrString(value, "print_file_and_line")) {
             PyObject* message;
-            const char* filename, *text;
+            const char *filename, *text;
             int lineno, offset;
             if (!parse_syntax_error(value, &message, &filename, &lineno, &offset, &text))
                 PyErr_Clear();
@@ -352,7 +352,7 @@ extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb
 }
 
 static void handle_system_exit(void) noexcept {
-    PyObject* exception, *value, *tb;
+    PyObject *exception, *value, *tb;
     int exitcode = 0;
 
     if (Py_InspectFlag)
@@ -404,7 +404,7 @@ done:
 }
 
 extern "C" void PyErr_PrintEx(int set_sys_last_vars) noexcept {
-    PyObject* exception, *v, *tb, *hook;
+    PyObject *exception, *v, *tb, *hook;
 
     if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
         handle_system_exit();
@@ -426,7 +426,7 @@ extern "C" void PyErr_PrintEx(int set_sys_last_vars) noexcept {
         PyObject* args = PyTuple_Pack(3, exception, v, tb ? tb : Py_None);
         PyObject* result = PyEval_CallObject(hook, args);
         if (result == NULL) {
-            PyObject* exception2, *v2, *tb2;
+            PyObject *exception2, *v2, *tb2;
             if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
                 handle_system_exit();
             }

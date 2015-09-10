@@ -98,7 +98,7 @@ struct LenRewriteArgs {
 struct CallRewriteArgs {
     Rewriter* rewriter;
     RewriterVar* obj;
-    RewriterVar* arg1, *arg2, *arg3, *args;
+    RewriterVar *arg1, *arg2, *arg3, *args;
     bool func_guarded;
     bool args_guarded;
     Location destination;

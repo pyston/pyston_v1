@@ -893,8 +893,8 @@ static PyObject* decode_utf8(const char** sPtr, const char* end, const char* enc
     Py_FatalError("decode_utf8 should not be called in this build.");
     return NULL;
 #else
-    PyObject* u, *v;
-    const char* s, *t;
+    PyObject *u, *v;
+    const char *s, *t;
     t = s = (const char*)*sPtr;
     /* while (s < end && *s != '\\') s++; */ /* inefficient for u".." */
     while (s < end && (*s & 0x80))

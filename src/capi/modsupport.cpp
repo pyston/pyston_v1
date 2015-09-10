@@ -280,7 +280,7 @@ static PyObject* do_mkdict(const char** p_format, va_list* p_va, int endchar, in
     /* Note that we can't bail immediately on error as this will leak
        refcounts on any 'N' arguments. */
     for (i = 0; i < n; i += 2) {
-        PyObject* k, *v;
+        PyObject *k, *v;
         int err;
         k = do_mkvalue(p_format, p_va, flags);
         if (k == NULL) {

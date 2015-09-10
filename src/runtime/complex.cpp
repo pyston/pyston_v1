@@ -663,7 +663,7 @@ Box* complexRepr(BoxedComplex* self) {
 }
 
 static PyObject* complex_subtype_from_string(PyObject* v) noexcept {
-    const char* s, *start;
+    const char *s, *start;
     char* end;
     double x = 0.0, y = 0.0, z;
     int got_bracket = 0;
@@ -1077,7 +1077,7 @@ static PyObject* complex_richcompare(PyObject* v, PyObject* w, int op) noexcept 
          * comparison when possible->g
          */
         if (lhs->imag == 0.0) {
-            PyObject* j, *sub_res;
+            PyObject *j, *sub_res;
             j = PyFloat_FromDouble(lhs->real);
             if (j == NULL)
                 return NULL;

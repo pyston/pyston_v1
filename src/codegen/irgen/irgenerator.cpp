@@ -427,8 +427,9 @@ public:
 #endif
 
         if (ENABLE_FRAME_INTROSPECTION) {
-            llvm::Type* rtn_type = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())
-                                                                      ->getElementType())->getReturnType();
+            llvm::Type* rtn_type
+                = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())->getElementType())
+                      ->getReturnType();
 
             llvm::Value* bitcasted = getBuilder()->CreateBitCast(callee, g.i8->getPointerTo());
             llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, unw_info, target_exception_style);
@@ -1161,7 +1162,7 @@ private:
             emitter.getBuilder()->SetInsertPoint(curblock);
 
             llvm::CallSite call(emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
-                                                     embedRelocatablePtr(node->id.c_str(), g.i8_ptr)));
+                                                   embedRelocatablePtr(node->id.c_str(), g.i8_ptr)));
             call.setDoesNotReturn();
             emitter.getBuilder()->CreateUnreachable();
 
@@ -1264,12 +1265,12 @@ private:
     }
 
     CompilerVariable* evalSlice(AST_Slice* node, const UnwindInfo& unw_info) {
-        CompilerVariable* start, *stop, *step;
+        CompilerVariable *start, *stop, *step;
         start = node->lower ? evalExpr(node->lower, unw_info) : getNone();
         stop = node->upper ? evalExpr(node->upper, unw_info) : getNone();
         step = node->step ? evalExpr(node->step, unw_info) : getNone();
 
-        ConcreteCompilerVariable* cstart, *cstop, *cstep;
+        ConcreteCompilerVariable *cstart, *cstop, *cstep;
         cstart = start->makeConverted(emitter, start->getBoxType());
         cstop = stop->makeConverted(emitter, stop->getBoxType());
         cstep = step->makeConverted(emitter, step->getBoxType());
@@ -1955,10 +1956,11 @@ private:
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
         if (symbol_table.count(target->id) == 0) {
-            llvm::CallSite call(emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                     { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                       embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                       getConstantInt(true /*local_error_msg*/, g.i1) }));
+            llvm::CallSite call(
+                emitter.createCall(unw_info, g.funcs.assertNameDefined,
+                                   { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                                     embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
+                                     getConstantInt(true /*local_error_msg*/, g.i1) }));
             call.setDoesNotReturn();
             return;
         }
@@ -2202,7 +2204,7 @@ private:
         // prevent us from having two OSR exits point to the same OSR entry; not something that
         // we're doing right now but something that would be nice in the future.
 
-        llvm::Value* arg_array = NULL, * malloc_save = NULL;
+        llvm::Value *arg_array = NULL, *malloc_save = NULL;
         if (sorted_symbol_table.size() > 3) {
             // Leave in the ability to use malloc but I guess don't use it.
             // Maybe if there are a ton of live variables it'd be nice to have them be
@@ -2344,7 +2346,8 @@ private:
             assert(!node->arg1);
             assert(!node->arg2);
 
-            llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(nullptr, irstate->getFrameInfoVar(), 0, 0);
+            llvm::Value* exc_info
+                = emitter.getBuilder()->CreateConstInBoundsGEP2_32(nullptr, irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
                 emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI);
                 emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),

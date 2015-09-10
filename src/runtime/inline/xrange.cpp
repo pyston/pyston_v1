@@ -18,7 +18,7 @@
 
 namespace pyston {
 
-BoxedClass* xrange_cls, *xrange_iterator_cls;
+BoxedClass *xrange_cls, *xrange_iterator_cls;
 
 class BoxedXrangeIterator;
 class BoxedXrange : public Box {

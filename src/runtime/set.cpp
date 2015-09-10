@@ -617,7 +617,7 @@ void setupSet() {
     frozenset_cls->giveAttr("__repr__", set_repr);
     frozenset_cls->giveAttr("__str__", set_repr);
 
-    std::vector<ConcreteCompilerType*> v_ss, v_sf, v_su, v_ff, v_fs, v_fu;
+    std::vector<ConcreteCompilerType *> v_ss, v_sf, v_su, v_ff, v_fs, v_fu;
     v_ss.push_back(SET);
     v_ss.push_back(SET);
     v_sf.push_back(SET);

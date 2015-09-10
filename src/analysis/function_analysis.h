@@ -65,7 +65,7 @@ public:
     typedef llvm::DenseSet<InternedString> RequiredSet;
 
 private:
-    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
+    llvm::DenseMap<CFGBlock *, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
     llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
 
 public:

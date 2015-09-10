@@ -69,7 +69,7 @@ enum class MovType {
 
 class Assembler {
 private:
-    uint8_t* const start_addr, *const end_addr;
+    uint8_t *const start_addr, *const end_addr;
     uint8_t* addr;
     bool failed; // if the rewrite failed at the assembly-generation level for some reason
 
