@@ -673,6 +673,10 @@ void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
     v->visit(&o->obj);
 }
 
+extern "C" PyObject* PyStaticMethod_New(PyObject* callable) noexcept {
+    return new BoxedStaticmethod(callable);
+}
+
 void setupDescr() {
     member_descriptor_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_descriptor_cls->freeze();

@@ -57,3 +57,17 @@ class MyTuple(tuple):
 f.func_defaults = MyTuple((1, 2))
 print type(f.__defaults__)
 f()
+
+
+class C(object):
+    def __new__(cls, arg):
+        print arg
+        return object.__new__(cls)
+
+    def foo(self, arg):
+        print arg
+
+print type(C.__new__), type(C.__dict__['__new__'])
+
+C.__new__.__defaults__ = (1,)
+print type(C())
