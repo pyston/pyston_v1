@@ -181,3 +181,10 @@ def irgen_error():
 		fail = "test {0} {1} {2}".format(1, 2, 3)
 		print fail
 irgen_error()
+
+s = "hello"
+for i in xrange(-8, 8):
+    for j in xrange(-8, 8):
+        print i,j, repr(s[i:j])
+        for k in (-2, 1, 1, 2):
+            print i,j,k, repr(s[i:j:k]), repr(s[slice(i, j, k)])

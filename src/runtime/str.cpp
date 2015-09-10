@@ -1652,9 +1652,9 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(step != 0);
     if (step > 0) {
         assert(0 <= start);
-        assert(stop <= s.size());
+        assert(stop <= (i64)s.size());
     } else {
-        assert(start < s.size());
+        assert(start < (i64)s.size());
         assert(-1 <= stop);
     }
     assert(length >= 0);
