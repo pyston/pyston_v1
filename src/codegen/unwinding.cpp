@@ -24,6 +24,7 @@
 #else
 #include "llvm/DebugInfo/DWARF/DIContext.h"
 #endif
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/Object/ObjectFile.h"
@@ -192,7 +193,7 @@ public:
 
             // Found a function!
             assert(!func_addr);
-            func_addr = L.getSymbolLoadAddress(Name);
+            func_addr = g.engine->getGlobalValueAddress(Name);
             assert(func_addr);
 
 // TODO this should be the Python name, not the C name:

@@ -44,6 +44,7 @@ namespace pyston {
 class PystonAA : public ImmutablePass, public AliasAnalysis {
 private:
     int depth;
+    const DataLayout* DL = nullptr;
 
     void indent() {
         for (int i = 0; i < depth - 1; i++) {
@@ -55,7 +56,15 @@ public:
     static char ID; // Class identification, replacement for typeinfo
     PystonAA() : ImmutablePass(ID), depth(0) { initializePystonAAPass(*PassRegistry::getPassRegistry()); }
 
+#if LLVMREV < 231270
     void initializePass() override { AliasAnalysis::InitializeAliasAnalysis(this); }
+#else
+    bool doInitialization(Module& M) override {
+        DL = &M.getDataLayout();
+        InitializeAliasAnalysis(this, DL);
+        return true;
+    }
+#endif
 
     void getAnalysisUsage(AnalysisUsage& AU) const override {
         AliasAnalysis::getAnalysisUsage(AU);
@@ -141,7 +150,6 @@ public:
 
                 if (bases_alias == MustAlias) {
                     APInt offsetA(64, 0, true), offsetB(64, 0, true);
-                    const DataLayout* DL = getDataLayout();
                     assert(DL);
                     bool accumA = GIa->accumulateConstantOffset(*DL, offsetA);
                     bool accumB = GIb->accumulateConstantOffset(*DL, offsetB);

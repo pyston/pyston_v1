@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
@@ -85,7 +86,7 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
 
 #if LLVMREV < 217548
     fpm.add(new llvm::DataLayoutPass(*g.tm->getDataLayout()));
-#else
+#elif LLVMREV < 231270
     fpm.add(new llvm::DataLayoutPass());
 #endif
 
@@ -946,14 +947,13 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
-    llvm::DIFile file = builder.createFile(fn->s(), dir);
-    llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
-    llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
-    llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
-                                                          false, true, lineno + 1, 0, true, f);
+    llvm::MDFile* file = builder.createFile(fn->s(), dir);
+    llvm::MDTypeRefArray param_types = builder.getOrCreateTypeArray(llvm::None);
+    llvm::MDSubroutineType* func_type = builder.createSubroutineType(file, param_types);
+    llvm::MDSubprogram* func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
+                                                           false, true, lineno + 1, 0, true, f);
 
-    llvm::DICompileUnit compile_unit
-        = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);
+    builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);
 
     builder.finalize();
     return func_info;
@@ -995,7 +995,7 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
     g.cur_module->setDataLayout(g.tm->getDataLayout()->getStringRepresentation());
 #elif LLVMREV < 227113
     g.cur_module->setDataLayout(g.tm->getSubtargetImpl()->getDataLayout());
-#else
+#elif LLVMREV < 231270
     g.cur_module->setDataLayout(g.tm->getDataLayout());
 #endif
     // g.engine->addModule(g.cur_module);
