@@ -198,66 +198,111 @@ static Box* setRepr(BoxedSet* self) {
     return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
-Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
-    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
-    RELEASE_ASSERT(PyAnySet_Check(rhs), "");
+static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
+    if (!PyAnySet_Check(other))
+        other = makeNewSet(self->cls, other);
 
-    BoxedSet* rtn = new (lhs->cls) BoxedSet();
-
-    for (auto&& elt : lhs->s) {
-        rtn->s.insert(elt);
+    BoxedSet* other_set = static_cast<BoxedSet*>(other);
+    for (auto elt : other_set->s) {
+        bool found = self->s.erase(elt);
+        if (!found)
+            self->s.insert(elt);
     }
+}
+
+static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
+    RELEASE_ASSERT(PyAnySet_Check(self), "");
+
+    BoxedSet* rtn = new BoxedSet();
+    for (auto elt : container->pyElements()) {
+        if (self->s.count(elt))
+            rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+static Box* setIntersectionUpdate2(BoxedSet* self, Box* other) {
+    Box* tmp = setIntersection2(self, other);
+    std::swap(self->s, ((BoxedSet*)tmp)->s);
+    return None;
+}
+
+Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
+    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
+
+    // TODO just [write and] call setUnionUpdate2
     for (auto&& elt : rhs->s) {
-        rtn->s.insert(elt);
+        lhs->s.insert(elt);
     }
-    return rtn;
+    return lhs;
 }
 
-Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
+Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
-    RELEASE_ASSERT(PyAnySet_Check(rhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
 
-    BoxedSet* rtn = new (lhs->cls) BoxedSet();
-
-    for (auto&& elt : lhs->s) {
-        if (rhs->s.count(elt))
-            rtn->s.insert(elt);
-    }
-    return rtn;
+    BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    return setIOr(rtn, rhs);
 }
 
-Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
+Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
-    RELEASE_ASSERT(PyAnySet_Check(rhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
 
-    BoxedSet* rtn = new (lhs->cls) BoxedSet();
-
-    for (auto&& elt : lhs->s) {
-        // TODO if len(rhs) << len(lhs), it might be more efficient
-        // to delete the elements of rhs from lhs?
-        if (rhs->s.count(elt) == 0)
-            rtn->s.insert(elt);
-    }
-    return rtn;
+    setIntersectionUpdate2(lhs, rhs);
+    return lhs;
 }
 
-Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
+Box* setAnd(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
-    RELEASE_ASSERT(PyAnySet_Check(rhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
 
-    BoxedSet* rtn = new (lhs->cls) BoxedSet();
+    return setIntersection2(lhs, rhs);
+}
 
-    for (auto&& elt : lhs->s) {
-        if (rhs->s.count(elt) == 0)
-            rtn->s.insert(elt);
-    }
+Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
+    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
 
+    // TODO: write and call setDifferenceUpdate2
     for (auto&& elt : rhs->s) {
-        if (lhs->s.count(elt) == 0)
-            rtn->s.insert(elt);
+        lhs->s.erase(elt);
     }
+    return lhs;
+}
 
-    return rtn;
+Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
+    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
+
+    BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    return setISub(rtn, rhs);
+}
+
+Box* setIXor(BoxedSet* lhs, BoxedSet* rhs) {
+    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
+
+    _setSymmetricDifferenceUpdate(lhs, rhs);
+
+    return lhs;
+}
+
+Box* setXor(BoxedSet* lhs, BoxedSet* rhs) {
+    RELEASE_ASSERT(PyAnySet_Check(lhs), "");
+    if (!PyAnySet_Check(rhs))
+        return NotImplemented;
+
+    BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    return setIXor(rtn, rhs);
 }
 
 Box* setIter(BoxedSet* self) noexcept {
@@ -368,34 +413,51 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
     return rtn;
 }
 
+static void _setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
+    for (auto container : *args) {
+        for (auto elt : container->pyElements()) {
+            self->s.erase(elt);
+        }
+    }
+}
+
+Box* setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
+    if (!PySet_Check(self))
+        raiseExcHelper(TypeError, "descriptor 'difference_update' requires a 'set' object but received a '%s'",
+                       getTypeName(self));
+
+    _setDifferenceUpdate(self, args);
+    return None;
+}
+
 Box* setDifference(BoxedSet* self, BoxedTuple* args) {
     if (!PyAnySet_Check(self))
         raiseExcHelper(TypeError, "descriptor 'difference' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
     BoxedSet* rtn = makeNewSet(self->cls, self);
-
-    for (auto container : args->pyElements()) {
-        for (auto elt : container->pyElements()) {
-            rtn->s.erase(elt);
-        }
-    }
-
+    _setDifferenceUpdate(rtn, args);
     return rtn;
 }
 
-Box* setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
+Box* setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
     if (!PySet_Check(self))
-        raiseExcHelper(TypeError, "descriptor 'difference' requires a 'set' object but received a '%s'",
+        raiseExcHelper(TypeError,
+                       "descriptor 'symmetric_difference_update' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
-    for (auto container : args->pyElements()) {
-        for (auto elt : container->pyElements()) {
-            self->s.erase(elt);
-        }
-    }
-
+    _setSymmetricDifferenceUpdate(self, other);
     return None;
+}
+
+Box* setSymmetricDifference(BoxedSet* self, Box* other) {
+    if (!PyAnySet_Check(self))
+        raiseExcHelper(TypeError, "descriptor 'symmetric_difference' requires a 'set' object but received a '%s'",
+                       getTypeName(self));
+
+    BoxedSet* rtn = makeNewSet(self->cls, self);
+    _setSymmetricDifferenceUpdate(rtn, other);
+    return rtn;
 }
 
 static Box* setIssubset(BoxedSet* self, Box* container) {
@@ -437,24 +499,16 @@ static Box* setIsdisjoint(BoxedSet* self, Box* container) {
     return True;
 }
 
-static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
-    RELEASE_ASSERT(PyAnySet_Check(self), "");
-
-    BoxedSet* rtn = new BoxedSet();
-    for (auto elt : container->pyElements()) {
-        if (self->s.count(elt))
-            rtn->s.insert(elt);
-    }
-    return rtn;
-}
-
 static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
     if (!PyAnySet_Check(self))
         raiseExcHelper(TypeError, "descriptor 'intersection' requires a 'set' object but received a '%s'",
                        getTypeName(self));
 
+    if (args->size() == 0)
+        return makeNewSet(self->cls, self);
+
     BoxedSet* rtn = self;
-    for (auto container : args->pyElements()) {
+    for (auto container : *args) {
         rtn = setIntersection2(rtn, container);
     }
     return rtn;
@@ -633,19 +687,29 @@ void setupSet() {
     v_fu.push_back(UNKNOWN);
 
     auto add = [&](const char* name, void* func) {
-        CLFunction* func_obj = createRTFunction(2, false, false);
+        auto func_obj = new BoxedFunction(boxRTFunction((void*)func, UNKNOWN, 2, false, false));
+        set_cls->giveAttr(name, func_obj);
+        frozenset_cls->giveAttr(name, func_obj);
+        /*
+        CLFunction* func_obj = boxRTFunction(2, false, false);
         addRTFunction(func_obj, (void*)func, SET, v_ss);
         addRTFunction(func_obj, (void*)func, SET, v_sf);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_ff);
         set_cls->giveAttr(name, new BoxedFunction(func_obj));
         frozenset_cls->giveAttr(name, set_cls->getattr(internStringMortal(name)));
+        */
     };
 
-    add("__or__", (void*)setOrSet);
-    add("__sub__", (void*)setSubSet);
-    add("__xor__", (void*)setXorSet);
-    add("__and__", (void*)setAndSet);
+    add("__or__", (void*)setOr);
+    add("__sub__", (void*)setSub);
+    add("__xor__", (void*)setXor);
+    add("__and__", (void*)setAnd);
+    add("__ior__", (void*)setIOr);
+    add("__isub__", (void*)setISub);
+    add("__ixor__", (void*)setIXor);
+    add("__iand__", (void*)setIAnd);
+
 
     set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
     frozenset_cls->giveAttr("__iter__", set_cls->getattr(internStringMortal("__iter__")));
@@ -688,11 +752,15 @@ void setupSet() {
     frozenset_cls->giveAttr("intersection", set_cls->getattr(internStringMortal("intersection")));
     set_cls->giveAttr("intersection_update",
                       new BoxedFunction(boxRTFunction((void*)setIntersectionUpdate, UNKNOWN, 1, true, false)));
-    frozenset_cls->giveAttr("intersection_update", set_cls->getattr(internStringMortal("intersection_update")));
     set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttr("difference", set_cls->getattr(internStringMortal("difference")));
     set_cls->giveAttr("difference_update",
                       new BoxedFunction(boxRTFunction((void*)setDifferenceUpdate, UNKNOWN, 1, true, false)));
+    set_cls->giveAttr("symmetric_difference",
+                      new BoxedFunction(boxRTFunction((void*)setSymmetricDifference, UNKNOWN, 2, false, false)));
+    frozenset_cls->giveAttr("symmetric_difference", set_cls->getattr(internStringMortal("symmetric_difference")));
+    set_cls->giveAttr("symmetric_difference_update",
+                      new BoxedFunction(boxRTFunction((void*)setSymmetricDifferenceUpdate, UNKNOWN, 2, false, false)));
     set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
     frozenset_cls->giveAttr("issubset", set_cls->getattr(internStringMortal("issubset")));
     set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));

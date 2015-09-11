@@ -3463,8 +3463,12 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
         BoxedDict* okwargs = NULL;
-        if (d_kwargs->d.size())
+        if (d_kwargs->d.size()) {
             okwargs = get_okwargs();
+
+            if (!okwargs && (!param_names || !param_names->takes_param_names))
+                raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+        }
 
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr(p.first);
