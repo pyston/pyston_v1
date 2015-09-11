@@ -125,6 +125,7 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/grp.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/termios.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_curses.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/mmap.pyston.so
                    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
                    DEPENDS
                        pyston
@@ -150,5 +151,6 @@ add_custom_command(OUTPUT
 		       Modules/grpmodule.c
 		       Modules/termios.c
 		       Modules/_cursesmodule.c
+		       Modules/mmapmodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)
