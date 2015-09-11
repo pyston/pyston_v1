@@ -12,7 +12,6 @@ def relpath(fn):
     r =  os.path.join(os.path.dirname(__file__), fn)
     return r
 
-print glob.glob("../from_cpython/Include/*.h")
 builtin_headers = map(relpath, glob.glob("../../from_cpython/Include/*.h"))
 
 for m in extensions:

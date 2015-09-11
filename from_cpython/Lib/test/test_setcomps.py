@@ -1,4 +1,3 @@
-# expected: fail
 doctests = """
 ########### Tests mostly copied from test_listcomps.py ############
 

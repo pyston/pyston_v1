@@ -62,8 +62,7 @@ test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_richcmp            PyObject_Not
 test_scope              eval of code object from existing function (not currently supported)
-test_set                weird function-picking issue
-test_setcomps           parser not raising a SyntaxError when assigning to a setcomp
+test_set                lots of set issues
 test_sort               argument specification issue in listSort?
 test_str                memory leak?
 test_string             infinite loops in test_replace
