@@ -5426,6 +5426,18 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     }
     basic_size = cur_offset;
 
+    // from cpython:
+    /* Special-case __new__: if it's a plain function,
+               make it a static function */
+    Box* tmp = PyDict_GetItemString(attr_dict, "__new__");
+    if (tmp != NULL && PyFunction_Check(tmp)) {
+        tmp = PyStaticMethod_New(tmp);
+        if (tmp == NULL)
+            throwCAPIException();
+        PyDict_SetItemString(attr_dict, "__new__", tmp);
+        Py_DECREF(tmp);
+    }
+
     size_t total_slots = final_slot_names.size()
                          + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);
     BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, NULL, attrs_offset, weaklist_offset, basic_size, true,
