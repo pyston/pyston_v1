@@ -73,6 +73,7 @@ MODULES_TO_TEST = [
     'test.base.test_events',
     'test.base.test_except',
     'test.base.test_inspect',
+    'test.base.test_utils',
     'test.dialect.test_mxodbc',
     'test.dialect.test_pyodbc',
     'test.dialect.test_sybase',
@@ -103,7 +104,7 @@ for fn in test_files:
         m = __import__(mname, fromlist=["__all__"])
         for clsname in dir(m):
             cls = getattr(m, clsname)
-            if not clsname.endswith("Test") or not isinstance(cls, type):
+            if clsname.startswith('_') or not clsname.endswith("Test") or not isinstance(cls, type):
                 continue
             print "Running", cls
 

@@ -3552,6 +3552,7 @@ void setupRuntime() {
     // XXX silly that we have to set this again
     new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
     new (&type_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
+    object_cls->instances_are_nonzero = true;
     object_cls->tp_getattro = PyObject_GenericGetAttr;
     object_cls->tp_setattro = PyObject_GenericSetAttr;
     object_cls->tp_init = object_init;
