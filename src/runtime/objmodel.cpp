@@ -2486,12 +2486,13 @@ extern "C" bool nonzero(Box* obj) {
             rewriter.reset();
 
         if (rtn == NULL) {
-            ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
-                       || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
-                       || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
-                       || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
-                       || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
-                       || obj->cls == wrapperdescr_cls || obj->cls == wrapperobject_cls,
+            ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
+                       || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == file_cls
+                       || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
+                       || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
+                       || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
+                       || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls
+                       || obj->cls == wrapperobject_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {
