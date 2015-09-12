@@ -262,7 +262,7 @@ public:
                     // llvm::InlineFunctionInfo InlineInfo(&cg);
 
                     llvm::InlineFunctionInfo InlineInfo;
-                    bool inlined = llvm::InlineFunction(cs, InlineInfo, false);
+                    bool inlined = llvm::InlineFunction(cs, InlineInfo, nullptr, false);
                     did_inline = did_inline || inlined;
                     did_any_inlining = did_any_inlining || inlined;
 

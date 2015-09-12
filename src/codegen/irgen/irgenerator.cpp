@@ -2730,8 +2730,8 @@ public:
             if (!passed_closure)
                 passed_closure = getNullPtr(g.llvm_closure_type_ptr);
 
-            llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
-                g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
+            llvm::Value* new_closure = emitter.getBuilder()->CreateCall(
+                g.funcs.createClosure, { passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64) });
             symbol_table[internString(CREATED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
         }
@@ -2862,8 +2862,8 @@ public:
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
-            emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException, phi_node,
-                                              embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException, { phi_node,
+                                              embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
 
             if (!final_dest) {
                 // Propagate the exception out of the function:
@@ -2884,10 +2884,10 @@ public:
                 llvm::Value* exc_traceback_ptr
                     = new llvm::AllocaInst(g.llvm_value_type_ptr, getConstantInt(1, g.i64), "exc_traceback",
                                            irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
-                emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Fetch, exc_type_ptr, exc_value_ptr, exc_traceback_ptr);
+                emitter.getBuilder()->CreateCall(g.funcs.PyErr_Fetch, { exc_type_ptr, exc_value_ptr, exc_traceback_ptr });
                 // TODO: I think we should be doing this on a python raise() or when we enter a python catch:
-                emitter.getBuilder()->CreateCall3(g.funcs.PyErr_NormalizeException, exc_type_ptr, exc_value_ptr,
-                                                  exc_traceback_ptr);
+                emitter.getBuilder()->CreateCall(g.funcs.PyErr_NormalizeException, { exc_type_ptr, exc_value_ptr,
+                                                  exc_traceback_ptr });
                 llvm::Value* exc_type = emitter.getBuilder()->CreateLoad(exc_type_ptr);
                 llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
                 llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
@@ -2925,11 +2925,14 @@ public:
 
         llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
         assert(_personality_func);
-        llvm::Value* personality_func
+        llvm::Constant* personality_func
             = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
+
+        irstate->getLLVMFunction()->setPersonalityFn(personality_func);
+
         assert(personality_func);
         llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
-            llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+            llvm::StructType::get(g.context, std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), 1);
         landing_pad->addClause(getNullPtr(g.i8_ptr));
 
         llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
@@ -2964,7 +2967,7 @@ public:
             // We shouldn't be hitting this case if the current function is CXX-style; then we should have
             // just not created an Invoke and let the exception machinery propagate it for us.
             assert(irstate->getExceptionStyle() == CAPI);
-            builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            builder->CreateCall(g.funcs.PyErr_Restore, { exc_type, exc_value, exc_traceback });
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         }
 

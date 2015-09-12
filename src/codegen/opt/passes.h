@@ -22,7 +22,7 @@ class ImmutablePass;
 }
 
 namespace pyston {
-llvm::ImmutablePass* createPystonAAPass();
+llvm::ImmutablePass* createPystonAAWrapperPass();
 llvm::FunctionPass* createMallocsNonNullPass();
 llvm::FunctionPass* createConstClassesPass();
 llvm::FunctionPass* createDeadAllocsPass();

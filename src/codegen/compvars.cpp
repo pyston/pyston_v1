@@ -169,8 +169,8 @@ public:
         ConcreteCompilerVariable* func = im->func->makeConverted(emitter, UNKNOWN);
         ConcreteCompilerVariable* im_class = im->im_class->makeConverted(emitter, UNKNOWN);
 
-        llvm::Value* boxed = emitter.getBuilder()->CreateCall3(g.funcs.boxInstanceMethod, obj->getValue(),
-                                                               func->getValue(), im_class->getValue());
+        llvm::Value* boxed = emitter.getBuilder()->CreateCall(g.funcs.boxInstanceMethod, { obj->getValue(),
+                                                               func->getValue(), im_class->getValue() });
 
         obj->decvref(emitter);
         func->decvref(emitter);
@@ -2345,7 +2345,7 @@ public:
             emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
         }
 
-        llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
+        llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.createTuple, { nelts, scratch });
 
         for (int i = 0; i < converted_args.size(); i++) {
             converted_args[i]->decvref(emitter);

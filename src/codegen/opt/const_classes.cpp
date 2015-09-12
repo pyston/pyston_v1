@@ -102,7 +102,7 @@ private:
 #elif LLVMREV < 227113
             bool success = gep->accumulateConstantOffset(*g.tm->getSubtargetImpl()->getDataLayout(), ap_offset);
 #else
-            bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+            bool success = gep->accumulateConstantOffset(g.tm->createDataLayout(), ap_offset);
 #endif
             assert(success);
             int64_t offset = ap_offset.getSExtValue();

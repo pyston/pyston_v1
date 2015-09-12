@@ -19,7 +19,9 @@
 #include <set>
 #include <stdint.h>
 
+#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
@@ -99,11 +101,11 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
         fpm.add(makeFPInliner(275));
     fpm.add(llvm::createCFGSimplificationPass());
 
-    fpm.add(llvm::createBasicAliasAnalysisPass());
-    fpm.add(llvm::createTypeBasedAliasAnalysisPass());
+    fpm.add(llvm::createTypeBasedAAWrapperPass());
+    fpm.add(llvm::createBasicAAWrapperPass());
     if (ENABLE_PYSTON_PASSES) {
         fpm.add(new EscapeAnalysis());
-        fpm.add(createPystonAAPass());
+        fpm.add(createPystonAAWrapperPass());
     }
 
     if (ENABLE_PYSTON_PASSES)
@@ -947,10 +949,10 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
-    llvm::MDFile* file = builder.createFile(fn->s(), dir);
-    llvm::MDTypeRefArray param_types = builder.getOrCreateTypeArray(llvm::None);
-    llvm::MDSubroutineType* func_type = builder.createSubroutineType(file, param_types);
-    llvm::MDSubprogram* func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
+    llvm::DIFile* file = builder.createFile(fn->s(), dir);
+    llvm::DITypeRefArray param_types = builder.getOrCreateTypeArray(llvm::None);
+    llvm::DISubroutineType* func_type = builder.createSubroutineType(file, param_types);
+    llvm::DISubprogram* func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
                                                            false, true, lineno + 1, 0, true, f);
 
     builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);

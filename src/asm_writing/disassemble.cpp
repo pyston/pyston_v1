@@ -76,7 +76,7 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
     static __thread llvm::MCInstPrinter* IP = NULL;
 
     if (!DisAsm) {
-        const llvm::StringRef triple = g.tm->getTargetTriple();
+        const std::string triple = g.tm->getTargetTriple().getTriple();
         std::string err;
         const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple, err);
         assert(target);

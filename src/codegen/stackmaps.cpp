@@ -176,7 +176,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
 
         if (name == ".llvm_stackmaps") {
             assert(stackmap_address == 0);
-            stackmap_address = L.getSectionLoadAddress(name);
+            stackmap_address = L.getSectionLoadAddress(sec);
             assert(stackmap_address > 0);
         }
     }

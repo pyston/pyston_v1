@@ -24,6 +24,8 @@
 namespace llvm {
 class Instruction;
 class Value;
+
+void initializeEscapeAnalysisPass(PassRegistry&);
 }
 
 namespace pyston {
