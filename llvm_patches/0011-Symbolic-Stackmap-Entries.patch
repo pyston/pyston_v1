@@ -5,33 +5,32 @@ Subject: [PATCH] Add support for symbolic entries in the stackmap constant
  table
 
 ---
- include/llvm/CodeGen/StackMaps.h                 | 18 ++++++++++--
+ include/llvm/CodeGen/StackMaps.h                 | 17 +++++++++--
  lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp |  9 ++++++
  lib/CodeGen/StackMaps.cpp                        | 36 +++++++++++++++++++++---
  test/CodeGen/X86/stackmap.ll                     | 26 +++++++++++++++--
- 4 files changed, 79 insertions(+), 10 deletions(-)
+ 4 files changed, 78 insertions(+), 10 deletions(-)
 
 diff --git a/include/llvm/CodeGen/StackMaps.h b/include/llvm/CodeGen/StackMaps.h
-index caec994..6a62f93 100644
+index fdc1a91..f1d2d85 100644
 --- a/include/llvm/CodeGen/StackMaps.h
 +++ b/include/llvm/CodeGen/StackMaps.h
-@@ -137,9 +137,13 @@ public:
+@@ -142,9 +142,12 @@ public:
      unsigned Size;
      unsigned Reg;
      int64_t Offset;
--    Location() : LocType(Unprocessed), Size(0), Reg(0), Offset(0) {}
+-    Location() : Type(Unprocessed), Size(0), Reg(0), Offset(0) {}
 +    const MCSymbol *Sym;
-+    Location() : LocType(Unprocessed), Size(0), Reg(0), Offset(0), Sym(0) {}
-     Location(LocationType LocType, unsigned Size, unsigned Reg, int64_t Offset)
--      : LocType(LocType), Size(Size), Reg(Reg), Offset(Offset) {}
-+        : LocType(LocType), Size(Size), Reg(Reg), Offset(Offset), Sym(0) {}
++    Location() : Type(Unprocessed), Size(0), Reg(0), Offset(0), Sym(0) {}
+     Location(LocationType Type, unsigned Size, unsigned Reg, int64_t Offset)
+-        : Type(Type), Size(Size), Reg(Reg), Offset(Offset) {}
++        : Type(Type), Size(Size), Reg(Reg), Offset(Offset), Sym(0) {}
 +    Location(const MCSymbol *Sym)
-+        : LocType(LocationType::Constant), Size(sizeof(int64_t)), Reg(0),
-+          Offset(0), Sym(Sym) {}
++        : Type(Constant), Size(sizeof(int64_t)), Reg(0), Offset(0), Sym(Sym) {}
    };
  
    struct LiveOutReg {
-@@ -161,13 +165,19 @@ public:
+@@ -161,13 +164,19 @@ public:
    // OpTypes are used to encode information about the following logical
    // operand (which may consist of several MachineOperands) for the
    // OpParser.
@@ -52,7 +51,7 @@ index caec994..6a62f93 100644
      FnStackSize.clear();
    }
  
-@@ -192,6 +202,7 @@ private:
+@@ -192,6 +201,7 @@ private:
    typedef SmallVector<Location, 8> LocationVec;
    typedef SmallVector<LiveOutReg, 8> LiveOutVec;
    typedef MapVector<uint64_t, uint64_t> ConstantPool;
@@ -60,7 +59,7 @@ index caec994..6a62f93 100644
    typedef MapVector<const MCSymbol *, uint64_t> FnStackSizeMap;
  
    struct CallsiteInfo {
-@@ -211,6 +222,7 @@ private:
+@@ -211,6 +221,7 @@ private:
    AsmPrinter &AP;
    CallsiteInfoList CSInfos;
    ConstantPool ConstPool;
@@ -69,19 +68,19 @@ index caec994..6a62f93 100644
  
    MachineInstr::const_mop_iterator
 diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-index 4417095..89e2e31 100644
+index 20a6ffd..028839a 100644
 --- a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 +++ b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-@@ -6923,6 +6923,15 @@ static void addStackMapLiveVars(ImmutableCallSite CS, unsigned StartIdx,
+@@ -6656,6 +6656,15 @@ static void addStackMapLiveVars(ImmutableCallSite CS, unsigned StartIdx,
        const TargetLowering &TLI = Builder.DAG.getTargetLoweringInfo();
-       Ops.push_back(
-         Builder.DAG.getTargetFrameIndex(FI->getIndex(), TLI.getPointerTy()));
+       Ops.push_back(Builder.DAG.getTargetFrameIndex(
+           FI->getIndex(), TLI.getPointerTy(Builder.DAG.getDataLayout())));
 +    } else if (auto *GA = dyn_cast<GlobalAddressSDNode>(OpVal)) {
 +      if (GA->getValueType(0) != MVT::i64)
 +        Ops.push_back(OpVal);
 +      else {
 +        Ops.push_back(
-+            Builder.DAG.getTargetConstant(StackMaps::ConstantGVOp, MVT::i64));
++            Builder.DAG.getTargetConstant(StackMaps::ConstantGVOp, DL, MVT::i64));
 +        Ops.push_back(Builder.DAG.getTargetGlobalAddress(GA->getGlobal(),
 +                                                         SDLoc(GA), MVT::i64));
 +      }
@@ -89,11 +88,11 @@ index 4417095..89e2e31 100644
        Ops.push_back(OpVal);
    }
 diff --git a/lib/CodeGen/StackMaps.cpp b/lib/CodeGen/StackMaps.cpp
-index aa18dea..c365beb 100644
+index b3cd8b3..d22adc7 100644
 --- a/lib/CodeGen/StackMaps.cpp
 +++ b/lib/CodeGen/StackMaps.cpp
-@@ -118,6 +118,16 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
-       Locs.push_back(Location(Location::Constant, sizeof(int64_t), 0, Imm));
+@@ -121,6 +121,16 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
+       Locs.emplace_back(Location::Constant, sizeof(int64_t), 0, Imm);
        break;
      }
 +    case StackMaps::ConstantGVOp: {
@@ -109,24 +108,24 @@ index aa18dea..c365beb 100644
      }
      return ++MOI;
    }
-@@ -296,7 +306,7 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
-        I != E; ++I) {
+@@ -306,7 +316,7 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
+   for (auto &Loc : Locations) {
      // Constants are encoded as sign-extended integers.
      // -1 is directly encoded as .long 0xFFFFFFFF with no constant pool.
--    if (I->LocType == Location::Constant && !isInt<32>(I->Offset)) {
-+    if (I->LocType == Location::Constant && !isInt<32>(I->Offset) && !I->Sym) {
-       I->LocType = Location::ConstantIndex;
+-    if (Loc.Type == Location::Constant && !isInt<32>(Loc.Offset)) {
++    if (Loc.Type == Location::Constant && !isInt<32>(Loc.Offset) && !Loc.Sym) {
+       Loc.Type = Location::ConstantIndex;
        // ConstPool is intentionally a MapVector of 'uint64_t's (as
        // opposed to 'int64_t's).  We should never be in a situation
-@@ -313,6 +323,17 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
+@@ -323,6 +333,17 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
      }
    }
  
 +  // Convert constant symbols to ConstantIndex entries.
 +  for (LocationVec::iterator I = Locations.begin(), E = Locations.end(); I != E;
 +       ++I) {
-+    if (I->LocType == Location::Constant && I->Sym) {
-+      I->LocType = Location::ConstantIndex;
++    if (I->Type == Location::Constant && I->Sym) {
++      I->Type = Location::ConstantIndex;
 +      auto Result = ConstSymPool.insert(std::make_pair(I->Sym, I->Sym));
 +      // The symbolic entries will be emitted after the ConstPool entries.
 +      I->Offset = ConstPool.size() + Result.first - ConstSymPool.begin();
@@ -135,8 +134,8 @@ index aa18dea..c365beb 100644
 +
    // Create an expression to calculate the offset of the callsite from function
    // entry.
-   const MCExpr *CSOffsetExpr = MCBinaryExpr::CreateSub(
-@@ -395,8 +416,9 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
+   const MCExpr *CSOffsetExpr = MCBinaryExpr::createSub(
+@@ -401,8 +422,9 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
    DEBUG(dbgs() << WSMP << "#functions = " << FnStackSize.size() << '\n');
    OS.EmitIntValue(FnStackSize.size(), 4);
    // Num constants.
@@ -148,7 +147,7 @@ index aa18dea..c365beb 100644
    // Num callsites.
    DEBUG(dbgs() << WSMP << "#callsites = " << CSInfos.size() << '\n');
    OS.EmitIntValue(CSInfos.size(), 4);
-@@ -429,6 +451,10 @@ void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
+@@ -435,6 +457,10 @@ void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
      DEBUG(dbgs() << WSMP << ConstEntry.second << '\n');
      OS.EmitIntValue(ConstEntry.second, 8);
    }
@@ -159,9 +158,9 @@ index aa18dea..c365beb 100644
  }
  
  /// Emit the callsite info for each callsite.
-@@ -514,7 +540,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS) {
+@@ -520,7 +546,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS) {
  void StackMaps::serializeToStackMapSection() {
-   (void) WSMP;
+   (void)WSMP;
    // Bail out if there's no stack map data.
 -  assert((!CSInfos.empty() || (CSInfos.empty() && ConstPool.empty())) &&
 +  assert((!CSInfos.empty() ||
@@ -169,7 +168,7 @@ index aa18dea..c365beb 100644
           "Expected empty constant pool too!");
    assert((!CSInfos.empty() || (CSInfos.empty() && FnStackSize.empty())) &&
           "Expected empty function record too!");
-@@ -543,4 +570,5 @@ void StackMaps::serializeToStackMapSection() {
+@@ -549,4 +576,5 @@ void StackMaps::serializeToStackMapSection() {
    // Clean up.
    CSInfos.clear();
    ConstPool.clear();

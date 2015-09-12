@@ -95,6 +95,8 @@ if __name__ == "__main__":
             continue
         if "getSymbolLoadAddress" in patch_fn:
             continue
+        if "Rename-one-of-scan-builds-internal" in patch_fn:
+            continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)
