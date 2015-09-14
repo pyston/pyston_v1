@@ -641,7 +641,7 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
 
 void BoxedSet::dealloc(Box* b) noexcept {
     assert(PyAnySet_Check(b));
-    static_cast<BoxedSet*>(b)->s.~Set();
+    static_cast<BoxedSet*>(b)->s.freeAllMemory();
 }
 
 using namespace pyston::set;

@@ -1,11 +1,10 @@
-# run_args: -x
-
+import gc
 import os
 import sys
 import subprocess
 import traceback
 
-ENV_NAME = "sqlalchemy_test_env_" + os.path.basename(sys.executable)
+ENV_NAME = os.path.abspath("sqlalchemy_test_env_" + os.path.basename(sys.executable))
 
 if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(ENV_NAME + "/bin/python").st_mtime:
     print "Creating virtualenv to install testing dependencies..."
@@ -28,7 +27,7 @@ if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(EN
 
 # subprocess.check_call([os.path.abspath("sqlalchemy_test_env/bin/python"), "-c", "import py; print type(py); print py.builtin"])
 
-SQLALCHEMY_DIR = os.path.dirname(__file__) + "/../lib/sqlalchemy"
+SQLALCHEMY_DIR = os.path.abspath(os.path.dirname(__file__) + "/../lib/sqlalchemy")
 TEST_DIR = SQLALCHEMY_DIR + "/test"
 python_exe = os.path.abspath(ENV_NAME + "/bin/python")
 
@@ -37,29 +36,56 @@ sys.path.insert(0, SQLALCHEMY_DIR)
 sys.path.append(ENV_NAME + "/site-packages")
 sys.path.append(ENV_NAME + "/lib/python2.7/site-packages")
 
+os.chdir(SQLALCHEMY_DIR)
+
+
 # make sure this is importable:
 import mock
 
+# sqlalchemy has a bad implementation of is_cpython (in compat.py): it's "not pypy and not is jython".
+# Monkey-patch in a properly-detected value (it uses this to gate some "requires a predictable gc" tests
+# we fail):
+import platform
+import sqlalchemy.util.compat
+sqlalchemy.util.compat.cpython = sqlalchemy.util.cpython = (platform.python_implementation() == "CPython")
+
 import sqlalchemy.testing
-class Requirements(object):
-    def __getattr__(self, n):
-        def inner(f):
-            if n == "predictable_gc":
-                def f2(*args, **kw):
-                    return
-                return f2
-            else:
-                return f
-        inner.not_ = lambda: inner
-        return inner
-sqlalchemy.testing.config.requirements = sqlalchemy.testing.requires = Requirements()
+import sqlalchemy.testing.plugin.pytestplugin
+class Options(object):
+    pass
+options = Options()
+options.__dict__.update({'noassert': False, 'verbose': 1, 'color': 'auto', 'collectonly': False, 'pyargs': False, 'pastebin': None, 'genscript': None, 'include_tag': None, 'plugins': [], 'dbs': None, 'log_debug': None, 'markexpr': '', 'help': False, 'capture': 'fd', 'low_connections': False, 'requirements': None, 'reportchars': 'fxX', 'reversetop': False, 'assertmode': 'rewrite', 'backend_only': False, 'markers': False, 'strict': False, 'usepdb': False, 'inifilename': None, 'version': False, 'log_info': None, 'dropfirst': False, 'maxfail': 25, 'traceconfig': False, 'junitprefix': None, 'force_write_profiles': False, 'durations': None, 'db': None, 'confcutdir': None, 'doctestmodules': False, 'showfixtures': False, 'fulltrace': False, 'file_or_dir': ['/mnt/kmod/pyston/test/lib/sqlalchemy'], 'basetemp': None, 'report': None, 'ignore': None, 'exclude_tag': None, 'resultlog': None, 'doctestglob': 'test*.txt', 'dburi': None, 'exitfirst': False, 'showlocals': False, 'keyword': '', 'doctest_ignore_import_errors': False, 'write_profiles': False, 'runxfail': False, 'quiet': 0, 'cdecimal': False, 'xmlpath': None, 'tbstyle': 'native', 'debug': False, 'nomagic': False})
+class SkipTest(Exception):
+    pass
+sqlalchemy.testing.plugin.plugin_base.set_skip_test(SkipTest)
+sqlalchemy.testing.plugin.plugin_base.pre_begin(options)
+sqlalchemy.testing.plugin.plugin_base.read_config()
+sqlalchemy.testing.plugin.pytestplugin.pytest_sessionstart(None)
+
 
 import glob
 test_files = glob.glob(TEST_DIR + "/test*.py") + glob.glob(TEST_DIR + "/*/test*.py")
 
 # These are the ones that pass on CPython (ie that we've stubbed enough of their testing
 # infrastructure to run):
-MODULES_TO_TEST = ['test.engine.test_parseconnect', 'test.ext.test_compiler', 'test.dialect.test_pyodbc', 'test.dialect.test_sybase', 'test.dialect.test_mxodbc', 'test.sql.test_inspect', 'test.sql.test_operators', 'test.sql.test_ddlemit', 'test.sql.test_cte', 'test.base.test_dependency', 'test.base.test_except', 'test.base.test_inspect', 'test.base.test_events', 'test.orm.test_inspect', 'test.orm.test_descriptor']
+MODULES_TO_TEST = [
+    'test.base.test_dependency',
+    'test.base.test_events',
+    'test.base.test_except',
+    'test.base.test_inspect',
+    'test.dialect.test_mxodbc',
+    'test.dialect.test_pyodbc',
+    'test.dialect.test_sybase',
+    'test.engine.test_parseconnect',
+    'test.ext.test_compiler',
+    'test.orm.test_descriptor',
+    'test.orm.test_inspect',
+    'test.orm.test_query',
+    'test.sql.test_cte',
+    'test.sql.test_ddlemit',
+    'test.sql.test_inspect',
+    'test.sql.test_operators',
+]
 
 passed = []
 failed = []
@@ -70,28 +96,36 @@ for fn in test_files:
     mname = fn[len(SQLALCHEMY_DIR) + 1:-3].replace('/', '.')
     if mname not in MODULES_TO_TEST:
         continue
-    print
+    print '=' * 50
     print mname
 
     try:
         m = __import__(mname, fromlist=["__all__"])
-        for nname in dir(m):
-            n = getattr(m, nname)
-            if not nname.endswith("Test") or not isinstance(n, type):
+        for clsname in dir(m):
+            cls = getattr(m, clsname)
+            if not clsname.endswith("Test") or not isinstance(cls, type):
                 continue
-            print "Running", n
+            print "Running", cls
 
-            n = n()
+            if hasattr(cls, "setup_class"):
+                cls.setup_class()
+            n = cls()
             for t in dir(n):
                 if not t.startswith("test_"):
                     continue
-                if nname == "SubclassGrowthTest" and t == "test_subclass":
+                if clsname == "SubclassGrowthTest" and t == "test_subclass":
                     # This test should be marked as requiring predictable_pc
                     continue
                 print "Running", t
                 n.setup()
-                getattr(n, t)()
+                try:
+                    getattr(n, t)()
+                except SkipTest:
+                    pass
                 n.teardown()
+            if hasattr(cls, "teardown_class"):
+                cls.teardown_class()
+            gc.collect()
     except Exception:
         print mname, "FAILED"
         traceback.print_exc()

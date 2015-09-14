@@ -771,7 +771,7 @@ static Box* dict_repr(PyObject* self) noexcept {
 
 void BoxedDict::dealloc(Box* b) noexcept {
     assert(PyDict_Check(b));
-    static_cast<BoxedDict*>(b)->d.~DictMap();
+    static_cast<BoxedDict*>(b)->d.freeAllMemory();
 }
 
 void setupDict() {

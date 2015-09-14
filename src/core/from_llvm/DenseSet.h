@@ -81,6 +81,12 @@ public:
     TheMap.clear();
   }
 
+  // Pyston addition:
+  // Frees all dynamically-allocated memory, but leaves the DenseSet in a valid state.
+  void freeAllMemory() {
+    TheMap.freeAllMemory();
+  }
+
   /// Return 1 if the specified key is in the set, 0 otherwise.
   size_type count(const ValueT &V) const {
     return TheMap.count(V);

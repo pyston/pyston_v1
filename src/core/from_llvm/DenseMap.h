@@ -600,6 +600,14 @@ public:
     this->insert(I, E);
   }
 
+  // Pyston addition:
+  // Frees all dynamically-allocated memory, but leaves the DenseMap in a valid state.
+  void freeAllMemory() {
+    this->destroyAll();
+    operator delete(Buckets);
+    init(0);
+  }
+
   ~DenseMap() {
     this->destroyAll();
     operator delete(Buckets);
