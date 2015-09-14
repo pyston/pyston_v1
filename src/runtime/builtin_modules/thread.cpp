@@ -161,6 +161,7 @@ public:
             PyThread_release_lock(self->lock_lock);
 
             PyThread_free_lock(self->lock_lock);
+            self->lock_lock = NULL;
         }
     }
 

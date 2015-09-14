@@ -1055,13 +1055,15 @@ static PyObject* instance_index(PyObject* self) noexcept {
     return res;
 }
 
-static void instance_dealloc(Box* _inst) {
+static void instance_dealloc(Box* _inst) noexcept {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     // Note that trying to call __del__ as a finalizer does not fallback to
     // __getattr__ unlike other attributes (like __index__). This is CPython's behavior.
     static BoxedString* del_str = internStringImmortal("__del__");
+
+    // TODO: any exceptions here should get caught + printed, instead of causing a std::terminate:
     Box* func = instanceGetattributeSimple(inst, del_str);
     if (func)
         runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
