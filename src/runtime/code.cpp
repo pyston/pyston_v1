@@ -111,8 +111,7 @@ extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, Py
 }
 
 void setupCode() {
-    code_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
+    code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
 
     code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
 

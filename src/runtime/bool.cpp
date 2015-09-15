@@ -87,6 +87,9 @@ extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
 
 
 void setupBool() {
+    static PyNumberMethods bool_as_number;
+    bool_cls->tp_as_number = &bool_as_number;
+
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
     bool_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)boolHash, BOXED_INT, 1)));

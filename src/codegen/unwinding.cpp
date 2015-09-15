@@ -1252,8 +1252,8 @@ llvm::JITEventListener* makeTracebacksListener() {
 }
 
 void setupUnwinding() {
-    unwind_session_cls = BoxedHeapClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
-                                                sizeof(PythonUnwindSession), false, "unwind_session");
+    unwind_session_cls = BoxedClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
+                                            sizeof(PythonUnwindSession), false, "unwind_session");
     unwind_session_cls->freeze();
 }
 }

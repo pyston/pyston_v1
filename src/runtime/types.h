@@ -268,14 +268,26 @@ public:
 
     void freeze();
 
+    static void gcHandler(GCVisitor* v, Box* b);
+
+    typedef size_t SlotOffset;
+    SlotOffset* slotOffsets() { return (BoxedClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
+
+    // These should only be used for builtin types:
+    static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                              int weaklist_offset, int instance_size, bool is_user_defined, const char* name);
+
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+               bool is_user_defined, const char* name);
+
+
+    DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
+
 protected:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
     void finishInitialization();
-
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
-               bool is_user_defined);
 
     friend void setupRuntime();
     friend void setupSysEnd();
@@ -292,18 +304,12 @@ public:
     BoxedString* ht_name;
     PyObject* ht_slots;
 
-    typedef size_t SlotOffset;
-    SlotOffset* slotOffsets() { return (BoxedHeapClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
     size_t nslots() { return this->ob_size; }
 
     // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                   BoxedTuple* bases, size_t nslots);
-    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int weaklist_offset, int instance_size, bool is_user_defined, llvm::StringRef name);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
@@ -315,8 +321,6 @@ private:
     friend void setupRuntime();
     friend void setupSys();
     friend void setupThread();
-
-    DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");

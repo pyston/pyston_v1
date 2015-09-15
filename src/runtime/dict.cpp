@@ -775,15 +775,20 @@ void BoxedDict::dealloc(Box* b) noexcept {
 }
 
 void setupDict() {
-    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
-                                               sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
+    static PyMappingMethods dict_as_mapping;
+    dict_cls->tp_as_mapping = &dict_as_mapping;
+    static PySequenceMethods dict_as_sequence;
+    dict_cls->tp_as_sequence = &dict_as_sequence;
 
-    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
-                                           false, "dict_keys");
-    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0,
-                                             sizeof(BoxedDictView), false, "dict_values");
-    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0,
-                                            sizeof(BoxedDictView), false, "dict_items");
+    dict_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
+                                           sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
+
+    dict_keys_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+                                       false, "dict_keys");
+    dict_values_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+                                         false, "dict_values");
+    dict_items_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+                                        false, "dict_items");
 
     dict_cls->tp_dealloc = &BoxedDict::dealloc;
     dict_cls->has_safe_tp_dealloc = true;

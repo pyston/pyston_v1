@@ -181,8 +181,8 @@ bool calliter_hasnext(Box* b) {
 
 
 void setupIter() {
-    seqiter_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter),
-                                         false, "iterator");
+    seqiter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter), false,
+                                     "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
@@ -191,8 +191,8 @@ void setupIter() {
     seqiter_cls->freeze();
     seqiter_cls->tpp_hasnext = seqiterHasnextUnboxed;
 
-    seqreviter_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter),
-                                            false, "reversed");
+    seqreviter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter),
+                                        false, "reversed");
 
     seqreviter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqreviter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqreviterHasnext, BOXED_BOOL, 1)));
@@ -200,8 +200,8 @@ void setupIter() {
 
     seqreviter_cls->freeze();
 
-    iterwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedIterWrapper::gcHandler, 0, 0,
-                                             sizeof(BoxedIterWrapper), false, "iterwrapper");
+    iterwrapper_cls = BoxedClass::create(type_cls, object_cls, &BoxedIterWrapper::gcHandler, 0, 0,
+                                         sizeof(BoxedIterWrapper), false, "iterwrapper");
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)iterwrapperNext, UNKNOWN, 1)));
     iterwrapper_cls->giveAttr("__hasnext__",

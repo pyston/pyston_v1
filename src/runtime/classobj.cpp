@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
@@ -213,7 +214,7 @@ static const char* set_bases(PyClassObject* c, PyObject* v) {
     return "";
 }
 
-static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
+static void _classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     RELEASE_ASSERT(_cls->cls == classobj_cls, "");
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
 
@@ -221,26 +222,30 @@ static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     if (attr->s() == "__bases__") {
+        RELEASE_ASSERT(_value, "can't delete __bases__");
+
         const char* error_str = set_bases((PyClassObject*)cls, _value);
         if (error_str && error_str[0] != '\0')
             raiseExcHelper(TypeError, "%s", error_str);
         static BoxedString* bases_str = internStringImmortal("__bases__");
         cls->setattr(bases_str, _value, NULL);
-        return None;
+        return;
     }
     PyObject_GenericSetAttr(cls, _attr, _value);
     checkAndThrowCAPIException();
+}
+
+static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
+    assert(_value);
+
+    _classobjSetattr(_cls, _attr, _value);
     return None;
 }
 
 static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
     try {
-        if (value) {
-            classobjSetattr(cls, attr, value);
-            return 0;
-        } else {
-            RELEASE_ASSERT(0, "");
-        }
+        _classobjSetattr(cls, attr, value);
+        return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -1494,11 +1499,10 @@ extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
 }
 
 void setupClassobj() {
-    classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
-                                          offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
-    instance_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
-                                 offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
+    classobj_cls = BoxedClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
+                                      0, sizeof(BoxedClassobj), false, "classobj");
+    instance_cls = BoxedClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
+                                      offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
 
     classobj_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, false, false)));
 
@@ -1513,7 +1517,14 @@ void setupClassobj() {
     classobj_cls->freeze();
     classobj_cls->tp_getattro = classobj_getattro;
     classobj_cls->tp_setattro = classobj_setattro;
+    add_operators(classobj_cls);
 
+    static PyNumberMethods instance_as_number;
+    instance_cls->tp_as_number = &instance_as_number;
+    static PySequenceMethods instance_as_sequence;
+    instance_cls->tp_as_sequence = &instance_as_sequence;
+    static PyMappingMethods instance_as_mapping;
+    instance_cls->tp_as_mapping = &instance_as_mapping;
 
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattroInternal<CXX>, UNKNOWN, 2)));

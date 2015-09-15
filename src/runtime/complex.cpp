@@ -14,6 +14,7 @@
 
 #include "runtime/complex.h"
 
+#include "capi/typeobject.h"
 #include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/inline/boxing.h"
@@ -1224,6 +1225,9 @@ static PyMethodDef complex_methods[] = {
 };
 
 void setupComplex() {
+    static PyNumberMethods complex_as_number;
+    complex_cls->tp_as_number = &complex_as_number;
+
     auto complex_new = boxRTFunction((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
                                      ParamNames({ "", "real", "imag" }, "", ""), CXX);
     addRTFunction(complex_new, (void*)complexNew<CAPI>, UNKNOWN, CAPI);
@@ -1277,6 +1281,8 @@ void setupComplex() {
     for (auto& md : complex_methods) {
         complex_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, complex_cls));
     }
+
+    add_operators(complex_cls);
 
     complex_cls->freeze();
     complex_cls->tp_as_number->nb_negative = (unaryfunc)complex_neg;

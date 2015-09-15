@@ -1207,6 +1207,9 @@ static PyObject* int_richcompare(PyObject* v, PyObject* w, int op) noexcept {
 }
 
 void setupInt() {
+    static PyNumberMethods int_as_number;
+    int_cls->tp_as_number = &int_as_number;
+
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
         gc::registerPermanentRoot(interned_ints[i]);

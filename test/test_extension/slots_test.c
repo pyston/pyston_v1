@@ -806,8 +806,25 @@ call_funcs(PyObject* _module, PyObject* args) {
     Py_RETURN_NONE;
 }
 
+static PyObject *
+view_tp_as(PyObject* _module, PyObject* _type) {
+    assert(PyType_Check(_type));
+    PyTypeObject* type = (PyTypeObject*)_type;
+
+    printf("%s:", type->tp_name);
+    if (type->tp_as_number)
+        printf(" tp_as_number");
+    if (type->tp_as_sequence)
+        printf(" tp_as_sequence");
+    if (type->tp_as_mapping)
+        printf(" tp_as_mapping");
+    printf("\n");
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef SlotsMethods[] = {
     {"call_funcs", call_funcs, METH_VARARGS, "Call slotted functions."},
+    {"view_tp_as", view_tp_as, METH_O, "Check which tp_as_ slots are defined."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

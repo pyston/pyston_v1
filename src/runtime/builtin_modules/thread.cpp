@@ -210,7 +210,7 @@ void setupThread() {
     thread_module->giveAttr(
         "stack_size", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)stackSize, BOXED_INT, 0), "stack_size"));
 
-    thread_lock_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLock), false, "lock");
+    thread_lock_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
     thread_lock_cls->has_safe_tp_dealloc = true;
 
@@ -228,8 +228,8 @@ void setupThread() {
     thread_lock_cls->giveAttr("locked_lock", thread_lock_cls->getattr(internStringMortal("locked")));
     thread_lock_cls->freeze();
 
-    ThreadError = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset,
-                                         Exception->tp_weaklistoffset, Exception->tp_basicsize, false, "error");
+    ThreadError = BoxedClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,
+                                     Exception->tp_basicsize, false, "error");
     ThreadError->giveAttr("__module__", boxString("thread"));
     ThreadError->freeze();
 

@@ -1450,6 +1450,9 @@ static Box* long1(Box* b, void*) {
 }
 
 void setupLong() {
+    static PyNumberMethods long_as_number;
+    long_cls->tp_as_number = &long_as_number;
+
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);

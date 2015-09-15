@@ -2811,10 +2811,17 @@ static PyMethodDef string_methods[] = {
 };
 
 void setupStr() {
+    static PySequenceMethods string_as_sequence;
+    str_cls->tp_as_sequence = &string_as_sequence;
+    static PyNumberMethods str_as_number;
+    str_cls->tp_as_number = &str_as_number;
+    static PyMappingMethods str_as_mapping;
+    str_cls->tp_as_mapping = &str_as_mapping;
+
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
-                                              sizeof(BoxedStringIterator), false, "striterator");
+    str_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
+                                          sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("__iter__",
