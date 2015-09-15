@@ -598,7 +598,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "setattr(): attribute name must be string");
+        raiseExcHelper(TypeError, "attribute name must be string, not '%s'", _str->cls->tp_name);
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);

@@ -602,6 +602,7 @@ static void orderFinalizers() {
     std::vector<Box*> finalizer_marked;
 
     for (Box* obj : objects_with_ordered_finalizers) {
+        GC_TRACE_LOG("%p has an ordered finalizer\n", obj);
         GCAllocation* al = GCAllocation::fromUserData(obj);
 
         // We are only interested in object with finalizers that need to be garbage-collected.

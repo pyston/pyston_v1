@@ -996,12 +996,10 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 rewrite_args->obj_shape_guarded = true;
             }
             val = base->getattr(attr, rewrite_args);
-            assert(rewrite_args->out_success);
             if (val)
                 return val;
         }
 
-        assert(rewrite_args->out_success);
         assert(!rewrite_args->out_rtn);
         rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
         return NULL;
