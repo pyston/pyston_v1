@@ -643,6 +643,12 @@ extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
     v->visit(&it->t);
 }
 
+static Box* tuple_getnewargs(Box* _self) noexcept {
+    RELEASE_ASSERT(PyTuple_Check(_self), "");
+    PyTupleObject* v = reinterpret_cast<PyTupleObject*>(_self);
+    return Py_BuildValue("(N)", tupleslice(v, 0, Py_SIZE(v)));
+}
+
 void setupTuple() {
     static PySequenceMethods tuple_as_sequence;
     tuple_cls->tp_as_sequence = &tuple_as_sequence;
@@ -681,6 +687,8 @@ void setupTuple() {
     tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
 
+    tuple_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)tuple_getnewargs, UNKNOWN, 1,
+                                                                          ParamNames::empty(), CAPI)));
 
     tuple_cls->tp_hash = (hashfunc)tuple_hash;
     tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;

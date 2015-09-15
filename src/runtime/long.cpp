@@ -74,7 +74,7 @@ extern "C" int _PyLong_Sign(PyObject* l) noexcept {
 
 extern "C" PyObject* _PyLong_Copy(PyLongObject* src) noexcept {
     BoxedLong* rtn = new BoxedLong();
-    mpz_init_set(((BoxedLong*)src)->n, rtn->n);
+    mpz_init_set(rtn->n, ((BoxedLong*)src)->n);
     return rtn;
 }
 
@@ -1449,6 +1449,10 @@ static Box* long1(Box* b, void*) {
     return boxLong(1);
 }
 
+static PyObject* long_getnewargs(PyLongObject* v) noexcept {
+    return Py_BuildValue("(N)", _PyLong_Copy(v));
+}
+
 void setupLong() {
     static PyNumberMethods long_as_number;
     long_cls->tp_as_number = &long_as_number;
@@ -1514,6 +1518,9 @@ void setupLong() {
     long_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)longLong, UNKNOWN, 1)));
     long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
+
+    long_cls->giveAttr("__getnewargs__",
+                       new BoxedFunction(boxRTFunction((void*)long_getnewargs, UNKNOWN, 1, ParamNames::empty(), CAPI)));
 
     add_operators(long_cls);
     long_cls->freeze();

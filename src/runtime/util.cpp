@@ -17,6 +17,7 @@
 #include "codegen/codegen.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 
 // Temp hack to get CType sort of importing
@@ -236,6 +237,11 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (PyInt_Check(b)) {
             printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
+        }
+
+        if (PyLong_Check(b)) {
+            PyObject* str = longRepr(static_cast<BoxedLong*>(b));
+            printf("Long value: %s\n", static_cast<BoxedString*>(str)->c_str());
         }
 
         if (PyList_Check(b)) {

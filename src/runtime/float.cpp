@@ -1626,6 +1626,10 @@ exit:
     return result;
 }
 
+static PyObject* float_getnewargs(PyFloatObject* v) noexcept {
+    return Py_BuildValue("(d)", v->ob_fval);
+}
+
 static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOARGS, NULL },
                                        { "fromhex", (PyCFunction)float_fromhex, METH_O | METH_CLASS, NULL },
                                        { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL },
@@ -1636,6 +1640,9 @@ static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOA
 void setupFloat() {
     static PyNumberMethods float_as_number;
     float_cls->tp_as_number = &float_as_number;
+
+    float_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)float_getnewargs, UNKNOWN, 1,
+                                                                          ParamNames::empty(), CAPI)));
 
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr(internStringMortal("__add__")));

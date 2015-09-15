@@ -41,6 +41,8 @@ public:
 extern "C" Box* createLong(llvm::StringRef s);
 extern "C" BoxedLong* boxLong(int64_t n);
 
+Box* longRepr(BoxedLong* v);
+
 Box* longNeg(BoxedLong* lhs);
 Box* longAbs(BoxedLong* v1);
 
