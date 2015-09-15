@@ -113,6 +113,7 @@ void force() {
     FORCE(assertFailDerefNameDefined);
     FORCE(assertFail);
     FORCE(printExprHelper);
+    FORCE(printHelper);
 
     FORCE(strOrUnicode);
     FORCE(printFloat);

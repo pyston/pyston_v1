@@ -240,6 +240,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(assertFailDerefNameDefined);
     GET(assertFail);
     GET(printExprHelper);
+    GET(printHelper);
 
     GET(printFloat);
     GET(listAppendInternal);
