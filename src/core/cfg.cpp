@@ -973,6 +973,7 @@ private:
                                    insert_point->push_back(makeExpr(y));
                                });
 
+        wrapFunction(func->function_def, func->function_def->args, func->function_def->body, source);
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
@@ -1017,6 +1018,8 @@ private:
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
+
+        wrapFunction(func->function_def, func->function_def->args, func->function_def->body, source);
 
         return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
     }
@@ -1076,8 +1079,17 @@ private:
         auto rtn = new AST_Lambda();
         rtn->body = node->body; // don't remap now; will be CFG'ed later
         rtn->args = remapArguments(node->args);
+
+
+        AST_Return* expr = new AST_Return();
+        expr->value = rtn->body;
+        std::vector<AST_stmt*> body = { expr };
+
+        wrapFunction(rtn, rtn->args, body, source);
+
         // lambdas create scope, need to register as replacement
         scoping_analysis->registerScopeReplacement(node, rtn);
+
         return rtn;
     }
 
@@ -1486,6 +1498,8 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
+        wrapFunction(def, NULL, def->body, source);
+
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 
@@ -1508,6 +1522,8 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
+        wrapFunction(def, def->args, def->body, source);
+
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 

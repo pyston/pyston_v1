@@ -1425,7 +1425,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        CLFunction* cl = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
+        CLFunction* cl = getWrappedFunction(node);
 
         // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
@@ -1471,7 +1471,7 @@ private:
 
     CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args,
                                       const std::vector<AST_stmt*>& body) {
-        CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
+        CLFunction* cl = getWrappedFunction(node);
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -2997,11 +2997,10 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
 }
 
+static std::unordered_map<AST*, CLFunction*> made;
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
     // Different compilations of the parent scope of a functiondef should lead
     // to the same CLFunction* being used:
-    static std::unordered_map<AST*, CLFunction*> made;
-
     CLFunction*& cl = made[node];
     if (cl == NULL) {
         std::unique_ptr<SourceInfo> si(
@@ -3012,5 +3011,10 @@ CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_s
             cl = new CLFunction(0, false, false, std::move(si));
     }
     return cl;
+}
+
+CLFunction* getWrappedFunction(AST* node) {
+    RELEASE_ASSERT(made.count(node), "");
+    return made[node];
 }
 }
