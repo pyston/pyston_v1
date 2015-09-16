@@ -2143,14 +2143,21 @@ Box* typeMro(BoxedClass* self) {
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
     RELEASE_ASSERT(PyModule_Check(self), "");
     RELEASE_ASSERT(name->cls == str_cls, "");
-    RELEASE_ASSERT(!doc || doc->cls == str_cls, "");
+    RELEASE_ASSERT(!doc || doc->cls == str_cls || doc->cls == unicode_cls, "");
+
+    doc = doc ? doc : None;
 
     HCAttrs* attrs = self->getHCAttrsPtr();
-    RELEASE_ASSERT(attrs->hcls->attributeArraySize() == 0, "");
-    attrs->hcls = HiddenClass::makeSingleton();
 
-    self->giveAttr("__name__", name);
-    self->giveAttr("__doc__", doc ? doc : boxString(""));
+    if (attrs->hcls->attributeArraySize() == 0) {
+        attrs->hcls = HiddenClass::makeSingleton();
+
+        self->giveAttr("__name__", name);
+        self->giveAttr("__doc__", doc);
+    } else {
+        self->setattr(internStringMortal("__name__"), name, NULL);
+        self->setattr(internStringMortal("__doc__"), doc, NULL);
+    }
 
     return None;
 }
