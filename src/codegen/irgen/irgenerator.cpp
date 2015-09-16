@@ -2328,7 +2328,7 @@ private:
 
         llvm::BasicBlock* target = entry_blocks[node->target];
 
-        if (ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL) {
+        if (0 && ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL) {
             assert(node->target->predecessors.size() > 1);
             doOSRExit(target, node);
         } else {
