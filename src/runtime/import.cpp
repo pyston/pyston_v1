@@ -234,7 +234,7 @@ SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedLi
 
         PyObject* importer = get_path_importer(path_importer_cache, path_hooks, _p);
         if (importer == NULL)
-            return SearchResult("", SearchResult::SEARCH_ERROR);
+            throwCAPIException();
 
         if (importer != None) {
             CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
@@ -469,10 +469,8 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
             buf = subname;
         }
     }
-    if (result == NULL) {
-        *rtn = NULL;
-        return false;
-    }
+    if (result == NULL)
+        throwCAPIException();
 
     if (result == None)
         raiseExcHelper(ImportError, "No module named %.200s", local_name.c_str());
@@ -892,7 +890,7 @@ void setupImport() {
     imp_module->giveAttr("C_BUILTIN", boxInt(SearchResult::C_BUILTIN));
     imp_module->giveAttr("PY_FROZEN", boxInt(SearchResult::PY_FROZEN));
 
-    null_importer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NullImporter");
+    null_importer_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NullImporter");
     null_importer_cls->giveAttr(
         "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, false, false), { None }));
     null_importer_cls->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(

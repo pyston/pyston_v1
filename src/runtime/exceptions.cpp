@@ -192,11 +192,13 @@ extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {
+    assert(!PyErr_Occurred());
     Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
     raiseExc(exc_obj);
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
+    assert(!PyErr_Occurred());
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);

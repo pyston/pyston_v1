@@ -150,8 +150,8 @@ Box* getFrame(int depth) {
 }
 
 void setupFrame() {
-    frame_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false,
-                                       "frame");
+    frame_cls
+        = BoxedClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false, "frame");
     frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
     frame_cls->has_safe_tp_dealloc = true;
 

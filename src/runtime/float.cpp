@@ -18,6 +18,7 @@
 #include <cstring>
 #include <gmp.h>
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/types.h"
 #include "runtime/inline/boxing.h"
@@ -1625,6 +1626,10 @@ exit:
     return result;
 }
 
+static PyObject* float_getnewargs(PyFloatObject* v) noexcept {
+    return Py_BuildValue("(d)", v->ob_fval);
+}
+
 static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOARGS, NULL },
                                        { "fromhex", (PyCFunction)float_fromhex, METH_O | METH_CLASS, NULL },
                                        { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL },
@@ -1633,6 +1638,12 @@ static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOA
                                        { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL } };
 
 void setupFloat() {
+    static PyNumberMethods float_as_number;
+    float_cls->tp_as_number = &float_as_number;
+
+    float_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)float_getnewargs, UNKNOWN, 1,
+                                                                          ParamNames::empty(), CAPI)));
+
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr(internStringMortal("__add__")));
 
@@ -1687,6 +1698,7 @@ void setupFloat() {
         float_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, float_cls));
     }
 
+    add_operators(float_cls);
     float_cls->freeze();
 
     floatFormatInit();

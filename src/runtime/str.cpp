@@ -2786,6 +2786,10 @@ static int string_buffer_getbuffer(BoxedString* self, Py_buffer* view, int flags
     return PyBuffer_FillInfo(view, (PyObject*)self, self->data(), self->size(), 1, flags);
 }
 
+static PyObject* string_getnewargs(BoxedString* v) noexcept {
+    return Py_BuildValue("(s#)", v->data(), v->size());
+}
+
 static PyBufferProcs string_as_buffer = {
     (readbufferproc)string_buffer_getreadbuf, // comments are the only way I've found of
     (writebufferproc)NULL,                    // forcing clang-format to break these onto multiple lines
@@ -2811,10 +2815,17 @@ static PyMethodDef string_methods[] = {
 };
 
 void setupStr() {
+    static PySequenceMethods string_as_sequence;
+    str_cls->tp_as_sequence = &string_as_sequence;
+    static PyNumberMethods str_as_number;
+    str_cls->tp_as_number = &str_as_number;
+    static PyMappingMethods str_as_mapping;
+    str_cls->tp_as_mapping = &str_as_mapping;
+
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
-                                              sizeof(BoxedStringIterator), false, "striterator");
+    str_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
+                                          sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("__iter__",
@@ -2826,6 +2837,9 @@ void setupStr() {
 
     str_cls->tp_as_buffer = &string_as_buffer;
     str_cls->tp_print = string_print;
+
+    str_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)string_getnewargs, UNKNOWN, 1,
+                                                                        ParamNames::empty(), CAPI)));
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));

@@ -2615,7 +2615,9 @@ static void inherit_special(PyTypeObject* type, PyTypeObject* base) noexcept {
            inherit tp_new; static extension types that specify some
            other built-in type as the default are considered
            new-style-aware so they also inherit object.__new__. */
-        if (base != object_cls || (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        // Pyston change:
+        // if (base != object_cls || (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        if (base != object_cls || !type->is_user_defined) {
             if (type->tp_new == NULL)
                 type->tp_new = base->tp_new;
         }

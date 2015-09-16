@@ -148,6 +148,42 @@ static Py_ssize_t list_length(Box* self) noexcept {
     return static_cast<BoxedList*>(self)->size;
 }
 
+static PyObject* list_concat(PyListObject* a, PyObject* bb) noexcept {
+    Py_ssize_t size;
+    Py_ssize_t i;
+    PyObject** src, **dest;
+    PyListObject* np;
+    if (!PyList_Check(bb)) {
+        PyErr_Format(PyExc_TypeError, "can only concatenate list (not \"%.200s\") to list", bb->cls->tp_name);
+        return NULL;
+    }
+#define b ((PyListObject*)bb)
+    size = Py_SIZE(a) + Py_SIZE(b);
+    if (size < 0)
+        return PyErr_NoMemory();
+    np = (PyListObject*)PyList_New(size);
+    if (np == NULL) {
+        return NULL;
+    }
+    src = a->ob_item;
+    dest = np->ob_item;
+    for (i = 0; i < Py_SIZE(a); i++) {
+        PyObject* v = src[i];
+        Py_INCREF(v);
+        dest[i] = v;
+    }
+    src = b->ob_item;
+    dest = np->ob_item + Py_SIZE(a);
+    for (i = 0; i < Py_SIZE(b); i++) {
+        PyObject* v = src[i];
+        Py_INCREF(v);
+        dest[i] = v;
+    }
+    return (PyObject*)np;
+#undef b
+}
+
+
 Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(step != 0);
     if (step > 0) {
@@ -921,8 +957,46 @@ static inline int list_contains_shared(BoxedList* self, Box* elt) {
     return false;
 }
 
-static int list_contains(PyListObject* a, PyObject* el) {
+static int list_contains(PyListObject* a, PyObject* el) noexcept {
     return list_contains_shared((BoxedList*)a, el);
+}
+
+static PyObject* list_repeat(PyListObject* a, Py_ssize_t n) noexcept {
+    Py_ssize_t i, j;
+    Py_ssize_t size;
+    PyListObject* np;
+    PyObject** p, **items;
+    PyObject* elem;
+    if (n < 0)
+        n = 0;
+    if (n > 0 && Py_SIZE(a) > PY_SSIZE_T_MAX / n)
+        return PyErr_NoMemory();
+    size = Py_SIZE(a) * n;
+    if (size == 0)
+        return PyList_New(0);
+    np = (PyListObject*)PyList_New(size);
+    if (np == NULL)
+        return NULL;
+
+    items = np->ob_item;
+    if (Py_SIZE(a) == 1) {
+        elem = a->ob_item[0];
+        for (i = 0; i < n; i++) {
+            items[i] = elem;
+            Py_INCREF(elem);
+        }
+        return (PyObject*)np;
+    }
+    p = np->ob_item;
+    items = a->ob_item;
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < Py_SIZE(a); j++) {
+            *p = items[j];
+            Py_INCREF(*p);
+            p++;
+        }
+    }
+    return (PyObject*)np;
 }
 
 Box* listContains(BoxedList* self, Box* elt) {
@@ -1198,10 +1272,16 @@ void BoxedList::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void setupList() {
-    list_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
-                                               sizeof(BoxedListIterator), false, "listiterator");
-    list_reverse_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
-                                                       sizeof(BoxedListIterator), false, "listreverseiterator");
+    static PySequenceMethods list_as_sequence;
+    list_cls->tp_as_sequence = &list_as_sequence;
+    static PyMappingMethods list_as_mapping;
+    list_cls->tp_as_mapping = &list_as_mapping;
+
+    list_cls->tp_iter = listIter;
+    list_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
+                                           sizeof(BoxedListIterator), false, "listiterator");
+    list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
+                                                   sizeof(BoxedListIterator), false, "listreverseiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
@@ -1281,13 +1361,14 @@ void setupList() {
     list_cls->giveAttr("__hash__", None);
     list_cls->freeze();
 
-    list_cls->tp_iter = listIter;
     list_cls->tp_as_sequence->sq_length = list_length;
+    list_cls->tp_as_sequence->sq_concat = (binaryfunc)list_concat;
     list_cls->tp_as_sequence->sq_item = (ssizeargfunc)list_item;
     list_cls->tp_as_sequence->sq_slice = list_slice;
     list_cls->tp_as_sequence->sq_ass_item = (ssizeobjargproc)list_ass_item;
     list_cls->tp_as_sequence->sq_ass_slice = (ssizessizeobjargproc)list_ass_slice;
     list_cls->tp_as_sequence->sq_contains = (objobjproc)list_contains;
+    list_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)list_repeat;
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

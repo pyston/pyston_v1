@@ -637,6 +637,30 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
     }
 }
 
+static PyObject* set_reduce(BoxedSet* so) noexcept {
+    PyObject* keys = NULL, * args = NULL, * result = NULL, * dict = NULL;
+
+    keys = PySequence_List((PyObject*)so);
+    if (keys == NULL)
+        goto done;
+    args = PyTuple_Pack(1, keys);
+    if (args == NULL)
+        goto done;
+    dict = PyObject_GetAttrString((PyObject*)so, "__dict__");
+    if (dict == NULL) {
+        PyErr_Clear();
+        dict = Py_None;
+        Py_INCREF(dict);
+    }
+    result = PyTuple_Pack(3, Py_TYPE(so), args, dict);
+done:
+    Py_XDECREF(args);
+    Py_XDECREF(keys);
+    Py_XDECREF(dict);
+    return result;
+}
+
+
 } // namespace set
 
 void BoxedSet::dealloc(Box* b) noexcept {
@@ -646,12 +670,28 @@ void BoxedSet::dealloc(Box* b) noexcept {
 
 using namespace pyston::set;
 
+static PyMethodDef set_methods[] = {
+    { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL },
+};
+static PyMethodDef frozenset_methods[] = {
+    { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL },
+};
+
 void setupSet() {
+    static PySequenceMethods set_as_sequence;
+    set_cls->tp_as_sequence = &set_as_sequence;
+    static PyNumberMethods set_as_number;
+    set_cls->tp_as_number = &set_as_number;
+    static PySequenceMethods frozenset_as_sequence;
+    frozenset_cls->tp_as_sequence = &frozenset_as_sequence;
+    static PyNumberMethods frozenset_as_number;
+    frozenset_cls->tp_as_number = &frozenset_as_number;
+
     set_cls->tp_dealloc = frozenset_cls->tp_dealloc = BoxedSet::dealloc;
     set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
 
-    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSetIterator::gcHandler, 0, 0,
-                                              sizeof(BoxedSetIterator), false, "setiterator");
+    set_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedSetIterator::gcHandler, 0, 0,
+                                          sizeof(BoxedSetIterator), false, "setiterator");
     set_iterator_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
@@ -770,6 +810,14 @@ void setupSet() {
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
     set_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)setPop, UNKNOWN, 1)));
+
+    for (auto& md : set_methods) {
+        set_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, set_cls));
+    }
+
+    for (auto& md : frozenset_methods) {
+        frozenset_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, frozenset_cls));
+    }
 
     set_cls->freeze();
     frozenset_cls->freeze();

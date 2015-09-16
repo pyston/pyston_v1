@@ -420,7 +420,7 @@ void BoxedClass::freeze() {
 }
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
-                       int instance_size, bool is_user_defined)
+                       int instance_size, bool is_user_defined, const char* name)
     : attrs(HiddenClass::makeSingleton()),
       gc_visit(gc_visit),
       attrs_offset(attrs_offset),
@@ -435,6 +435,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
     tp_basicsize = instance_size;
     tp_weaklistoffset = weaklist_offset;
+    tp_name = name;
 
     tp_flags |= Py_TPFLAGS_DEFAULT_EXTERNAL;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
@@ -515,6 +516,24 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         gc::registerPermanentRoot(this);
 }
 
+BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                               int weaklist_offset, int instance_size, bool is_user_defined, const char* name) {
+    assert(!is_user_defined);
+    BoxedClass* made = new (metaclass, 0)
+        BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
+
+    // While it might be ok if these were set, it'd indicate a difference in
+    // expectations as to who was going to calculate them:
+    assert(!made->tp_mro);
+    assert(!made->tp_bases);
+    made->tp_bases = NULL;
+
+    made->finishInitialization();
+    assert(made->tp_mro);
+
+    return made;
+}
+
 void BoxedClass::finishInitialization() {
     assert(!tp_traverse);
     assert(!tp_clear);
@@ -531,31 +550,24 @@ void BoxedClass::finishInitialization() {
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                                int instance_size, bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined),
+    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data()),
       ht_name(name),
       ht_slots(NULL) {
+    assert(is_user_defined);
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
+
     if (!ht_name)
         assert(str_cls == NULL);
-    else
-        tp_name = ht_name->data();
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
     memset(&as_sequence, 0, sizeof(as_sequence));
     memset(&as_buffer, 0, sizeof(as_buffer));
-}
-
-BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                       int weaklist_offset, int instance_size, bool is_user_defined,
-                                       llvm::StringRef name) {
-    return create(metaclass, base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined,
-                  boxString(name), NULL, 0);
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,

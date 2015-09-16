@@ -1206,11 +1206,21 @@ static PyObject* int_richcompare(PyObject* v, PyObject* w, int op) noexcept {
     }
 }
 
+static PyObject* int_getnewargs(BoxedInt* v) noexcept {
+    return Py_BuildValue("(l)", v->n);
+}
+
 void setupInt() {
+    static PyNumberMethods int_as_number;
+    int_cls->tp_as_number = &int_as_number;
+
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
         gc::registerPermanentRoot(interned_ints[i]);
     }
+
+    int_cls->giveAttr("__getnewargs__",
+                      new BoxedFunction(boxRTFunction((void*)int_getnewargs, UNKNOWN, 1, ParamNames::empty(), CAPI)));
 
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);

@@ -518,7 +518,7 @@ static PyObject* tuplerichcompare(PyObject* v, PyObject* w, int op) noexcept {
     return PyObject_RichCompare(vt->elts[i], wt->elts[i], op);
 }
 
-static PyObject* tupleslice(PyTupleObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) {
+static PyObject* tupleslice(PyTupleObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     PyTupleObject* np;
     PyObject** src, **dest;
     Py_ssize_t i;
@@ -556,8 +556,78 @@ static PyObject* tupleitem(register PyTupleObject* a, register Py_ssize_t i) {
     return a->ob_item[i];
 }
 
-static Py_ssize_t tuplelength(PyTupleObject* a) {
+static Py_ssize_t tuplelength(PyTupleObject* a) noexcept {
     return Py_SIZE(a);
+}
+
+static Box* tupleconcat(PyTupleObject* a, Box* bb) noexcept {
+    Py_ssize_t size;
+    Py_ssize_t i;
+    PyObject** src, **dest;
+    PyTupleObject* np;
+    if (!PyTuple_Check(bb)) {
+        PyErr_Format(PyExc_TypeError, "can only concatenate tuple (not \"%.200s\") to tuple", Py_TYPE(bb)->tp_name);
+        return NULL;
+    }
+#define b ((PyTupleObject*)bb)
+    size = Py_SIZE(a) + Py_SIZE(b);
+    if (size < 0)
+        return PyErr_NoMemory();
+    np = (PyTupleObject*)PyTuple_New(size);
+    if (np == NULL) {
+        return NULL;
+    }
+    src = a->ob_item;
+    dest = np->ob_item;
+    for (i = 0; i < Py_SIZE(a); i++) {
+        PyObject* v = src[i];
+        Py_INCREF(v);
+        dest[i] = v;
+    }
+    src = b->ob_item;
+    dest = np->ob_item + Py_SIZE(a);
+    for (i = 0; i < Py_SIZE(b); i++) {
+        PyObject* v = src[i];
+        Py_INCREF(v);
+        dest[i] = v;
+    }
+    return (PyObject*)np;
+#undef b
+}
+
+static PyObject* tuplerepeat(PyTupleObject* a, Py_ssize_t n) noexcept {
+    Py_ssize_t i, j;
+    Py_ssize_t size;
+    PyTupleObject* np;
+    PyObject** p, **items;
+    if (n < 0)
+        n = 0;
+    if (Py_SIZE(a) == 0 || n == 1) {
+        if (PyTuple_CheckExact((BoxedTuple*)a)) {
+            /* Since tuples are immutable, we can return a shared
+             *                copy in this case */
+            Py_INCREF(a);
+            return (PyObject*)a;
+        }
+        if (Py_SIZE(a) == 0)
+            return PyTuple_New(0);
+    }
+    size = Py_SIZE(a) * n;
+    if (size / Py_SIZE(a) != n)
+        return PyErr_NoMemory();
+    np = (PyTupleObject*)PyTuple_New(size);
+    if (np == NULL)
+        return NULL;
+    p = np->ob_item;
+    items = a->ob_item;
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < Py_SIZE(a); j++) {
+            *p = items[j];
+            Py_INCREF(*p);
+            p++;
+        }
+    }
+    return (PyObject*)np;
 }
 
 void BoxedTuple::gcHandler(GCVisitor* v, Box* b) {
@@ -573,9 +643,20 @@ extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
     v->visit(&it->t);
 }
 
+static Box* tuple_getnewargs(Box* _self) noexcept {
+    RELEASE_ASSERT(PyTuple_Check(_self), "");
+    PyTupleObject* v = reinterpret_cast<PyTupleObject*>(_self);
+    return Py_BuildValue("(N)", tupleslice(v, 0, Py_SIZE(v)));
+}
+
 void setupTuple() {
-    tuple_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedTupleIterator::gcHandler, 0, 0,
-                                                sizeof(BoxedTupleIterator), false, "tuple");
+    static PySequenceMethods tuple_as_sequence;
+    tuple_cls->tp_as_sequence = &tuple_as_sequence;
+    static PyMappingMethods tuple_as_mapping;
+    tuple_cls->tp_as_mapping = &tuple_as_mapping;
+
+    tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedTupleIterator::gcHandler, 0, 0,
+                                            sizeof(BoxedTupleIterator), false, "tuple");
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0);
@@ -606,6 +687,9 @@ void setupTuple() {
     tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
 
+    tuple_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)tuple_getnewargs, UNKNOWN, 1,
+                                                                          ParamNames::empty(), CAPI)));
+
     tuple_cls->tp_hash = (hashfunc)tuple_hash;
     tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;
     add_operators(tuple_cls);
@@ -614,6 +698,8 @@ void setupTuple() {
 
     tuple_cls->tp_as_sequence->sq_item = (ssizeargfunc)tupleitem;
     tuple_cls->tp_as_sequence->sq_length = (lenfunc)tuplelength;
+    tuple_cls->tp_as_sequence->sq_concat = (binaryfunc)tupleconcat;
+    tuple_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)tuplerepeat;
     tuple_cls->tp_iter = tupleIter;
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);

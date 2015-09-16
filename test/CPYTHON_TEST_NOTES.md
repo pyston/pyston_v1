@@ -57,6 +57,7 @@ test_mutants            unknown failure
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_pep277             segfaults
 test_pep352             various unique bugs
+test_pickle             unknown
 test_pkg                unknown bug
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues

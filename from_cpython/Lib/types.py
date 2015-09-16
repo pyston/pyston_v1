@@ -58,7 +58,9 @@ InstanceType = type(_x)
 MethodType = type(_x._m)
 
 BuiltinFunctionType = type(len)
-BuiltinMethodType = type([].append)     # Same as BuiltinFunctionType
+# Pyston change:
+# BuiltinMethodType = type([].append)     # Same as BuiltinFunctionType
+BuiltinMethodType = type((1.0).hex)     # Same as BuiltinFunctionType
 
 ModuleType = type(sys)
 FileType = file
@@ -85,8 +87,9 @@ NotImplementedType = type(NotImplemented)
 AttrwrapperType = type(_C().__dict__)
 
 # For Jython, the following two types are identical
-# Pyston change: don't support these yet
-# GetSetDescriptorType = type(FunctionType.func_code)
+GetSetDescriptorType = type(FunctionType.func_code)
+# Pyston change:
 # MemberDescriptorType = type(FunctionType.func_globals)
+MemberDescriptorType = type(file.softspace)
 
 del sys, _f, _g, _C, _x                           # Not for export

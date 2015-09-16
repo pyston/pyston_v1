@@ -120,8 +120,8 @@ void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
 }
 
 void setupTraceback() {
-    traceback_cls = BoxedHeapClass::create(type_cls, object_cls, BoxedTraceback::gcHandler, 0, 0,
-                                           sizeof(BoxedTraceback), false, "traceback");
+    traceback_cls = BoxedClass::create(type_cls, object_cls, BoxedTraceback::gcHandler, 0, 0, sizeof(BoxedTraceback),
+                                       false, "traceback");
 
     traceback_cls->giveAttr("getLines", new BoxedFunction(boxRTFunction((void*)BoxedTraceback::getLines, UNKNOWN, 1)));
 

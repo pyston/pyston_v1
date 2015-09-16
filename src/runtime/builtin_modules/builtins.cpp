@@ -1105,8 +1105,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls
-        = BoxedHeapClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
+    BoxedClass* cls = BoxedClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
     cls->giveAttr("__module__", boxString("exceptions"));
 
     if (base == object_cls) {
@@ -1516,8 +1515,7 @@ void setupBuiltins() {
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
-    BoxedHeapClass* ellipsis_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
+    BoxedClass* ellipsis_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);
@@ -1530,15 +1528,13 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "print", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)print, NONE, 0, true, true), "print"));
 
-    notimplemented_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
+    notimplemented_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
     gc::registerPermanentRoot(NotImplemented);
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
-    builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
 
     builtins_module->giveAttr("all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1), "all"));
     builtins_module->giveAttr("any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1), "any"));
@@ -1629,8 +1625,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                                              { None, None, None, new BoxedInt(-1) }));
 
-    enumerate_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0,
-                                           sizeof(BoxedEnumerate), false, "enumerate");
+    enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
+                                       false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false), { boxInt(0) }));
@@ -1724,7 +1720,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("set", set_cls);
     builtins_module->giveAttr("frozenset", frozenset_cls);
     builtins_module->giveAttr("tuple", tuple_cls);
-    builtins_module->giveAttr("instancemethod", instancemethod_cls);
     builtins_module->giveAttr("complex", complex_cls);
     builtins_module->giveAttr("super", super_cls);
     builtins_module->giveAttr("property", property_cls);
