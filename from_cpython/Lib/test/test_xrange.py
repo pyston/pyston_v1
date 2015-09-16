@@ -1,4 +1,3 @@
-# expected: fail
 # Python test set -- built-in functions
 
 import test.test_support, unittest
