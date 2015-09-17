@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <llvm/ADT/DenseSet.h>
 
 #include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
@@ -753,7 +754,7 @@ static void prepareWeakrefCallbacks(Box* box) {
     }
 }
 
-static void markPhase() {
+void markPhase() {
     static StatCounter sc_us("us_gc_mark_phase");
     Timer _t("markPhase", /*min_usec=*/10000);
 
@@ -787,13 +788,13 @@ static void markPhase() {
     sc_us.log(us);
 }
 
-static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
     static StatCounter sc_us("us_gc_sweep_phase");
     Timer _t("sweepPhase", /*min_usec=*/10000);
 
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
-    global_heap.freeUnmarked(weakly_referenced);
+    global_heap.freeUnmarked(weakly_referenced, classes_to_free);
 
     long us = _t.end();
     sc_us.log(us);
@@ -973,7 +974,15 @@ void runCollection() {
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
-    sweepPhase(weakly_referenced);
+
+    // Separately keep track of classes that we will be freeing in this collection.
+    // We want to make sure that any instances get freed before the class itself gets freed,
+    // since the freeing logic can look at the class object.
+    // So instead of directly freeing the classes, we stuff them into this vector and then
+    // free them at the end.
+    std::vector<BoxedClass*> classes_to_free;
+
+    sweepPhase(weakly_referenced, classes_to_free);
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
@@ -984,7 +993,25 @@ void runCollection() {
         assert(isValidGCObject(o));
         GC_TRACE_LOG("%p is weakly referenced\n", o);
         prepareWeakrefCallbacks(o);
-        global_heap.free(GCAllocation::fromUserData(o));
+
+        if (PyType_Check(o))
+            classes_to_free.push_back(static_cast<BoxedClass*>(o));
+        else
+            global_heap.free(GCAllocation::fromUserData(o));
+    }
+
+    // We want to make sure that classes get freed before their metaclasses.
+    // Use a simple approach of only freeing one level of the hierarchy and then
+    // letting the next collection do the next one.
+    llvm::DenseSet<BoxedClass*> classes_to_not_free;
+    for (auto b : classes_to_free) {
+        classes_to_not_free.insert(b->cls);
+    }
+
+    for (auto b : classes_to_free) {
+        if (classes_to_not_free.count(b))
+            continue;
+        global_heap._setFree(GCAllocation::fromUserData(b));
     }
 
     global_heap.cleanupAfterCollection();
