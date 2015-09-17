@@ -813,7 +813,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
         ParamReceiveSpec paramspec(4, 3, false, false);
         bool rewrite_success = false;
-        static ParamNames param_names({ "string", "encoding", "errors" }, "", "");
+        static ParamNames param_names({ "", "string", "encoding", "errors" }, "", "");
         static Box* defaults[3] = { NULL, NULL, NULL };
         Box* oargs[1];
 
