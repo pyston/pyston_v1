@@ -175,6 +175,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
+    GC_TRACE_LOG("doFree %p\n", al->user_data);
     if (alloc_kind == GCKind::PYTHON) {
 #ifndef NVALGRIND
         VALGRIND_DISABLE_ERROR_REPORTING;
@@ -188,12 +189,14 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         if (isWeaklyReferenced(b)) {
             assert(weakly_referenced && "attempting to free a weakly referenced object manually");
             weakly_referenced->push_back(b);
+            GC_TRACE_LOG("%p is weakly referenced\n", al->user_data);
             return false;
         }
 
         ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al), "%s", getTypeName(b));
 
         if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
+            GC_TRACE_LOG("running safe destructor for %p\n", b);
             gc_safe_destructors.log();
 
             GCAllocation* al = GCAllocation::fromUserData(b);

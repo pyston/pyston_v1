@@ -178,7 +178,7 @@ public:
     }
 
     void addWork(void* p) {
-        GC_TRACE_LOG("Pushing %p\n", p);
+        GC_TRACE_LOG("Pushing (%d) %p\n", visit_type, p);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
         switch (visit_type) {
@@ -213,8 +213,10 @@ public:
             // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
             case TraversalType::FinalizationOrderingFindReachable:
                 if (orderingState(al) == FinalizationState::UNREACHABLE) {
+                    GC_TRACE_LOG("%p is now TEMPORARY\n", al->user_data);
                     setOrderingState(al, FinalizationState::TEMPORARY);
                 } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
+                    GC_TRACE_LOG("%p is now ALIVE\n", al->user_data);
                     setOrderingState(al, FinalizationState::ALIVE);
                 } else {
                     return;
@@ -222,6 +224,7 @@ public:
                 break;
             case TraversalType::FinalizationOrderingRemoveTemporaries:
                 if (orderingState(al) == FinalizationState::TEMPORARY) {
+                    GC_TRACE_LOG("%p is now REACHABLE_FROM_FINALIZER\n", al->user_data);
                     setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
                 } else {
                     return;
@@ -366,6 +369,7 @@ void registerPythonObject(Box* b) {
 
     assert(b->cls);
     if (hasOrderedFinalizer(b->cls)) {
+        GC_TRACE_LOG("%p is registered as having an ordered finalizer\n", b);
         objects_with_ordered_finalizers.push_back(b);
     }
 }
@@ -380,6 +384,7 @@ void invalidateOrderedFinalizerList() {
 
         if (!hasOrderedFinalizer(box->cls) || hasFinalized(al)) {
             // Cleanup.
+            GC_TRACE_LOG("Removing %p from objects_with_ordered_finalizers\n", box);
             iter = objects_with_ordered_finalizers.erase(iter);
         } else {
             ++iter;
@@ -554,8 +559,10 @@ static void finalizationOrderingFindReachable(Box* obj) {
     TraversalWorklist worklist(TraversalType::FinalizationOrderingFindReachable);
     GCVisitor visitor(&worklist);
 
+    GC_TRACE_LOG("findReachable %p\n", obj);
     worklist.addWork(obj);
     while (void* p = worklist.next()) {
+        GC_TRACE_LOG("findReachable, looking at %p\n", p);
         sc_marked_objs.log();
 
         visitByGCKind(p, visitor);
@@ -572,8 +579,10 @@ static void finalizationOrderingRemoveTemporaries(Box* obj) {
     TraversalWorklist worklist(TraversalType::FinalizationOrderingRemoveTemporaries);
     GCVisitor visitor(&worklist);
 
+    GC_TRACE_LOG("removeTemporaries %p\n", obj);
     worklist.addWork(obj);
     while (void* p = worklist.next()) {
+        GC_TRACE_LOG("removeTemporaries, looking at %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
         assert(orderingState(al) != FinalizationState::UNREACHABLE);
         visitByGCKind(p, visitor);
@@ -611,6 +620,7 @@ static void orderFinalizers() {
         assert(state == FinalizationState::REACHABLE_FROM_FINALIZER || state == FinalizationState::ALIVE);
 
         if (state == FinalizationState::REACHABLE_FROM_FINALIZER) {
+            GC_TRACE_LOG("%p is now pending finalization\n", marked);
             pending_finalization_list.push_back(marked);
         }
     }
@@ -666,6 +676,8 @@ static void callPendingFinalizers() {
     while (!pending_finalization_list.empty()) {
         Box* box = pending_finalization_list.front();
         pending_finalization_list.pop_front();
+
+        GC_TRACE_LOG("Running finalizer for %p\n", box);
 
         ASSERT(isValidGCObject(box), "objects to be finalized should still be alive");
 
@@ -901,6 +913,24 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
+#if TRACE_GC_MARKING
+static void openTraceFp(bool is_pre) {
+    if (trace_fp)
+        fclose(trace_fp);
+
+    char tracefn_buf[80];
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d%s.txt", getpid(), ncollections + is_pre,
+             is_pre ? "_pre" : "");
+    trace_fp = fopen(tracefn_buf, "w");
+}
+
+static int _dummy() {
+    openTraceFp(true);
+    return 0;
+}
+static int _initializer = _dummy();
+#endif
+
 void runCollection() {
     static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
@@ -925,13 +955,7 @@ void runCollection() {
     Timer _t("collecting", /*min_usec=*/10000);
 
 #if TRACE_GC_MARKING
-#if 1 // separate log file per collection
-    char tracefn_buf[80];
-    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d.txt", getpid(), ncollections);
-    trace_fp = fopen(tracefn_buf, "w");
-#else // overwrite previous log file with each collection
-    trace_fp = fopen("gc_trace.txt", "w");
-#endif
+    openTraceFp(false);
 #endif
 
     global_heap.prepareForCollection();
@@ -958,6 +982,7 @@ void runCollection() {
     // - the callbacks are called later, along with the finalizers
     for (auto o : weakly_referenced) {
         assert(isValidGCObject(o));
+        GC_TRACE_LOG("%p is weakly referenced\n", o);
         prepareWeakrefCallbacks(o);
         global_heap.free(GCAllocation::fromUserData(o));
     }
@@ -969,8 +994,7 @@ void runCollection() {
 #endif
 
 #if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
+    openTraceFp(true);
 #endif
 
     should_not_reenter_gc = false; // end non-reentrant section
