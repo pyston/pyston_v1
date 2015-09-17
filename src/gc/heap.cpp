@@ -488,7 +488,11 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
 
     thread_caches.forEachValue([this, &weakly_referenced](ThreadBlockCache* cache) {
-        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        // Iterate over the buckets from largest to smallest.  I don't think it really matters, but
+        // doing it in this order means that we will tend to free types early in the sweep (since they
+        // are fairly large), and we are more likely to detect if other code depended on that type
+        // being alive.
+        for (int bidx = NUM_BUCKETS - 1; bidx >= 0; bidx--) {
             Block* h = cache->cache_free_heads[bidx];
             // Try to limit the amount of unused memory a thread can hold onto;
             // currently pretty dumb, just limit the number of blocks in the free-list
@@ -517,7 +521,7 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
         }
     });
 
-    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+    for (int bidx = NUM_BUCKETS - 1; bidx >= 0; bidx--) {
         Block** chain_end = _freeChain(&heads[bidx], weakly_referenced);
         _freeChain(&full_heads[bidx], weakly_referenced);
 
