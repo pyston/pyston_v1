@@ -160,10 +160,10 @@ __attribute__((always_inline)) bool isWeaklyReferenced(Box* b) {
 
 Heap global_heap;
 
+static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
+
 __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced,
                                             std::vector<BoxedClass*>* classes_to_free) {
-    static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
-
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -183,7 +183,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 #endif
 
         assert(b->cls);
-        if (isWeaklyReferenced(b)) {
+        if (unlikely(isWeaklyReferenced(b))) {
             assert(weakly_referenced && "attempting to free a weakly referenced object manually");
             weakly_referenced->push_back(b);
             GC_TRACE_LOG("%p is weakly referenced\n", al->user_data);
@@ -193,7 +193,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al), "%s", getTypeName(b));
 
         // Note: do this check after the weakrefs check.
-        if (PyType_Check(b)) {
+        if (unlikely(PyType_Check(b))) {
             assert(classes_to_free);
             classes_to_free->push_back(static_cast<BoxedClass*>(b));
             return false;
