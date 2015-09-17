@@ -267,6 +267,27 @@ Box* classobjStr(Box* _obj) {
     return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s()) + "." + cls->name->s());
 }
 
+Box* classobjRepr(Box* _obj) {
+    if (!isSubclass(_obj->cls, classobj_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'classobj' object but received an '%s'",
+                       getTypeName(_obj));
+    }
+
+    BoxedClassobj* cls = static_cast<BoxedClassobj*>(_obj);
+
+    static BoxedString* module_str = internStringImmortal("__module__");
+    Box* mod = cls->getattr(module_str);
+
+    const char* name;
+    if (cls->name == NULL || !PyString_Check(cls->name))
+        name = "?";
+    else
+        name = PyString_AsString(cls->name);
+    if (mod == NULL || !PyString_Check(mod))
+        return PyString_FromFormat("<class ?.%s at %p>", name, cls);
+    else
+        return PyString_FromFormat("<class %s.%s at %p>", PyString_AsString(mod), name, cls);
+}
 
 // Analogous to CPython's instance_getattr2
 static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_str,
@@ -1512,6 +1533,7 @@ void setupClassobj() {
                            new BoxedFunction(boxRTFunction((void*)classobjGetattribute, UNKNOWN, 2)));
     classobj_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)classobjSetattr, UNKNOWN, 3)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)classobjStr, STR, 1)));
+    classobj_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)classobjRepr, STR, 1)));
     classobj_cls->giveAttr("__dict__", dict_descr);
 
     classobj_cls->freeze();

@@ -56,7 +56,7 @@ BoxedClass* capifunc_cls;
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
-    Py_FatalError("unimplemented");
+    PyErr_Format(PyExc_SystemError, "%s:%d: bad argument to internal function", filename, lineno);
 }
 
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
@@ -1386,6 +1386,14 @@ extern "C" PyObject* PyCFunction_GetSelf(PyObject* op) noexcept {
         return NULL;
     }
     return static_cast<BoxedCApiFunction*>(op)->passthrough;
+}
+
+extern "C" int PyCFunction_GetFlags(PyObject* op) noexcept {
+    if (!PyCFunction_Check(op)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    return static_cast<BoxedCApiFunction*>(op)->method_def->ml_flags;
 }
 
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
