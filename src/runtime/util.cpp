@@ -110,8 +110,13 @@ template <ExceptionStyle S> Box* coerceUnicodeToStr(Box* unicode) noexcept(S == 
 
     Box* r = PyUnicode_AsASCIIString(unicode);
     if (!r) {
-        PyErr_Clear();
-        raiseExcHelper(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
+        if (S == CAPI) {
+            PyErr_SetString(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
+            return NULL;
+        } else {
+            PyErr_Clear();
+            raiseExcHelper(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
+        }
     }
 
     return r;

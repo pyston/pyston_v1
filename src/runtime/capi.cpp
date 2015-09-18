@@ -1033,20 +1033,6 @@ extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t sta
     return -1;
 }
 
-extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
-    RELEASE_ASSERT(module_name, "");
-    RELEASE_ASSERT(module_name->cls == str_cls, "");
-
-    try {
-        std::string _module_name = static_cast<BoxedString*>(module_name)->s();
-        return importModuleLevel(_module_name, None, None, -1);
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-    }
-}
-
-
 extern "C" void* PyObject_Malloc(size_t sz) noexcept {
     return gc_compat_malloc(sz);
 }
