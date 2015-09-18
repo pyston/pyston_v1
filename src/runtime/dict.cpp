@@ -322,18 +322,20 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
         return d->getOrNull(key);
     }
 
-    // XXX this would be easy to make much faster.
-
-    // This path doesn't exist in CPython; we have it to support extension modules that do
-    // something along the lines of PyDict_GetItem(PyModule_GetDict()):
-    try {
-        return getitem(dict, key);
-    } catch (ExcInfo e) {
-        // PyDict_GetItem has special error behavior in CPython for backwards-compatibility reasons,
-        // and apparently it's important enough that we have to follow that.
-        // The behavior is that all errors get suppressed, and in fact I think it's supposed to
-        // restore the previous exception afterwards (we don't do that yet).
-        return NULL;
+    auto&& tstate = _PyThreadState_Current;
+    if (tstate != NULL && tstate->curexc_type != NULL) {
+        /* preserve the existing exception */
+        PyObject* err_type, *err_value, *err_tb;
+        PyErr_Fetch(&err_type, &err_value, &err_tb);
+        Box* b = getitemInternal<CAPI>(dict, key, NULL);
+        /* ignore errors */
+        PyErr_Restore(err_type, err_value, err_tb);
+        return b;
+    } else {
+        Box* b = getitemInternal<CAPI>(dict, key, NULL);
+        if (b == NULL)
+            PyErr_Clear();
+        return b;
     }
 }
 

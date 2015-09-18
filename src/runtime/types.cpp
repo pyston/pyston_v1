@@ -2289,7 +2289,7 @@ public:
         return r;
     }
 
-    static Box* getitem(Box* _self, Box* _key) {
+    template <ExceptionStyle S> static Box* getitem(Box* _self, Box* _key) noexcept(S == CAPI) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -2300,8 +2300,12 @@ public:
         internStringMortalInplace(key);
 
         Box* r = self->b->getattr(key);
-        if (!r)
-            raiseExcHelper(KeyError, "'%s'", key->data());
+        if (!r) {
+            if (S == CXX)
+                raiseExcHelper(KeyError, "'%s'", key->data());
+            else
+                PyErr_Format(KeyError, "'%s'", key->data());
+        }
         return r;
     }
 
@@ -3842,7 +3846,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
         "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, false, false), { NULL }));
-    attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__getitem__",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem<CXX>, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::delitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("setdefault",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
@@ -3868,6 +3873,7 @@ void setupRuntime() {
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 1, true, true)));
     attrwrapper_cls->freeze();
     attrwrapper_cls->tp_iter = AttrWrapper::iter;
+    attrwrapper_cls->tp_as_mapping->mp_subscript = (binaryfunc)AttrWrapper::getitem<CAPI>;
 
     attrwrapperiter_cls->giveAttr("__hasnext__",
                                   new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::hasnext, UNKNOWN, 1)));
