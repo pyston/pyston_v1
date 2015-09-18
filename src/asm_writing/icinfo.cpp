@@ -84,6 +84,9 @@ uint8_t* ICSlotRewrite::getSlotStart() {
     return (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
 }
 
+// Map of gc pointers -> number of ics that point tot hem.
+static llvm::DenseMap<void*, int> ic_gc_references;
+
 void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
@@ -120,7 +123,16 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
 
+    for (auto p : ic_entry->gc_references) {
+        int& i = ic_gc_references[p];
+        if (i == 1)
+            ic_gc_references.erase(p);
+        else
+            --i;
+    }
     ic_entry->gc_references = std::move(gc_references);
+    for (auto p : ic_entry->gc_references)
+        ic_gc_references[p]++;
 
     ic->times_rewritten++;
 
@@ -344,10 +356,15 @@ bool ICInfo::isMegamorphic() {
 }
 
 void ICInfo::visitGCReferences(gc::GCVisitor* v) {
+    for (auto&& p : ic_gc_references) {
+        v->visitNonRelocatable(p.first);
+    }
+#if MOVING_GC
     for (const auto& p : ics_list) {
         for (auto& slot : p->slots) {
             v->visitNonRelocatableRange(&slot.gc_references[0], &slot.gc_references[slot.gc_references.size()]);
         }
     }
+#endif
 }
 }

@@ -546,8 +546,8 @@ static void visitRoots(GCVisitor& visitor) {
     }
 
     GC_TRACE_LOG("Looking at generated code pointers\n");
-#if MOVING_GC
     ICInfo::visitGCReferences(&visitor);
+#if MOVING_GC
     CompiledFunction::visitAllCompiledFunctions(&visitor);
 #endif
 }

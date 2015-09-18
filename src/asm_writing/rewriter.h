@@ -554,6 +554,11 @@ public:
 
     const char* debugName() { return rewrite->debugName(); }
 
+    // Register that this rewrite will embed a reference to a particular gc object.
+    // TODO: come up with an implementation that is performant enough that we can automatically
+    // infer these from loadConst calls.
+    void addGCReference(void* obj);
+
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
     // has_side_effects: whether this call could have "side effects".  the exact side effects we've
