@@ -1125,13 +1125,7 @@ static PyObject* slot_tp_del(PyObject* self) noexcept {
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqitem", SLOT_AVOIDABILITY(self));
-
-    try {
-        return getitem(self, boxInt(i));
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    return getitemInternal<CAPI>(self, boxInt(i), NULL);
 }
 
 /* Pyston change: static */ Py_ssize_t slot_sq_length(PyObject* self) noexcept {

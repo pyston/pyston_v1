@@ -2208,6 +2208,7 @@ public:
 
     static Box* hasnext(Box* _self);
     static Box* next(Box* _self);
+    static Box* next_capi(Box* _self) noexcept;
 };
 
 // A dictionary-like wrapper around the attributes array.
@@ -2523,7 +2524,7 @@ public:
         return None;
     }
 
-    static Box* iter(Box* _self) {
+    static Box* iter(Box* _self) noexcept {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
@@ -2568,6 +2569,18 @@ Box* AttrWrapperIter::next(Box* _self) {
     RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL || self->hcls->type == HiddenClass::SINGLETON, "");
 
     assert(self->it != self->hcls->getStrAttrOffsets().end());
+    Box* r = self->it->first;
+    ++self->it;
+    return r;
+}
+
+Box* AttrWrapperIter::next_capi(Box* _self) noexcept {
+    RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
+    AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
+    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL || self->hcls->type == HiddenClass::SINGLETON, "");
+
+    if (self->it == self->hcls->getStrAttrOffsets().end())
+        return NULL;
     Box* r = self->it->first;
     ++self->it;
     return r;
@@ -3854,11 +3867,14 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("update",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 1, true, true)));
     attrwrapper_cls->freeze();
+    attrwrapper_cls->tp_iter = AttrWrapper::iter;
 
     attrwrapperiter_cls->giveAttr("__hasnext__",
                                   new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::hasnext, UNKNOWN, 1)));
     attrwrapperiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::next, UNKNOWN, 1)));
     attrwrapperiter_cls->freeze();
+    attrwrapperiter_cls->tp_iter = PyObject_SelfIter;
+    attrwrapperiter_cls->tp_iternext = AttrWrapperIter::next_capi;
 
     setupBuiltins();
     _PyExc_Init();

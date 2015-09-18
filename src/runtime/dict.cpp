@@ -854,6 +854,7 @@ void setupDict() {
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterIter, typeFromClass(dict_iterator_cls), 1)));
     dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1)));
     dict_iterator_cls->freeze();
+    dict_iterator_cls->tp_iter = PyObject_SelfIter;
     dict_iterator_cls->tp_iternext = dictiter_next;
 
     // Manually set some tp_* slots *after* calling freeze() -> fixup_slot_dispatchers().
@@ -869,6 +870,7 @@ void setupDict() {
     // subclass Python classes.
     dict_cls->tp_init = dict_init;
     dict_cls->tp_repr = dict_repr;
+    dict_cls->tp_iter = dict_iter;
 
     dict_cls->tp_as_mapping->mp_length = (lenfunc)dict_length;
     dict_cls->tp_as_mapping->mp_subscript = (binaryfunc)dictGetitem<CAPI>;
