@@ -1,0 +1,1 @@
+../../from_cpython/Lib/test/test_urllib2_localnet.py

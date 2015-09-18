@@ -1,0 +1,1 @@
+../../from_cpython/Lib/test/test_codecencodings_cn.py
