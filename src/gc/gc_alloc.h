@@ -112,6 +112,8 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 // if (VERBOSITY()) printf("Allocated %ld bytes at [%p, %p)\n", bytes, r, (char*)r + bytes);
 #endif
 
+    GC_TRACE_LOG("Allocated %p\n", r);
+
 #if STAT_ALLOCATIONS
     gc_alloc_bytes.log(alloc_bytes);
     gc_alloc_bytes_typed[(int)kind_id].log(alloc_bytes);

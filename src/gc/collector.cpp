@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <llvm/ADT/DenseSet.h>
 
 #include "asm_writing/icinfo.h"
 #include "codegen/ast_interpreter.h"
@@ -178,7 +179,7 @@ public:
     }
 
     void addWork(void* p) {
-        GC_TRACE_LOG("Pushing %p\n", p);
+        GC_TRACE_LOG("Pushing (%d) %p\n", visit_type, p);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
         switch (visit_type) {
@@ -213,8 +214,10 @@ public:
             // http://pypy.readthedocs.org/en/latest/discussion/finalizer-order.html
             case TraversalType::FinalizationOrderingFindReachable:
                 if (orderingState(al) == FinalizationState::UNREACHABLE) {
+                    GC_TRACE_LOG("%p is now TEMPORARY\n", al->user_data);
                     setOrderingState(al, FinalizationState::TEMPORARY);
                 } else if (orderingState(al) == FinalizationState::REACHABLE_FROM_FINALIZER) {
+                    GC_TRACE_LOG("%p is now ALIVE\n", al->user_data);
                     setOrderingState(al, FinalizationState::ALIVE);
                 } else {
                     return;
@@ -222,6 +225,7 @@ public:
                 break;
             case TraversalType::FinalizationOrderingRemoveTemporaries:
                 if (orderingState(al) == FinalizationState::TEMPORARY) {
+                    GC_TRACE_LOG("%p is now REACHABLE_FROM_FINALIZER\n", al->user_data);
                     setOrderingState(al, FinalizationState::REACHABLE_FROM_FINALIZER);
                 } else {
                     return;
@@ -366,6 +370,7 @@ void registerPythonObject(Box* b) {
 
     assert(b->cls);
     if (hasOrderedFinalizer(b->cls)) {
+        GC_TRACE_LOG("%p is registered as having an ordered finalizer\n", b);
         objects_with_ordered_finalizers.push_back(b);
     }
 }
@@ -380,6 +385,7 @@ void invalidateOrderedFinalizerList() {
 
         if (!hasOrderedFinalizer(box->cls) || hasFinalized(al)) {
             // Cleanup.
+            GC_TRACE_LOG("Removing %p from objects_with_ordered_finalizers\n", box);
             iter = objects_with_ordered_finalizers.erase(iter);
         } else {
             ++iter;
@@ -540,8 +546,8 @@ static void visitRoots(GCVisitor& visitor) {
     }
 
     GC_TRACE_LOG("Looking at generated code pointers\n");
-#if MOVING_GC
     ICInfo::visitGCReferences(&visitor);
+#if MOVING_GC
     CompiledFunction::visitAllCompiledFunctions(&visitor);
 #endif
 }
@@ -554,8 +560,10 @@ static void finalizationOrderingFindReachable(Box* obj) {
     TraversalWorklist worklist(TraversalType::FinalizationOrderingFindReachable);
     GCVisitor visitor(&worklist);
 
+    GC_TRACE_LOG("findReachable %p\n", obj);
     worklist.addWork(obj);
     while (void* p = worklist.next()) {
+        GC_TRACE_LOG("findReachable, looking at %p\n", p);
         sc_marked_objs.log();
 
         visitByGCKind(p, visitor);
@@ -572,8 +580,10 @@ static void finalizationOrderingRemoveTemporaries(Box* obj) {
     TraversalWorklist worklist(TraversalType::FinalizationOrderingRemoveTemporaries);
     GCVisitor visitor(&worklist);
 
+    GC_TRACE_LOG("removeTemporaries %p\n", obj);
     worklist.addWork(obj);
     while (void* p = worklist.next()) {
+        GC_TRACE_LOG("removeTemporaries, looking at %p\n", p);
         GCAllocation* al = GCAllocation::fromUserData(p);
         assert(orderingState(al) != FinalizationState::UNREACHABLE);
         visitByGCKind(p, visitor);
@@ -611,6 +621,7 @@ static void orderFinalizers() {
         assert(state == FinalizationState::REACHABLE_FROM_FINALIZER || state == FinalizationState::ALIVE);
 
         if (state == FinalizationState::REACHABLE_FROM_FINALIZER) {
+            GC_TRACE_LOG("%p is now pending finalization\n", marked);
             pending_finalization_list.push_back(marked);
         }
     }
@@ -666,6 +677,8 @@ static void callPendingFinalizers() {
     while (!pending_finalization_list.empty()) {
         Box* box = pending_finalization_list.front();
         pending_finalization_list.pop_front();
+
+        GC_TRACE_LOG("Running finalizer for %p\n", box);
 
         ASSERT(isValidGCObject(box), "objects to be finalized should still be alive");
 
@@ -741,7 +754,7 @@ static void prepareWeakrefCallbacks(Box* box) {
     }
 }
 
-static void markPhase() {
+void markPhase() {
     static StatCounter sc_us("us_gc_mark_phase");
     Timer _t("markPhase", /*min_usec=*/10000);
 
@@ -775,13 +788,13 @@ static void markPhase() {
     sc_us.log(us);
 }
 
-static void sweepPhase(std::vector<Box*>& weakly_referenced) {
+static void sweepPhase(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
     static StatCounter sc_us("us_gc_sweep_phase");
     Timer _t("sweepPhase", /*min_usec=*/10000);
 
     // we need to use the allocator here because these objects are referenced only here, and calling the weakref
     // callbacks could start another gc
-    global_heap.freeUnmarked(weakly_referenced);
+    global_heap.freeUnmarked(weakly_referenced, classes_to_free);
 
     long us = _t.end();
     sc_us.log(us);
@@ -901,6 +914,24 @@ void endGCUnexpectedRegion() {
     should_not_reenter_gc = false;
 }
 
+#if TRACE_GC_MARKING
+static void openTraceFp(bool is_pre) {
+    if (trace_fp)
+        fclose(trace_fp);
+
+    char tracefn_buf[80];
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d%s.txt", getpid(), ncollections + is_pre,
+             is_pre ? "_pre" : "");
+    trace_fp = fopen(tracefn_buf, "w");
+}
+
+static int _dummy() {
+    openTraceFp(true);
+    return 0;
+}
+static int _initializer = _dummy();
+#endif
+
 void runCollection() {
     static StatCounter sc_us("us_gc_collections");
     static StatCounter sc("gc_collections");
@@ -925,13 +956,7 @@ void runCollection() {
     Timer _t("collecting", /*min_usec=*/10000);
 
 #if TRACE_GC_MARKING
-#if 1 // separate log file per collection
-    char tracefn_buf[80];
-    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d.txt", getpid(), ncollections);
-    trace_fp = fopen(tracefn_buf, "w");
-#else // overwrite previous log file with each collection
-    trace_fp = fopen("gc_trace.txt", "w");
-#endif
+    openTraceFp(false);
 #endif
 
     global_heap.prepareForCollection();
@@ -949,7 +974,15 @@ void runCollection() {
     // since the deallocation of other objects (namely, the weakref objects themselves) can affect
     // those lists, and we want to see the final versions.
     std::vector<Box*> weakly_referenced;
-    sweepPhase(weakly_referenced);
+
+    // Separately keep track of classes that we will be freeing in this collection.
+    // We want to make sure that any instances get freed before the class itself gets freed,
+    // since the freeing logic can look at the class object.
+    // So instead of directly freeing the classes, we stuff them into this vector and then
+    // free them at the end.
+    std::vector<BoxedClass*> classes_to_free;
+
+    sweepPhase(weakly_referenced, classes_to_free);
 
     // Handle weakrefs in two passes:
     // - first, find all of the weakref objects whose callbacks we need to call.  we need to iterate
@@ -958,8 +991,27 @@ void runCollection() {
     // - the callbacks are called later, along with the finalizers
     for (auto o : weakly_referenced) {
         assert(isValidGCObject(o));
+        GC_TRACE_LOG("%p is weakly referenced\n", o);
         prepareWeakrefCallbacks(o);
-        global_heap.free(GCAllocation::fromUserData(o));
+
+        if (PyType_Check(o))
+            classes_to_free.push_back(static_cast<BoxedClass*>(o));
+        else
+            global_heap.free(GCAllocation::fromUserData(o));
+    }
+
+    // We want to make sure that classes get freed before their metaclasses.
+    // Use a simple approach of only freeing one level of the hierarchy and then
+    // letting the next collection do the next one.
+    llvm::DenseSet<BoxedClass*> classes_to_not_free;
+    for (auto b : classes_to_free) {
+        classes_to_not_free.insert(b->cls);
+    }
+
+    for (auto b : classes_to_free) {
+        if (classes_to_not_free.count(b))
+            continue;
+        global_heap._setFree(GCAllocation::fromUserData(b));
     }
 
     global_heap.cleanupAfterCollection();
@@ -969,8 +1021,7 @@ void runCollection() {
 #endif
 
 #if TRACE_GC_MARKING
-    fclose(trace_fp);
-    trace_fp = NULL;
+    openTraceFp(true);
 #endif
 
     should_not_reenter_gc = false; // end non-reentrant section

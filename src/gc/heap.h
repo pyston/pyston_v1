@@ -272,7 +272,7 @@ public:
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -414,7 +414,7 @@ private:
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
-    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced);
+    Block** _freeChain(Block** head, std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* _alloc(size_t bytes, int bucket_idx);
@@ -496,7 +496,7 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -517,7 +517,7 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked(std::vector<Box*>& weakly_referenced);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -623,18 +623,7 @@ public:
     void free(GCAllocation* alloc) {
         destructContents(alloc);
 
-        if (large_arena.contains(alloc)) {
-            large_arena.free(alloc);
-            return;
-        }
-
-        if (huge_arena.contains(alloc)) {
-            huge_arena.free(alloc);
-            return;
-        }
-
-        assert(small_arena.contains(alloc));
-        small_arena.free(alloc);
+        _setFree(alloc);
     }
 
     // not thread safe:
@@ -654,10 +643,10 @@ public:
     void forEachSmallArenaReference(std::function<void(GCAllocation*, size_t)> f) { small_arena.forEachReference(f); }
 
     // not thread safe:
-    void freeUnmarked(std::vector<Box*>& weakly_referenced) {
-        small_arena.freeUnmarked(weakly_referenced);
-        large_arena.freeUnmarked(weakly_referenced);
-        huge_arena.freeUnmarked(weakly_referenced);
+    void freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+        small_arena.freeUnmarked(weakly_referenced, classes_to_free);
+        large_arena.freeUnmarked(weakly_referenced, classes_to_free);
+        huge_arena.freeUnmarked(weakly_referenced, classes_to_free);
     }
 
     void prepareForCollection() {
@@ -673,6 +662,27 @@ public:
     }
 
     void dumpHeapStatistics(int level);
+
+private:
+    // Internal function that just marks the allocation as being freed, without doing any
+    // Python-semantics on it.
+    void _setFree(GCAllocation* alloc) {
+        if (large_arena.contains(alloc)) {
+            large_arena.free(alloc);
+            return;
+        }
+
+        if (huge_arena.contains(alloc)) {
+            huge_arena.free(alloc);
+            return;
+        }
+
+        assert(small_arena.contains(alloc));
+        small_arena.free(alloc);
+    }
+
+    friend void markPhase();
+    friend void runCollection();
 };
 
 extern Heap global_heap;

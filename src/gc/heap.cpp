@@ -45,7 +45,7 @@ template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p) {
 namespace pyston {
 namespace gc {
 
-bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced);
+bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced, std::vector<BoxedClass*>* classes_to_free);
 
 // lots of linked lists around here, so let's just use template functions for operations on them.
 template <class ListT> inline void nullNextPrev(ListT* node) {
@@ -88,7 +88,8 @@ template <class ListT, typename Func> inline void forEach(ListT* list, Func func
 }
 
 template <class ListT, typename Free>
-inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free free_func) {
+inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free,
+                      Free free_func) {
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
@@ -97,7 +98,7 @@ inline void sweepList(ListT* head, std::vector<Box*>& weakly_referenced, Free fr
             clearMark(al);
             cur = cur->next;
         } else {
-            if (_doFree(al, &weakly_referenced)) {
+            if (_doFree(al, &weakly_referenced, &classes_to_free)) {
                 removeFromLL(cur);
 
                 auto to_free = cur;
@@ -128,12 +129,7 @@ void _bytesAllocatedTripped() {
 /// Finalizers
 
 bool hasOrderedFinalizer(BoxedClass* cls) {
-    if (PyType_FastSubclass(cls, Py_TPFLAGS_TYPE_SUBCLASS)) {
-        // Class objects need to be kept alive for at least as long as any objects that point
-        // to them, even if those objects are garbage (or involved in finalizer chains).
-        // Marking class objects as having finalizers should get us this behavior.
-        return true;
-    } else if (cls->has_safe_tp_dealloc) {
+    if (cls->has_safe_tp_dealloc) {
         ASSERT(!cls->tp_del, "class \"%s\" with safe tp_dealloc also has tp_del?", cls->tp_name);
         return false;
     } else if (cls->hasNonDefaultTpDealloc()) {
@@ -164,9 +160,10 @@ __attribute__((always_inline)) bool isWeaklyReferenced(Box* b) {
 
 Heap global_heap;
 
-__attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced) {
-    static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
+static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
 
+__attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced,
+                                            std::vector<BoxedClass*>* classes_to_free) {
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -175,6 +172,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
     VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
+    GC_TRACE_LOG("doFree %p\n", al->user_data);
     if (alloc_kind == GCKind::PYTHON) {
 #ifndef NVALGRIND
         VALGRIND_DISABLE_ERROR_REPORTING;
@@ -185,15 +183,24 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 #endif
 
         assert(b->cls);
-        if (isWeaklyReferenced(b)) {
+        if (unlikely(isWeaklyReferenced(b))) {
             assert(weakly_referenced && "attempting to free a weakly referenced object manually");
             weakly_referenced->push_back(b);
+            GC_TRACE_LOG("%p is weakly referenced\n", al->user_data);
             return false;
         }
 
         ASSERT(!hasOrderedFinalizer(b->cls) || hasFinalized(al), "%s", getTypeName(b));
 
+        // Note: do this check after the weakrefs check.
+        if (unlikely(PyType_Check(b))) {
+            assert(classes_to_free);
+            classes_to_free->push_back(static_cast<BoxedClass*>(b));
+            return false;
+        }
+
         if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
+            GC_TRACE_LOG("running safe destructor for %p\n", b);
             gc_safe_destructors.log();
 
             GCAllocation* al = GCAllocation::fromUserData(b);
@@ -208,7 +215,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 }
 
 void Heap::destructContents(GCAllocation* al) {
-    _doFree(al, NULL);
+    _doFree(al, NULL, NULL);
 }
 
 struct HeapStatistics {
@@ -481,11 +488,15 @@ void SmallArena::forEachReference(std::function<void(GCAllocation*, size_t)> f) 
     }
 }
 
-void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
+void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
     assertConsistent();
 
-    thread_caches.forEachValue([this, &weakly_referenced](ThreadBlockCache* cache) {
-        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+    thread_caches.forEachValue([this, &weakly_referenced, &classes_to_free](ThreadBlockCache* cache) {
+        // Iterate over the buckets from largest to smallest.  I don't think it really matters, but
+        // doing it in this order means that we will tend to free types early in the sweep (since they
+        // are fairly large), and we are more likely to detect if other code depended on that type
+        // being alive.
+        for (int bidx = NUM_BUCKETS - 1; bidx >= 0; bidx--) {
             Block* h = cache->cache_free_heads[bidx];
             // Try to limit the amount of unused memory a thread can hold onto;
             // currently pretty dumb, just limit the number of blocks in the free-list
@@ -504,8 +515,8 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
                 insertIntoLL(&heads[bidx], h);
             }
 
-            Block** chain_end = _freeChain(&cache->cache_free_heads[bidx], weakly_referenced);
-            _freeChain(&cache->cache_full_heads[bidx], weakly_referenced);
+            Block** chain_end = _freeChain(&cache->cache_free_heads[bidx], weakly_referenced, classes_to_free);
+            _freeChain(&cache->cache_full_heads[bidx], weakly_referenced, classes_to_free);
 
             while (Block* b = cache->cache_full_heads[bidx]) {
                 removeFromLLAndNull(b);
@@ -514,9 +525,9 @@ void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
         }
     });
 
-    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        Block** chain_end = _freeChain(&heads[bidx], weakly_referenced);
-        _freeChain(&full_heads[bidx], weakly_referenced);
+    for (int bidx = NUM_BUCKETS - 1; bidx >= 0; bidx--) {
+        Block** chain_end = _freeChain(&heads[bidx], weakly_referenced, classes_to_free);
+        _freeChain(&full_heads[bidx], weakly_referenced, classes_to_free);
 
         while (Block* b = full_heads[bidx]) {
             removeFromLLAndNull(b);
@@ -543,7 +554,8 @@ void SmallArena::getStatistics(HeapStatistics* stats) {
 }
 
 
-SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weakly_referenced) {
+SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weakly_referenced,
+                                           std::vector<BoxedClass*>& classes_to_free) {
     while (Block* b = *head) {
         int num_objects = b->numObjects();
         int first_obj = b->minObjIndex();
@@ -568,7 +580,7 @@ SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weak
             if (isMarked(al)) {
                 clearMark(al);
             } else {
-                if (_doFree(al, &weakly_referenced)) {
+                if (_doFree(al, &weakly_referenced, &classes_to_free)) {
                     // GC_TRACE_LOG("freeing %p\n", al->user_data);
                     b->isfree.set(atom_idx);
 #ifndef NDEBUG
@@ -807,8 +819,8 @@ void LargeArena::cleanupAfterCollection() {
     lookup.clear();
 }
 
-void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
-    sweepList(head, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
+void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+    sweepList(head, weakly_referenced, classes_to_free, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
 void LargeArena::getStatistics(HeapStatistics* stats) {
@@ -1016,8 +1028,8 @@ void HugeArena::cleanupAfterCollection() {
     lookup.clear();
 }
 
-void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
-    sweepList(head, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
+void HugeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+    sweepList(head, weakly_referenced, classes_to_free, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {

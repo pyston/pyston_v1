@@ -716,6 +716,11 @@ void Rewriter::_trap() {
     assembler->trap();
 }
 
+void Rewriter::addGCReference(void* obj) {
+    assert(gc::isValidGCObject(obj));
+    gc_references.push_back(obj);
+}
+
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 

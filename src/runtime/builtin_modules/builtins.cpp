@@ -532,8 +532,15 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
         // value is fixed.
         if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
             rewrite_args = NULL;
-        else
+        else {
+            if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
+                // can avoid keeping the extra gc reference
+            } else {
+                rewrite_args->rewriter->addGCReference(_str);
+            }
+
             rewrite_args->arg2->addGuard((intptr_t)arg2);
+        }
     }
 
     try {
