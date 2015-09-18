@@ -30,7 +30,7 @@ public:
     /* Return number of items in range (lo, hi, step).  step != 0
      * required.  The result always fits in an unsigned long.
      */
-    static int64_t get_len_of_range(int64_t lo, int64_t hi, int64_t step) {
+    static unsigned long get_len_of_range(int64_t lo, int64_t hi, int64_t step) {
         /* -------------------------------------------------------------
         If step > 0 and lo >= hi, or step < 0 and lo <= hi, the range is empty.
         Else for step > 0, if n values are in the range, the last one is
@@ -44,11 +44,11 @@ public:
         precision to compute the RHS exactly.  The analysis for step < 0
         is similar.
         ---------------------------------------------------------------*/
-        assert(step != 0LL);
-        if (step > 0LL && lo < hi)
-            return 1LL + (hi - 1LL - lo) / step;
+        assert(step != 0);
+        if (step > 0 && lo < hi)
+            return 1UL + (hi - 1UL - lo) / step;
         else if (step < 0 && lo > hi)
-            return 1LL + (lo - 1LL - hi) / (0LL - step);
+            return 1UL + (lo - 1UL - hi) / (0UL - step);
         else
             return 0LL;
     }
@@ -66,18 +66,18 @@ class BoxedXrangeIterator : public Box {
 private:
     BoxedXrange* const xrange;
     int64_t cur;
-    int64_t stop, step;
+    int64_t index, len, step;
 
 public:
     BoxedXrangeIterator(BoxedXrange* xrange, bool reversed) : xrange(xrange) {
         int64_t start = xrange->start;
-        int64_t len = xrange->len;
 
-        stop = xrange->stop;
         step = xrange->step;
 
+        len = xrange->len;
+        index = 0;
+
         if (reversed) {
-            stop = xrange->start - step;
             start = xrange->start + (len - 1) * step;
             step = -step;
         }
@@ -91,11 +91,10 @@ public:
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
 
-        if (self->step > 0) {
-            return self->cur < self->stop;
-        } else {
-            return self->cur > self->stop;
+        if (self->index >= self->len) {
+            return false;
         }
+        return true;
     }
 
     static Box* xrangeIteratorHasnext(Box* s) __attribute__((visibility("default"))) {
@@ -111,6 +110,7 @@ public:
 
         i64 rtn = self->cur;
         self->cur += self->step;
+        self->index++;
         return boxInt(rtn);
     }
 
@@ -123,6 +123,7 @@ public:
 
         i64 rtn = self->cur;
         self->cur += self->step;
+        self->index++;
         return rtn;
     }
 
@@ -152,6 +153,10 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
         checkAndThrowCAPIException();
         i64 istop = PyLong_AsLong(stop);
         checkAndThrowCAPIException();
+        i64 n = BoxedXrange::get_len_of_range(istart, istop, 1);
+        if (n > (unsigned long)LONG_MAX || (long)n > PY_SSIZE_T_MAX) {
+            raiseExcHelper(OverflowError, "xrange() result has too many items");
+        }
         return new BoxedXrange(istart, istop, 1);
     } else {
         i64 istart = PyLong_AsLong(start);
@@ -160,7 +165,12 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
         checkAndThrowCAPIException();
         i64 istep = PyLong_AsLong(step);
         checkAndThrowCAPIException();
-        RELEASE_ASSERT(istep != 0, "step can't be 0");
+        if (istep == 0)
+            raiseExcHelper(ValueError, "xrange() arg 3 must not be zero");
+        unsigned long n = BoxedXrange::get_len_of_range(istart, istop, istep);
+        if (n > (unsigned long)LONG_MAX || (long)n > PY_SSIZE_T_MAX) {
+            raiseExcHelper(OverflowError, "xrange() result has too many items");
+        }
         return new BoxedXrange(istart, istop, istep);
     }
 }
@@ -189,6 +199,9 @@ Box* xrangeGetitem(Box* self, Box* slice) {
     BoxedXrange* r = static_cast<BoxedXrange*>(self);
     if (PyIndex_Check(slice)) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i < 0) {
+            i = i + r->len;
+        }
         if (i < 0 || i >= r->len) {
             raiseExcHelper(IndexError, "xrange object index out of range");
         }
@@ -203,6 +216,30 @@ Box* xrangeGetitem(Box* self, Box* slice) {
 Box* xrangeLen(Box* self) {
     assert(isSubclass(self->cls, xrange_cls));
     return boxInt(static_cast<BoxedXrange*>(self)->len);
+}
+
+Box* xrangeRepr(BoxedXrange* self) {
+    Box* repr;
+
+    if (self->start == 0 && self->step == 1)
+        repr = PyString_FromFormat("xrange(%ld)", self->stop);
+
+    else if (self->step == 1)
+        repr = PyString_FromFormat("xrange(%ld, %ld)", self->start, self->stop);
+
+    else
+        repr = PyString_FromFormat("xrange(%ld, %ld, %ld)", self->start, self->stop, self->step);
+    return repr;
+}
+
+Box* xrangeReduce(Box* self) {
+    if (!self) {
+        return None;
+    }
+    BoxedXrange* r = static_cast<BoxedXrange*>(self);
+    BoxedTuple* range = BoxedTuple::create({ boxInt(r->start), boxInt(r->stop), boxInt(r->step) });
+
+    return BoxedTuple::create({ r->cls, range });
 }
 
 void setupXrange() {
@@ -224,6 +261,8 @@ void setupXrange() {
     xrange_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)xrangeGetitem, BOXED_INT, 2)));
 
     xrange_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)xrangeLen, BOXED_INT, 1)));
+    xrange_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)xrangeRepr, STR, 1)));
+    xrange_cls->giveAttr("__reduce__", new BoxedFunction(boxRTFunction((void*)xrangeReduce, BOXED_TUPLE, 1)));
 
     CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);
