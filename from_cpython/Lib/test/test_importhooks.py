@@ -1,3 +1,4 @@
+# expected: fail
 import sys
 import imp
 import os

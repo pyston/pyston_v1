@@ -1,3 +1,4 @@
+# expected: fail
 # As a test suite for the os module, this is woefully inadequate, but this
 # does add tests for a few functions which have been determined to be more
 # portable than they had been thought to be.

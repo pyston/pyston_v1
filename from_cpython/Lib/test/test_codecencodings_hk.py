@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecencodings_hk.py
 #   Codec encoding tests for HongKong encodings.

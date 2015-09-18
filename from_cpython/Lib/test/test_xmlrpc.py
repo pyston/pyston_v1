@@ -1,3 +1,4 @@
+# expected: fail
 import base64
 import datetime
 import sys

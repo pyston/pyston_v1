@@ -1,3 +1,4 @@
+# expected: fail
 """Test correct operation of the print function.
 """
 

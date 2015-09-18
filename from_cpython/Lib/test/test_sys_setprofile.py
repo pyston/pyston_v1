@@ -1,3 +1,4 @@
+# expected: fail
 import gc
 import pprint
 import sys

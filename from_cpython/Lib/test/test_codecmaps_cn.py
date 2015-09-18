@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecmaps_cn.py
 #   Codec mapping tests for PRC encodings

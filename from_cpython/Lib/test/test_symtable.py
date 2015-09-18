@@ -1,3 +1,4 @@
+# expected: fail
 """
 Test the API of the symtable module.
 """

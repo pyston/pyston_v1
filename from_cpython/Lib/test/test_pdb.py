@@ -1,3 +1,4 @@
+# expected: fail
 # A test suite for pdb; at the moment, this only validates skipping of
 # specified test modules (RFE #5142).
 

@@ -1,3 +1,4 @@
+# expected: fail
 # -*- coding: iso-8859-1 -*-
 # Copyright (C) 2001,2002 Python Software Foundation
 # csv package unit tests

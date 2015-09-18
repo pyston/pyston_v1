@@ -1,3 +1,4 @@
+# expected: fail
 from test.test_support import run_unittest
 from test.test_math import parse_testfile, test_file
 import unittest

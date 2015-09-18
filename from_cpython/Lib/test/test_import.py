@@ -1,3 +1,4 @@
+# expected: fail
 import errno
 import imp
 import marshal

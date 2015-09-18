@@ -1,3 +1,4 @@
+# expected: fail
 """Test suite for the cProfile module."""
 
 import sys

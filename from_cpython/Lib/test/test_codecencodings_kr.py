@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecencodings_kr.py
 #   Codec encoding tests for ROK encodings.

@@ -1,3 +1,4 @@
+# expected: fail
 import parser
 import unittest
 import sys

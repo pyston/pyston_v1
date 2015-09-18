@@ -1,3 +1,4 @@
+# expected: fail
 """Unit tests for the memoryview
 
 XXX We need more tests! Some tests are in test_bytes

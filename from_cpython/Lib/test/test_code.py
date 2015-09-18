@@ -1,3 +1,4 @@
+# expected: fail
 """This module includes tests of the code object representation.
 
 >>> def f(x):

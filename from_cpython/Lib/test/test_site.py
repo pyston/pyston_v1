@@ -1,3 +1,4 @@
+# expected: fail
 """Tests for 'site'.
 
 Tests assume the initial paths in sys.path once the interpreter has begun

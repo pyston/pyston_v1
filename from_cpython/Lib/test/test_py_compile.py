@@ -1,3 +1,4 @@
+# expected: fail
 import imp
 import os
 import py_compile

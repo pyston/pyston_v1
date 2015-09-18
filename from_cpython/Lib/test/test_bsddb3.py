@@ -1,3 +1,4 @@
+# expected: fail
 # Test driver for bsddb package.
 """
 Run all test cases.

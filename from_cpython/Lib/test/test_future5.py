@@ -1,3 +1,4 @@
+# expected: fail
 # Check that multiple features can be enabled.
 from __future__ import unicode_literals, print_function
 

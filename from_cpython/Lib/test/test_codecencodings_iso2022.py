@@ -1,3 +1,4 @@
+# expected: fail
 # Codec encoding tests for ISO 2022 encodings.
 
 from test import test_support

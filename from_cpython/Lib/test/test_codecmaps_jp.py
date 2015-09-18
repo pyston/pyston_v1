@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecmaps_jp.py
 #   Codec mapping tests for Japanese encodings

@@ -1,3 +1,4 @@
+# expected: fail
 # This is a variant of the very old (early 90's) file
 # Demo/threads/bug.py.  It simply provokes a number of threads into
 # trying to import the same module "at the same time".

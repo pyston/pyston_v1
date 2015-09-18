@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecencodings_cn.py
 #   Codec encoding tests for PRC encodings.

@@ -1,3 +1,4 @@
+# expected: fail
 """Unit tests for memory-based file-like objects.
 StringIO -- for unicode strings
 BytesIO -- for bytes

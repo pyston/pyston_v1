@@ -1,3 +1,4 @@
+# expected: fail
 from contextlib import contextmanager
 import linecache
 import os

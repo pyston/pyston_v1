@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 
 from test.test_support import run_unittest, import_module

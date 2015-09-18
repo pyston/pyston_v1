@@ -1,3 +1,4 @@
+# expected: fail
 # -*- coding: iso-8859-1 -*-
 import unittest, test.test_support
 from test.script_helper import assert_python_ok, assert_python_failure

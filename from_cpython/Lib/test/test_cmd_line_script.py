@@ -1,3 +1,4 @@
+# expected: fail
 # Tests command line execution of scripts
 
 import unittest

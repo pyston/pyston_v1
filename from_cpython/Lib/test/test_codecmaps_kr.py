@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecmaps_kr.py
 #   Codec mapping tests for ROK encodings

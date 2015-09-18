@@ -1,3 +1,4 @@
+# expected: fail
 """Supporting definitions for the Python regression tests."""
 
 if __name__ != 'test.test_support':

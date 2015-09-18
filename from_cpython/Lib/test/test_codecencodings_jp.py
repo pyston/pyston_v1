@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecencodings_jp.py
 #   Codec encoding tests for Japanese encodings.

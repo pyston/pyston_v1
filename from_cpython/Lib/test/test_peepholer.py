@@ -1,3 +1,4 @@
+# expected: fail
 import dis
 import sys
 from cStringIO import StringIO

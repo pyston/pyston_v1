@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecmaps_hk.py
 #   Codec mapping tests for HongKong encodings

@@ -1,3 +1,4 @@
+# expected: fail
 # xml.etree test for cElementTree
 
 from test import test_support

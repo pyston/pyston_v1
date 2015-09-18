@@ -1,3 +1,4 @@
+# expected: fail
 import os
 from test import test_support
 

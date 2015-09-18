@@ -1,3 +1,4 @@
+# expected: fail
 """
 Tests for kqueue wrapper.
 """

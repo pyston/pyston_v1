@@ -1,3 +1,4 @@
+# expected: fail
 # Copyright (C) 2002 Python Software Foundation
 # email package unit tests for (optional) Asian codecs
 

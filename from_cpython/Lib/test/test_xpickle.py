@@ -1,3 +1,4 @@
+# expected: fail
 # test_pickle dumps and loads pickles via pickle.py.
 # test_cpickle does the same, but via the cPickle module.
 # This test covers the other two cases, making pickles with one module and

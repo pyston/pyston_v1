@@ -1,3 +1,4 @@
+# expected: fail
 import os
 import pprint
 import unittest

@@ -1,3 +1,4 @@
+# expected: fail
 """Simple test script for imgfile.c
    Roger E. Masse
 """

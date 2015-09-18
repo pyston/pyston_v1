@@ -1,3 +1,4 @@
+# expected: fail
 import os
 import unittest
 from test import test_support

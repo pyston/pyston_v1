@@ -1,3 +1,4 @@
+# expected: fail
 import __future__
 import os
 import unittest

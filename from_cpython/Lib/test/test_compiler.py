@@ -1,3 +1,4 @@
+# expected: fail
 import test.test_support
 compiler = test.test_support.import_module('compiler', deprecated=True)
 from compiler.ast import flatten

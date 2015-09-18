@@ -1,3 +1,4 @@
+# expected: fail
 from test import test_support
 from test.test_support import TESTFN, _4G, bigmemtest, import_module, findfile
 

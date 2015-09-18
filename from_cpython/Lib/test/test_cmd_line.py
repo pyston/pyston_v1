@@ -1,3 +1,4 @@
+# expected: fail
 # Tests invocation of the interpreter with various command line arguments
 # All tests are executed with environment variables ignored
 # See test_cmd_line_script.py for testing of script execution

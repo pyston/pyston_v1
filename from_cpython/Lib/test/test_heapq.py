@@ -1,3 +1,4 @@
+# expected: fail
 """Unittests for heapq."""
 
 import sys

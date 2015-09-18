@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 import sys
 import _ast

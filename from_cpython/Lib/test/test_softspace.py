@@ -1,3 +1,4 @@
+# expected: fail
 from test.test_support import run_unittest
 import unittest
 import StringIO

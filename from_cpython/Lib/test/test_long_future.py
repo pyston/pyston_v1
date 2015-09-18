@@ -1,3 +1,4 @@
+# expected: fail
 from __future__ import division
 # When true division is the default, get rid of this and add it to
 # test_long.py instead.  In the meantime, it's too obscure to try to

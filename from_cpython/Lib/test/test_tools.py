@@ -1,3 +1,4 @@
+# expected: fail
 """Tests for scripts in the Tools directory.
 
 This file contains regression tests for some of the scripts found in the

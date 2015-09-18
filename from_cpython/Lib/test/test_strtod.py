@@ -1,3 +1,4 @@
+# expected: fail
 # Tests for the correctly-rounded string -> float conversions
 # introduced in Python 2.7 and 3.1.
 

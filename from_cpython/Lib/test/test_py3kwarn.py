@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 import sys
 from test.test_support import check_py3k_warnings, CleanImport, run_unittest

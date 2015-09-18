@@ -1,3 +1,4 @@
+# expected: fail
 # Copyright (C) 2001-2006 Python Software Foundation
 # email package unit tests
 

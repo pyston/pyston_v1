@@ -1,3 +1,4 @@
+# expected: fail
 # Very rudimentary test of threading module
 
 import test.test_support

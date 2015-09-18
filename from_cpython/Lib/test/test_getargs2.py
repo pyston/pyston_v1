@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 from test import test_support
 # Skip this test if the _testcapi module isn't available.

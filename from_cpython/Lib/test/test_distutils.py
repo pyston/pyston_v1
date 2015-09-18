@@ -1,3 +1,4 @@
+# expected: fail
 """Tests for distutils.
 
 The tests for distutils are defined in the distutils.tests package;

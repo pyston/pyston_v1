@@ -1,3 +1,4 @@
+# expected: fail
 import audioop
 import sys
 import unittest

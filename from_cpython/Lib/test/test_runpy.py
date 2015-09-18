@@ -1,3 +1,4 @@
+# expected: fail
 # Test the runpy module
 import unittest
 import os

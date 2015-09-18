@@ -1,3 +1,4 @@
+# expected: fail
 from test import test_support
 import unittest
 dbm = test_support.import_module('dbm')

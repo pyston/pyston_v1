@@ -1,3 +1,4 @@
+# expected: fail
 """
    Test cases for codeop.py
    Nick Mathewson

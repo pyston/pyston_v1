@@ -1,3 +1,4 @@
+# expected: fail
 # Testing the line trace facility.
 
 from test import test_support

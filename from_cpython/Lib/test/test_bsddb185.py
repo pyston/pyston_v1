@@ -1,3 +1,4 @@
+# expected: fail
 """Tests for the bsddb185 module.
 
 The file 185test.db found in Lib/test/ is for testing purposes with this

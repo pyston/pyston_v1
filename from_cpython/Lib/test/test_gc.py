@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 from test.test_support import verbose, run_unittest
 import sys

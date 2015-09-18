@@ -1,3 +1,4 @@
+# expected: fail
 """Whimpy test script for the cl module
    Roger E. Masse
 """

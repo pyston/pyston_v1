@@ -1,3 +1,4 @@
+# expected: fail
 # Tests universal newline support for both reading and parsing files.
 
 # NOTE: this file tests the new `io` library backported from Python 3.x.

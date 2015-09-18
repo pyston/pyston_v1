@@ -1,3 +1,4 @@
+# expected: fail
 # Ridiculously simple test of the winsound module for Windows.
 
 import unittest

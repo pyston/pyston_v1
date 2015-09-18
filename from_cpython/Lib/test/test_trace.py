@@ -1,3 +1,4 @@
+# expected: fail
 import os
 import sys
 from test.test_support import (run_unittest, TESTFN, rmtree, unlink,

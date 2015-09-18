@@ -1,3 +1,4 @@
+# expected: fail
 #
 # Test script for the curses module
 #

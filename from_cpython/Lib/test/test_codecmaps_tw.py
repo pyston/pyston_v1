@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecmaps_tw.py
 #   Codec mapping tests for ROC encodings

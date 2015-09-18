@@ -1,3 +1,4 @@
+# expected: fail
 """Do a minimal test of all the modules that aren't otherwise tested."""
 
 from test import test_support

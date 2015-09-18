@@ -1,3 +1,4 @@
+# expected: fail
 from test.test_support import (findfile, TESTFN, unlink, captured_stdout,
                                run_unittest)
 import unittest

@@ -1,3 +1,4 @@
+# expected: fail
 import difflib
 from test.test_support import run_unittest, findfile
 import unittest

@@ -1,3 +1,4 @@
+# expected: fail
 # This test module covers support in various parts of the standard library
 # for working with modules located inside zipfiles
 # The tests are centralised in this fashion to make it easy to drop them

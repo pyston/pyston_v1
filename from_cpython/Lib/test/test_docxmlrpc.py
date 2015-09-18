@@ -1,3 +1,4 @@
+# expected: fail
 from DocXMLRPCServer import DocXMLRPCServer
 import httplib
 import sys

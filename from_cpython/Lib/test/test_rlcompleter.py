@@ -1,3 +1,4 @@
+# expected: fail
 from test import test_support as support
 import unittest
 import __builtin__ as builtins

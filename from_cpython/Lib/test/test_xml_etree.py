@@ -1,3 +1,4 @@
+# expected: fail
 # xml.etree test.  This file contains enough tests to make sure that
 # all included components work as they should.
 # Large parts are extracted from the upstream test suite.

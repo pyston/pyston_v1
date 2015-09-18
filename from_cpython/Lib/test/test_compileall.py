@@ -1,3 +1,4 @@
+# expected: fail
 import compileall
 import imp
 import os

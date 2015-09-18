@@ -1,3 +1,4 @@
+# expected: fail
 """ Test suite for the code in msilib """
 import unittest
 import os

@@ -1,3 +1,4 @@
+# expected: fail
 """Test the arraymodule.
    Roger E. Masse
 """

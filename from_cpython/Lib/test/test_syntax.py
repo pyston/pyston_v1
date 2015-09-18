@@ -1,3 +1,4 @@
+# expected: fail
 """This module tests SyntaxErrors.
 
 Here's an example of the sort of thing that is tested.

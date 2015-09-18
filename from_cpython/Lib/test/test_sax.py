@@ -1,3 +1,4 @@
+# expected: fail
 # regression test for SAX 2.0            -*- coding: utf-8 -*-
 # $Id$
 

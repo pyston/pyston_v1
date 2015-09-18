@@ -1,3 +1,4 @@
+# expected: fail
 """Test dlmodule.c
    Roger E. Masse  revised strategy by Barry Warsaw
 """

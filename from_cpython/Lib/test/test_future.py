@@ -1,3 +1,4 @@
+# expected: fail
 # Test various flavors of legal and illegal future statements
 
 import unittest

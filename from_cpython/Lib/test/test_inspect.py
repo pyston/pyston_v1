@@ -1,3 +1,4 @@
+# expected: fail
 import re
 import sys
 import types

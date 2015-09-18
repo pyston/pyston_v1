@@ -1,3 +1,4 @@
+# expected: fail
 """This test checks for correct wait4() behavior.
 """
 

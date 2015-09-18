@@ -1,3 +1,4 @@
+# expected: fail
 """test script for a few new invalid token catches"""
 
 import unittest

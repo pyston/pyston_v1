@@ -1,3 +1,4 @@
+# expected: fail
 # We can test part of the module without zlib.
 try:
     import zlib

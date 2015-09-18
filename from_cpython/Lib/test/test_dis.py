@@ -1,3 +1,4 @@
+# expected: fail
 # Minimal tests for dis module
 
 from test.test_support import run_unittest

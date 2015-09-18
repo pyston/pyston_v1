@@ -1,3 +1,4 @@
+# expected: fail
 from test.test_support import findfile, TestFailed, import_module
 import unittest
 sunaudiodev = import_module('sunaudiodev', deprecated=True)

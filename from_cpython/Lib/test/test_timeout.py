@@ -1,3 +1,4 @@
+# expected: fail
 """Unit tests for socket timeout feature."""
 
 import unittest

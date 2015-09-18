@@ -1,3 +1,4 @@
+# expected: fail
 """Test cases for traceback module"""
 
 from StringIO import StringIO

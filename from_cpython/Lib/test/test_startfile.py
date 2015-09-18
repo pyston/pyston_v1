@@ -1,3 +1,4 @@
+# expected: fail
 # Ridiculously simple test of the os.startfile function for Windows.
 #
 # empty.vbs is an empty file (except for a comment), which does

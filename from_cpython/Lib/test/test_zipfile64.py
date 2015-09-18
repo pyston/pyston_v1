@@ -1,3 +1,4 @@
+# expected: fail
 # Tests of the full ZIP64 functionality of zipfile
 # The test_support.requires call is the only reason for keeping this separate
 # from test_zipfile

@@ -1,3 +1,4 @@
+# expected: fail
 from test import test_support
 from test.test_support import bigmemtest, _1G, _2G, _4G, precisionbigmemtest
 

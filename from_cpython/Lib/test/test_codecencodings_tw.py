@@ -1,3 +1,4 @@
+# expected: fail
 #
 # test_codecencodings_tw.py
 #   Codec encoding tests for ROC encodings.

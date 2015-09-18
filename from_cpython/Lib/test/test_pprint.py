@@ -1,3 +1,4 @@
+# expected: fail
 import pprint
 import test.test_support
 import unittest
