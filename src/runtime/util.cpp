@@ -104,7 +104,7 @@ Box* noneIfNull(Box* b) {
     }
 }
 
-Box* coerceUnicodeToStr(Box* unicode) {
+template <ExceptionStyle S> Box* coerceUnicodeToStr(Box* unicode) noexcept(S == CAPI) {
     if (!isSubclass(unicode->cls, unicode_cls))
         return unicode;
 
@@ -116,6 +116,10 @@ Box* coerceUnicodeToStr(Box* unicode) {
 
     return r;
 }
+
+// force instantiation:
+template Box* coerceUnicodeToStr<CXX>(Box* unicode);
+template Box* coerceUnicodeToStr<CAPI>(Box* unicode);
 
 Box* boxStringFromCharPtr(const char* s) {
     return boxString(s);

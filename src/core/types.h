@@ -482,7 +482,7 @@ inline BoxedString* internStringMortal(llvm::StringRef s) {
 }
 
 // TODO this is an immortal intern for now
-inline void internStringMortalInplace(BoxedString*& s) {
+inline void internStringMortalInplace(BoxedString*& s) noexcept {
     PyString_InternInPlace((PyObject**)&s);
 }
 

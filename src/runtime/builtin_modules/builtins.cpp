@@ -464,7 +464,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     // Well, it gets passed to PyImport_ImportModuleLevel() and then import_module_level(),
     // which ignores it.  So we don't even pass it through.
 
-    name = coerceUnicodeToStr(name);
+    name = coerceUnicodeToStr<CXX>(name);
 
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
@@ -479,7 +479,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
-    _str = coerceUnicodeToStr(_str);
+    _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
@@ -543,15 +543,9 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
         }
     }
 
-    try {
-        _str = coerceUnicodeToStr(_str);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
+    _str = coerceUnicodeToStr<S>(_str);
+    if (S == CAPI && !_str)
+        return NULL;
 
     if (!PyString_Check(_str)) {
         if (S == CAPI) {
@@ -601,7 +595,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
-    _str = coerceUnicodeToStr(_str);
+    _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "setattr(): attribute name must be string");
@@ -651,15 +645,9 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
             rewrite_args->arg2->addGuard((intptr_t)arg2);
     }
 
-    try {
-        _str = coerceUnicodeToStr(_str);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
+    _str = coerceUnicodeToStr<S>(_str);
+    if (S == CAPI && !_str)
+        return NULL;
 
     if (!PyString_Check(_str)) {
         if (S == CAPI) {

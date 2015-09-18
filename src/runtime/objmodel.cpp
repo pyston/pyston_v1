@@ -3488,7 +3488,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         }
 
         for (const auto& p : *d_kwargs) {
-            auto k = coerceUnicodeToStr(p.first);
+            auto k = coerceUnicodeToStr<CXX>(p.first);
 
             if (k->cls != str_cls)
                 raiseExcHelper(TypeError, "%s() keywords must be strings", func_name);
@@ -4720,7 +4720,6 @@ static Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* val
 template <ExceptionStyle S>
 static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_str, Box* slice, Box* value,
                                 CallRewriteArgs* rewrite_args) noexcept(S == CAPI) {
-
     // This function contains a lot of logic for deciding between whether to call
     // the slice operator or the item operator, so we can match CPython's behavior
     // on custom classes that define those operators. However, for builtin types,
@@ -4979,6 +4978,12 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
     return rtn;
 }
 
+static void setitemHelper(Box* target, Box* slice, Box* value) {
+    int ret = target->cls->tp_as_mapping->mp_ass_subscript(target, slice, value);
+    if (ret == -1)
+        throwCAPIException();
+}
+
 // target[slice] = value
 extern "C" void setitem(Box* target, Box* slice, Box* value) {
     STAT_TIMER(t0, "us_timer_slowpath_setitem", 10);
@@ -4991,6 +4996,23 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 
     static BoxedString* setitem_str = internStringImmortal("__setitem__");
     static BoxedString* setslice_str = internStringImmortal("__setslice__");
+
+    auto&& m = target->cls->tp_as_mapping;
+    if (m && m->mp_ass_subscript && m->mp_ass_subscript != slot_mp_ass_subscript) {
+        if (rewriter.get()) {
+            RewriterVar* r_obj = rewriter->getArg(0);
+            RewriterVar* r_slice = rewriter->getArg(1);
+            RewriterVar* r_value = rewriter->getArg(2);
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
+            r_m->addGuardNotEq(0);
+            rewriter->call(true, (void*)setitemHelper, r_obj, r_slice, r_value);
+            rewriter->commit();
+        }
+
+        setitemHelper(target, slice, value);
+        return;
+    }
 
     Box* rtn;
     if (rewriter.get()) {
@@ -5502,7 +5524,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     }
 
     for (const auto& p : *attr_dict) {
-        auto k = coerceUnicodeToStr(p.first);
+        auto k = coerceUnicodeToStr<CXX>(p.first);
 
         RELEASE_ASSERT(k->cls == str_cls, "");
         BoxedString* s = static_cast<BoxedString*>(k);
@@ -5831,7 +5853,7 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
             }
             idx++;
 
-            attr_name = coerceUnicodeToStr(attr_name);
+            attr_name = coerceUnicodeToStr<CXX>(attr_name);
 
             if (attr_name->cls != str_cls)
                 raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));

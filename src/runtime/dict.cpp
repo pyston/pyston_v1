@@ -432,6 +432,7 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
         assert(res == None);
     } catch (ExcInfo e) {
         setCAPIException(e);
+        return -1;
     }
     return 0;
 }

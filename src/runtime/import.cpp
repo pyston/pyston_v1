@@ -683,7 +683,7 @@ extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {
-    _name = coerceUnicodeToStr(_name);
+    _name = coerceUnicodeToStr<CXX>(_name);
     RELEASE_ASSERT(_name->cls == str_cls, "");
 
     BoxedString* name = static_cast<BoxedString*>(_name);

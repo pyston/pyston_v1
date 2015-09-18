@@ -2246,7 +2246,7 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<CXX>(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2256,11 +2256,27 @@ public:
         return None;
     }
 
+    static int ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
+        try {
+            Box* res;
+            if (w == NULL) {
+                res = AttrWrapper::delitem((Box*)mp, v);
+            } else {
+                res = AttrWrapper::setitem((Box*)mp, v, w);
+            }
+            assert(res == None);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return -1;
+        }
+        return 0;
+    }
+
     static Box* setdefault(Box* _self, Box* _key, Box* value) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<CXX>(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2277,7 +2293,7 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<CXX>(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2293,7 +2309,9 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<S>(_key);
+        if (S == CAPI && !_key)
+            return NULL;
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2313,7 +2331,7 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<CXX>(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2334,7 +2352,7 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<CXX>(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2371,11 +2389,13 @@ public:
         return boxString(os.str());
     }
 
-    static Box* contains(Box* _self, Box* _key) {
+    template <ExceptionStyle S> static Box* contains(Box* _self, Box* _key) noexcept(S == CAPI) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr(_key);
+        _key = coerceUnicodeToStr<S>(_key);
+        if (S == CAPI && !_key)
+            return NULL;
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2383,6 +2403,13 @@ public:
 
         Box* r = self->b->getattr(key);
         return r ? True : False;
+    }
+
+    static int sq_contains(Box* _self, Box* _key) noexcept {
+        Box* rtn = contains<CAPI>(_self, _key);
+        if (!rtn)
+            return -1;
+        return rtn == True;
     }
 
     static Box* keys(Box* _self) {
@@ -2706,7 +2733,7 @@ Box* objectHash(Box* obj) {
 }
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value) {
-    attr = coerceUnicodeToStr(attr);
+    attr = coerceUnicodeToStr<CXX>(attr);
     if (attr->cls != str_cls) {
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", attr->cls->tp_name);
     }
@@ -3843,6 +3870,8 @@ void setupRuntime() {
 
     static PyMappingMethods attrwrapper_as_mapping;
     attrwrapper_cls->tp_as_mapping = &attrwrapper_as_mapping;
+    static PySequenceMethods attrwrapper_as_sequence;
+    attrwrapper_cls->tp_as_sequence = &attrwrapper_as_sequence;
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
         "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, false, false), { NULL }));
@@ -3855,7 +3884,7 @@ void setupRuntime() {
         "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, false, false), { None }));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
-                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains<CXX>, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::eq, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::ne, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
@@ -3874,6 +3903,8 @@ void setupRuntime() {
     attrwrapper_cls->freeze();
     attrwrapper_cls->tp_iter = AttrWrapper::iter;
     attrwrapper_cls->tp_as_mapping->mp_subscript = (binaryfunc)AttrWrapper::getitem<CAPI>;
+    attrwrapper_cls->tp_as_mapping->mp_ass_subscript = (objobjargproc)AttrWrapper::ass_sub;
+    attrwrapper_cls->tp_as_sequence->sq_contains = (objobjproc)AttrWrapper::sq_contains;
 
     attrwrapperiter_cls->giveAttr("__hasnext__",
                                   new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::hasnext, UNKNOWN, 1)));
