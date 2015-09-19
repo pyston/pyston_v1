@@ -5534,7 +5534,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     for (const auto& p : *attr_dict) {
         auto k = coerceUnicodeToStr<CXX>(p.first);
 
-        RELEASE_ASSERT(k->cls == str_cls, "");
+        RELEASE_ASSERT(k->cls == str_cls, "%s", k->cls->tp_name);
         BoxedString* s = static_cast<BoxedString*>(k);
         internStringMortalInplace(s);
         made->setattr(s, p.second, NULL);

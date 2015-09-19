@@ -62,6 +62,16 @@ sqlalchemy.testing.plugin.plugin_base.pre_begin(options)
 sqlalchemy.testing.plugin.plugin_base.read_config()
 sqlalchemy.testing.plugin.pytestplugin.pytest_sessionstart(None)
 
+# Bug in this file: they forgot to import SkipTest
+import sqlalchemy.testing.profiling
+sqlalchemy.testing.profiling.SkipTest = SkipTest
+
+# The tests are kind enough to call `lazy_gc()` to make sure things get finalized,
+# but with our conservative collector that's usually not enough.
+import sqlalchemy.testing.util
+def no_gc():
+    raise SkipTest()
+sqlalchemy.testing.util.lazy_gc = no_gc
 
 import glob
 test_files = glob.glob(TEST_DIR + "/test*.py") + glob.glob(TEST_DIR + "/*/test*.py")
@@ -103,6 +113,9 @@ CPYTHON_PASSING = [
 # These are the ones that pass on CPython (ie that we've stubbed enough of their testing
 # infrastructure to run):
 MODULES_TO_TEST = [
+    'test.aaa_profiling.test_compiler',
+    'test.aaa_profiling.test_orm',
+    'test.aaa_profiling.test_pool',
     'test.base.test_dependency',
     'test.base.test_events',
     'test.base.test_except',
@@ -114,6 +127,7 @@ MODULES_TO_TEST = [
     'test.engine.test_bind',
     'test.engine.test_ddlevents',
     'test.engine.test_parseconnect',
+    'test.engine.test_pool',
     'test.engine.test_reconnect',
     'test.ext.test_compiler',
     'test.orm.test_association',
@@ -158,6 +172,42 @@ MODULES_TO_TEST = [
     'test.sql.test_rowcount',
 ]
 
+FAILING = [
+    # 'test.aaa_profiling.test_memusage',   # Wants gc.get_objects
+    # 'test.aaa_profiling.test_resultset',  # Wants sys.getrefcount
+    # 'test.dialect.test_sqlite',           # ascii codec can't encode
+    # 'test.engine.test_logging',           # Unclear
+    # 'test.ext.test_extendedattr',         # does `locals()[42] = 99` in a classdef to prove it can.  maybe we could say is_pypy to avoid it.
+    'test.ext.test_hybrid',
+    'test.ext.test_orderinglist',
+    'test.orm.test_attributes',
+    'test.orm.test_collection',
+    'test.orm.test_composites',
+    'test.orm.test_dynamic',
+    'test.orm.test_events',
+    'test.orm.test_hasparent',
+    'test.orm.test_immediate_load',
+    'test.orm.test_joins',
+    'test.orm.test_lazy_relations',
+    'test.orm.test_manytomany',
+    'test.orm.test_merge',
+    'test.orm.test_naturalpks',
+    'test.orm.test_of_type',
+    'test.orm.test_relationships',
+    'test.orm.test_session',
+    'test.orm.test_transaction',
+    'test.orm.test_unitofworkv2',
+    'test.orm.test_update_delete',
+    'test.orm.test_utils',
+    'test.orm.test_versioning',
+    'test.sql.test_compiler',
+    'test.sql.test_generative',
+    'test.sql.test_quote',
+    'test.sql.test_selectable',
+    'test.sql.test_text',
+    'test.sql.test_unicode'
+]
+
 passed = []
 failed = []
 
@@ -184,9 +234,11 @@ for fn in test_files:
             for t in dir(n):
                 if not t.startswith("test_"):
                     continue
-                if clsname == "SubclassGrowthTest" and t == "test_subclass":
-                    # This test should be marked as requiring predictable_pc
+
+                # These test should be marked as requiring predictable_pc
+                if (clsname == "SubclassGrowthTest" and t == "test_subclass"):
                     continue
+
                 print "Running", t
                 n.setup()
                 try:
