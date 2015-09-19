@@ -1,4 +1,3 @@
-# expected: fail
 """Unit tests for contextlib.py, and other context managers."""
 
 import sys

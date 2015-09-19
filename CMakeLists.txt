@@ -336,4 +336,4 @@ else()
 endif()
 
 # last file added (need to change this if we add a file that is added via a glob):
-# from_cpython/Lib/test/pickletester.py
+# from_cpython/Lib/test/test_zipimport.py
