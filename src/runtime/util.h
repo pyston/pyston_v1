@@ -56,7 +56,7 @@ Box* boxStringFromCharPtr(const char* s);
 // strings and a string that happens to be its encoding.  It seems safer to just encode as ascii,
 // which will throw an exception if you try to pass something that might run into this risk.
 // (We wrap the unicode error and throw a TypeError)
-Box* coerceUnicodeToStr(Box* unicode);
+template <ExceptionStyle S> Box* coerceUnicodeToStr(Box* unicode) noexcept(S == CAPI);
 
 extern "C" bool hasnext(Box* o);
 extern "C" void dump(void* p);

@@ -1693,7 +1693,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         // Spill the register whose next use is farthest in the future
         assert(found);
         spillRegister(best_reg, /* preserve */ otherThan);
-        assert(vars_by_location.count(best_reg) == 0);
+        assert(failed || vars_by_location.count(best_reg) == 0);
         return best_reg;
     } else if (dest.type == Location::Register) {
         assembler::Register reg(dest.regnum);
@@ -1736,6 +1736,8 @@ assembler::XMMRegister Rewriter::allocXMMReg(Location dest, Location otherThan) 
 }
 
 void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
+    if (failed)
+        return;
     assert(!var->isInLocation(l));
     assert(vars_by_location.count(l) == 0);
 

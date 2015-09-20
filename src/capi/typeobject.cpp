@@ -1316,7 +1316,7 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
 
-static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexcept {
+int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexcept {
     STAT_TIMER(t0, "us_timer_slot_mpasssubscript", SLOT_AVOIDABILITY(self));
 
     PyObject* res;

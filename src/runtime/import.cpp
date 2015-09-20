@@ -594,20 +594,23 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
     }
 }
 
-extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
-    if (strcmp("__builtin__", name) == 0)
-        return builtins_module;
+extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
+    RELEASE_ASSERT(module_name, "");
+    RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
         // TODO: check if this has the same behaviour as the cpython implementation
-        std::string str = name;
         BoxedList* silly_list = new BoxedList();
         listAppendInternal(silly_list, boxString("__doc__"));
-        return import(0, silly_list, str);
+        return import(0, silly_list, ((BoxedString*)module_name)->s());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
+}
+
+extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
+    return PyImport_Import(boxString(name));
 }
 
 /* Get the module object corresponding to a module name.
@@ -683,7 +686,7 @@ extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {
-    _name = coerceUnicodeToStr(_name);
+    _name = coerceUnicodeToStr<CXX>(_name);
     RELEASE_ASSERT(_name->cls == str_cls, "");
 
     BoxedString* name = static_cast<BoxedString*>(_name);

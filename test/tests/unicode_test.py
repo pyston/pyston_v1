@@ -165,3 +165,4 @@ class C(object):
         return MyUnicode("hello world")
 
 print type(unicode(C()))
+print unicode("test", encoding="UTF-8")
