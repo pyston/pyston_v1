@@ -12,10 +12,10 @@ Subject: [PATCH] Add support for symbolic entries in the stackmap constant
  4 files changed, 79 insertions(+), 10 deletions(-)
 
 diff --git a/include/llvm/CodeGen/StackMaps.h b/include/llvm/CodeGen/StackMaps.h
-index 4e48afe..30cae3b 100644
+index caec994..6a62f93 100644
 --- a/include/llvm/CodeGen/StackMaps.h
 +++ b/include/llvm/CodeGen/StackMaps.h
-@@ -136,9 +136,13 @@ public:
+@@ -137,9 +137,13 @@ public:
      unsigned Size;
      unsigned Reg;
      int64_t Offset;
@@ -31,7 +31,7 @@ index 4e48afe..30cae3b 100644
    };
  
    struct LiveOutReg {
-@@ -160,13 +164,19 @@ public:
+@@ -161,13 +165,19 @@ public:
    // OpTypes are used to encode information about the following logical
    // operand (which may consist of several MachineOperands) for the
    // OpParser.
@@ -52,7 +52,7 @@ index 4e48afe..30cae3b 100644
      FnStackSize.clear();
    }
  
-@@ -191,6 +201,7 @@ private:
+@@ -192,6 +202,7 @@ private:
    typedef SmallVector<Location, 8> LocationVec;
    typedef SmallVector<LiveOutReg, 8> LiveOutVec;
    typedef MapVector<uint64_t, uint64_t> ConstantPool;
@@ -60,7 +60,7 @@ index 4e48afe..30cae3b 100644
    typedef MapVector<const MCSymbol *, uint64_t> FnStackSizeMap;
  
    struct CallsiteInfo {
-@@ -210,6 +221,7 @@ private:
+@@ -211,6 +222,7 @@ private:
    AsmPrinter &AP;
    CallsiteInfoList CSInfos;
    ConstantPool ConstPool;
@@ -69,10 +69,10 @@ index 4e48afe..30cae3b 100644
  
    MachineInstr::const_mop_iterator
 diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-index c0a8299..98cc692 100644
+index 4417095..89e2e31 100644
 --- a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 +++ b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-@@ -7122,6 +7122,15 @@ static void addStackMapLiveVars(ImmutableCallSite CS, unsigned StartIdx,
+@@ -6923,6 +6923,15 @@ static void addStackMapLiveVars(ImmutableCallSite CS, unsigned StartIdx,
        const TargetLowering &TLI = Builder.DAG.getTargetLoweringInfo();
        Ops.push_back(
          Builder.DAG.getTargetFrameIndex(FI->getIndex(), TLI.getPointerTy()));
@@ -89,10 +89,10 @@ index c0a8299..98cc692 100644
        Ops.push_back(OpVal);
    }
 diff --git a/lib/CodeGen/StackMaps.cpp b/lib/CodeGen/StackMaps.cpp
-index 0797d56..7151166 100644
+index aa18dea..c365beb 100644
 --- a/lib/CodeGen/StackMaps.cpp
 +++ b/lib/CodeGen/StackMaps.cpp
-@@ -107,6 +107,16 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
+@@ -118,6 +118,16 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
        Locs.push_back(Location(Location::Constant, sizeof(int64_t), 0, Imm));
        break;
      }
@@ -109,7 +109,7 @@ index 0797d56..7151166 100644
      }
      return ++MOI;
    }
-@@ -226,7 +236,7 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
+@@ -296,7 +306,7 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
         I != E; ++I) {
      // Constants are encoded as sign-extended integers.
      // -1 is directly encoded as .long 0xFFFFFFFF with no constant pool.
@@ -118,7 +118,7 @@ index 0797d56..7151166 100644
        I->LocType = Location::ConstantIndex;
        // ConstPool is intentionally a MapVector of 'uint64_t's (as
        // opposed to 'int64_t's).  We should never be in a situation
-@@ -243,6 +253,17 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
+@@ -313,6 +323,17 @@ void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
      }
    }
  
@@ -136,7 +136,7 @@ index 0797d56..7151166 100644
    // Create an expression to calculate the offset of the callsite from function
    // entry.
    const MCExpr *CSOffsetExpr = MCBinaryExpr::CreateSub(
-@@ -325,8 +346,9 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
+@@ -395,8 +416,9 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
    DEBUG(dbgs() << WSMP << "#functions = " << FnStackSize.size() << '\n');
    OS.EmitIntValue(FnStackSize.size(), 4);
    // Num constants.
@@ -148,7 +148,7 @@ index 0797d56..7151166 100644
    // Num callsites.
    DEBUG(dbgs() << WSMP << "#callsites = " << CSInfos.size() << '\n');
    OS.EmitIntValue(CSInfos.size(), 4);
-@@ -359,6 +381,10 @@ void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
+@@ -429,6 +451,10 @@ void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
      DEBUG(dbgs() << WSMP << ConstEntry.second << '\n');
      OS.EmitIntValue(ConstEntry.second, 8);
    }
@@ -159,7 +159,7 @@ index 0797d56..7151166 100644
  }
  
  /// Emit the callsite info for each callsite.
-@@ -511,7 +537,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS,
+@@ -514,7 +540,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS) {
  void StackMaps::serializeToStackMapSection() {
    (void) WSMP;
    // Bail out if there's no stack map data.
@@ -169,14 +169,14 @@ index 0797d56..7151166 100644
           "Expected empty constant pool too!");
    assert((!CSInfos.empty() || (CSInfos.empty() && FnStackSize.empty())) &&
           "Expected empty function record too!");
-@@ -541,4 +568,5 @@ void StackMaps::serializeToStackMapSection() {
+@@ -543,4 +570,5 @@ void StackMaps::serializeToStackMapSection() {
    // Clean up.
    CSInfos.clear();
    ConstPool.clear();
 +  ConstSymPool.clear();
  }
 diff --git a/test/CodeGen/X86/stackmap.ll b/test/CodeGen/X86/stackmap.ll
-index 5e356f3..59fa50f 100644
+index 0805e81..e81725d 100644
 --- a/test/CodeGen/X86/stackmap.ll
 +++ b/test/CodeGen/X86/stackmap.ll
 @@ -11,7 +11,7 @@
@@ -237,11 +237,11 @@ index 5e356f3..59fa50f 100644
  define void @constantargs() {
  entry:
    %0 = inttoptr i64 12345 to i8*
--  tail call void (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.void(i64 1, i32 15, i8* %0, i32 0, i16 65535, i16 -1, i32 65536, i32 2000000000, i32 2147483647, i32 -1, i32 4294967295, i32 4294967296, i64 2147483648, i64 4294967295, i64 4294967296, i64 -1)
-+  tail call void (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.void(i64 1, i32 15, i8* %0, i32 0, i16 65535, i16 -1, i32 65536, i32 2000000000, i32 2147483647, i32 -1, i32 4294967295, i32 4294967296, i64 2147483648, i64 4294967295, i64 4294967296, i64* @constSym1, i64* @constSym1, i64* @constSym2, i64 -1)
+-  tail call void (i64, i32, i8*, i32, ...) @llvm.experimental.patchpoint.void(i64 1, i32 15, i8* %0, i32 0, i16 65535, i16 -1, i32 65536, i32 2000000000, i32 2147483647, i32 -1, i32 4294967295, i32 4294967296, i64 2147483648, i64 4294967295, i64 4294967296, i64 -1)
++  tail call void (i64, i32, i8*, i32, ...) @llvm.experimental.patchpoint.void(i64 1, i32 15, i8* %0, i32 0, i16 65535, i16 -1, i32 65536, i32 2000000000, i32 2147483647, i32 -1, i32 4294967295, i32 4294967296, i64 2147483648, i64 4294967295, i64 4294967296, i64* @constSym1, i64* @constSym1, i64* @constSym2, i64 -1)
    ret void
  }
  
 -- 
-2.1.0
+1.9.1
 

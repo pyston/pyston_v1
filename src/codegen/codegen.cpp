@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -258,11 +259,11 @@ public:
             code = sym.getSize(size);
             assert(!code);
 
-            if (name == ".text")
+            if (name == ".text" || name.empty() || !size)
                 continue;
 
 
-            uint64_t sym_addr = L.getSymbolLoadAddress(name);
+            uint64_t sym_addr = g.engine->getGlobalValueAddress(name);
             assert(sym_addr);
 
             g.func_addr_registry.registerFunction(name.data(), (void*)sym_addr, size, NULL);

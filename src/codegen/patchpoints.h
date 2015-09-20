@@ -80,7 +80,7 @@ public:
         num_frame_stackmap_args = num_frame_args;
     }
 
-    int icStackmapArgsStart() { return 1; }
+    static int icStackmapArgsStart() { return 1; }
     int numICStackmapArgs() { return num_ic_stackmap_args; }
 
     int frameStackmapArgsStart() { return icStackmapArgsStart() + numICStackmapArgs(); }
@@ -95,9 +95,9 @@ public:
 
     int totalStackmapArgs() { return frameStackmapArgsStart() + numFrameStackmapArgs(); }
 
-    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
-                                  void* func_addr);
-    static void* getSlowpathAddr(unsigned int pp_id);
+    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args);
+    static PatchpointInfo* create(CompiledFunction* parent_cf, llvm::StringRef frame_str);
+    std::string toString();
 };
 
 class ICSetupInfo {
@@ -150,6 +150,8 @@ public:
 
     static ICSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
                                    TypeRecorder* type_recorder);
+    static ICSetupInfo* initialize(llvm::StringRef str);
+    std::string toString() const;
 };
 
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
@@ -164,6 +166,8 @@ ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder);
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
+
+CompilerType* getTypeFromString(llvm::StringRef type_str, int& num_parsed);
 
 } // namespace pyston
 

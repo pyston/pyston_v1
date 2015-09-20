@@ -75,7 +75,7 @@ public:
     static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 private:
-    Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
+    Value createFunction(AST* node, AST_arguments* args);
     Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
     void doStore(AST_Name* name, Value value);
@@ -848,8 +848,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
         if (jit)
-            v.var = jit->emitImportName(level, froms, module_name);
-        v.o = import(level, froms.o, module_name);
+            v.var = jit->emitImportName(level, froms, internStringImmortal(module_name));
+        v.o = import(level, froms.o, boxString(module_name));
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -983,8 +983,8 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     return s;
 }
 
-Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-    CLFunction* cl = wrapFunction(node, args, body, source_info);
+Value ASTInterpreter::createFunction(AST* node, AST_arguments* args) {
+    CLFunction* cl = getWrappedFunction(node);
 
     std::vector<Box*, StlCompatAllocator<Box*>> defaults;
 
@@ -1074,7 +1074,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d));
 
-    Value func = createFunction(node, args, node->body);
+    Value func = createFunction(node, args);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
         if (jit)
@@ -1108,7 +1108,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
             closure = created_closure;
         assert(closure);
     }
-    CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
+    CLFunction* cl = getWrappedFunction(node);
 
     Box* passed_globals = NULL;
     if (!getCL()->source->scoping->areGlobalsFromModule())
@@ -1215,7 +1215,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                     assert(getSymVRegMap().count(target->id));
                     assert(getSymVRegMap()[target->id] == target->vreg);
                     if (vregs[target->vreg] == 0) {
-                        assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                        assertNameDefined(0, target->id.getBox(), NameError, true /* local_var_msg */);
                         return Value();
                     }
 
@@ -1437,11 +1437,7 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
 }
 
 Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
-    AST_Return* expr = new AST_Return();
-    expr->value = node->body;
-
-    std::vector<AST_stmt*> body = { expr };
-    return createFunction(node, node->args, body);
+    return createFunction(node, node->args);
 }
 
 Value ASTInterpreter::visit_dict(AST_Dict* node) {
@@ -1530,7 +1526,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                 return v;
             }
 
-            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            assertNameDefined(0, node->id.getBox(), UnboundLocalError, true);
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
@@ -1617,7 +1613,7 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
         auto& d = static_cast<BoxedDict*>(boxed_locals)->d;
         auto it = d.find(name.getBox());
         if (it == d.end()) {
-            assertNameDefined(0, name.c_str(), NameError, false /* local_var_msg */);
+            assertNameDefined(0, name.getBox(), NameError, false /* local_var_msg */);
         }
         d.erase(it);
     } else if (boxed_locals->cls == attrwrapper_cls) {

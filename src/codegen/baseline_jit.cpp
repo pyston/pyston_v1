@@ -326,7 +326,7 @@ RewriterVar* JitFragmentWriter::emitGetItem(RewriterVar* value, RewriterVar* sli
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
     assert(vreg >= 0);
     RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
-    addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+    addAction([=]() { _emitGetLocal(val_var, s.getBox()); }, { val_var }, ActionType::NORMAL);
     return val_var;
 }
 
@@ -342,9 +342,8 @@ RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString*
     return call(false, (void*)importFrom, module, imm(name));
 }
 
-RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, llvm::StringRef module_name) {
-    return call(false, (void*)import, imm(level), from_imports, imm(const_cast<char*>(module_name.data())),
-                imm(module_name.size()));
+RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, BoxedString* module_name) {
+    return call(false, (void*)import, imm(level), from_imports, imm(module_name));
 }
 
 RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {
@@ -700,7 +699,7 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
 #endif
 }
 
-void JitFragmentWriter::assertNameDefinedHelper(const char* id) {
+void JitFragmentWriter::assertNameDefinedHelper(BoxedString* id) {
     assertNameDefined(0, id, UnboundLocalError, true);
 }
 
@@ -768,7 +767,7 @@ Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRec
     return recordType(type_recorder, r);
 }
 
-void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
+void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, BoxedString* name) {
     assembler::Register var_reg = val_var->getInReg();
     assembler->test(var_reg, var_reg);
     val_var->bumpUse();
@@ -831,6 +830,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                                     int num_slots, int slot_size) {
+    assembler->comment("_emitPPCall");
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.
@@ -856,7 +856,12 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     // make space for patchpoint
     uint8_t* pp_start = rewrite->getSlotStart() + assembler->bytesWritten();
     constexpr int call_size = 16;
+#ifndef NDEBUG
+    for (int i=0; i<pp_size + call_size; ++i)
+        assembler->trap();
+#else
     assembler->skipBytes(pp_size + call_size);
+#endif
     uint8_t* pp_end = rewrite->getSlotStart() + assembler->bytesWritten();
     assert(assembler->hasFailed() || (pp_start + pp_size + call_size == pp_end));
 

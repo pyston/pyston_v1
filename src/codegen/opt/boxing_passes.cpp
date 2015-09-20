@@ -53,8 +53,12 @@ public:
                 continue;
 
             // We are only interested in boxInt, boxFloat and boxBool calls
-            void* func = getCalledFuncAddr(CI);
-            if (func != boxInt && func != boxFloat && func != boxBool)
+            auto* func = CI->getCalledFunction();
+            if (!func)
+                continue;
+
+            llvm::StringRef func_name = func->getName();
+            if (func_name != "boxInt" && func_name != "boxFloat" && func_name != "boxBool")
                 continue;
 
             CallInst* CI2 = dyn_cast<CallInst>(CI->getArgOperand(0));
@@ -62,9 +66,13 @@ public:
                 continue;
 
             // Check if the value passed as argument to the boxing call is coming from the corresponding unbox call
-            void* func2 = getCalledFuncAddr(CI2);
-            if ((func == boxInt && func2 == unboxInt) || (func == boxFloat && func2 == unboxFloat)
-                || (func == boxBool && func2 == unboxBool))
+            auto* func2 = CI2->getCalledFunction();
+            if (!func2)
+                continue;
+
+            llvm::StringRef func2_name = func2->getName();
+            if ((func_name == "boxInt" && func2_name == "unboxInt") || (func_name == "boxFloat" && func2_name == "unboxFloat")
+                || (func_name == "boxBool" && func2_name == "unboxBool"))
                 dead_boxing_call[CI] = CI2;
         }
 
@@ -104,8 +112,12 @@ public:
         // the maps key is pair of the called function and the passed argument
         for (Instruction& I : BB) {
             if (CallInst* CI = dyn_cast<CallInst>(&I)) {
-                void* called_func = getCalledFuncAddr(CI);
-                if (called_func == boxInt || called_func == boxFloat || called_func == boxBool)
+                auto* called_func = CI->getCalledFunction();
+                if (!called_func)
+                    continue;
+
+                llvm::StringRef func_name = called_func->getName();
+                if (func_name == "boxInt" || func_name == "boxFloat" || func_name == "boxBool")
                     boxing_calls[std::make_pair(called_func, CI->getArgOperand(0))].push_back(CI);
             }
         }

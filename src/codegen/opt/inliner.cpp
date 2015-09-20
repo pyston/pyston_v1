@@ -59,11 +59,13 @@ public:
             r = new_module->getOrInsertFunction(f->getName(), f->getFunctionType());
         } else if (llvm::GlobalVariable* gv = llvm::dyn_cast<llvm::GlobalVariable>(v)) {
             // llvm::errs() << " is gv\n";
-            assert(gv->getLinkage() != llvm::GlobalVariable::PrivateLinkage);
-            llvm::GlobalVariable* new_gv = llvm::cast<llvm::GlobalVariable>(
-                new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType()));
+            llvm::GlobalVariable* new_gv = new llvm::GlobalVariable(
+                  *new_module, gv->getType()->getElementType(), gv->isConstant(),
+                  gv->getLinkage(), nullptr, gv->getName(), nullptr,
+                  gv->getThreadLocalMode(), gv->getType()->getAddressSpace());
+            new_gv->copyAttributesFrom(gv);
             RELEASE_ASSERT(!gv->isThreadLocal(), "I don't think MCJIT supports thread-local variables yet");
-            new_gv->setThreadLocalMode(gv->getThreadLocalMode());
+            assert(!gv->hasInitializer());
             r = new_gv;
         } else if (llvm::GlobalAlias* alias = llvm::dyn_cast<llvm::GlobalAlias>(v)) {
 #if LLVMREV < 209040

@@ -91,6 +91,10 @@ if __name__ == "__main__":
             continue
         if "Expose-getSymbolLoadAddress" in patch_fn and svn_rev <= 222840:
             continue
+        if "Filter-out-extraneous-registers-from-live-outs-like" in patch_fn:
+            continue
+        if "getSymbolLoadAddress" in patch_fn:
+            continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)

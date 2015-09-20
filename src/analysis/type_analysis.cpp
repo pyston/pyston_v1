@@ -113,6 +113,9 @@ private:
         assert(old_type);
         assert(speculation != TypeAnalysis::NONE);
 
+        // HACK: disable type speculation
+        return old_type;
+
         if (speculated_cls != NULL && speculated_cls->is_constant) {
             ConcreteCompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));
             if (VERBOSITY() >= 2) {

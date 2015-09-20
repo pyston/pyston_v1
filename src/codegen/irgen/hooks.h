@@ -21,6 +21,7 @@
 
 namespace pyston {
 
+class AST_Jump;
 struct CompiledFunction;
 class CLFunction;
 class OSRExit;
@@ -28,7 +29,7 @@ class Box;
 class BoxedDict;
 
 CompiledFunction* compilePartialFuncInternal(OSRExit* exit);
-void* compilePartialFunc(OSRExit*);
+extern "C" void* compilePartialFunc(OSRExit* exit, const char* types, AST_Jump* backedge, CLFunction* cl, long flags);
 extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction*);
 extern "C" char* reoptCompiledFunc(CompiledFunction*);
 

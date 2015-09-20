@@ -80,6 +80,12 @@ public:
 
     llvm::DenseMap<InternedString, int> sym_vreg_map;
 
+    std::vector<AST*> mat_constants;
+    std::vector<void*> ptr_constants;
+    llvm::DenseMap<AST*, int> mat_constants_map;
+    llvm::DenseMap<void*, int> ptr_constants_map;
+
+
     CFG() : next_idx(0), has_vregs_assigned(false) {}
 
     CFGBlock* getStartingBlock() { return blocks[0]; }
@@ -109,9 +115,20 @@ public:
     }
 
     void print(llvm::raw_ostream& stream = llvm::outs());
+    std::string getHash(llvm::StringRef func_name);
 
     bool hasVregsAssigned() { return has_vregs_assigned; }
     void assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info);
+
+    int getIndexForPtr(void* p) {
+        assert(ptr_constants_map.count(p));
+        return ptr_constants_map[p];
+    }
+
+    int getIndexForASTNode(AST* p) {
+        assert(mat_constants_map.count(p));
+        return mat_constants_map[p];
+    }
 };
 
 class SourceInfo;

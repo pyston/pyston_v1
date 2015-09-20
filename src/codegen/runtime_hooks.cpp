@@ -64,65 +64,66 @@ static llvm::Value* getFunc(void* func, const char* name) {
     llvm::Function* f = lookupFunction(name);
     ASSERT(f, "%s", name);
     g.func_addr_registry.registerFunction(name, func, 0, f);
-    return embedConstantPtr(func, f->getType());
+    return f;
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::ArrayRef<llvm::Type*> arg_types,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::ArrayRef<llvm::Type*> arg_types,
                             bool varargs = false) {
     llvm::FunctionType* ft = llvm::FunctionType::get(rtn_type, arg_types, varargs);
-    return embedConstantPtr(func, ft->getPointerTo());
+    return g.stdlib_module->getOrInsertFunction(name, ft);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, bool varargs = false) {
-    return addFunc(func, rtn_type, llvm::ArrayRef<llvm::Type*>(), varargs);
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, bool varargs = false) {
+    return addFunc(name, func, rtn_type, llvm::ArrayRef<llvm::Type*>(), varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, bool varargs = false) {
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, bool varargs = false) {
     llvm::Type* array[] = { arg1 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2,
                             bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
                             bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2, arg3 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
                             llvm::Type* arg4, bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2, arg3, arg4 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
                             llvm::Type* arg4, llvm::Type* arg5, bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2, arg3, arg4, arg5 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
                             llvm::Type* arg4, llvm::Type* arg5, llvm::Type* arg6, bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2, arg3, arg4, arg5, arg6 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
-static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
+static llvm::Value* addFunc(llvm::StringRef name, void* func, llvm::Type* rtn_type, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* arg3,
                             llvm::Type* arg4, llvm::Type* arg5, llvm::Type* arg6, llvm::Type* arg7,
                             bool varargs = false) {
     llvm::Type* array[] = { arg1, arg2, arg3, arg4, arg5, arg6, arg7 };
-    return addFunc(func, rtn_type, array, varargs);
+    return addFunc(name, func, rtn_type, array, varargs);
 }
 
 void initGlobalFuncs(GlobalState& g) {
     g.llvm_opaque_type = llvm::StructType::create(g.context, "opaque");
 
     g.llvm_clfunction_type_ptr = lookupFunction("boxCLFunction")->arg_begin()->getType();
+    g.llvm_cffunction_type_ptr = lookupFunction("reoptCompiledFunc")->arg_begin()->getType();
     g.llvm_module_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedModule")->getPointerTo();
     assert(g.llvm_module_type_ptr);
     g.llvm_bool_type_ptr = lookupFunction("boxBool")->getReturnType();
@@ -172,10 +173,10 @@ void initGlobalFuncs(GlobalState& g) {
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
-    g.funcs.printf = addFunc((void*)printf, g.i8_ptr, true);
+    g.funcs.printf = addFunc("printf", (void*)printf, g.i8_ptr, true);
     g.funcs.my_assert = getFunc((void*)my_assert, "my_assert");
-    g.funcs.malloc = addFunc((void*)malloc, g.i8_ptr, g.i64);
-    g.funcs.free = addFunc((void*)free, g.void_, g.i8_ptr);
+    g.funcs.malloc = addFunc("malloc", (void*)malloc, g.i8_ptr, g.i64);
+    g.funcs.free = addFunc("free", (void*)free, g.void_, g.i8_ptr);
 
     g.funcs.allowGLReadPreemption = getFunc((void*)threading::allowGLReadPreemption, "allowGLReadPreemption");
 
@@ -251,66 +252,66 @@ void initGlobalFuncs(GlobalState& g) {
     GET(boxedLocalsDel);
 
     g.funcs.runtimeCall.cxx_val = getFunc((void*)runtimeCall, "runtimeCall");
-    g.funcs.runtimeCall0.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
+    g.funcs.runtimeCall0.cxx_val = addFunc("runtimeCall", (void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
     g.funcs.runtimeCall1.cxx_val
-        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall2.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+        = addFunc("runtimeCall", (void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall2.cxx_val = addFunc("runtimeCall", (void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                            g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall3.cxx_val = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+    g.funcs.runtimeCall3.cxx_val = addFunc("runtimeCall", (void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                            g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.runtimeCallN.cxx_val
-        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
+        = addFunc("runtimeCall", (void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
     g.funcs.runtimeCall.capi_val = getFunc((void*)runtimeCallCapi, "runtimeCallCapi");
     g.funcs.runtimeCall0.capi_val
-        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
+        = addFunc("runtimeCall", (void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
     g.funcs.runtimeCall1.capi_val
-        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall2.capi_val = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+        = addFunc("runtimeCall", (void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall2.capi_val = addFunc("runtimeCall", (void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                             g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall3.capi_val = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
+    g.funcs.runtimeCall3.capi_val = addFunc("runtimeCall", (void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                             g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.runtimeCallN.capi_val
-        = addFunc((void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
+        = addFunc("runtimeCall", (void*)runtimeCallCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
 
     g.funcs.callattr.cxx_val = getFunc((void*)callattr, "callattr");
     g.funcs.callattr0.cxx_val
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64);
-    g.funcs.callattr1.cxx_val = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+        = addFunc("callattr", (void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64);
+    g.funcs.callattr1.cxx_val = addFunc("callattr", (void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
                                         g.llvm_boxedstring_type_ptr, g.i64, g.llvm_value_type_ptr);
     g.funcs.callattr2.cxx_val
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
+        = addFunc("callattr", (void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattr3.cxx_val
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
+        = addFunc("callattr", (void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.callattrN.cxx_val = addFunc(
+    g.funcs.callattrN.cxx_val = addFunc("callattr",
         (void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
         g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
 
     g.funcs.callattr.capi_val = getFunc((void*)callattrCapi, "callattrCapi");
-    g.funcs.callattr0.capi_val = addFunc((void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+    g.funcs.callattr0.capi_val = addFunc("callattrCapi", (void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
                                          g.llvm_boxedstring_type_ptr, g.i64);
-    g.funcs.callattr1.capi_val = addFunc((void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
+    g.funcs.callattr1.capi_val = addFunc("callattrCapi", (void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr,
                                          g.llvm_boxedstring_type_ptr, g.i64, g.llvm_value_type_ptr);
     g.funcs.callattr2.capi_val
-        = addFunc((void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
+        = addFunc("callattrCapi", (void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattr3.capi_val
-        = addFunc((void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
+        = addFunc("callattrCapi", (void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
                   g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.callattrN.capi_val = addFunc(
+    g.funcs.callattrN.capi_val = addFunc("callattrCapi",
         (void*)callattrCapi, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_boxedstring_type_ptr, g.i64,
         g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr->getPointerTo());
 
-    g.funcs.reoptCompiledFunc = addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
-    g.funcs.compilePartialFunc = addFunc((void*)compilePartialFunc, g.i8_ptr, g.i8_ptr);
+    g.funcs.reoptCompiledFunc = lookupFunction("reoptCompiledFunc");//getFunc((void*)reoptCompiledFunc, "reoptCompiledFunc");//addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
+    GET(compilePartialFunc);
 
-    g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
+    g.funcs.__cxa_end_catch = addFunc("__cxa_end_catch", (void*)__cxa_end_catch, g.void_);
     GET(raise0);
     GET(raise0_capi);
     GET(raise3);

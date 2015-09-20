@@ -19,9 +19,13 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "llvm/Support/FileSystem.h"
+
 #include "Python.h"
 
 #include "analysis/scoping_analysis.h"
+#include "codegen/entry.h"
+#include "codegen/irgen/irgenerator.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/types.h"
@@ -71,7 +75,7 @@ void CFGBlock::print(llvm::raw_ostream& stream) {
     }
     stream << "\n";
 
-    PrintVisitor pv(4);
+    PrintVisitor pv(4, stream);
     for (int j = 0; j < body.size(); j++) {
         stream << "    ";
         body[j]->accept(&pv);
@@ -969,6 +973,7 @@ private:
                                    insert_point->push_back(makeExpr(y));
                                });
 
+        wrapFunction(func->function_def, func->function_def->args, func->function_def->body, source);
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
@@ -1013,6 +1018,8 @@ private:
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
+
+        wrapFunction(func->function_def, func->function_def->args, func->function_def->body, source);
 
         return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
     }
@@ -1072,8 +1079,17 @@ private:
         auto rtn = new AST_Lambda();
         rtn->body = node->body; // don't remap now; will be CFG'ed later
         rtn->args = remapArguments(node->args);
+
+
+        AST_Return* expr = new AST_Return();
+        expr->value = rtn->body;
+        std::vector<AST_stmt*> body = { expr };
+
+        wrapFunction(rtn, rtn->args, body, source);
+
         // lambdas create scope, need to register as replacement
         scoping_analysis->registerScopeReplacement(node, rtn);
+
         return rtn;
     }
 
@@ -1482,6 +1498,8 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
+        wrapFunction(def, NULL, def->body, source);
+
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 
@@ -1504,6 +1522,8 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
+        wrapFunction(def, def->args, def->body, source);
+
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 
@@ -2525,6 +2545,34 @@ void CFG::print(llvm::raw_ostream& stream) {
         blocks[i]->print(stream);
 }
 
+std::string CFG::getHash(llvm::StringRef name) {
+    static std::string executable_hash;
+    if (executable_hash.empty()) {
+        std::string pyston_path = llvm::sys::fs::getMainExecutable(NULL, NULL);
+        llvm::sys::fs::file_status result;
+        auto rtn = llvm::sys::fs::status(pyston_path, result);
+        assert(!rtn);
+
+        HashOStream hash_exe;
+        hash_exe << pyston_path;
+        hash_exe << result.getSize();
+        auto&& last_mod = result.getLastModificationTime();
+        hash_exe << last_mod.toEpochTime();
+        hash_exe << last_mod.usec();
+        hash_exe << last_mod.msec();
+        hash_exe << last_mod.str();
+        executable_hash = hash_exe.getHash();
+    }
+
+    HashOStream stream;
+    print(stream);
+    stream << mat_constants.size();
+    stream << ptr_constants.size();
+    stream << name;
+    stream << executable_hash;
+    return stream.getHash();
+}
+
 class AssignVRegsVisitor : public NoopASTVisitor {
 public:
     int index = 0;
@@ -2605,6 +2653,89 @@ void CFG::assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info) {
     sym_vreg_map = std::move(visitor.sym_vreg_map);
     has_vregs_assigned = true;
 }
+
+class AssignConstantVisitor : public NoopASTVisitor {
+public:
+    SourceInfo* source_info;
+    std::vector<AST*>& mat_constants;
+    llvm::DenseMap<AST*, int>& mat_constants_map;
+    std::vector<void*>& ptr_constants;
+    llvm::DenseMap<void*, int>& ptr_constants_map;
+
+    AssignConstantVisitor(SourceInfo* source_info, std::vector<AST*>& mat_constants, llvm::DenseMap<AST*, int>& mat_constants_map, std::vector<void*>& ptr_constants, llvm::DenseMap<void*, int>& ptr_constants_map)
+        : source_info(source_info), mat_constants(mat_constants), mat_constants_map(mat_constants_map), ptr_constants(ptr_constants), ptr_constants_map(ptr_constants_map) {}
+
+    bool visit_classdef(AST_ClassDef* node) override {
+        addPointerRef(node);
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_functiondef(AST_FunctionDef* node) override {
+        addPointerRef(node);
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_lambda(AST_Lambda* node) override {
+        addPointerRef(node);
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_name(AST_Name* node) override {
+        addPointerRef(node->id.getBox());
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_attribute(AST_Attribute* node) override {
+        addPointerRef(node);
+        addPointerRef(node->attr.getBox());
+        return false;
+    }
+
+    bool visit_clsattribute(AST_ClsAttribute* node) override {
+        addPointerRef(node);
+        addPointerRef(node->attr.getBox());
+        return false;
+    }
+
+    bool visit_str(AST_Str* node) override {
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_num(AST_Num* node) override {
+        addMaterializable(node);
+        return false;
+    }
+
+    bool visit_call(AST_Call* node) override {
+        if (node->keywords.size())
+            addPointerRef(getKeywordNameStorage(node));
+        return false;
+    }
+
+    bool visit_jump(AST_Jump* node) override {
+        addPointerRef(node);
+        return false;
+    }
+
+    void addMaterializable(AST* p) {
+        if (!mat_constants_map.count(p)) {
+            mat_constants_map[p] = mat_constants_map.size();
+            mat_constants.push_back(p);
+        }
+    }
+
+    void addPointerRef(void* p) {
+        if (!ptr_constants_map.count(p)) {
+            ptr_constants_map[p] = ptr_constants_map.size();
+            ptr_constants.push_back(p);
+        }
+    }
+};
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
@@ -2848,6 +2979,13 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     }
 
 
+    AssignConstantVisitor c_visitor(source, rtn->mat_constants, rtn->mat_constants_map, rtn->ptr_constants, rtn->ptr_constants_map);
+    for (CFGBlock* b : rtn->blocks) {
+        for (AST_stmt* stmt : b->body) {
+            c_visitor.addPointerRef(stmt);
+            stmt->accept(&c_visitor);
+        }
+    }
     return rtn;
 }
 }

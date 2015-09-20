@@ -14,8 +14,8 @@ Differential Revision: http://reviews.llvm.org/D5696
  lib/Target/AArch64/AArch64TargetTransformInfo.cpp |  1 +
  lib/Target/X86/X86TargetTransformInfo.cpp         |  1 +
  test/CodeGen/X86/anyregcc.ll                      | 24 +++++++++++++++++++++--
- test/CodeGen/X86/patchpoint.ll                    | 18 +++++++++++++++++
- 10 files changed, 62 insertions(+), 4 deletions(-)
+ test/CodeGen/X86/patchpoint.ll                    | 17 ++++++++++++++++
+ 10 files changed, 61 insertions(+), 4 deletions(-)
 
 diff --git a/docs/StackMaps.rst b/docs/StackMaps.rst
 index 43c60c9..c900c97 100644
@@ -32,10 +32,10 @@ index 43c60c9..c900c97 100644
  Overview:
  """""""""
 diff --git a/include/llvm/IR/Intrinsics.td b/include/llvm/IR/Intrinsics.td
-index e89e65d..1603067 100644
+index 4052a31..8e72f98 100644
 --- a/include/llvm/IR/Intrinsics.td
 +++ b/include/llvm/IR/Intrinsics.td
-@@ -514,6 +514,11 @@ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
+@@ -519,6 +519,11 @@ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
                                                   llvm_ptr_ty, llvm_i32_ty,
                                                   llvm_vararg_ty],
                                                   [Throws]>;
@@ -48,10 +48,10 @@ index e89e65d..1603067 100644
  
  //===------------------------ Garbage Collection Intrinsics ---------------===//
 diff --git a/lib/CodeGen/SelectionDAG/FastISel.cpp b/lib/CodeGen/SelectionDAG/FastISel.cpp
-index 1df4a1d..54af94b 100644
+index 2b624ad..633f0a9 100644
 --- a/lib/CodeGen/SelectionDAG/FastISel.cpp
 +++ b/lib/CodeGen/SelectionDAG/FastISel.cpp
-@@ -739,7 +739,12 @@ bool FastISel::selectPatchpoint(const CallInst *I) {
+@@ -740,7 +740,12 @@ bool FastISel::selectPatchpoint(const CallInst *I) {
    // Add an explicit result reg if we use the anyreg calling convention.
    if (IsAnyRegCC && HasDef) {
      assert(CLI.NumResultRegs == 0 && "Unexpected result register.");
@@ -65,7 +65,7 @@ index 1df4a1d..54af94b 100644
      CLI.NumResultRegs = 1;
      Ops.push_back(MachineOperand::CreateReg(CLI.ResultReg, /*IsDef=*/true));
    }
-@@ -1206,6 +1211,7 @@ bool FastISel::selectIntrinsicCall(const IntrinsicInst *II) {
+@@ -1219,6 +1224,7 @@ bool FastISel::selectIntrinsicCall(const IntrinsicInst *II) {
      return selectStackmap(II);
    case Intrinsic::experimental_patchpoint_void:
    case Intrinsic::experimental_patchpoint_i64:
@@ -74,18 +74,18 @@ index 1df4a1d..54af94b 100644
    }
  
 diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-index 29c0360..c0a8299 100644
+index 2c81313..4417095 100644
 --- a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 +++ b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-@@ -2025,6 +2025,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
+@@ -2008,6 +2008,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
        break;
      case Intrinsic::experimental_patchpoint_void:
      case Intrinsic::experimental_patchpoint_i64:
 +      case Intrinsic::experimental_patchpoint_double:
        visitPatchpoint(&I, LandingPad);
        break;
-     }
-@@ -5596,7 +5597,8 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
+     case Intrinsic::experimental_gc_statepoint:
+@@ -5376,7 +5377,8 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
      return nullptr;
    }
    case Intrinsic::experimental_patchpoint_void:
@@ -96,10 +96,10 @@ index 29c0360..c0a8299 100644
      return nullptr;
    }
 diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
-index 5e867cf..cb3f995 100644
+index 235cda6..309f2dd 100644
 --- a/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
 +++ b/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
-@@ -1101,6 +1101,7 @@ static void collectFailStats(const Instruction *I) {
+@@ -1140,6 +1140,7 @@ static void collectFailStats(const Instruction *I) {
          NumFastIselFailStackMap++; return;
        case Intrinsic::experimental_patchpoint_void: // fall-through
        case Intrinsic::experimental_patchpoint_i64:
@@ -108,22 +108,22 @@ index 5e867cf..cb3f995 100644
        }
      }
 diff --git a/lib/IR/Verifier.cpp b/lib/IR/Verifier.cpp
-index d01e138..be969eb 100644
+index 7001c55..74aff29 100644
 --- a/lib/IR/Verifier.cpp
 +++ b/lib/IR/Verifier.cpp
-@@ -2487,6 +2487,7 @@ void Verifier::visitInstruction(Instruction &I) {
+@@ -2821,6 +2821,7 @@ void Verifier::visitInstruction(Instruction &I) {
                F->getIntrinsicID() == Intrinsic::donothing ||
                F->getIntrinsicID() == Intrinsic::experimental_patchpoint_void ||
                F->getIntrinsicID() == Intrinsic::experimental_patchpoint_i64 ||
 +              F->getIntrinsicID() == Intrinsic::experimental_patchpoint_double ||
                F->getIntrinsicID() == Intrinsic::experimental_gc_statepoint,
-               "Cannot invoke an intrinsinc other than"
-               " donothing or patchpoint", &I);
+           "Cannot invoke an intrinsinc other than"
+           " donothing or patchpoint",
 diff --git a/lib/Target/AArch64/AArch64TargetTransformInfo.cpp b/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
-index 0646d85..40f2c85 100644
+index 0533355..b5230cb 100644
 --- a/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
 +++ b/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
-@@ -159,6 +159,7 @@ unsigned AArch64TTIImpl::getIntImmCost(Intrinsic::ID IID, unsigned Idx,
+@@ -160,6 +160,7 @@ unsigned AArch64TTIImpl::getIntImmCost(Intrinsic::ID IID, unsigned Idx,
      break;
    case Intrinsic::experimental_patchpoint_void:
    case Intrinsic::experimental_patchpoint_i64:
@@ -144,7 +144,7 @@ index 5136619..9f455eb 100644
        return TTI::TCC_Free;
      break;
 diff --git a/test/CodeGen/X86/anyregcc.ll b/test/CodeGen/X86/anyregcc.ll
-index 98ba17c..b81a3ad 100644
+index 129aadf..60cf97e 100644
 --- a/test/CodeGen/X86/anyregcc.ll
 +++ b/test/CodeGen/X86/anyregcc.ll
 @@ -11,11 +11,11 @@
@@ -187,7 +187,7 @@ index 98ba17c..b81a3ad 100644
 +define double @property_access_double() nounwind ssp uwtable {
 +entry:
 +  %f = inttoptr i64 12297829382473034410 to i8*
-+  %ret = call anyregcc double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 1, i32 15, i8* %f, i32 0)
++  %ret = call anyregcc double (i64, i32, i8*, i32, ...) @llvm.experimental.patchpoint.double(i64 1, i32 15, i8* %f, i32 0)
 +  ret double %ret
 +}
 +
@@ -200,10 +200,10 @@ index 98ba17c..b81a3ad 100644
  declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...)
 +declare double @llvm.experimental.patchpoint.double(i64, i32, i8*, i32, ...)
 diff --git a/test/CodeGen/X86/patchpoint.ll b/test/CodeGen/X86/patchpoint.ll
-index 07148f0..7e2a340 100644
+index 82b15c3..939e7bd 100644
 --- a/test/CodeGen/X86/patchpoint.ll
 +++ b/test/CodeGen/X86/patchpoint.ll
-@@ -21,6 +21,23 @@ entry:
+@@ -36,6 +36,22 @@ entry:
    ret i64 %result
  }
  
@@ -219,19 +219,19 @@ index 07148f0..7e2a340 100644
 +; CHECK:      movsd [[SPILL]], %xmm0
 +; CHECK:      ret
 +  %resolveCall2 = inttoptr i64 -559038736 to i8*
-+  %result = tail call double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
-+  %result2 = tail call double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
++  %result = tail call double (i64, i32, i8*, i32, ...) @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
++  %result2 = tail call double (i64, i32, i8*, i32, ...) @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
 +  ret double %result
 +}
-+
+ 
  ; Caller frame metadata with stackmaps. This should not be optimized
  ; as a leaf function.
- ;
-@@ -85,3 +102,4 @@ entry:
+@@ -101,3 +117,4 @@ entry:
  declare void @llvm.experimental.stackmap(i64, i32, ...)
  declare void @llvm.experimental.patchpoint.void(i64, i32, i8*, i32, ...)
  declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...)
 +declare double @llvm.experimental.patchpoint.double(i64, i32, i8*, i32, ...)
 -- 
-2.1.0
+1.9.1
+
 

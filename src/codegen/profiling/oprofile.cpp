@@ -53,7 +53,9 @@ void OprofileJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
             uint64_t addr, size;
             code = sym.getName(name);
             assert(!code);
-            addr = L.getSymbolLoadAddress(name);
+            if (name.empty())
+                continue;
+            addr = g.engine->getGlobalValueAddress(name);
             code = sym.getSize(size);
             assert(!code);
 

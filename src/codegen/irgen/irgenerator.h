@@ -79,6 +79,8 @@ public:
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
     ~IRGenState();
 
+    llvm::Value* getFuncDecl(llvm::Value* func_in_other_module);
+
     CompiledFunction* getCurFunction() { return cf; }
     CLFunction* getCL() { return clfunc; }
 
@@ -115,6 +117,8 @@ public:
     llvm::Value* getGlobals();
     // Returns the custom globals, or null if the globals come from the module.
     llvm::Value* getGlobalsIfCustom();
+
+    llvm::Constant* getParentModule();
 };
 
 // turns CFGBlocks into LLVM IR
@@ -171,6 +175,7 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
                                CFGBlock* myblock, TypeAnalysis* types);
 
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
+CLFunction* getWrappedFunction(AST* node);
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
 }
 

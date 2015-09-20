@@ -20,7 +20,9 @@
 #include <stdint.h>
 
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DIBuilder.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #if LLVMREV < 229094
@@ -85,7 +87,7 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
 
 #if LLVMREV < 217548
     fpm.add(new llvm::DataLayoutPass(*g.tm->getDataLayout()));
-#else
+#elif LLVMREV < 231270
     fpm.add(new llvm::DataLayoutPass());
 #endif
 
@@ -117,7 +119,7 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
         fpm.add(llvm::createCFGSimplificationPass());
 
         if (ENABLE_PYSTON_PASSES) {
-            fpm.add(createConstClassesPass());
+            //fpm.add(createConstClassesPass());
             fpm.add(createDeadAllocsPass());
             fpm.add(llvm::createInstructionCombiningPass());
             fpm.add(llvm::createCFGSimplificationPass());
@@ -126,7 +128,7 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
         // TODO Find the right place for this pass (and ideally not duplicate it)
         if (ENABLE_PYSTON_PASSES) {
             fpm.add(llvm::createGVNPass());
-            fpm.add(createConstClassesPass());
+            //fpm.add(createConstClassesPass());
         }
 
         // copied + slightly modified from llvm/lib/Transforms/IPO/PassManagerBuilder.cpp::populateModulePassManager
@@ -175,10 +177,10 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
 
         // TODO Find the right place for this pass (and ideally not duplicate it)
         if (ENABLE_PYSTON_PASSES) {
-            fpm.add(createConstClassesPass());
+            //fpm.add(createConstClassesPass());
             fpm.add(llvm::createInstructionCombiningPass());
             fpm.add(llvm::createCFGSimplificationPass());
-            fpm.add(createConstClassesPass());
+            //fpm.add(createConstClassesPass());
             fpm.add(createDeadAllocsPass());
             // fpm.add(llvm::createSCCPPass());                  // Constant prop with SCCP
             // fpm.add(llvm::createEarlyCSEPass());              // Catch trivial redundancies
@@ -551,7 +553,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
                 emitter->getBuilder()->SetInsertPoint(preentry_bb);
 
-                llvm::Value* call_count_ptr = embedRelocatablePtr(&cf->times_called, g.i64->getPointerTo());
+                llvm::Value* call_count_ptr
+                    = embedRelocatablePtr(&cf->times_called, g.i64->getPointerTo(), "cTimesCalled");
                 llvm::Value* cur_call_count = emitter->getBuilder()->CreateLoad(call_count_ptr);
                 llvm::Value* new_call_count
                     = emitter->getBuilder()->CreateAdd(cur_call_count, getConstantInt(1, g.i64));
@@ -576,8 +579,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 emitter->getBuilder()->SetInsertPoint(reopt_bb);
                 // emitter->getBuilder()->CreateCall(g.funcs.my_assert, getConstantInt(0, g.i1));
-                llvm::Value* r = emitter->getBuilder()->CreateCall(g.funcs.reoptCompiledFunc,
-                                                                   embedRelocatablePtr(cf, g.i8->getPointerTo()));
+
+                auto* reopt = irstate->getLLVMFunction()->getParent()->getOrInsertFunction(g.funcs.reoptCompiledFunc->getName(), ((llvm::Function*)g.funcs.reoptCompiledFunc)->getFunctionType());
+
+                llvm::Value* r = emitter->getBuilder()->CreateCall(
+                    reopt, embedRelocatablePtr(cf, g.llvm_cffunction_type_ptr, "cCF"));
                 assert(r);
                 assert(r->getType() == g.i8->getPointerTo());
 
@@ -935,7 +941,7 @@ static void computeBlockSetClosure(BlockSet& blocks) {
     }
 }
 // returns a pointer to the function-info mdnode
-static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::string origname) {
+static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f) {
     int lineno = 0;
     if (source->ast)
         lineno = source->ast->lineno;
@@ -946,64 +952,21 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
-    llvm::DIFile file = builder.createFile(fn->s(), dir);
-    llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
-    llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
-    llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
-                                                          false, true, lineno + 1, 0, true, f);
+    llvm::MDFile* file = builder.createFile(fn->s(), dir);
+    llvm::MDTypeRefArray param_types = builder.getOrCreateTypeArray(llvm::None);
+    llvm::MDSubroutineType* func_type = builder.createSubroutineType(file, param_types);
+    llvm::MDSubprogram* func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
+                                                           false, true, lineno + 1, 0, true, f);
 
-    llvm::DICompileUnit compile_unit
-        = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);
+    builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn->s(), dir, producer, true, "", 0);
 
     builder.finalize();
     return func_info;
 }
 
-static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel effort, const OSREntryDescriptor* entry) {
-    static llvm::StringMap<int> used_module_names;
-    std::string name;
-    llvm::raw_string_ostream os(name);
-    os << nameprefix;
-    os << "_e" << (int)effort;
-    if (entry)
-        os << "_osr" << entry->backedge->target->idx;
-    // in order to generate a unique id add the number of times we encountered this name to end of the string.
-    auto& times = used_module_names[os.str()];
-    os << '_' << ++times;
-    return os.str();
-}
-
-CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
-                            const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef nameprefix) {
-    Timer _t("in doCompile");
-    Timer _t2;
-    long irgen_us = 0;
-
-    assert((entry_descriptor != NULL) + (spec != NULL) == 1);
-
-    if (VERBOSITY("irgen") >= 2)
-        source->cfg->print();
-
-    assert(g.cur_module == NULL);
-
-    clearRelocatableSymsMap();
-
-    std::string name = getUniqueFunctionName(nameprefix, effort, entry_descriptor);
-    g.cur_module = new llvm::Module(name, g.context);
-#if LLVMREV < 217070 // not sure if this is the right rev
-    g.cur_module->setDataLayout(g.tm->getDataLayout()->getStringRepresentation());
-#elif LLVMREV < 227113
-    g.cur_module->setDataLayout(g.tm->getSubtargetImpl()->getDataLayout());
-#else
-    g.cur_module->setDataLayout(g.tm->getDataLayout());
-#endif
-    // g.engine->addModule(g.cur_module);
-
-    ////
-    // Initializing the llvm-level structures:
-
-
+CompiledFunction* createCF(llvm::StringRef name, SourceInfo* source, ParamNames* param_names,
+                           const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                           ExceptionStyle exception_style, FunctionSpecialization* spec) {
     std::vector<llvm::Type*> llvm_arg_types;
     if (entry_descriptor == NULL) {
         assert(spec);
@@ -1053,10 +1016,46 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
     llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
 
     cf->func = f;
+    return cf;
+}
 
+CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* param_names,
+                            const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef name) {
+    Timer _t("in doCompile");
+    Timer _t2;
+    long irgen_us = 0;
+
+    assert((entry_descriptor != NULL) + (spec != NULL) == 1);
+
+    if (VERBOSITY("irgen") >= 2)
+        source->cfg->print();
+
+    assert(g.cur_module == NULL);
+
+    g.cur_cfg = source->cfg;
+
+    g.cur_module = new llvm::Module(name, g.context);
+#if LLVMREV < 217070 // not sure if this is the right rev
+    g.cur_module->setDataLayout(g.tm->getDataLayout()->getStringRepresentation());
+#elif LLVMREV < 227113
+    g.cur_module->setDataLayout(g.tm->getSubtargetImpl()->getDataLayout());
+#elif LLVMREV < 231270
+    g.cur_module->setDataLayout(g.tm->getDataLayout());
+#endif
+    // g.engine->addModule(g.cur_module);
+
+
+
+    CompiledFunction* cf = createCF(name, source, param_names, entry_descriptor, effort, exception_style, spec);
+    llvm::Function* f = cf->func;
+
+    setRelocatableSym("cParentModule", source->parent_module);
+    setRelocatableSym("cCF", cf);
+    setRelocatableSym("cTimesCalled", &cf->times_called);
     // g.func_registry.registerFunction(f, g.cur_module);
 
-    llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
+    llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f);
 
     irgen_us += _t2.split();
 
