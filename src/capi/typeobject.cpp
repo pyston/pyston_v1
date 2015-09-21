@@ -75,7 +75,7 @@ static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noe
     STAT_TIMER(t0, "us_timer_wrap_setattr", WRAP_AVOIDABILITY(self));
     setattrofunc func = (setattrofunc)wrapped;
     int res;
-    PyObject* name, *value;
+    PyObject *name, *value;
 
     if (!PyArg_UnpackTuple(args, "", 2, 2, &name, &value))
         return NULL;
@@ -345,7 +345,7 @@ static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) 
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
-    PyObject* arg, *value;
+    PyObject *arg, *value;
 
     if (!PyArg_UnpackTuple(args, "", 2, 2, &arg, &value))
         return NULL;
@@ -423,7 +423,7 @@ static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrappe
     STAT_TIMER(t0, "us_timer_wrap_objobjargproc", WRAP_AVOIDABILITY(self));
     objobjargproc func = (objobjargproc)wrapped;
     int res;
-    PyObject* key, *value;
+    PyObject *key, *value;
 
     if (!PyArg_UnpackTuple(args, "", 2, 2, &key, &value))
         return NULL;
@@ -511,7 +511,7 @@ static PyObject* lookup_method(PyObject* self, const char* attrstr, PyObject** a
 // Copied from CPython:
 static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, const char* format, ...) noexcept {
     va_list va;
-    PyObject* args, * func = 0, *retval;
+    PyObject *args, *func = 0, *retval;
     va_start(va, format);
 
     func = lookup_maybe(o, name, nameobj);
@@ -545,7 +545,7 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
 
 static PyObject* call_maybe(PyObject* o, const char* name, PyObject** nameobj, const char* format, ...) noexcept {
     va_list va;
-    PyObject* args, * func = 0, *retval;
+    PyObject *args, *func = 0, *retval;
     va_start(va, format);
 
     func = lookup_maybe(o, name, nameobj);
@@ -578,7 +578,7 @@ static PyObject* call_maybe(PyObject* o, const char* name, PyObject** nameobj, c
 }
 
 static int half_compare(PyObject* self, PyObject* other) noexcept {
-    PyObject* func, *args, *res;
+    PyObject *func, *args, *res;
     static PyObject* cmp_str;
     Py_ssize_t c;
 
@@ -655,7 +655,7 @@ static long slot_tp_hash(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tphash", SLOT_AVOIDABILITY(self));
 
     PyObject* func;
-    static PyObject* hash_str, *eq_str, *cmp_str;
+    static PyObject *hash_str, *eq_str, *cmp_str;
     long h;
 
     func = lookup_method(self, "__hash__", &hash_str);
@@ -709,7 +709,7 @@ static const char* name_op[] = {
 };
 
 static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexcept {
-    PyObject* func, *args, *res;
+    PyObject *func, *args, *res;
     static PyObject* op_str[6];
 
     func = lookup_method(self, name_op[op], &op_str[op]);
@@ -762,8 +762,8 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexc
 PyObject* slot_tp_iter(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpiter", SLOT_AVOIDABILITY(self));
 
-    PyObject* func, *res;
-    static PyObject* iter_str, *getitem_str;
+    PyObject *func, *res;
+    static PyObject *iter_str, *getitem_str;
 
     func = lookup_method(self, "__iter__", &iter_str);
     if (func != NULL) {
@@ -847,7 +847,7 @@ static int slot_tp_setattro(PyObject* self, PyObject* name, PyObject* value) noe
     STAT_TIMER(t0, "us_timer_slot_tpsetattro", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
-    static PyObject* delattr_str, *setattr_str;
+    static PyObject *delattr_str, *setattr_str;
 
     if (value == NULL)
         res = call_method(self, "__delattr__", &delattr_str, "(O)", name);
@@ -860,7 +860,7 @@ static int slot_tp_setattro(PyObject* self, PyObject* name, PyObject* value) noe
 }
 
 static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) noexcept {
-    PyObject* res, * descr = NULL;
+    PyObject *res, *descr = NULL;
     descrgetfunc f = Py_TYPE(attr)->tp_descr_get;
 
     if (f != NULL) {
@@ -890,7 +890,7 @@ template <ExceptionStyle S>
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slot_tpgetattrhook", SLOT_AVOIDABILITY(self));
 
-    PyObject* getattr, *getattribute, * res = NULL;
+    PyObject *getattr, *getattribute, *res = NULL;
 
     /* speed hack: we could use lookup_maybe, but that would resolve the
          method fully for each attribute lookup for classes with
@@ -1163,7 +1163,7 @@ static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) n
     STAT_TIMER(t0, "us_timer_slot_sqassitem", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
-    static PyObject* delitem_str, *setitem_str;
+    static PyObject *delitem_str, *setitem_str;
 
     if (value == NULL)
         res = call_method(self, "__delitem__", &delitem_str, "(n)", index);
@@ -1179,7 +1179,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
     STAT_TIMER(t0, "us_timer_slot_sqassslice", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
-    static PyObject* delslice_str, *setslice_str;
+    static PyObject *delslice_str, *setslice_str;
 
     if (value == NULL) {
         if (PyErr_WarnPy3k("in 3.x, __delslice__ has been removed; "
@@ -1203,7 +1203,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
 /* Pyston change: static*/ int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqcontains", SLOT_AVOIDABILITY(self));
 
-    PyObject* func, *res, *args;
+    PyObject *func, *res, *args;
     int result = -1;
 
     static PyObject* contains_str;
@@ -1248,7 +1248,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
 /* Boolean helper for SLOT1BINFULL().
    right.__class__ is a nontrivial subclass of left.__class__. */
 static int method_is_overloaded(PyObject* left, PyObject* right, const char* name) noexcept {
-    PyObject* a, *b;
+    PyObject *a, *b;
     int ok;
 
     b = PyObject_GetAttrString((PyObject*)(Py_TYPE(right)), name);
@@ -1279,7 +1279,7 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 
 #define SLOT1BINFULL(FUNCNAME, TESTFUNC, SLOTNAME, OPSTR, ROPSTR)                                                      \
     static PyObject* FUNCNAME(PyObject* self, PyObject* other) noexcept {                                              \
-        static PyObject* cache_str, *rcache_str;                                                                       \
+        static PyObject *cache_str, *rcache_str;                                                                       \
         int do_other = Py_TYPE(self) != Py_TYPE(other) && Py_TYPE(other)->tp_as_number != NULL                         \
                        && Py_TYPE(other)->tp_as_number->SLOTNAME == TESTFUNC;                                          \
         if (Py_TYPE(self)->tp_as_number != NULL && Py_TYPE(self)->tp_as_number->SLOTNAME == TESTFUNC) {                \
@@ -1320,7 +1320,7 @@ int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexce
     STAT_TIMER(t0, "us_timer_slot_mpasssubscript", SLOT_AVOIDABILITY(self));
 
     PyObject* res;
-    static PyObject* delitem_str, *setitem_str;
+    static PyObject *delitem_str, *setitem_str;
 
     if (value == NULL)
         res = call_method(self, "__delitem__", &delitem_str, "(O)", key);
@@ -1367,8 +1367,8 @@ SLOT0(slot_nb_absolute, "__abs__")
 static int slot_nb_nonzero(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_nbnonzero", SLOT_AVOIDABILITY(self));
 
-    PyObject* func, *args;
-    static PyObject* nonzero_str, *len_str;
+    PyObject *func, *args;
+    static PyObject *nonzero_str, *len_str;
     int result = -1;
     int using_len = 0;
 
@@ -1420,7 +1420,7 @@ static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept {
     STAT_TIMER(t0, "us_timer_slot_nbcoerce", std::min(SLOT_AVOIDABILITY(*a), SLOT_AVOIDABILITY(*b)));
 
     static PyObject* coerce_str;
-    PyObject* self = *a, * other = *b;
+    PyObject *self = *a, *other = *b;
 
     if (self->cls->tp_as_number != NULL && self->cls->tp_as_number->nb_coerce == slot_nb_coerce) {
         PyObject* r;
@@ -1747,8 +1747,8 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noex
     /* pname and ptrs act as a little cache */
     static std::string pname;
     static slotdef* ptrs[MAX_EQUIV];
-    slotdef* p, **pp;
-    void** res, **ptr;
+    slotdef *p, **pp;
+    void **res, **ptr;
 
     if (pname != name) {
         /* Collect all slotdefs that match name into ptrs. */
@@ -1780,7 +1780,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
 
     PyObject* descr;
     BoxedWrapperDescriptor* d;
-    void* generic = NULL, * specific = NULL;
+    void *generic = NULL, *specific = NULL;
     int use_generic = 0;
     int offset = p->offset;
     void** ptr = slotptr(type, offset);
@@ -1948,7 +1948,7 @@ static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback
 
 static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept {
     PyTypeObject* subclass;
-    PyObject* ref, *subclasses, *dict;
+    PyObject *ref, *subclasses, *dict;
     Py_ssize_t i, n;
 
     subclasses = type->tp_subclasses;
@@ -2111,7 +2111,7 @@ static PyTypeObject* solid_base(PyTypeObject* type) noexcept {
 
 PyTypeObject* best_base(PyObject* bases) noexcept {
     Py_ssize_t i, n;
-    PyTypeObject* base, *winner, *candidate, *base_i;
+    PyTypeObject *base, *winner, *candidate, *base_i;
     PyObject* base_proto;
 
     assert(PyTuple_Check(bases));
@@ -2159,7 +2159,7 @@ PyTypeObject* best_base(PyObject* bases) noexcept {
 }
 
 static int fill_classic_mro(PyObject* mro, PyObject* cls) {
-    PyObject* bases, *base;
+    PyObject *bases, *base;
     Py_ssize_t i, n;
 
     assert(PyList_Check(mro));
@@ -2283,7 +2283,7 @@ static int check_duplicates(PyObject* list) {
 static void set_mro_error(PyObject* to_merge, int* remain) noexcept {
     Py_ssize_t i, n, off, to_merge_size;
     char buf[1000];
-    PyObject* k, *v;
+    PyObject *k, *v;
     PyObject* set = PyDict_New();
     if (!set)
         return;
@@ -2388,8 +2388,8 @@ again:
 static PyObject* mro_implementation(PyTypeObject* type) noexcept {
     Py_ssize_t i, n;
     int ok;
-    PyObject* bases, *result;
-    PyObject* to_merge, *bases_aslist;
+    PyObject *bases, *result;
+    PyObject *to_merge, *bases_aslist;
 
     // Pyston change: we require things are already ready
     if (type->tp_dict == NULL) {
@@ -2470,7 +2470,7 @@ PyObject* mro_external(PyObject* self) noexcept {
 }
 
 static int mro_internal(PyTypeObject* type) noexcept {
-    PyObject* mro, *result, *tuple;
+    PyObject *mro, *result, *tuple;
     int checkit = 0;
 
     if (Py_TYPE(type) == &PyType_Type) {
@@ -2858,7 +2858,7 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
 static int add_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
     Py_ssize_t i;
     int result;
-    PyObject* list, *ref, *newobj;
+    PyObject *list, *ref, *newobj;
 
     list = base->tp_subclasses;
     if (list == NULL) {
@@ -2882,7 +2882,7 @@ static int add_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
 
 static void remove_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
     Py_ssize_t i;
-    PyObject* list, *ref;
+    PyObject *list, *ref;
 
     list = base->tp_subclasses;
     if (list == NULL) {
@@ -2926,7 +2926,7 @@ static void update_all_slots(PyTypeObject* type) noexcept {
 static int same_slots_added(PyTypeObject* a, PyTypeObject* b) noexcept {
     PyTypeObject* base = a->tp_base;
     Py_ssize_t size;
-    PyObject* slots_a, *slots_b;
+    PyObject *slots_a, *slots_b;
 
     assert(base == b->tp_base);
     size = base->tp_basicsize;
@@ -2950,7 +2950,7 @@ static int same_slots_added(PyTypeObject* a, PyTypeObject* b) noexcept {
 }
 
 static int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
-    PyTypeObject* newbase, *oldbase;
+    PyTypeObject *newbase, *oldbase;
 
     if (newto->tp_dealloc != oldto->tp_dealloc || newto->tp_free != oldto->tp_free) {
         PyErr_Format(PyExc_TypeError, "%s assignment: "
@@ -2976,7 +2976,7 @@ static int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, c
 
 static int mro_subclasses(PyTypeObject* type, PyObject* temp) noexcept {
     PyTypeObject* subclass;
-    PyObject* ref, *subclasses, *old_mro;
+    PyObject *ref, *subclasses, *old_mro;
     Py_ssize_t i, n;
 
     subclasses = type->tp_subclasses;
@@ -3015,9 +3015,9 @@ static int mro_subclasses(PyTypeObject* type, PyObject* temp) noexcept {
 int type_set_bases(PyTypeObject* type, PyObject* value, void* context) noexcept {
     Py_ssize_t i;
     int r = 0;
-    PyObject* ob, *temp;
-    PyTypeObject* new_base, *old_base;
-    PyObject* old_bases, *old_mro;
+    PyObject *ob, *temp;
+    PyTypeObject *new_base, *old_base;
+    PyObject *old_bases, *old_mro;
 
     if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
         PyErr_Format(PyExc_TypeError, "can't set %s.__bases__", type->tp_name);

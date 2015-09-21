@@ -135,7 +135,7 @@ private:
 
     // this variables are used by the baseline JIT, make sure they have an offset < 0x80 so we can use shorter
     // instructions
-    CFGBlock* next_block, *current_block;
+    CFGBlock *next_block, *current_block;
     AST_stmt* current_inst;
 
     CLFunction* clfunc;
@@ -145,7 +145,7 @@ private:
 
     Box** vregs;
     ExcInfo last_exception;
-    BoxedClosure* passed_closure, *created_closure;
+    BoxedClosure *passed_closure, *created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
     FrameInfo frame_info;

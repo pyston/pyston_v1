@@ -818,7 +818,7 @@ PyObject* filterstring(PyObject* func, BoxedString* strobj) {
         if (func == Py_None) {
             ok = 1;
         } else {
-            PyObject* arg, *good;
+            PyObject *arg, *good;
             arg = PyTuple_Pack(1, item);
             if (arg == NULL) {
                 Py_DECREF(item);
@@ -925,7 +925,7 @@ static PyObject* filtertuple(PyObject* func, PyObject* tuple) {
         return NULL;
 
     for (i = j = 0; i < len; ++i) {
-        PyObject* item, *good;
+        PyObject *item, *good;
         int ok;
 
         if (tuple->cls->tp_as_sequence && tuple->cls->tp_as_sequence->sq_item) {
@@ -1253,7 +1253,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
     assert(!kwargs || kwargs->cls == dict_cls);
 
-    Box* dest, *end;
+    Box *dest, *end;
 
     static BoxedString* file_str = internStringImmortal("file");
     static BoxedString* end_str = internStringImmortal("end");

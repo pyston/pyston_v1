@@ -867,7 +867,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
-    Box* new_attr, * init_attr = NULL;
+    Box *new_attr, *init_attr = NULL;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
         assert(!argspec.has_kwargs);
@@ -966,7 +966,12 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     //
 
     // For debugging, keep track of why we think we can rewrite this:
-    enum { UNKNOWN, MAKES_CLS, NO_INIT, TYPE_NEW_SPECIAL_CASE, } which_init = UNKNOWN;
+    enum {
+        UNKNOWN,
+        MAKES_CLS,
+        NO_INIT,
+        TYPE_NEW_SPECIAL_CASE,
+    } which_init = UNKNOWN;
 
     // These are __new__ functions that have the property that __new__(kls) always returns an instance of kls.
     // These are ok to call regardless of what type was requested.
@@ -1349,7 +1354,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     if (args_to_pass > 3)
         args = (Box**)alloca(sizeof(Box*) * (args_to_pass - 3));
 
-    Box* arg1, *arg2, *arg3;
+    Box *arg1, *arg2, *arg3;
     arg1 = obj;
     for (int i = 0; i < n; i++) {
         getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
@@ -1511,11 +1516,12 @@ void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" {
-BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
-    * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
-      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-      *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
+BoxedClass *object_cls, *type_cls, *none_cls, *bool_cls, *int_cls,
+    *float_cls, *str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls,
+                *tuple_cls, *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls,
+                *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls,
+                *pyston_getset_cls, *capi_getset_cls, *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls,
+                *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
 }
@@ -1816,8 +1822,8 @@ static Box* instancemethodRepr(Box* b) {
     Box* self = a->obj;
     Box* func = a->func;
     Box* klass = a->im_class;
-    Box* funcname = NULL, * klassname = NULL, * result = NULL;
-    const char* sfuncname = "?", * sklassname = "?";
+    Box *funcname = NULL, *klassname = NULL, *result = NULL;
+    const char *sfuncname = "?", *sklassname = "?";
 
     static BoxedString* name_str = internStringImmortal("__name__");
     funcname = getattrInternal<CXX>(func, name_str, NULL);
@@ -2099,7 +2105,7 @@ Box* typeHash(BoxedClass* self) {
 }
 
 static PyObject* type_subclasses(PyTypeObject* type, PyObject* args_ignored) noexcept {
-    PyObject* list, *raw, *ref;
+    PyObject *list, *raw, *ref;
     Py_ssize_t i, n;
 
     list = PyList_New(0);
@@ -2793,11 +2799,11 @@ static PyObject* slotnames(PyObject* cls) noexcept {
 }
 
 static PyObject* reduce_2(PyObject* obj) noexcept {
-    PyObject* cls, *getnewargs;
-    PyObject* args = NULL, * args2 = NULL;
-    PyObject* getstate = NULL, * state = NULL, * names = NULL;
-    PyObject* slots = NULL, * listitems = NULL, * dictitems = NULL;
-    PyObject* copyreg = NULL, * newobj = NULL, * res = NULL;
+    PyObject *cls, *getnewargs;
+    PyObject *args = NULL, *args2 = NULL;
+    PyObject *getstate = NULL, *state = NULL, *names = NULL;
+    PyObject *slots = NULL, *listitems = NULL, *dictitems = NULL;
+    PyObject *copyreg = NULL, *newobj = NULL, *res = NULL;
     Py_ssize_t i, n;
 
     cls = PyObject_GetAttrString(obj, "__class__");
@@ -2855,7 +2861,7 @@ static PyObject* reduce_2(PyObject* obj) noexcept {
                is stored on the class so accessible to other
                threads, which may be run by DECREF */
             for (i = 0; i < PyList_GET_SIZE(names); i++) {
-                PyObject* name, *value;
+                PyObject *name, *value;
                 name = PyList_GET_ITEM(names, i);
                 value = PyObject_GetAttr(obj, name);
                 if (value == NULL)
@@ -2930,7 +2936,7 @@ end:
 }
 
 static PyObject* _common_reduce(PyObject* self, int proto) noexcept {
-    PyObject* copyreg, *res;
+    PyObject *copyreg, *res;
 
     if (proto >= 2)
         return reduce_2(self);
@@ -2955,7 +2961,7 @@ static PyObject* object_reduce(PyObject* self, PyObject* args) noexcept {
 }
 
 static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
-    PyObject* reduce, *res;
+    PyObject *reduce, *res;
     int proto = 0;
 
     if (!PyArg_ParseTuple(args, "|i:__reduce_ex__", &proto))
@@ -2965,7 +2971,7 @@ static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
     if (reduce == NULL)
         PyErr_Clear();
     else {
-        PyObject* cls, *clsreduce, *objreduce;
+        PyObject *cls, *clsreduce, *objreduce;
         int override;
         cls = PyObject_GetAttrString(self, "__class__");
         if (cls == NULL) {

@@ -88,7 +88,7 @@ extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;
 
 extern "C" {
-extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
+extern BoxedClass *object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls,
     *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
@@ -128,14 +128,14 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
 extern std::vector<BoxedClass*> exception_types;
 
 extern "C" {
-extern Box* None, *NotImplemented, *True, *False;
+extern Box *None, *NotImplemented, *True, *False;
 }
 extern "C" {
-extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *id_obj, *chr_obj,
+extern Box *repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *id_obj, *chr_obj,
     *ord_obj, *trap_obj;
 } // these are only needed for functionRepr, which is hacky
 extern "C" {
-extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *thread_module;
+extern BoxedModule *sys_module, *builtins_module, *math_module, *time_module, *thread_module;
 }
 
 extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));
@@ -447,7 +447,7 @@ public:
     Box** in_weakreflist;
 
     // obj is NULL for unbound instancemethod
-    Box* obj, *func, *im_class;
+    Box *obj, *func, *im_class;
 
     BoxedInstanceMethod(Box* obj, Box* func, Box* im_class) __attribute__((visibility("default")))
     : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
@@ -845,7 +845,7 @@ public:
 
 class BoxedSlice : public Box {
 public:
-    Box* start, *stop, *step;
+    Box *start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
 
     DEFAULT_CLASS_SIMPLE(slice_cls);
@@ -972,7 +972,7 @@ public:
     Box** weakreflist;
 
     BoxedFunctionBase* function;
-    Box* arg1, *arg2, *arg3;
+    Box *arg1, *arg2, *arg3;
     GCdArray* args;
 
     bool entryExited;
@@ -981,7 +981,7 @@ public:
     bool iterated_from__hasnext__;
     ExcInfo exception;
 
-    struct Context* context, *returnContext;
+    struct Context *context, *returnContext;
     void* stack_begin;
 
 #if STAT_TIMERS

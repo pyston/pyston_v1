@@ -62,7 +62,7 @@ extern "C" PyObject* PyObject_Type(PyObject* o) noexcept {
 
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
     static PyObject* hintstrobj = NULL;
-    PyObject* ro, *hintmeth;
+    PyObject *ro, *hintmeth;
     Py_ssize_t rv;
 
     /* try o.__len__() */
@@ -164,8 +164,8 @@ extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
 extern "C" int PyBuffer_ToContiguous(void* buf, Py_buffer* view, Py_ssize_t len, char fort) noexcept {
     int k;
     void (*addone)(int, Py_ssize_t*, const Py_ssize_t*);
-    Py_ssize_t* indices, elements;
-    char* dest, *ptr;
+    Py_ssize_t *indices, elements;
+    char *dest, *ptr;
 
     if (len > view->len) {
         len = view->len;
@@ -263,7 +263,7 @@ extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
 static PyObject* objargs_mktuple(va_list va) noexcept {
     int i, n = 0;
     va_list countva;
-    PyObject* result, *tmp;
+    PyObject *result, *tmp;
 
 #ifdef VA_LIST_IS_ARRAY
     memcpy(countva, va, sizeof(va_list));
@@ -508,7 +508,7 @@ extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
 }
 
 extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) noexcept {
-    PyObject* args, *tmp;
+    PyObject *args, *tmp;
     va_list vargs;
 
     if (callable == NULL)
@@ -666,7 +666,7 @@ exit:
 }
 
 extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* name, ...) noexcept {
-    PyObject* args, *tmp;
+    PyObject *args, *tmp;
     va_list vargs;
 
     if (callable == NULL || name == NULL)
@@ -943,8 +943,8 @@ extern "C" void _Py_add_one_to_index_C(int nd, Py_ssize_t* index, const Py_ssize
 extern "C" int PyObject_CopyData(PyObject* dest, PyObject* src) noexcept {
     Py_buffer view_dest, view_src;
     int k;
-    Py_ssize_t* indices, elements;
-    char* dptr, *sptr;
+    Py_ssize_t *indices, elements;
+    char *dptr, *sptr;
 
     if (!PyObject_CheckBuffer(dest) || !PyObject_CheckBuffer(src)) {
         PyErr_SetString(PyExc_TypeError, "both destination and source must have the "
@@ -1131,7 +1131,7 @@ static PyObject* binary_iop(PyObject* v, PyObject* w, const int iop_slot, const 
  */
 
 static PyObject* ternary_op(PyObject* v, PyObject* w, PyObject* z, const int op_slot, const char* op_name) noexcept {
-    PyNumberMethods* mv, *mw, *mz;
+    PyNumberMethods *mv, *mw, *mz;
     PyObject* x = NULL;
     ternaryfunc slotv = NULL;
     ternaryfunc slotw = NULL;
@@ -1180,7 +1180,7 @@ static PyObject* ternary_op(PyObject* v, PyObject* w, PyObject* z, const int op_
 
     if (!NEW_STYLE_NUMBER(v) || !NEW_STYLE_NUMBER(w) || (z != Py_None && !NEW_STYLE_NUMBER(z))) {
         /* we have an old style operand, coerce */
-        PyObject* v1, *z1, *w2, *z2;
+        PyObject *v1, *z1, *w2, *z2;
         int c;
 
         c = PyNumber_Coerce(&v, &w);
@@ -1473,7 +1473,7 @@ extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
        have an nb_multiply slot, not an sq_repeat slot. so we fall back
        to nb_multiply if o appears to be a sequence. */
     if (PySequence_Check(o)) {
-        PyObject* n, *result;
+        PyObject *n, *result;
         n = PyInt_FromSsize_t(count);
         if (n == NULL)
             return NULL;
@@ -1520,7 +1520,7 @@ extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noe
         return m->sq_repeat(o, count);
 
     if (PySequence_Check(o)) {
-        PyObject* n, *result;
+        PyObject *n, *result;
         n = PyInt_FromSsize_t(count);
         if (n == NULL)
             return NULL;
@@ -1556,7 +1556,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* s, Py_ssize_t i) noexcept {
 }
 
 PyObject* _PySlice_FromIndices(Py_ssize_t istart, Py_ssize_t istop) {
-    PyObject* start, *end, *slice;
+    PyObject *start, *end, *slice;
     start = PyInt_FromSsize_t(istart);
     if (!start)
         return NULL;
@@ -1794,7 +1794,7 @@ extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
-    PyObject* okey, *r;
+    PyObject *okey, *r;
 
     if (key == NULL)
         return null_error();

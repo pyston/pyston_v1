@@ -232,7 +232,7 @@ int handleArg(char code) {
 }
 
 static int RunModule(const char* module, int set_argv0) {
-    PyObject* runpy, *runmodule, *runargs, *result;
+    PyObject *runpy, *runmodule, *runargs, *result;
     runpy = PyImport_ImportModule("runpy");
     if (runpy == NULL) {
         fprintf(stderr, "Could not import runpy module\n");

@@ -118,7 +118,7 @@ ExceptionStyle UnwindInfo::preferredExceptionStyle() const {
 static llvm::Value* getClosureParentGep(IREmitter& emitter, llvm::Value* closure) {
     static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
     static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
-    return emitter.getBuilder()->CreateConstInBoundsGEP2_32(closure, 0, 1);
+    return emitter.getBuilder()->CreateConstInBoundsGEP2_32(nullptr, closure, 0, 1);
 }
 
 static llvm::Value* getClosureElementGep(IREmitter& emitter, llvm::Value* closure, size_t index) {
@@ -134,12 +134,12 @@ static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Valu
     static_assert(offsetof(FrameInfo, exc) == 0, "");
     static_assert(sizeof(ExcInfo) == 24, "");
     static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
-    return builder.CreateConstInBoundsGEP2_32(v, 0, 1);
+    return builder.CreateConstInBoundsGEP2_32(nullptr, v, 0, 1);
 }
 
 static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
-    return builder.CreateConstInBoundsGEP2_32(v, 0, 0);
+    return builder.CreateConstInBoundsGEP2_32(nullptr, v, 0, 0);
 }
 
 static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
@@ -147,7 +147,7 @@ static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* 
     static_assert(sizeof(ExcInfo) == 24, "");
     static_assert(sizeof(Box*) == 8, "");
     static_assert(offsetof(FrameInfo, frame_obj) == 32, "");
-    return builder.CreateConstInBoundsGEP2_32(v, 0, 2);
+    return builder.CreateConstInBoundsGEP2_32(nullptr, v, 0, 2);
     // TODO: this could be made more resilient by doing something like
     // gep->accumulateConstantOffset(g.tm->getDataLayout(), ap_offset)
 }
@@ -203,8 +203,8 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // frame_info.exc.type = NULL
             llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
             llvm::Value* exc_info = getExcinfoGep(builder, al);
-            builder.CreateStore(
-                null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
+            builder.CreateStore(null_value, builder.CreateConstInBoundsGEP2_32(nullptr, exc_info, 0,
+                                                                               offsetof(ExcInfo, type) / sizeof(Box*)));
 
             // frame_info.boxedLocals = NULL
             llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
@@ -332,11 +332,16 @@ private:
         std::vector<llvm::Value*> pp_args;
         pp_args.push_back(getConstantInt(pp_id, g.i64));
         pp_args.push_back(getConstantInt(pp_size, g.i32));
+
+#if LLVMREV < 235483
         if (ENABLE_JIT_OBJECT_CACHE)
             // add fixed dummy dest pointer, we will replace it with the correct address during stackmap processing
             pp_args.push_back(embedConstantPtr((void*)-1L, g.i8_ptr));
         else
             pp_args.push_back(func);
+#else
+        pp_args.push_back(func);
+#endif
         pp_args.push_back(getConstantInt(args.size(), g.i32));
 
         pp_args.insert(pp_args.end(), args.begin(), args.end());
@@ -422,8 +427,9 @@ public:
 #endif
 
         if (ENABLE_FRAME_INTROSPECTION) {
-            llvm::Type* rtn_type = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())
-                                                                      ->getElementType())->getReturnType();
+            llvm::Type* rtn_type
+                = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())->getElementType())
+                      ->getReturnType();
 
             llvm::Value* bitcasted = getBuilder()->CreateBitCast(callee, g.i8->getPointerTo());
             llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, unw_info, target_exception_style);
@@ -820,18 +826,20 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
+                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(nullptr, frame_info, 0, 0);
                 assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
                 ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_type->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
+                builder->CreateStore(converted_type->getValue(),
+                                     builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 0));
                 converted_type->decvref(emitter);
                 ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
+                builder->CreateStore(converted_value->getValue(),
+                                     builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 1));
                 converted_value->decvref(emitter);
                 ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
                 builder->CreateStore(converted_traceback->getValue(),
-                                     builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+                                     builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 2));
                 converted_traceback->decvref(emitter);
 
                 return getNone();
@@ -842,13 +850,13 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
+                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(nullptr, frame_info, 0, 0);
                 assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
                 llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 0));
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 1));
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(nullptr, exc_info, 0, 2));
 
                 return getNone();
             }
@@ -1153,8 +1161,8 @@ private:
             curblock = fail_bb;
             emitter.getBuilder()->SetInsertPoint(curblock);
 
-            llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
-                                                     embedRelocatablePtr(node->id.c_str(), g.i8_ptr));
+            llvm::CallSite call(emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
+                                                   embedRelocatablePtr(node->id.c_str(), g.i8_ptr)));
             call.setDoesNotReturn();
             emitter.getBuilder()->CreateUnreachable();
 
@@ -1174,10 +1182,10 @@ private:
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
-                llvm::CallSite call = emitter.createCall(
+                llvm::CallSite call(emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { getConstantInt(0, g.i1), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
-                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) }));
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -1257,12 +1265,12 @@ private:
     }
 
     CompilerVariable* evalSlice(AST_Slice* node, const UnwindInfo& unw_info) {
-        CompilerVariable* start, *stop, *step;
+        CompilerVariable *start, *stop, *step;
         start = node->lower ? evalExpr(node->lower, unw_info) : getNone();
         stop = node->upper ? evalExpr(node->upper, unw_info) : getNone();
         step = node->step ? evalExpr(node->step, unw_info) : getNone();
 
-        ConcreteCompilerVariable* cstart, *cstop, *cstep;
+        ConcreteCompilerVariable *cstart, *cstop, *cstep;
         cstart = start->makeConverted(emitter, start->getBoxType());
         cstop = stop->makeConverted(emitter, stop->getBoxType());
         cstep = step->makeConverted(emitter, step->getBoxType());
@@ -1862,7 +1870,7 @@ private:
         } else {
             llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
         }
-        llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFail, llvm_args);
+        llvm::CallSite call(emitter.createCall(unw_info, g.funcs.assertFail, llvm_args));
         call.setDoesNotReturn();
     }
 
@@ -1948,11 +1956,11 @@ private:
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
         if (symbol_table.count(target->id) == 0) {
-            llvm::CallSite call
-                = emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                     { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                       embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                       getConstantInt(true /*local_error_msg*/, g.i1) });
+            llvm::CallSite call(
+                emitter.createCall(unw_info, g.funcs.assertNameDefined,
+                                   { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                                     embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
+                                     getConstantInt(true /*local_error_msg*/, g.i1) }));
             call.setDoesNotReturn();
             return;
         }
@@ -2196,7 +2204,7 @@ private:
         // prevent us from having two OSR exits point to the same OSR entry; not something that
         // we're doing right now but something that would be nice in the future.
 
-        llvm::Value* arg_array = NULL, * malloc_save = NULL;
+        llvm::Value *arg_array = NULL, *malloc_save = NULL;
         if (sorted_symbol_table.size() > 3) {
             // Leave in the ability to use malloc but I guess don't use it.
             // Maybe if there are a ton of live variables it'd be nice to have them be
@@ -2338,7 +2346,8 @@ private:
             assert(!node->arg1);
             assert(!node->arg2);
 
-            llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(irstate->getFrameInfoVar(), 0, 0);
+            llvm::Value* exc_info
+                = emitter.getBuilder()->CreateConstInBoundsGEP2_32(nullptr, irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
                 emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI);
                 emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
@@ -2938,10 +2947,12 @@ public:
             = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
 
         auto* builder = emitter.getBuilder();
-        llvm::Value* exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-        llvm::Value* exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+        llvm::Value* exc_type
+            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(nullptr, excinfo_pointer_casted, 0, 0));
+        llvm::Value* exc_value
+            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(nullptr, excinfo_pointer_casted, 0, 1));
         llvm::Value* exc_traceback
-            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(nullptr, excinfo_pointer_casted, 0, 2));
 
         if (final_dest) {
             // Catch the exception and forward to final_dest:

@@ -57,7 +57,7 @@ int _PyLong_DigitValue[256] = {
 };
 }
 
-#define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
+#define IS_LITTLE_ENDIAN (int) * (unsigned char*) & one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
 void BoxedLong::gchandler(GCVisitor* v, Box* b) {
@@ -1421,7 +1421,7 @@ static int convert_binop(PyObject* v, PyObject* w, PyLongObject** a, PyLongObjec
 
 static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     try {
-        PyLongObject* a, *b;
+        PyLongObject *a, *b;
         CONVERT_BINOP(v, w, &a, &b);
         return longPow((BoxedLong*)a, (BoxedLong*)b, x);
     } catch (ExcInfo e) {

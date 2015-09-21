@@ -1040,8 +1040,8 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
     if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls
         || (descr->cls == method_cls
             && (static_cast<BoxedMethodDescriptor*>(descr)->method->ml_flags & (METH_CLASS | METH_STATIC)) == 0)) {
-        Box* im_self = NULL, * im_func = NULL, * im_class = obj->cls;
-        RewriterVar* r_im_self = NULL, * r_im_func = NULL, * r_im_class = NULL;
+        Box *im_self = NULL, *im_func = NULL, *im_class = obj->cls;
+        RewriterVar *r_im_self = NULL, *r_im_func = NULL, *r_im_class = NULL;
 
         if (rewrite_args) {
             r_im_class = rewrite_args->obj->getAttr(offsetof(Box, cls));
@@ -5594,7 +5594,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 // we don't want to do an attribute lookup for __new__, because that would end up calling
 // the tp_new of the subclass PyCSimpleType (PyCSimpleType_new again) and end up in a loop.
 Box* type_new(BoxedClass* metatype, Box* args, Box* kwds) noexcept {
-    PyObject* name, *bases, *dict;
+    PyObject *name, *bases, *dict;
     static const char* kwlist[] = { "name", "bases", "dict", 0 };
 
     // Copied from CPython.

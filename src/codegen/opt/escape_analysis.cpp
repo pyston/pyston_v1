@@ -49,7 +49,9 @@ EscapeAnalysis::~EscapeAnalysis() {
 
 void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage& info) const {
     info.setPreservesCFG();
+#if LLVMREV < 231270
     info.addRequiredTransitive<DataLayoutPass>();
+#endif
 }
 
 bool EscapeAnalysis::runOnFunction(Function& F) {

@@ -305,7 +305,7 @@ static PyObject* file_read(BoxedFile* f, long bytesrequested) noexcept {
 static PyObject* get_line(BoxedFile* f, int n) noexcept {
     FILE* fp = f->f_fp;
     int c;
-    char* buf, *end;
+    char *buf, *end;
     size_t total_v_size; /* total # of slots in buffer */
     size_t used_v_size;  /* # used slots in buffer */
     size_t increment;    /* amount to increment the buffer */
@@ -494,7 +494,7 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
             n = PyString_GET_SIZE(text);
 #ifdef Py_USING_UNICODE
         } else if (PyUnicode_Check(text)) {
-            const char* encoding, *errors;
+            const char *encoding, *errors;
             if (f->f_encoding != Py_None)
                 encoding = PyString_AS_STRING(f->f_encoding);
             else
@@ -540,7 +540,7 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
 
 static PyObject* file_writelines(BoxedFile* f, PyObject* seq) noexcept {
 #define CHUNKSIZE 1000
-    PyObject* list, *line;
+    PyObject *list, *line;
     PyObject* it; /* iter(seq) */
     PyObject* result;
     int index, islist;
@@ -786,7 +786,7 @@ static PyObject* file_seek(BoxedFile* f, PyObject* args) {
     int whence;
     int ret;
     Py_off_t offset;
-    PyObject* offobj, *off_index;
+    PyObject *offobj, *off_index;
 
     if (f->f_fp == NULL)
         return err_closed();
@@ -978,7 +978,7 @@ static PyObject* file_readlines(BoxedFile* f, PyObject* args) noexcept {
     size_t nfilled = 0;
     size_t nread;
     size_t totalread = 0;
-    char* p, *q, *end;
+    char *p, *q, *end;
     int err;
     int shortread = 0; /* bool, did the previous read come up short? */
 
@@ -1152,7 +1152,7 @@ extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
 }
 
 extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept {
-    PyObject* writer, *value, *args, *result;
+    PyObject *writer, *value, *args, *result;
     if (f == NULL) {
         PyErr_SetString(PyExc_TypeError, "writeobject with NULL file");
         return -1;
@@ -1294,7 +1294,7 @@ extern "C" int PyFile_SetEncoding(PyObject* f, const char* enc) noexcept {
 
 extern "C" int PyFile_SetEncodingAndErrors(PyObject* f, const char* enc, char* errors) noexcept {
     BoxedFile* file = static_cast<BoxedFile*>(f);
-    PyObject* str, *oerrors;
+    PyObject *str, *oerrors;
 
     assert(PyFile_Check(f));
     str = PyString_FromString(enc);

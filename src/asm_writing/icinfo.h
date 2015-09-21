@@ -131,7 +131,7 @@ public:
            int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet live_outs,
            assembler::GenericRegister return_register, TypeRecorder* type_recorder);
     ~ICInfo();
-    void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
+    void *const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
     int getSlotSize() { return slot_size; }
     int getNumSlots() { return num_slots; }

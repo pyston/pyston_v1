@@ -50,7 +50,7 @@ extern "C" PyObject** PyList_Items(PyObject* op) noexcept {
 
 extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
     PyObject* w;
-    PyObject** p, **q;
+    PyObject **p, **q;
     Py_ssize_t n;
     if (v == NULL || !PyList_Check(v)) {
         PyErr_BadInternalCall();
@@ -206,7 +206,7 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
 static Box* list_slice(Box* o, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     BoxedList* a = static_cast<BoxedList*>(o);
 
-    PyObject** src, **dest;
+    PyObject **src, **dest;
     Py_ssize_t i, len;
     if (ilow < 0)
         ilow = 0;
@@ -456,8 +456,8 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
         return 0;
     } else {
         /* assign slice */
-        PyObject* ins, *seq;
-        PyObject** garbage, **seqitems, **selfitems;
+        PyObject *ins, *seq;
+        PyObject **garbage, **seqitems, **selfitems;
         Py_ssize_t cur, i;
 
         /* protect against a[::-1] = a */

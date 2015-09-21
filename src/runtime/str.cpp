@@ -658,13 +658,13 @@ Py_LOCAL_INLINE(int) formatchar(char* buf, size_t buflen, PyObject* v) {
 
 #define FORMATBUFLEN (size_t)120
 extern "C" PyObject* PyString_Format(PyObject* format, PyObject* args) noexcept {
-    char* fmt, *res;
+    char *fmt, *res;
     Py_ssize_t arglen, argidx;
     Py_ssize_t reslen, rescnt, fmtcnt;
     int args_owned = 0;
-    PyObject* result, *orig_args;
+    PyObject *result, *orig_args;
 #ifdef Py_USING_UNICODE
-    PyObject* v, *w;
+    PyObject *v, *w;
 #endif
     PyObject* dict = NULL;
     if (format == NULL || !PyString_Check(format) || args == NULL) {
@@ -1377,7 +1377,7 @@ extern "C" Box* str_repr(Box* self) noexcept {
 extern "C" PyObject* PyString_DecodeEscape(const char* s, Py_ssize_t len, const char* errors, Py_ssize_t unicode,
                                            const char* recode_encoding) noexcept {
     int c;
-    char* p, *buf;
+    char *p, *buf;
     const char* end;
     PyObject* v;
     Py_ssize_t newlen = recode_encoding ? 4 * len : len;
@@ -1391,7 +1391,7 @@ extern "C" PyObject* PyString_DecodeEscape(const char* s, Py_ssize_t len, const 
         non_esc:
 #ifdef Py_USING_UNICODE
             if (recode_encoding && (*s & 0x80)) {
-                PyObject* u, *w;
+                PyObject *u, *w;
                 char* r;
                 const char* t;
                 Py_ssize_t rn;
@@ -2565,7 +2565,7 @@ extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject*
 }
 
 static PyObject* string_expandtabs(PyStringObject* self, PyObject* args) noexcept {
-    const char* e, *p, *qe;
+    const char *e, *p, *qe;
     char* q;
     Py_ssize_t i, j, incr;
     PyObject* u;
