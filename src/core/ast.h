@@ -1338,6 +1338,9 @@ private:
 public:
     PrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
     virtual ~PrintVisitor() {}
+    void flush() {
+        stream.flush();
+    }
 
     virtual bool visit_alias(AST_alias* node);
     virtual bool visit_arguments(AST_arguments* node);

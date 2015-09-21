@@ -243,7 +243,7 @@ public:
                         if (!lookup_success) {
                             llvm::Constant* int_val
                                 = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8);
+                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
                             ii->setArgOperand(i, ptr_val);
                             continue;
                         } else {

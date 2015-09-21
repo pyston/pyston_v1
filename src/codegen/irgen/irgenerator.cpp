@@ -1170,7 +1170,7 @@ private:
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
-            // vst is one of {FAST, CLOSURE, NAME}
+            // vst is one of {FAST, CLOSURE}
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
@@ -1541,14 +1541,24 @@ private:
             if (VERBOSITY("irgen") >= 2) {
                 printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
-                PrintVisitor printer;
-                node->accept(&printer);
+                fflush(stdout);
+                print_ast(node);
+                llvm::outs().flush();
                 printf("\n");
             }
 
+#ifndef NDEBUG
             // That's not really a speculation.... could potentially handle this here, but
             // I think it's better to just not generate bad speculations:
-            assert(!rtn->canConvertTo(speculated_type));
+            if (rtn->canConvertTo(speculated_type)) {
+                auto source = irstate->getSourceInfo();
+                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->body[0]->lineno,
+                       source->getName()->c_str());
+                irstate->getSourceInfo()->cfg->print();
+            }
+            RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
+                           speculated_type->debugName().c_str());
+#endif
 
             ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
             rtn->decvref(emitter);
