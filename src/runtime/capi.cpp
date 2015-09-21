@@ -1382,6 +1382,12 @@ extern "C" int PyCFunction_GetFlags(PyObject* op) noexcept {
     return static_cast<BoxedCApiFunction*>(op)->method_def->ml_flags;
 }
 
+extern "C" PyObject* PyCFunction_Call(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
+    assert(arg->cls == tuple_cls);
+    assert(!kw || kw->cls == dict_cls);
+    return BoxedCApiFunction::tppCall<CAPI>(func, NULL, ArgPassSpec(0, 0, true, true), arg, kw, NULL, NULL, NULL);
+}
+
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
     if (v != NULL) {
         Py_ssize_t x;
@@ -1491,7 +1497,6 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", 10);
 
-    assert(_self->cls == capifunc_cls);
     BoxedCApiFunction* self = static_cast<BoxedCApiFunction*>(_self);
 
     if (rewrite_args) {

@@ -82,7 +82,11 @@ extern "C" Box* vars(Box* obj) {
     if (!obj)
         return fastLocalsToBoxedLocals();
 
-    return obj->getAttrWrapper();
+    static BoxedString* dict_str = internStringImmortal("__dict__");
+    Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str, NULL);
+    if (!rtn)
+        raiseExcHelper(TypeError, "vars() argument must have __dict__ attribute");
+    return rtn;
 }
 
 extern "C" Box* abs_(Box* x) {
