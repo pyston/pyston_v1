@@ -82,3 +82,15 @@ def f7(n):
 
 c = f7(5)()
 print c.foo()
+
+
+# Regression test: being included in a closure (ie in the parent scope) shouldn't ruin type analysis.
+def f8():
+    l = []
+
+    def g():
+        print l
+
+    l.append(1)
+for i in xrange(11000):
+    f8()
