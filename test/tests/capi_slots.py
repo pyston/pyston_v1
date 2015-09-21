@@ -224,3 +224,13 @@ slots_test.call_funcs(C())
 class C(object):
     val = slots_test.SlotsTesterDescrGet()
 print C().val
+
+
+# Test that extension classes (in this case, weakref.proxy) get our custom class-level flags
+# (in this case, has_getattribute)
+import weakref
+class C(object):
+    pass
+c = C()
+proxy = weakref.proxy(c)
+print isinstance(proxy, C)
