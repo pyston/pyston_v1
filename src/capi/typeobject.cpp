@@ -1940,6 +1940,21 @@ void fixup_slot_dispatchers(BoxedClass* self) noexcept {
         p = update_one_slot(self, p);
 }
 
+void fixup_pyston_slot_dispatchers(BoxedClass* self) noexcept {
+    init_slotdefs();
+
+    const slotdef* p = slotdefs;
+    while (p->name.size() != 0) {
+        // Skip slotdefs that are either in the CPython slots (things before tp_version_tag), or
+        // things that are pointers into the tp_as_foo structs (which are represented as offsets
+        // past the end of BoxedClass, ie into BoxedHeapClass)
+        if (p->offset <= offsetof(BoxedClass, tp_version_tag) || p->offset >= sizeof(BoxedClass))
+            ++p;
+        else
+            p = update_one_slot(self, p);
+    }
+}
+
 static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept {
     if (callback(type, data) < 0)
         return -1;
@@ -3374,6 +3389,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     }
 
     assert(!(cls->instancesHaveHCAttrs() && cls->instancesHaveDictAttrs()));
+
+    // We need to apply any pyston-specific slotdefs to extension types.
+    // Extensions are usually responsible for setting their own tp_ slots if they
+    // want them, but they don't know about our custom ones so we need to fill those in.
+    fixup_pyston_slot_dispatchers(cls);
 
     if (Py_TPFLAGS_BASE_EXC_SUBCLASS & cls->tp_flags) {
         exception_types.push_back(cls);
