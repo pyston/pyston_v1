@@ -2572,6 +2572,72 @@ extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
     }
 }
 
+/* Initialize the __dict__ in a type object */
+
+static int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
+    for (; meth->ml_name != NULL; meth++) {
+        auto name = internStringMortal(meth->ml_name);
+        PyObject* descr;
+        int err;
+        if (type->hasattr(name) && !(meth->ml_flags & METH_COEXIST))
+            continue;
+        if (meth->ml_flags & METH_CLASS) {
+            if (meth->ml_flags & METH_STATIC) {
+                PyErr_SetString(PyExc_ValueError, "method cannot be both class and static");
+                return -1;
+            }
+            // Pyston change: create these classmethods as normal methods, which will
+            // later just notice the METH_CLASS flag.
+            // descr = PyDescr_NewClassMethod(type, meth);
+            descr = PyDescr_NewMethod(type, meth);
+        } else if (meth->ml_flags & METH_STATIC) {
+            PyObject* cfunc = PyCFunction_New(meth, NULL);
+            if (cfunc == NULL)
+                return -1;
+            descr = PyStaticMethod_New(cfunc);
+            Py_DECREF(cfunc);
+        } else {
+            descr = PyDescr_NewMethod(type, meth);
+        }
+        if (descr == NULL)
+            return -1;
+        type->setattr(name, descr, NULL);
+        Py_DECREF(descr);
+    }
+    return 0;
+}
+
+static int add_members(PyTypeObject* type, PyMemberDef* memb) noexcept {
+    for (; memb->name != NULL; memb++) {
+        auto name = internStringMortal(memb->name);
+        PyObject* descr;
+        if (type->hasattr(name))
+            continue;
+        descr = PyDescr_NewMember(type, memb);
+        if (descr == NULL)
+            return -1;
+        type->setattr(name, descr, NULL);
+        Py_DECREF(descr);
+    }
+    return 0;
+}
+
+static int add_getset(PyTypeObject* type, PyGetSetDef* gsp) noexcept {
+    for (; gsp->name != NULL; gsp++) {
+        auto name = internStringMortal(gsp->name);
+        PyObject* descr;
+        if (type->hasattr(name))
+            continue;
+        descr = PyDescr_NewGetSet(type, gsp);
+
+        if (descr == NULL)
+            return -1;
+        type->setattr(name, descr, NULL);
+        Py_DECREF(descr);
+    }
+    return 0;
+}
+
 #define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
 
 // This is copied from CPython with some modifications:
@@ -3313,19 +3379,17 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         abort();
     }
 
-    for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
-        cls->setattr(internStringMortal(method->ml_name), new BoxedMethodDescriptor(method, cls), NULL);
+    if (cls->tp_methods != NULL) {
+        if (add_methods(cls, cls->tp_methods) < 0)
+            return -1;
     }
-
-    for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {
-        cls->giveAttr(internStringMortal(member->name), new BoxedMemberDescriptor(member));
+    if (cls->tp_members != NULL) {
+        if (add_members(cls, cls->tp_members) < 0)
+            return -1;
     }
-
-    for (PyGetSetDef* getset = cls->tp_getset; getset && getset->name; ++getset) {
-        // TODO do something with __doc__
-        cls->giveAttr(internStringMortal(getset->name),
-                      new (capi_getset_cls) BoxedGetsetDescriptor(getset->get, (void (*)(Box*, Box*, void*))getset->set,
-                                                                  getset->closure));
+    if (cls->tp_getset != NULL) {
+        if (add_getset(cls, cls->tp_getset) < 0)
+            return -1;
     }
 
     try {

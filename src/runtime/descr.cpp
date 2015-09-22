@@ -259,7 +259,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
 
     int ml_flags = self->method->ml_flags;
-    int call_flags = ml_flags & (~METH_CLASS);
+    int call_flags = ml_flags & ~(METH_CLASS | METH_COEXIST | METH_STATIC);
 
     if (rewrite_args && !rewrite_args->func_guarded) {
         rewrite_args->obj->addAttrGuard(offsetof(BoxedMethodDescriptor, method), (intptr_t)self->method);
@@ -422,8 +422,6 @@ Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Bo
         return boxInstanceMethod(owner, self, self->type);
 
     if (self->method->ml_flags & METH_STATIC)
-        Py_FatalError("unimplemented");
-    if (self->method->ml_flags & METH_COEXIST)
         Py_FatalError("unimplemented");
 
     if (inst == NULL)
@@ -675,6 +673,24 @@ void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
 
 extern "C" PyObject* PyStaticMethod_New(PyObject* callable) noexcept {
     return new BoxedStaticmethod(callable);
+}
+
+extern "C" PyObject* PyDescr_NewMember(PyTypeObject* x, struct PyMemberDef* y) noexcept {
+    return new BoxedMemberDescriptor(y);
+}
+
+extern "C" PyObject* PyDescr_NewGetSet(PyTypeObject* x, struct PyGetSetDef* y) noexcept {
+    // TODO do something with __doc__
+    return new (capi_getset_cls) BoxedGetsetDescriptor(y->get, (void (*)(Box*, Box*, void*))y->set, y->closure);
+}
+
+extern "C" PyObject* PyDescr_NewClassMethod(PyTypeObject* x, PyMethodDef* y) noexcept {
+    Py_FatalError("unimplemented");
+    return NULL;
+}
+
+extern "C" PyObject* PyDescr_NewMethod(PyTypeObject* type, PyMethodDef* method) noexcept {
+    return new BoxedMethodDescriptor(method, type);
 }
 
 void setupDescr() {

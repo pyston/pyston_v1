@@ -20,20 +20,6 @@
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 
-// Temp hack to get CType sort of importing
-PyObject* PyDescr_NewMember(PyTypeObject* x, struct PyMemberDef* y) PYSTON_NOEXCEPT {
-    Py_FatalError("unimplemented");
-    return NULL;
-}
-PyObject* PyDescr_NewGetSet(PyTypeObject* x, struct PyGetSetDef* y) PYSTON_NOEXCEPT {
-    Py_FatalError("unimplemented");
-    return NULL;
-}
-PyObject* PyDescr_NewClassMethod(PyTypeObject* x, PyMethodDef* y) PYSTON_NOEXCEPT {
-    Py_FatalError("unimplemented");
-    return NULL;
-}
-
 namespace pyston {
 
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_step, i64* out_length) {
