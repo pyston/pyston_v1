@@ -209,7 +209,7 @@ public:
 
     // A "safe" tp_dealloc destructor/finalizer is one we believe:
     //  1) Can be called at any point after the object is dead.
-    //      (implies it's references could be finalized already)
+    //      (implies it's references could be finalized already, including its class)
     //  2) Won't take a lot of time to run.
     //  3) Won't take up a lot of memory (requiring another GC run).
     //  4) Won't resurrect itself.
