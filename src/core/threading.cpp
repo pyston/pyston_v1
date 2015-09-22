@@ -38,7 +38,7 @@ std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
 
 extern "C" {
 __thread PyThreadState cur_thread_state
-    = { 0, NULL, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
+    = { 0, 1, NULL, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
 }
 
 PthreadFastMutex threading_lock;
@@ -98,6 +98,16 @@ public:
     }
 
     bool isValid() { return saved; }
+
+    // This is a quick and dirty way to determine if the current thread holds the gil:
+    // the only way it can't (at least for now) is if it had saved its threadstate.
+    // This only works when looking at a thread that is not actively acquiring or releasing
+    // the GIL, so for now just guard on it only being called for the current thread.
+    // TODO It's pretty brittle to reuse the saved flag like this.
+    bool holdsGil() {
+        assert(pthread_self() == this->pthread_id);
+        return !saved;
+    }
 
     ucontext_t* getContext() { return &ucontext; }
 
@@ -227,6 +237,94 @@ static void visitLocalStack(gc::GCVisitor* v) {
     current_internal_thread_state->accept(v);
 }
 
+static void registerThread(bool is_starting_thread) {
+    pthread_t current_thread = pthread_self();
+
+    LOCK_REGION(&threading_lock);
+
+    pthread_attr_t thread_attrs;
+    int code = pthread_getattr_np(current_thread, &thread_attrs);
+    if (code)
+        err(1, NULL);
+
+    void* stack_start;
+    size_t stack_size;
+    code = pthread_attr_getstack(&thread_attrs, &stack_start, &stack_size);
+    RELEASE_ASSERT(code == 0, "");
+
+    pthread_attr_destroy(&thread_attrs);
+
+#if STACK_GROWS_DOWN
+    void* stack_bottom = static_cast<char*>(stack_start) + stack_size;
+#else
+    void* stack_bottom = stack_start;
+#endif
+    current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+    current_threads[current_thread] = current_internal_thread_state;
+
+    if (is_starting_thread)
+        num_starting_threads--;
+
+    if (VERBOSITY() >= 2)
+        printf("child initialized; tid=%ld\n", current_thread);
+}
+
+static void unregisterThread() {
+    current_internal_thread_state->assertNoGenerators();
+    {
+        pthread_t current_thread = pthread_self();
+        LOCK_REGION(&threading_lock);
+
+        current_threads.erase(current_thread);
+        if (VERBOSITY() >= 2)
+            printf("thread tid=%ld exited\n", current_thread);
+    }
+    current_internal_thread_state = 0;
+}
+
+extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
+    if (!current_internal_thread_state) {
+        /* Create a new thread state for this thread */
+        registerThread(false);
+        if (current_internal_thread_state == NULL)
+            Py_FatalError("Couldn't create thread-state for new thread");
+
+        acquireGLRead();
+        return PyGILState_UNLOCKED;
+    } else {
+        ++cur_thread_state.gilstate_counter;
+        if (current_internal_thread_state->holdsGil()) {
+            return PyGILState_LOCKED;
+        } else {
+            endAllowThreads();
+            return PyGILState_UNLOCKED;
+        }
+    }
+}
+
+extern "C" void PyGILState_Release(PyGILState_STATE oldstate) noexcept {
+    if (!current_internal_thread_state)
+        Py_FatalError("auto-releasing thread-state, but no thread-state for this thread");
+
+    --cur_thread_state.gilstate_counter;
+    RELEASE_ASSERT(cur_thread_state.gilstate_counter >= 0, "");
+
+    if (oldstate == PyGILState_UNLOCKED) {
+        beginAllowThreads();
+    }
+
+    if (cur_thread_state.gilstate_counter == 0) {
+        assert(oldstate == PyGILState_UNLOCKED);
+        RELEASE_ASSERT(0, "this is currently untested");
+        unregisterThread();
+    }
+}
+
+extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+
 void visitAllStacks(gc::GCVisitor* v) {
     visitLocalStack(v);
 
@@ -317,51 +415,14 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    pthread_t current_thread = pthread_self();
-
-    {
-        LOCK_REGION(&threading_lock);
-
-        pthread_attr_t thread_attrs;
-        int code = pthread_getattr_np(current_thread, &thread_attrs);
-        if (code)
-            err(1, NULL);
-
-        void* stack_start;
-        size_t stack_size;
-        code = pthread_attr_getstack(&thread_attrs, &stack_start, &stack_size);
-        RELEASE_ASSERT(code == 0, "");
-
-        pthread_attr_destroy(&thread_attrs);
-
-#if STACK_GROWS_DOWN
-        void* stack_bottom = static_cast<char*>(stack_start) + stack_size;
-#else
-        void* stack_bottom = stack_start;
-#endif
-        current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
-        current_threads[current_thread] = current_internal_thread_state;
-
-        num_starting_threads--;
-
-        if (VERBOSITY() >= 2)
-            printf("child initialized; tid=%ld\n", current_thread);
-    }
+    registerThread(true);
 
     threading::GLReadRegion _glock;
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
-    current_internal_thread_state->assertNoGenerators();
 
-    {
-        LOCK_REGION(&threading_lock);
-
-        current_threads.erase(current_thread);
-        if (VERBOSITY() >= 2)
-            printf("thread tid=%ld exited\n", current_thread);
-    }
-    current_internal_thread_state = 0;
+    unregisterThread();
 
     return rtn;
 }
