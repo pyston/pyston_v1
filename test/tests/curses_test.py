@@ -6,7 +6,7 @@ try:
 
         print 1
         print curses.version
-        print curses.longname()
+        curses.longname()
         print curses.baudrate()
         print curses.can_change_color()
         curses.start_color()
