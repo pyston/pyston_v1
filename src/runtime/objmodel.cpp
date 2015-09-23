@@ -222,6 +222,9 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
     static BoxedString* newline_str = internStringImmortal("\n");
     static BoxedString* space_str = internStringImmortal(" ");
 
+    if (dest == None)
+        dest = getSysStdout();
+
     if (var) {
         // begin code for handling of softspace
         bool new_softspace = !nl;
@@ -229,11 +232,17 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
             callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0, 0);
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
-        callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        Box* write_rtn
+            = callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        if (!write_rtn)
+            raiseAttributeError(dest, write_str->s());
     }
 
     if (nl) {
-        callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
+        Box* write_rtn
+            = callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
+        if (!write_rtn)
+            raiseAttributeError(dest, write_str->s());
         if (!var)
             softspace(dest, false);
     }
@@ -996,12 +1005,10 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 rewrite_args->obj_shape_guarded = true;
             }
             val = base->getattr(attr, rewrite_args);
-            assert(rewrite_args->out_success);
             if (val)
                 return val;
         }
 
-        assert(rewrite_args->out_success);
         assert(!rewrite_args->out_rtn);
         rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
         return NULL;

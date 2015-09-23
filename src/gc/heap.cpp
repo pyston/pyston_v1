@@ -186,7 +186,7 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         if (unlikely(isWeaklyReferenced(b))) {
             assert(weakly_referenced && "attempting to free a weakly referenced object manually");
             weakly_referenced->push_back(b);
-            GC_TRACE_LOG("%p is weakly referenced\n", al->user_data);
+            GC_TRACE_LOG("doFree: %p is weakly referenced\n", al->user_data);
             return false;
         }
 
@@ -196,11 +196,12 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
         if (unlikely(PyType_Check(b))) {
             assert(classes_to_free);
             classes_to_free->push_back(static_cast<BoxedClass*>(b));
+            GC_TRACE_LOG("doFree: %p is a class object\n", al->user_data);
             return false;
         }
 
         if (b->cls->tp_dealloc != dealloc_null && b->cls->has_safe_tp_dealloc) {
-            GC_TRACE_LOG("running safe destructor for %p\n", b);
+            GC_TRACE_LOG("doFree: running safe destructor for %p\n", b);
             gc_safe_destructors.log();
 
             GCAllocation* al = GCAllocation::fromUserData(b);
@@ -687,8 +688,10 @@ GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
     while (true) {
         while (Block* cache_block = *cache_head) {
             GCAllocation* rtn = _allocFromBlock(cache_block);
-            if (rtn)
+            if (rtn) {
+                GC_TRACE_LOG("Allocated %p\n", rtn->user_data);
                 return rtn;
+            }
 
             removeFromLLAndNull(cache_block);
             insertIntoLL(&cache->cache_full_heads[bucket_idx], cache_block);

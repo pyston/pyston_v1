@@ -54,3 +54,9 @@ try:
     assert 0, "expected TypeError was not thrown"
 except TypeError:
     pass
+
+print >>None, "this should still print"
+try:
+    print >>1, "this should error"
+except AttributeError as e:
+    print e
