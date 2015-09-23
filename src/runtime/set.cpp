@@ -664,7 +664,8 @@ done:
 } // namespace set
 
 void BoxedSet::dealloc(Box* b) noexcept {
-    assert(PyAnySet_Check(b));
+    // Unfortunately, this assert requires accessing the type object, which might have been freed already:
+    // assert(PyAnySet_Check(b));
     static_cast<BoxedSet*>(b)->s.freeAllMemory();
 }
 
