@@ -977,6 +977,27 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                 rewrite_args->out_rtn = grewrite_args.out_rtn;
                 rewrite_args->out_return_convention = grewrite_args.out_return_convention;
             }
+
+            // Guarding here is a bit tricky, since we need to make sure that we call getattr
+            // (or not) at the right times.
+            // Right now this section is a bit conservative.
+            if (rewrite_args) {
+                if (grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN) {
+                    // Do nothing
+                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN) {
+                    // TODO we should have a HAS_RETURN that takes out the NULL case
+                    assert(res);
+                    if (res)
+                        grewrite_args.out_rtn->addGuardNotEq(0);
+                    else
+                        grewrite_args.out_rtn->addGuard(0);
+                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
+                    // TODO maybe we could handle this
+                    rewrite_args = NULL;
+                } else {
+                    RELEASE_ASSERT(0, "%d", grewrite_args.out_return_convention);
+                }
+            }
         } else {
             try {
                 res = getattrInternalGeneric(self, name, NULL, false, false, NULL, NULL);

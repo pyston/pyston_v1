@@ -123,3 +123,24 @@ while True:
     except StopIteration:
         break
 print sorted(l)
+
+c = C1()
+print sorted(c.__dict__.items())
+# setattr() converts the attr name to a string:
+setattr(c, u'a', 1)
+print sorted(c.__dict__.items())
+# directly setting on the dict does not:
+c.__dict__[u'b'] = 2
+print sorted(c.__dict__.items())
+c.__dict__.update({u'c':3})
+print sorted(c.__dict__.items())
+
+# Can't set non-string-attrs with setattr, but can via dict:
+try:
+    setattr(c, 1, 1)
+    assert 0
+except TypeError as e:
+    print e
+print sorted(c.__dict__.items())
+c.__dict__[5] = 2
+print sorted(c.__dict__.items())

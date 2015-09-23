@@ -1056,6 +1056,7 @@ void* AST_MakeClass::accept_expr(ExprVisitor* v) {
 void print_ast(AST* ast) {
     PrintVisitor v;
     ast->accept(&v);
+    v.flush();
 }
 
 void PrintVisitor::printIndent() {

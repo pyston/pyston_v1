@@ -1282,6 +1282,7 @@ void setupList() {
                                            sizeof(BoxedListIterator), false, "listiterator");
     list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
                                                    sizeof(BoxedListIterator), false, "listreverseiterator");
+    list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 

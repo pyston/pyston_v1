@@ -28,14 +28,6 @@
 
 #define GC_KEEP_ALIVE(t) asm volatile("" : : "X"(t))
 
-#define TRACE_GC_MARKING 0
-#if TRACE_GC_MARKING
-extern FILE* trace_fp;
-#define GC_TRACE_LOG(...) fprintf(pyston::gc::trace_fp, __VA_ARGS__)
-#else
-#define GC_TRACE_LOG(...)
-#endif
-
 struct _PyWeakReference;
 typedef struct _PyWeakReference PyWeakReference;
 
@@ -45,6 +37,14 @@ class Box;
 
 namespace gc {
 class GCVisitable;
+
+#define TRACE_GC_MARKING 0
+#if TRACE_GC_MARKING
+extern FILE* trace_fp;
+#define GC_TRACE_LOG(...) fprintf(pyston::gc::trace_fp, __VA_ARGS__)
+#else
+#define GC_TRACE_LOG(...)
+#endif
 }
 
 namespace threading {

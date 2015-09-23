@@ -235,6 +235,12 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
+    // Just for debugging: whether instances of this class should always be considered nonzero.
+    // This is the default for anything that doesn't define a __nonzero__ or __len__ method, but
+    // for builtin types we have the extra check that we opted into this behavior rather than
+    // just forgot to add nonzero/len.
+    bool instances_are_nonzero;
+
     bool has___class__; // Has a custom __class__ attribute (ie different from object's __class__ descriptor)
     bool has_instancecheck;
     bool has_subclasscheck;
