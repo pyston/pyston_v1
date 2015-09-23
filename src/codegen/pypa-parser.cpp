@@ -1163,7 +1163,7 @@ private:
     int position;
 };
 
-static AST_Module* parse_with_reader(std::unique_ptr<pypa::Reader> reader) {
+static AST_Module* parse_with_reader(std::unique_ptr<pypa::Reader> reader, FutureFlags future_flags) {
     pypa::Lexer lexer(std::move(reader));
     pypa::SymbolTablePtr symbols;
     pypa::AstModulePtr module;
@@ -1175,6 +1175,35 @@ static AST_Module* parse_with_reader(std::unique_ptr<pypa::Reader> reader) {
     options.handle_future_errors = false;
     options.error_handler = pypaErrorHandler;
     options.escape_handler = pypaEscapeDecoder;
+
+    if (future_flags & CO_FUTURE_PRINT_FUNCTION) {
+        future_flags &= ~CO_FUTURE_PRINT_FUNCTION;
+        options.initial_future_features.print_function = true;
+    }
+
+    if (future_flags & CO_FUTURE_DIVISION) {
+        future_flags &= ~CO_FUTURE_DIVISION;
+        options.initial_future_features.division = true;
+    }
+
+    if (future_flags & CO_FUTURE_ABSOLUTE_IMPORT) {
+        future_flags &= ~CO_FUTURE_ABSOLUTE_IMPORT;
+        options.initial_future_features.absolute_imports = true;
+    }
+
+    if (future_flags & CO_FUTURE_WITH_STATEMENT) {
+        future_flags &= ~CO_FUTURE_WITH_STATEMENT;
+        options.initial_future_features.with_statement = true;
+    }
+
+    if (future_flags & CO_FUTURE_UNICODE_LITERALS) {
+        future_flags &= ~CO_FUTURE_UNICODE_LITERALS;
+        options.initial_future_features.unicode_literals = true;
+    }
+
+    // Strip out some flags:
+    future_flags &= ~(CO_NESTED);
+    RELEASE_ASSERT(!future_flags, "0x%x", future_flags);
 
     if (pypa::parse(lexer, module, symbols, options) && module) {
         return readModule(*module);
@@ -1199,17 +1228,17 @@ PyObject* PystonStringReader::open_python_file() noexcept {
     return PycStringIO->NewInput(s);
 }
 
-AST_Module* pypa_parse(char const* file_path) {
+AST_Module* pypa_parse(char const* file_path, FutureFlags future_flags) {
     auto reader = PystonFileReader::create(file_path);
     if (!reader)
         return nullptr;
 
-    return parse_with_reader(std::move(reader));
+    return parse_with_reader(std::move(reader), future_flags);
 }
 
-AST_Module* pypa_parse_string(char const* str) {
+AST_Module* pypa_parse_string(char const* str, FutureFlags future_flags) {
     auto reader = llvm::make_unique<PystonStringReader>(str);
 
-    return parse_with_reader(std::move(reader));
+    return parse_with_reader(std::move(reader), future_flags);
 }
 }

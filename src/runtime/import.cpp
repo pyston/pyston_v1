@@ -43,7 +43,7 @@ static void removeModule(BoxedString* name) {
 Box* createAndRunModule(BoxedString* name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn.c_str());
 
-    AST_Module* ast = caching_parse_file(fn.c_str());
+    AST_Module* ast = caching_parse_file(fn.c_str(), /* future_flags = */ 0);
     assert(ast);
     try {
         compileAndRunModule(ast, module);
@@ -69,7 +69,7 @@ static Box* createAndRunModule(BoxedString* name, const std::string& fn, const s
     static BoxedString* path_str = internStringImmortal("__path__");
     module->setattr(path_str, path_list, NULL);
 
-    AST_Module* ast = caching_parse_file(fn.c_str());
+    AST_Module* ast = caching_parse_file(fn.c_str(), /* future_flags = */ 0);
     assert(ast);
     try {
         compileAndRunModule(ast, module);
@@ -646,7 +646,7 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
 
         static BoxedString* file_str = internStringImmortal("__file__");
         module->setattr(file_str, boxString(pathname), NULL);
-        AST_Module* ast = parse_string(code->data());
+        AST_Module* ast = parse_string(code->data(), /* future_flags = */ 0);
         compileAndRunModule(ast, module);
         return module;
     } catch (ExcInfo e) {
