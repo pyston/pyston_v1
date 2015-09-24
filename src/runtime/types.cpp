@@ -909,6 +909,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             rewrite_args = NULL;
         else {
             assert(new_attr);
+            assert(grewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN);
             r_new = grewrite_args.out_rtn;
             r_new->addGuard((intptr_t)new_attr);
         }
@@ -1051,8 +1052,11 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 rewrite_args = NULL;
             else {
                 if (init_attr) {
+                    assert(grewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN);
                     r_init = grewrite_args.out_rtn;
                     r_init->addGuard((intptr_t)init_attr);
+                } else {
+                    assert(grewrite_args.out_return_convention = GetattrRewriteArgs::NO_RETURN);
                 }
             }
         } else {

@@ -933,11 +933,16 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         getattribute = typeLookup(self->cls, _getattribute_str, &grewrite_args);
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
-        else if (getattribute)
+        else if (getattribute) {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             r_getattribute = grewrite_args.out_rtn;
+        } else {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+        }
     } else {
         getattribute = typeLookup(self->cls, _getattribute_str, NULL);
     }
+
     // Not sure why CPython checks if getattribute is NULL since I don't think that should happen.
     // Is there some legacy way of creating types that don't inherit from object?  Anyway, I think we
     // have the right behavior even if getattribute was somehow NULL, but add an assert because that
