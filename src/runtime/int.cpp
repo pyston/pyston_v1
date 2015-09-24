@@ -925,21 +925,40 @@ extern "C" Box* intIndex(BoxedInt* v) {
     return boxInt(v->n);
 }
 
-template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S == CAPI) {
-    if (val->cls == int_cls) {
-        if (base) {
-            if (S == CAPI) {
-                PyErr_Format(TypeError, "int() missing string argument");
+template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S == CAPI) {
+    int base = 10;
+
+    if (_base) {
+        if (S == CAPI) {
+            if (!PyInt_Check(_base)) {
+                PyErr_SetString(PyExc_TypeError, "an integer is required");
                 return NULL;
-            } else
+            }
+
+            if (val == None) {
+                PyErr_SetString(PyExc_TypeError, "int() missing string argument");
+                return NULL;
+            }
+
+            if (!PyString_Check(val) && !PyUnicode_Check(val)) {
+                PyErr_SetString(PyExc_TypeError, "int() can't convert non-string with explicit base");
+                return NULL;
+            }
+        } else {
+            if (!PyInt_Check(_base))
+                raiseExcHelper(TypeError, "an integer is required");
+
+            if (val == None)
                 raiseExcHelper(TypeError, "int() missing string argument");
+
+            if (!PyString_Check(val) && !PyUnicode_Check(val))
+                raiseExcHelper(TypeError, "int() can't convert non-string with explicit base");
         }
-        BoxedInt* n = static_cast<BoxedInt*>(val);
-        if (val->cls == int_cls)
-            return n;
-        return new BoxedInt(n->n);
-    }
-    if (!base) {
+        base = static_cast<BoxedInt*>(_base)->n;
+    } else {
+        if (val == None)
+            return PyInt_FromLong(0L);
+
         Box* r = PyNumber_Int(val);
         if (!r) {
             if (S == CAPI) {
@@ -951,27 +970,20 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
     }
 
     if (PyString_Check(val)) {
-        int base_n;
-        if (!base)
-            base_n = 10;
-        else {
-            RELEASE_ASSERT(base->cls == int_cls, "");
-            base_n = static_cast<BoxedInt*>(base)->n;
-        }
         BoxedString* s = static_cast<BoxedString*>(val);
 
         if (s->size() != strlen(s->data())) {
             Box* srepr = PyObject_Repr(val);
             if (S == CAPI) {
-                PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base_n,
+                PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base,
                              PyString_AS_STRING(srepr));
                 return NULL;
             } else {
-                raiseExcHelper(ValueError, "invalid literal for int() with base %d: %s", base_n,
+                raiseExcHelper(ValueError, "invalid literal for int() with base %d: %s", base,
                                PyString_AS_STRING(srepr));
             }
         }
-        Box* r = PyInt_FromString(s->data(), NULL, base_n);
+        Box* r = PyInt_FromString(s->data(), NULL, base);
         if (!r) {
             if (S == CAPI)
                 return NULL;
@@ -979,75 +991,14 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* base) noexcept(S 
                 throwCAPIException();
         }
         return r;
-    } else if (isSubclass(val->cls, unicode_cls)) {
-        int base_n;
-        if (!base)
-            base_n = 10;
-        else {
-            RELEASE_ASSERT(base->cls == int_cls, "");
-            base_n = static_cast<BoxedInt*>(base)->n;
-        }
-
-        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
-        if (!r) {
-            if (S == CAPI)
-                return NULL;
-            else
-                throwCAPIException();
-        }
-        return r;
-    } else if (val->cls == float_cls) {
-        RELEASE_ASSERT(!base, "");
-
-        // This is tricky -- code copied from CPython:
-
-        double x = PyFloat_AsDouble(val);
-        double wholepart; /* integral portion of x, rounded toward 0 */
-
-        (void)modf(x, &wholepart);
-        /* Try to get out cheap if this fits in a Python int.  The attempt
-         * to cast to long must be protected, as C doesn't define what
-         * happens if the double is too big to fit in a long.  Some rare
-         * systems raise an exception then (RISCOS was mentioned as one,
-         * and someone using a non-default option on Sun also bumped into
-         * that).  Note that checking for <= LONG_MAX is unsafe: if a long
-         * has more bits of precision than a double, casting LONG_MAX to
-         * double may yield an approximation, and if that's rounded up,
-         * then, e.g., wholepart=LONG_MAX+1 would yield true from the C
-         * expression wholepart<=LONG_MAX, despite that wholepart is
-         * actually greater than LONG_MAX.  However, assuming a two's complement
-         * machine with no trap representation, LONG_MIN will be a power of 2 (and
-         * hence exactly representable as a double), and LONG_MAX = -1-LONG_MIN, so
-         * the comparisons with (double)LONG_MIN below should be safe.
-         */
-        if ((double)LONG_MIN <= wholepart && wholepart < -(double)LONG_MIN) {
-            const long aslong = (long)wholepart;
-            return PyInt_FromLong(aslong);
-        }
-        return PyLong_FromDouble(wholepart);
     } else {
-        if (base)
-            raiseExcHelper(TypeError, "TypeError: int() can't convert non-string with explicit base");
-        static BoxedString* int_str = internStringImmortal("__int__");
-        Box* r = callattrInternal<S>(val, int_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-
+        // only for unicode and its subtype. Other type will be filtered out in above.
+        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base);
         if (!r) {
-            if (S == CAPI) {
-                if (!PyErr_Occurred())
-                    PyErr_Format(TypeError, "int() argument must be a string or a number, not '%s'\n",
-                                 getTypeName(val));
+            if (S == CAPI)
                 return NULL;
-            } else {
-                raiseExcHelper(TypeError, "int() argument must be a string or a number, not '%s'\n", getTypeName(val));
-            }
-        }
-
-        if (!PyInt_Check(r) && !PyLong_Check(r)) {
-            if (S == CAPI) {
-                PyErr_Format(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
-                return NULL;
-            } else
-                raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
+            else
+                throwCAPIException();
         }
         return r;
     }
@@ -1258,7 +1209,8 @@ void setupInt() {
     auto int_new
         = boxRTFunction((void*)intNew<CXX>, UNKNOWN, 3, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
     addRTFunction(int_new, (void*)intNew<CAPI>, UNKNOWN, CAPI);
-    int_cls->giveAttr("__new__", new BoxedFunction(int_new, { boxInt(0), NULL }));
+    int_cls->giveAttr("__new__", new BoxedFunction(int_new, { None, NULL }));
+
 
     int_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)intBitLength, BOXED_INT, 1)));
 
