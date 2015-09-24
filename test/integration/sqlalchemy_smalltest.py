@@ -208,15 +208,23 @@ FAILING = [
     'test.sql.test_unicode'
 ]
 
+# MODULES_TO_TEST = ['test.orm.test_bulk']
+# MODULES_TO_TEST = FAILING[:1]
+
 passed = []
 failed = []
 
-for fn in test_files:
+for run_idx in xrange(1):
+  for fn in test_files:
     assert fn.startswith(TEST_DIR + '/')
     assert fn.endswith(".py")
     mname = fn[len(SQLALCHEMY_DIR) + 1:-3].replace('/', '.')
     if mname not in MODULES_TO_TEST:
         continue
+
+    if mname == 'test.sql.test_functions' and run_idx > 0:
+        continue
+
     print '=' * 50
     print mname
 
