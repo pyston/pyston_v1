@@ -15,6 +15,7 @@
 #include "runtime/util.h"
 
 #include "codegen/codegen.h"
+#include "core/cfg.h"
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/long.h"
@@ -258,6 +259,11 @@ extern "C" void dumpEx(void* p, int levels) {
             CLFunction* cl = f->f;
             if (cl->source) {
                 printf("User-defined function '%s'\n", cl->source->getName()->c_str());
+                printf("Defined at %s:%d\n", cl->source->getFn()->c_str(), cl->source->body[0]->lineno);
+
+                if (cl->source->cfg && levels > 0) {
+                    cl->source->cfg->print();
+                }
             } else {
                 printf("A builtin function\n");
             }
