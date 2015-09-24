@@ -874,7 +874,8 @@ private:
 
         if (type == AST_TYPE::In || type == AST_TYPE::NotIn) {
             CompilerVariable* r = right->contains(emitter, getOpInfoForNode(node, unw_info), left);
-            assert(r->getType() == BOOL);
+            ASSERT(r->getType() == BOOL, "%s gave %s", right->getType()->debugName().c_str(),
+                   r->getType()->debugName().c_str());
             if (type == AST_TYPE::NotIn) {
                 ConcreteCompilerVariable* converted = r->makeConverted(emitter, BOOL);
                 // TODO: would be faster to just do unboxBoolNegated

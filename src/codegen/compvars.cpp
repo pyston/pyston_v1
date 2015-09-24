@@ -2607,7 +2607,7 @@ public:
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
-        return undefVariable();
+        return boolFromI1(emitter, llvm::UndefValue::get(g.i1));
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
