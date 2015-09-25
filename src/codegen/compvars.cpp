@@ -1778,6 +1778,7 @@ public:
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn->getValue());
             return boolFromI1(emitter, unboxed);
         }
+#if ENABLE_UNBOXED_VALUES
         if (cf->spec->rtn_type == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, rtn->getValue());
             return new ConcreteCompilerVariable(INT, unboxed, true);
@@ -1787,8 +1788,9 @@ public:
             return new ConcreteCompilerVariable(FLOAT, unboxed, true);
         }
         assert(cf->spec->rtn_type != BOXED_INT);
-        ASSERT(cf->spec->rtn_type != BOXED_BOOL, "%p", cf->code);
         assert(cf->spec->rtn_type != BOXED_FLOAT);
+#endif
+        ASSERT(cf->spec->rtn_type != BOXED_BOOL, "%p", cf->code);
 
         return rtn;
     }
