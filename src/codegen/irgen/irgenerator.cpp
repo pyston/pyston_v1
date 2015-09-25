@@ -874,7 +874,8 @@ private:
 
         if (type == AST_TYPE::In || type == AST_TYPE::NotIn) {
             CompilerVariable* r = right->contains(emitter, getOpInfoForNode(node, unw_info), left);
-            assert(r->getType() == BOOL);
+            ASSERT(r->getType() == BOOL, "%s gave %s", right->getType()->debugName().c_str(),
+                   r->getType()->debugName().c_str());
             if (type == AST_TYPE::NotIn) {
                 ConcreteCompilerVariable* converted = r->makeConverted(emitter, BOOL);
                 // TODO: would be faster to just do unboxBoolNegated
@@ -1510,7 +1511,9 @@ private:
         return func;
     }
 
+    // Note: the behavior of this function must match type_analysis.cpp:unboxedType()
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
+#if ENABLE_UNBOXED_VALUES
         if (t == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(INT, unboxed, true);
@@ -1521,6 +1524,7 @@ private:
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
             return rtn;
         }
+#endif
         if (t == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
@@ -2198,9 +2202,11 @@ private:
             ConcreteCompilerVariable* var = p.second->makeConverted(emitter, p.second->getConcreteType());
             converted_args.push_back(var);
 
+#if ENABLE_UNBOXED_VALUES
             assert(var->getType() != BOXED_INT && "should probably unbox it, but why is it boxed in the first place?");
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
+#endif
 
             // This line can never get hit right now for the same reason that the variables must already be
             // concrete,
@@ -2647,8 +2653,10 @@ public:
         assert(name.s() != FRAME_INFO_PTR_NAME);
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
+#if ENABLE_UNBOXED_VALUES
         assert(var->getType() != BOXED_INT);
         assert(var->getType() != BOXED_FLOAT);
+#endif
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = var;

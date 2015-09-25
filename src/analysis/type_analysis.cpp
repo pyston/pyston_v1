@@ -56,13 +56,16 @@ ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(InternedString name, C
 }
 
 
+// Note: the behavior of this function must match irgenerator.cpp::unboxVar()
 static ConcreteCompilerType* unboxedType(ConcreteCompilerType* t) {
+    if (t == BOXED_BOOL)
+        return BOOL;
+#if ENABLE_UNBOXED_VALUES
     if (t == BOXED_INT)
         return INT;
     if (t == BOXED_FLOAT)
         return FLOAT;
-    if (t == BOXED_BOOL)
-        return BOOL;
+#endif
     return t;
 }
 

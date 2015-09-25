@@ -313,6 +313,8 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
     r = classLookup(inst->inst_cls, attr_str, rewriter_args ? &grewriter_inst_args : NULL);
     if (!grewriter_inst_args.out_success)
         rewriter_args = NULL;
+    else
+        assert(grewriter_inst_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
 
     if (r) {
         Box* rtn = processDescriptor(r, inst, inst->inst_cls);
