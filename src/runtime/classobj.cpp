@@ -54,6 +54,34 @@ static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArg
     return NULL;
 }
 
+extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexcept {
+    RELEASE_ASSERT(PyInstance_Check(pinst), "");
+    BoxedInstance* inst = (BoxedInstance*)pinst;
+
+    RELEASE_ASSERT(PyString_Check(pname), "");
+    BoxedString* name = (BoxedString*)pname;
+
+    try {
+        internStringMortalInplace(name);
+        Box* v = inst->getattr(name, NULL);
+        if (v == NULL)
+            v = classLookup(inst->inst_cls, name);
+        return v;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyInstance_NewRaw(PyObject* klass, PyObject* dict) noexcept {
+    RELEASE_ASSERT(!dict, "not implemented");
+    if (!PyClass_Check(klass)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return new BoxedInstance((BoxedClassobj*)klass);
+}
+
 extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
     Py_ssize_t i, n;
     if (klass == base)
@@ -153,6 +181,15 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
             raiseExcHelper(TypeError, "this constructor takes no arguments");
     }
     return made;
+}
+
+extern "C" PyObject* PyInstance_New(PyObject* klass, PyObject* arg, PyObject* kw) noexcept {
+    try {
+        return classobjCall(klass, arg, kw);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 static Box* classobjGetattribute(Box* _cls, Box* _attr) {

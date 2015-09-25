@@ -68,6 +68,7 @@ public:
         BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
 
         Box::gcHandler(v, o);
+        v->visitPotential(o->method_def);
         v->visit(&o->passthrough);
         v->visit(&o->module);
     }
