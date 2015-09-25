@@ -2477,6 +2477,10 @@ extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** 
 }
 
 extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexcept {
+    if (n < 0) {
+        PyErr_SetString(PyExc_SystemError, "Negative size passed to PyString_FromStringAndSize");
+        return NULL;
+    }
     if (s == NULL)
         return BoxedString::createUninitializedString(n);
     return boxString(llvm::StringRef(s, n));

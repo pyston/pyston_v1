@@ -892,8 +892,20 @@ extern "C" int PyErr_BadArgument() noexcept {
 }
 
 extern "C" PyObject* PyErr_NoMemory() noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    if (PyErr_ExceptionMatches(PyExc_MemoryError))
+        /* already current */
+        return NULL;
+
+    /* raise the pre-allocated instance if it still exists */
+    if (PyExc_MemoryErrorInst)
+        PyErr_SetObject(PyExc_MemoryError, PyExc_MemoryErrorInst);
+    else
+        /* this will probably fail since there's no memory and hee,
+           hee, we have to instantiate this class
+        */
+        PyErr_SetNone(PyExc_MemoryError);
+
+    return NULL;
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
