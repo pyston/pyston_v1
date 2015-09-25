@@ -1,3 +1,4 @@
+# Exceptions from finalizers should get caught:
 import sys
 from testing_helpers import test_gc
 
@@ -24,4 +25,27 @@ test_gc(test, 10)
 
 print sorted(strs)
 
-print "done"
+
+
+# Similarly for exceptions from weakref callbacks:
+import weakref
+
+called_callback = False
+def callback(ref):
+    global called_callback
+    if not called_callback:
+        print "callback"
+        called_callback = True
+        raise ValueError()
+
+class C(object):
+    pass
+
+import gc
+l = []
+
+# Make a bunch of them just to make sure at least one gets collected:
+for i in xrange(100):
+    l.append(weakref.ref(C(), callback))
+
+gc.collect()

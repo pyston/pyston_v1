@@ -660,7 +660,12 @@ static void graphTraversalMarking(Worklist& worklist, GCVisitor& visitor) {
 
 static void callWeakrefCallback(PyWeakReference* head) {
     if (head->wr_callback) {
-        runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+        try {
+            runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            PyErr_WriteUnraisable(head->wr_callback);
+        }
         head->wr_callback = NULL;
     }
 }
