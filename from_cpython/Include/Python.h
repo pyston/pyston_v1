@@ -18,8 +18,7 @@
 // Cython depends on having this define set:
 #define Py_PYTHON_H
 
-// Cython has some "not targeting CPython" support that is triggered by having PYPY_VERSION defined:
-#define PYPY_VERSION "Pyston"
+#define PYSTON_VERSION "0.3"
 
 // These include orders come from CPython:
 #include "patchlevel.h"
