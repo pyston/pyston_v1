@@ -425,7 +425,9 @@ StructUnionType_new(PyTypeObject *type, PyObject *args, PyObject *kwds, int isSt
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)dict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)dict;
+    PyType_SetDict(result, dict);
     dict->format = _ctypes_alloc_format_string(NULL, "B");
     if (dict->format == NULL) {
         Py_DECREF(result);
@@ -995,7 +997,9 @@ PyCPointerType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)stgdict;
+    PyType_SetDict(result, stgdict);
 
     return (PyObject *)result;
 }
@@ -1461,7 +1465,9 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)stgdict;
+    PyType_SetDict(result, stgdict);
 
     /* Special case for character arrays.
        A permanent annoyance: char arrays are also strings!
@@ -1885,7 +1891,9 @@ static PyObject *CreateSwappedType(PyTypeObject *type, PyObject *args, PyObject 
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)stgdict;
+    PyType_SetDict(result, stgdict);
 
     return (PyObject *)result;
 }
@@ -2014,7 +2022,9 @@ PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)stgdict;
+    PyType_SetDict(result, stgdict);
 
     /* Install from_param class methods in ctypes base classes.
        Overrides the PyCSimpleType_from_param generic method.
@@ -2044,21 +2054,14 @@ PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             break;
         }
 
-        // TODO: Pyston change:
-        // For now, don't run this code path because we don't support some of
-        // the descriptor CAPI functions.
-        // We do this to be able to run `import ctypes`, but this will need to be
-        // enabled again once we want CType to actually work.
-        // if (ml) {
-        if (false) {
+
+        if (ml) {
 #if (PYTHON_API_VERSION >= 1012)
             PyObject *meth;
             int x;
-            /*
             meth = PyDescr_NewClassMethod(result, ml);
             if (!meth)
                 return NULL;
-            */
 #else
 #error
             PyObject *meth, *func;
@@ -2402,7 +2405,9 @@ PyCFuncPtrType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    // Pyston change:
+    //result->tp_dict = (PyObject *)stgdict;
+    PyType_SetDict(result, stgdict);
 
     if (-1 == make_funcptrtype_dict(stgdict)) {
         Py_DECREF(result);

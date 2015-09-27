@@ -1425,12 +1425,26 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
     }
 
     if (obj->cls->instancesHaveHCAttrs()) {
-        obj->setDictBacked(val);
+        RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "%s", val->cls->tp_name);
+
+        auto new_attr_list
+            = (HCAttrs::AttrList*)gc_alloc(sizeof(HCAttrs::AttrList) + sizeof(Box*), gc::GCKind::PRECISE);
+        new_attr_list->attrs[0] = val;
+
+        HCAttrs* hcattrs = obj->getHCAttrsPtr();
+
+        hcattrs->hcls = HiddenClass::dict_backed;
+        hcattrs->attr_list = new_attr_list;
         return;
     }
 
     // This should have thrown an exception rather than get here:
     abort();
+}
+
+extern "C" void PyType_SetDict(PyTypeObject* type, PyObject* dict) {
+    typeSubSetDict(type, dict, NULL);
+    type->tp_dict = dict;
 }
 
 Box* dict_descr = NULL;

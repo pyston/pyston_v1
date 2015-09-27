@@ -993,28 +993,36 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
         obj_saved->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)mro);
 
         for (auto base : *mro) {
-            rewrite_args->out_success = false;
-            if (base == cls) {
-                // Small optimization: don't have to load the class again since it was given to us in
-                // a register.
-                assert(rewrite_args->obj == obj_saved);
-            } else {
-                rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
-                // We are passing a constant object, and objects are not allowed to change shape
-                // (at least the kind of "shape" that Box::getattr is referring to)
-                rewrite_args->obj_shape_guarded = true;
+            if (rewrite_args) {
+                rewrite_args->out_success = false;
+                if (base == cls) {
+                    // Small optimization: don't have to load the class again since it was given to us in
+                    // a register.
+                    assert(rewrite_args->obj == obj_saved);
+                } else {
+                    rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
+                    // We are passing a constant object, and objects are not allowed to change shape
+                    // (at least the kind of "shape" that Box::getattr is referring to)
+                    rewrite_args->obj_shape_guarded = true;
+                }
             }
             val = base->getattr(attr, rewrite_args);
+
+            if (rewrite_args && !rewrite_args->out_success)
+                rewrite_args = NULL;
+
             if (val)
                 return val;
         }
 
-        assert(!rewrite_args->out_rtn);
-        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
+        if (rewrite_args) {
+            assert(rewrite_args->out_success);
+            assert(!rewrite_args->out_rtn);
+            rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
+        }
         return NULL;
     } else {
         assert(attr->interned_state != SSTATE_NOT_INTERNED);
-
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
         for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
