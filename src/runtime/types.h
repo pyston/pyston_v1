@@ -41,6 +41,7 @@ class BoxedFile;
 class BoxedClosure;
 class BoxedGenerator;
 class BoxedLong;
+class BoxedEllipsis;
 
 void setupInt();
 void teardownInt();
@@ -71,6 +72,7 @@ void setupDescr();
 void teardownDescr();
 void setupCode();
 void setupFrame();
+void setupEllipsis();
 
 void setupSys();
 void setupBuiltins();
@@ -89,7 +91,7 @@ extern "C" BoxedString* EmptyString;
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
-    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
+    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *ellipsis_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls,
     *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
     *capi_getset_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls, *frame_cls, *capifunc_cls,
@@ -167,6 +169,7 @@ extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
+extern "C" Box* createEllipsis();
 extern "C" Box* createList();
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step);
 extern "C" Box* createTuple(int64_t nelts, Box** elts);
@@ -477,6 +480,14 @@ public:
     static GCdArray* realloc(GCdArray* array, int capacity) {
         return (GCdArray*)gc::gc_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
     }
+};
+
+class BoxedEllipsis : public Box {
+public:
+    BoxedEllipsis() __attribute__((visibility("default"))) {}
+
+    DEFAULT_CLASS_SIMPLE(ellipsis_cls);
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedList : public Box {
