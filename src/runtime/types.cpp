@@ -1490,11 +1490,10 @@ void BoxedSlice::gcHandler(GCVisitor* v, Box* b) {
     v->visit(&sl->step);
 }
 
-void BoxedEllipsis::gcHandler(GCVisitor* v, Box* b){
-     assert(b->cls == ellipsis_cls);
-  
-     Box::gcHandler(v, b);
+void BoxedEllipsis::gcHandler(GCVisitor* v, Box* b) {
+    assert(b->cls == ellipsis_cls);
 
+    Box::gcHandler(v, b);
 }
 
 static int call_gc_visit(PyObject* val, void* arg) {
@@ -1529,9 +1528,9 @@ void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
 
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
-    * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *ellipsis_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
-      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
+    * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *ellipsis_cls, *slice_cls, *module_cls, *dict_cls,
+      *tuple_cls, *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
+      *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
       *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
@@ -1787,7 +1786,7 @@ extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     return rtn;
 }
 
-extern "C" Box* createEllipsis(){
+extern "C" Box* createEllipsis() {
     BoxedEllipsis* rtn = new BoxedEllipsis();
     return rtn;
 }
@@ -1808,7 +1807,7 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
     return createSlice(start, stop, step);
 }
 
-extern "C" Box* ellipsisNew(Box* cls){
+extern "C" Box* ellipsisNew(Box* cls) {
     RELEASE_ASSERT(cls == ellipsis_cls, "");
     return createEllipsis();
 }
@@ -1925,8 +1924,7 @@ Box* sliceRepr(BoxedSlice* self) {
     return boxStringTwine(llvm::Twine("slice(") + start->s() + ", " + stop->s() + ", " + step->s() + ")");
 }
 
-Box* ellipsisRepr(BoxedEllipsis* self)
-{
+Box* ellipsisRepr(BoxedEllipsis* self) {
     return boxStringTwine(llvm::Twine("Ellipsis"));
 }
 
@@ -3777,7 +3775,8 @@ void setupRuntime() {
                                             offsetof(BoxedInstanceMethod, in_weakreflist), sizeof(BoxedInstanceMethod),
                                             false, "instancemethod");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, &BoxedEllipsis::gcHandler, 0, 0, sizeof(BoxedEllipsis), false, "ellipsis");
+    ellipsis_cls = BoxedClass::create(type_cls, object_cls, &BoxedEllipsis::gcHandler, 0, 0, sizeof(BoxedEllipsis),
+                                      false, "ellipsis");
     slice_cls
         = BoxedClass::create(type_cls, object_cls, &BoxedSlice::gcHandler, 0, 0, sizeof(BoxedSlice), false, "slice");
     set_cls = BoxedClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
@@ -3951,7 +3950,7 @@ void setupRuntime() {
                                                                        offsetof(BoxedInstanceMethod, im_class), true));
 
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)ellipsisRepr, STR, 1)));
-    
+
     ellipsis_cls->freeze();
 
     slice_cls->giveAttr("__new__",

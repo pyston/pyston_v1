@@ -484,10 +484,10 @@ public:
 
 class BoxedEllipsis : public Box {
 public:
-   BoxedEllipsis() __attribute__((visibility("default"))) {}
-   
-   DEFAULT_CLASS_SIMPLE(ellipsis_cls);
-   static void gcHandler(GCVisitor* v, Box* b);
+    BoxedEllipsis() __attribute__((visibility("default"))) {}
+
+    DEFAULT_CLASS_SIMPLE(ellipsis_cls);
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedList : public Box {

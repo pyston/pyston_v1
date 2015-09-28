@@ -561,11 +561,10 @@ Value ASTInterpreter::visit_slice(AST_slice* node) {
     }
     return Value();
 }
-Value ASTInterpreter::visit_ellipsis(AST_Ellipsis* node)
-{
-     Value v;
-     v.o = createEllipsis();
-     return v;
+Value ASTInterpreter::visit_ellipsis(AST_Ellipsis* node) {
+    Value v;
+    v.o = createEllipsis();
+    return v;
 }
 Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();

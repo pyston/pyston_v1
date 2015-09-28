@@ -788,7 +788,8 @@ int binarySearch(T needle, RandomAccessIterator start, RandomAccessIterator end,
     int l = 0;
     int r = end - start - 1;
     while (l <= r) {
-        int mid = l + (r - l) / 2;
+        //prevent overflow while calculating mid value
+        int mid = (l & r) + ((l ^ r) >> 1);;
         auto mid_item = *(start + mid);
         int c = cmp(needle, mid_item);
         if (c < 0)
