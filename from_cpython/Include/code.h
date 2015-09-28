@@ -91,6 +91,9 @@ PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno) PYS
    use PyFrame_GetLineNumber() instead. */
 PyAPI_FUNC(int) PyCode_Addr2Line(PyCodeObject *, int) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+PyAPI_FUNC(int) PyCode_GetArgCount(PyCodeObject *) PYSTON_NOEXCEPT;
+
 /* for internal use only */
 #define _PyCode_GETCODEPTR(co, pp) \
 	((*Py_TYPE((co)->co_code)->tp_as_buffer->bf_getreadbuffer) \

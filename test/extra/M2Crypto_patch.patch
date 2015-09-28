@@ -1,0 +1,23 @@
+diff -ur M2Crypto-0.21.1.orig/SWIG/_lib.i ./SWIG/_lib.i
+--- M2Crypto-0.21.1/SWIG/_lib.i	2011-01-15 19:10:06.000000000 +0000
++++ ./SWIG/_lib.i	2015-09-25 12:41:17.184659427 +0100
+@@ -110,12 +110,16 @@
+         PyCodeObject *code;
+         func = PyMethod_Function(ssl_verify_cb_func);
+         code = (PyCodeObject *) PyFunction_GetCode(func);
+-        if (code && code->co_argcount == 3) { /* XXX Python internals */
++        // Pyston change
++        //if (code && code->co_argcount == 3) { /* XXX Python internals */
++        if (code && PyCode_GetArgCount(code) == 3) {
+             new_style_callback = 1;
+         }
+     } else if (PyFunction_Check(ssl_verify_cb_func)) {
+         PyCodeObject *code = (PyCodeObject *) PyFunction_GetCode(ssl_verify_cb_func);
+-        if (code && code->co_argcount == 2) { /* XXX Python internals */
++        // Pyston change
++        //if (code && code->co_argcount == 2) { /* XXX Python internals */
++        if (code && PyCode_GetArgCount(code) == 2) {
+             new_style_callback = 1;
+         }    
+     } else {
+
