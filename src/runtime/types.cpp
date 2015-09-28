@@ -3777,7 +3777,7 @@ void setupRuntime() {
                                             offsetof(BoxedInstanceMethod, in_weakreflist), sizeof(BoxedInstanceMethod),
                                             false, "instancemethod");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, &BoxedEllipsis::gcHandler, 0, 0, sizeof(BoxedEllipsis), false, "Ellipsis");
+    ellipsis_cls = BoxedClass::create(type_cls, object_cls, &BoxedEllipsis::gcHandler, 0, 0, sizeof(BoxedEllipsis), false, "ellipsis");
     slice_cls
         = BoxedClass::create(type_cls, object_cls, &BoxedSlice::gcHandler, 0, 0, sizeof(BoxedSlice), false, "slice");
     set_cls = BoxedClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
@@ -3951,7 +3951,7 @@ void setupRuntime() {
                                                                        offsetof(BoxedInstanceMethod, im_class), true));
 
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)ellipsisRepr, STR, 1)));
-    //ellipsis_cls->giveAttr("__getitem__", new BoxedFunction(ellipsis_getitem));
+    
     ellipsis_cls->freeze();
 
     slice_cls->giveAttr("__new__",
