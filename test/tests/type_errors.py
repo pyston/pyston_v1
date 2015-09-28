@@ -32,3 +32,13 @@ try:
     print 1.0[0]
 except TypeError, e:
     print e
+
+
+
+def f2():
+    if 0:
+        1 in l
+        l = []
+
+for i in xrange(100):
+    f2()

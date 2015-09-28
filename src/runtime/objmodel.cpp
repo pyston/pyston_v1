@@ -222,6 +222,9 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
     static BoxedString* newline_str = internStringImmortal("\n");
     static BoxedString* space_str = internStringImmortal(" ");
 
+    if (dest == None)
+        dest = getSysStdout();
+
     if (var) {
         // begin code for handling of softspace
         bool new_softspace = !nl;
@@ -229,11 +232,17 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
             callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0, 0);
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
-        callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        Box* write_rtn
+            = callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), str_or_unicode_var, 0, 0, 0, 0);
+        if (!write_rtn)
+            raiseAttributeError(dest, write_str->s());
     }
 
     if (nl) {
-        callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
+        Box* write_rtn
+            = callattrInternal<CXX>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), newline_str, 0, 0, 0, 0);
+        if (!write_rtn)
+            raiseAttributeError(dest, write_str->s());
         if (!var)
             softspace(dest, false);
     }
@@ -996,12 +1005,10 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 rewrite_args->obj_shape_guarded = true;
             }
             val = base->getattr(attr, rewrite_args);
-            assert(rewrite_args->out_success);
             if (val)
                 return val;
         }
 
-        assert(rewrite_args->out_success);
         assert(!rewrite_args->out_rtn);
         rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
         return NULL;
@@ -1585,6 +1592,7 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
         gotten = getclsattrInternal(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success && gotten) {
+            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
 #endif
@@ -1708,6 +1716,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
                     } else if (_get_) {
+                        assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                         r_get = grewrite_args.out_rtn;
                     }
                 } else {
@@ -1730,6 +1739,9 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
+                    } else {
+                        assert(grewrite_args.out_return_convention
+                               == (_set_ ? GetattrRewriteArgs::VALID_RETURN : GetattrRewriteArgs::NO_RETURN));
                     }
                 } else {
                     _set_ = typeLookup(descr->cls, set_str, NULL);
@@ -1840,6 +1852,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 if (!grewrite_args.out_success) {
                     rewrite_args = NULL;
                 } else if (val) {
+                    assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                     r_val = grewrite_args.out_rtn;
                 }
             } else {
@@ -2183,13 +2196,14 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     // (otherwise no need to check descriptor logic)
     if (rewrite_args) {
         RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
-        GetattrRewriteArgs crewrite_args(rewrite_args->rewriter, r_cls, rewrite_args->rewriter->getReturnDestination());
-        descr = typeLookup(obj->cls, attr, &crewrite_args);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_cls, rewrite_args->rewriter->getReturnDestination());
+        descr = typeLookup(obj->cls, attr, &grewrite_args);
 
-        if (!crewrite_args.out_success) {
+        if (!grewrite_args.out_success) {
             rewrite_args = NULL;
         } else if (descr) {
-            r_descr = crewrite_args.out_rtn;
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
+            r_descr = grewrite_args.out_rtn;
         }
     } else {
         descr = typeLookup(obj->cls, attr, NULL);
@@ -2206,12 +2220,13 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
 
         if (rewrite_args) {
             RewriterVar* r_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
-            GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, r_cls, Location::any());
-            _set_ = typeLookup(descr->cls, set_str, &trewrite_args);
-            if (!trewrite_args.out_success) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_cls, Location::any());
+            _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
+            if (!grewrite_args.out_success) {
                 rewrite_args = NULL;
             } else if (_set_) {
-                r_set = trewrite_args.out_rtn;
+                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
+                r_set = grewrite_args.out_rtn;
             }
         } else {
             _set_ = typeLookup(descr->cls, set_str, NULL);
@@ -2306,6 +2321,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
 
             if (rewrite_args.out_success) {
                 r_setattr = rewrite_args.out_rtn;
+                assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                 // TODO this is not good enough, since the object could get collected:
                 r_setattr->addGuard((intptr_t)setattr);
             } else {
@@ -2486,12 +2502,13 @@ extern "C" bool nonzero(Box* obj) {
             rewriter.reset();
 
         if (rtn == NULL) {
-            ASSERT(obj->cls->is_user_defined || obj->cls == classobj_cls || obj->cls == type_cls
-                       || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
-                       || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
-                       || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls || obj->cls == frame_cls
-                       || obj->cls == generator_cls || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls
-                       || obj->cls == wrapperdescr_cls || obj->cls == wrapperobject_cls,
+            ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
+                       || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == file_cls
+                       || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
+                       || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
+                       || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
+                       || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls
+                       || obj->cls == wrapperobject_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {
@@ -2833,6 +2850,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
         if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
             rewrite_args = NULL;
         } else if (val) {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             r_val = grewrite_args.out_rtn;
         }
     } else {
@@ -4744,6 +4762,9 @@ static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString*
         slice_attr = typeLookup(target->cls, slice_str, &grewrite_args);
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
+        } else {
+            assert(grewrite_args.out_return_convention
+                   == (slice_attr ? GetattrRewriteArgs::VALID_RETURN : GetattrRewriteArgs::NO_RETURN));
         }
     } else {
         slice_attr = typeLookup(target->cls, slice_str, NULL);
@@ -5220,12 +5241,14 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (r) {
+            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             rewrite_args.out_rtn->addGuard((uint64_t)r);
             if (rewrite_args.out_success) {
                 rewriter->commitReturning(r_o);
                 return o;
             }
         } else if (!r) {
+            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
             RewriterVar* var = rewriter.get()->call(true, (void*)createBoxedIterWrapper, rewriter->getArg(0));
             if (rewrite_args.out_success) {
                 rewriter->commitReturning(var);
@@ -5526,7 +5549,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     for (const auto& p : *attr_dict) {
         auto k = coerceUnicodeToStr<CXX>(p.first);
 
-        RELEASE_ASSERT(k->cls == str_cls, "");
+        RELEASE_ASSERT(k->cls == str_cls, "%s", k->cls->tp_name);
         BoxedString* s = static_cast<BoxedString*>(k);
         internStringMortalInplace(s);
         made->setattr(s, p.second, NULL);
@@ -5727,6 +5750,11 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 r = m->getattr(name, &rewrite_args);
                 if (!rewrite_args.out_success) {
                     rewriter.reset(NULL);
+                } else {
+                    if (r)
+                        assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
+                    else
+                        assert(rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
                 }
                 if (r) {
                     if (rewriter.get()) {
@@ -5766,6 +5794,8 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
             if (!rtn || !rewrite_args.out_success) {
                 rewriter.reset(NULL);
+            } else {
+                assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             }
 
             if (rewriter.get()) {

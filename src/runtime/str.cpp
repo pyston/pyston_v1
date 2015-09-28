@@ -2409,7 +2409,8 @@ public:
 
     static Box* next(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
-        assert(hasnextUnboxed(self));
+        if (!hasnextUnboxed(self))
+            raiseExcHelper(StopIteration, (const char*)nullptr);
 
         char c = *self->it;
         ++self->it;

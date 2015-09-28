@@ -404,6 +404,15 @@ extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL
 }
 
 extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
+    if (isnan(v)) {
+        PyErr_SetString(PyExc_ValueError, "cannot convert float NaN to integer");
+        return NULL;
+    }
+    if (isinf(v)) {
+        PyErr_SetString(PyExc_OverflowError, "cannot convert float infinity to integer");
+        return NULL;
+    }
+
     BoxedLong* rtn = new BoxedLong();
     mpz_init_set_d(rtn->n, v);
     return rtn;
@@ -640,68 +649,106 @@ extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) noexce
     return rtn;
 }
 
-BoxedLong* _longNew(Box* val, Box* _base) {
-    BoxedLong* rtn = new BoxedLong();
+template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CAPI) {
+    int base = 10;
     if (_base) {
-        if (!PyInt_Check(_base))
-            raiseExcHelper(TypeError, "an integer is required");
-        int base = static_cast<BoxedInt*>(_base)->n;
+        if (S == CAPI) {
+            if (!PyInt_Check(_base)) {
+                PyErr_Format(PyExc_TypeError, "integer argument expected, got %s", getTypeName(_base));
+                return NULL;
+            }
 
-        if (!PyString_Check(val))
-            raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
+            if (val == None) {
+                PyErr_SetString(PyExc_TypeError, "long() missing string argument");
+                return NULL;
+            }
+
+            if (!PyString_Check(val) && !PyUnicode_Check(val)) {
+                PyErr_SetString(PyExc_TypeError, "long() can't convert non-string with explicit base");
+                return NULL;
+            }
+        } else {
+            if (!PyInt_Check(_base))
+                raiseExcHelper(TypeError, "integer argument expected, got %s", getTypeName(_base));
+
+            if (val == None)
+                raiseExcHelper(TypeError, "long() missing string argument");
+
+            if (!PyString_Check(val) && !PyUnicode_Check(val))
+                raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
+        }
+        base = static_cast<BoxedInt*>(_base)->n;
+    } else {
+        if (val == None)
+            return PyLong_FromLong(0L);
+
+        Box* r = PyNumber_Long(val);
+        if (!r) {
+            if (S == CAPI) {
+                return NULL;
+            } else
+                throwCAPIException();
+        }
+        return r;
+    }
+
+    if (PyString_Check(val)) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
-        checkAndThrowCAPIException();
-    } else {
-        if (PyLong_Check(val)) {
-            BoxedLong* l = static_cast<BoxedLong*>(val);
-            if (val->cls == long_cls)
-                return l;
-            BoxedLong* rtn = new BoxedLong();
-            mpz_init_set(rtn->n, l->n);
-            return rtn;
-        } else if (PyInt_Check(val)) {
-            mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
-        } else if (val->cls == str_cls) {
-            llvm::StringRef s = static_cast<BoxedString*>(val)->s();
-            assert(s.data()[s.size()] == '\0');
-            int r = mpz_init_set_str(rtn->n, s.data(), 10);
-            RELEASE_ASSERT(r == 0, "");
-        } else if (val->cls == float_cls) {
-            mpz_init_set_d(rtn->n, static_cast<BoxedFloat*>(val)->d);
-        } else {
-            static BoxedString* long_str = internStringImmortal("__long__");
-            CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-            Box* r = callattr(val, long_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-
-            if (!r) {
-                raiseExcHelper(TypeError, "TypeError: long() argument must be a string or a number, not '%s'\n",
-                               getTypeName(val));
-            }
-
-            if (PyInt_Check(r)) {
-                mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(r)->n);
-            } else if (!PyLong_Check(r)) {
-                raiseExcHelper(TypeError, "__long__ returned non-long (type %s)", r->cls->tp_name);
+        if (s->size() != strlen(s->data())) {
+            Box* srepr = PyObject_Repr(val);
+            if (S == CAPI) {
+                PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: %s", base,
+                             PyString_AS_STRING(srepr));
+                return NULL;
             } else {
-                return static_cast<BoxedLong*>(r);
+                raiseExcHelper(ValueError, "invalid literal for long() with base %d: %s", base,
+                               PyString_AS_STRING(srepr));
             }
         }
+        Box* r = PyLong_FromString(s->data(), NULL, base);
+        if (!r) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
+        return r;
+    } else {
+        // only for unicode and its subtype, other type will be filtered out in above
+        Box* r = PyLong_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base);
+        if (!r) {
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
+        return r;
     }
-    return rtn;
 }
 
-extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
-    if (!PyType_Check(_cls))
-        raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+template <ExceptionStyle S> Box* longNew(Box* _cls, Box* val, Box* base) noexcept(S == CAPI) {
+    if (!PyType_Check(_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls));
+    }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, long_cls))
-        raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls),
-                       getNameOfClass(cls));
+    if (!isSubclass(cls, long_cls)) {
+        if (S == CAPI) {
+            PyErr_Format(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls),
+                         getNameOfClass(cls));
+            return NULL;
+        } else
+            raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls),
+                           getNameOfClass(cls));
+    }
 
-    BoxedLong* l = _longNew(val, _base);
+    BoxedLong* l = (BoxedLong*)_longNew<S>(val, base);
+
     if (cls == long_cls)
         return l;
 
@@ -718,9 +765,11 @@ Box* longInt(Box* v) {
     int overflow = 0;
     long n = PyLong_AsLongAndOverflow(v, &overflow);
     static_assert(sizeof(BoxedInt::n) == sizeof(long), "");
-    if (overflow)
-        return v;
-    else
+    if (overflow) {
+        BoxedLong* rtn = new BoxedLong();
+        mpz_init_set(rtn->n, ((BoxedLong*)v)->n);
+        return rtn;
+    } else
         return new BoxedInt(n);
 }
 
@@ -1386,6 +1435,10 @@ extern "C" Box* longBitLength(BoxedLong* self) noexcept {
     if (!PyLong_Check(self))
         raiseExcHelper(TypeError, "descriptor 'bit_length' requires a 'long' object but received a '%s'",
                        getTypeName(self));
+
+    if (mpz_sgn(self->n) == 0) {
+        return boxLong(0);
+    }
     size_t bits = mpz_sizeinbase(self->n, 2);
     return boxLong(bits);
 }
@@ -1460,8 +1513,10 @@ void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
-    long_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, false, false), { boxInt(0), NULL }));
+    auto long_new
+        = boxRTFunction((void*)longNew<CXX>, UNKNOWN, 3, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
+    addRTFunction(long_new, (void*)longNew<CAPI>, UNKNOWN, CAPI);
+    long_cls->giveAttr("__new__", new BoxedFunction(long_new, { boxInt(0), NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));

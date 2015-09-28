@@ -527,10 +527,13 @@ public:
 
     llvm::iterator_range<BoxIterator> pyElements();
 
+    // For instances with hc attrs:
     size_t getHCAttrsOffset();
     HCAttrs* getHCAttrsPtr();
-    void setDict(BoxedDict* d);
+    void setDictBacked(Box* d);
+    // For instances with dict attrs:
     BoxedDict* getDict();
+    void setDict(BoxedDict* d);
 
 
     void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);

@@ -33,7 +33,7 @@
 #include "runtime/types.h"
 
 //#undef VERBOSITY
-//#define VERBOSITY(x) 2
+//#define VERBOSITY(x) 4
 
 namespace pyston {
 
@@ -56,13 +56,16 @@ ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(InternedString name, C
 }
 
 
+// Note: the behavior of this function must match irgenerator.cpp::unboxVar()
 static ConcreteCompilerType* unboxedType(ConcreteCompilerType* t) {
+    if (t == BOXED_BOOL)
+        return BOOL;
+#if ENABLE_UNBOXED_VALUES
     if (t == BOXED_INT)
         return INT;
     if (t == BOXED_FLOAT)
         return FLOAT;
-    if (t == BOXED_BOOL)
-        return BOOL;
+#endif
     return t;
 }
 
@@ -116,9 +119,11 @@ private:
         if (speculated_cls != NULL && speculated_cls->is_constant) {
             ConcreteCompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));
             if (VERBOSITY() >= 2) {
-                printf("in propagator, speculating that %s would actually be %s, at:\n", old_type->debugName().c_str(),
+                printf("in propagator, speculating that %s would actually be %s, at ", old_type->debugName().c_str(),
                        speculated_type->debugName().c_str());
+                fflush(stdout);
                 print_ast(node);
+                llvm::outs().flush();
                 printf("\n");
             }
 
@@ -152,8 +157,9 @@ private:
         CompilerType* rtn = static_cast<CompilerType*>(raw_rtn);
 
         if (VERBOSITY() >= 3) {
+            printf("Type of ");
             print_ast(node);
-            printf(" %s\n", rtn->debugName().c_str());
+            printf(" is %s\n", rtn->debugName().c_str());
         }
 
         expr_types[node] = rtn;
@@ -428,10 +434,6 @@ private:
             return UNKNOWN;
         }
 
-        if (name_scope == ScopeInfo::VarScopeType::CLOSURE) {
-            return UNKNOWN;
-        }
-
         if (name_scope == ScopeInfo::VarScopeType::NAME) {
             return UNKNOWN;
         }
@@ -440,7 +442,7 @@ private:
             return UNKNOWN;
         }
 
-        if (name_scope == ScopeInfo::VarScopeType::FAST) {
+        if (name_scope == ScopeInfo::VarScopeType::FAST || name_scope == ScopeInfo::VarScopeType::CLOSURE) {
             CompilerType*& t = sym_table[node->id];
             if (t == NULL) {
                 // if (VERBOSITY() >= 2) {

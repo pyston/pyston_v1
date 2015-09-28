@@ -122,3 +122,27 @@ a = 2389134823414823408429384238403228392384028439480234823
 print +a
 print +long.__new__(C, 5L)
 print type(+long.__new__(C, 5L))
+
+print((0L).bit_length())
+
+values = ['inf', '-inf', 'nan']
+
+for v in values:
+    try:
+        long(float(v))
+    except Exception as e:
+        print(e.message)
+
+
+class long2(long):
+    pass
+
+# Overflowing int conversion must return long not long subtype.
+x = long2(1L << 100)
+y = int(x)
+print(type(y))
+
+print(long(unicode("-3")))
+
+print(long(x=10))
+print(long(x="10", base=10))

@@ -767,18 +767,6 @@ finally:
     --tstate->recursion_depth;
 }
 
-extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" void PyGILState_Release(PyGILState_STATE) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_type = e.type;
     cur_thread_state.curexc_value = e.value;
@@ -867,9 +855,9 @@ extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject**
 
 extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
     ExcInfo* exc = getFrameExcInfo();
-    exc->type = type;
-    exc->value = value;
-    exc->traceback = traceback;
+    exc->type = type ? type : None;
+    exc->value = value ? value : None;
+    exc->traceback = traceback ? traceback : None;
 }
 
 extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
@@ -1382,6 +1370,12 @@ extern "C" int PyCFunction_GetFlags(PyObject* op) noexcept {
     return static_cast<BoxedCApiFunction*>(op)->method_def->ml_flags;
 }
 
+extern "C" PyObject* PyCFunction_Call(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
+    assert(arg->cls == tuple_cls);
+    assert(!kw || kw->cls == dict_cls);
+    return BoxedCApiFunction::tppCall<CAPI>(func, NULL, ArgPassSpec(0, 0, true, true), arg, kw, NULL, NULL, NULL);
+}
+
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
     if (v != NULL) {
         Py_ssize_t x;
@@ -1426,11 +1420,13 @@ extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
 }
 
 extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {
-    Py_FatalError("Unimplemented");
+    beginAllowThreads();
+    return PyThreadState_GET();
 }
 
 extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
-    Py_FatalError("Unimplemented");
+    RELEASE_ASSERT(tstate == PyThreadState_GET(), "");
+    endAllowThreads();
 }
 
 extern "C" char* PyModule_GetName(PyObject* m) noexcept {
@@ -1491,7 +1487,6 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", 10);
 
-    assert(_self->cls == capifunc_cls);
     BoxedCApiFunction* self = static_cast<BoxedCApiFunction*>(_self);
 
     if (rewrite_args) {

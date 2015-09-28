@@ -82,7 +82,11 @@ extern "C" Box* vars(Box* obj) {
     if (!obj)
         return fastLocalsToBoxedLocals();
 
-    return obj->getAttrWrapper();
+    static BoxedString* dict_str = internStringImmortal("__dict__");
+    Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str, NULL);
+    if (!rtn)
+        raiseExcHelper(TypeError, "vars() argument must have __dict__ attribute");
+    return rtn;
 }
 
 extern "C" Box* abs_(Box* x) {
@@ -564,13 +568,17 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
         rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        if (!grewrite_args.out_success)
+        // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
+        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE)
             rewrite_args = NULL;
         else {
-            if (!rtn && !PyErr_Occurred())
+            if (!rtn && !PyErr_Occurred()) {
+                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
                 r_rtn = rewrite_args->rewriter->loadConst(0);
-            else
+            } else {
+                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                 r_rtn = grewrite_args.out_rtn;
+            }
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str, NULL);
@@ -598,7 +606,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "setattr(): attribute name must be string");
+        raiseExcHelper(TypeError, "attribute name must be string, not '%s'", _str->cls->tp_name);
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
@@ -673,13 +681,16 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
         rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        if (!grewrite_args.out_success)
+        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE)
             rewrite_args = NULL;
         else {
-            if (!rtn && !PyErr_Occurred())
+            if (!rtn && !PyErr_Occurred()) {
+                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
                 r_rtn = rewrite_args->rewriter->loadConst(0);
-            else
+            } else {
+                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
                 r_rtn = grewrite_args.out_rtn;
+            }
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str, NULL);
@@ -1322,8 +1333,8 @@ Box* getreversed(Box* o) {
     return new (seqreviter_cls) BoxedSeqIter(o, len - 1);
 }
 
-Box* pydump(Box* p) {
-    dump(p);
+Box* pydump(Box* p, BoxedInt* level) {
+    dumpEx(p, level->n);
     return None;
 }
 
@@ -1587,8 +1598,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0), "trap");
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr("dump",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 1), "dump"));
+    builtins_module->giveAttr(
+        "dump", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 2), "dump", { boxInt(0) }));
     builtins_module->giveAttr(
         "dumpAddr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
 

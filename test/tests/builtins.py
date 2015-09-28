@@ -65,6 +65,10 @@ class C(object):
     def __init__(self):
         self.a = 1
 print vars(C()).items()
+try:
+    print vars(42)
+except TypeError, e:
+    print e
 
 print globals().get("not a real variable")
 print globals().get("not a real variable", 1)

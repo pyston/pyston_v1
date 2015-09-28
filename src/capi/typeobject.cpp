@@ -933,11 +933,16 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         getattribute = typeLookup(self->cls, _getattribute_str, &grewrite_args);
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
-        else if (getattribute)
+        else if (getattribute) {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
             r_getattribute = grewrite_args.out_rtn;
+        } else {
+            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+        }
     } else {
         getattribute = typeLookup(self->cls, _getattribute_str, NULL);
     }
+
     // Not sure why CPython checks if getattribute is NULL since I don't think that should happen.
     // Is there some legacy way of creating types that don't inherit from object?  Anyway, I think we
     // have the right behavior even if getattribute was somehow NULL, but add an assert because that
@@ -976,6 +981,27 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             else if (res) {
                 rewrite_args->out_rtn = grewrite_args.out_rtn;
                 rewrite_args->out_return_convention = grewrite_args.out_return_convention;
+            }
+
+            // Guarding here is a bit tricky, since we need to make sure that we call getattr
+            // (or not) at the right times.
+            // Right now this section is a bit conservative.
+            if (rewrite_args) {
+                if (grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN) {
+                    // Do nothing
+                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN) {
+                    // TODO we should have a HAS_RETURN that takes out the NULL case
+                    assert(res);
+                    if (res)
+                        grewrite_args.out_rtn->addGuardNotEq(0);
+                    else
+                        grewrite_args.out_rtn->addGuard(0);
+                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
+                    // TODO maybe we could handle this
+                    rewrite_args = NULL;
+                } else {
+                    RELEASE_ASSERT(0, "%d", grewrite_args.out_return_convention);
+                }
             }
         } else {
             try {
@@ -3332,7 +3358,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
-                          | Py_TPFLAGS_HAVE_NEWBUFFER;
+                          | Py_TPFLAGS_HAVE_NEWBUFFER | Py_TPFLAGS_HAVE_VERSION_TAG;
     ALLOWABLE_FLAGS |= Py_TPFLAGS_INT_SUBCLASS | Py_TPFLAGS_LONG_SUBCLASS | Py_TPFLAGS_LIST_SUBCLASS
                        | Py_TPFLAGS_TUPLE_SUBCLASS | Py_TPFLAGS_STRING_SUBCLASS | Py_TPFLAGS_UNICODE_SUBCLASS
                        | Py_TPFLAGS_DICT_SUBCLASS | Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS;

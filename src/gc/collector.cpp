@@ -602,6 +602,7 @@ static void orderFinalizers() {
     std::vector<Box*> finalizer_marked;
 
     for (Box* obj : objects_with_ordered_finalizers) {
+        GC_TRACE_LOG("%p has an ordered finalizer\n", obj);
         GCAllocation* al = GCAllocation::fromUserData(obj);
 
         // We are only interested in object with finalizers that need to be garbage-collected.
@@ -659,7 +660,12 @@ static void graphTraversalMarking(Worklist& worklist, GCVisitor& visitor) {
 
 static void callWeakrefCallback(PyWeakReference* head) {
     if (head->wr_callback) {
-        runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+        try {
+            runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL, NULL);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            PyErr_WriteUnraisable(head->wr_callback);
+        }
         head->wr_callback = NULL;
     }
 }
@@ -920,9 +926,10 @@ static void openTraceFp(bool is_pre) {
         fclose(trace_fp);
 
     char tracefn_buf[80];
-    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%03d%s.txt", getpid(), ncollections + is_pre,
+    snprintf(tracefn_buf, sizeof(tracefn_buf), "gc_trace_%d.%04d%s.txt", getpid(), ncollections + is_pre,
              is_pre ? "_pre" : "");
     trace_fp = fopen(tracefn_buf, "w");
+    assert(trace_fp);
 }
 
 static int _dummy() {
@@ -1001,17 +1008,29 @@ void runCollection() {
     }
 
     // We want to make sure that classes get freed before their metaclasses.
-    // Use a simple approach of only freeing one level of the hierarchy and then
-    // letting the next collection do the next one.
-    llvm::DenseSet<BoxedClass*> classes_to_not_free;
-    for (auto b : classes_to_free) {
-        classes_to_not_free.insert(b->cls);
-    }
+    // So, while there are still more classes to free, free any classes that are
+    // not the metaclass of another class we will free.  Then repeat.
+    //
+    // Note: our earlier approach of just deferring metaclasses to the next collection is
+    // not quite safe, since we will have freed everything that the class refers to.
+    while (!classes_to_free.empty()) {
+        llvm::DenseSet<BoxedClass*> classes_to_not_free;
+        for (auto b : classes_to_free) {
+            classes_to_not_free.insert(b->cls);
+        }
 
-    for (auto b : classes_to_free) {
-        if (classes_to_not_free.count(b))
-            continue;
-        global_heap._setFree(GCAllocation::fromUserData(b));
+        std::vector<BoxedClass*> deferred_classes;
+        for (auto b : classes_to_free) {
+            GC_TRACE_LOG("Dealing with the postponed free of class %p\n", b);
+            if (classes_to_not_free.count(b)) {
+                deferred_classes.push_back(b);
+                continue;
+            }
+            global_heap._setFree(GCAllocation::fromUserData(b));
+        }
+
+        assert(deferred_classes.size() < classes_to_free.size());
+        std::swap(deferred_classes, classes_to_free);
     }
 
     global_heap.cleanupAfterCollection();

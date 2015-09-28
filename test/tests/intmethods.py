@@ -164,3 +164,16 @@ print(-max_int / 5)
 print(max_int / 7)
 print(-max_int / 7)
 print(max_int / -7)
+
+try:
+    int(x=10, base=16)
+except TypeError as e:
+    print(e.message)
+
+if sys.version_info >= (2, 7, 6):
+    try:
+        int(base=16)
+    except TypeError as e:
+        print(e.message)
+else:
+    print("int() missing string argument")

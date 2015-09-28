@@ -874,7 +874,8 @@ private:
 
         if (type == AST_TYPE::In || type == AST_TYPE::NotIn) {
             CompilerVariable* r = right->contains(emitter, getOpInfoForNode(node, unw_info), left);
-            assert(r->getType() == BOOL);
+            ASSERT(r->getType() == BOOL, "%s gave %s", right->getType()->debugName().c_str(),
+                   r->getType()->debugName().c_str());
             if (type == AST_TYPE::NotIn) {
                 ConcreteCompilerVariable* converted = r->makeConverted(emitter, BOOL);
                 // TODO: would be faster to just do unboxBoolNegated
@@ -1170,7 +1171,7 @@ private:
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
-            // vst is one of {FAST, CLOSURE, NAME}
+            // vst is one of {FAST, CLOSURE}
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
@@ -1510,7 +1511,9 @@ private:
         return func;
     }
 
+    // Note: the behavior of this function must match type_analysis.cpp:unboxedType()
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
+#if ENABLE_UNBOXED_VALUES
         if (t == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(INT, unboxed, true);
@@ -1521,6 +1524,7 @@ private:
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
             return rtn;
         }
+#endif
         if (t == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
@@ -1541,14 +1545,24 @@ private:
             if (VERBOSITY("irgen") >= 2) {
                 printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
-                PrintVisitor printer;
-                node->accept(&printer);
+                fflush(stdout);
+                print_ast(node);
+                llvm::outs().flush();
                 printf("\n");
             }
 
+#ifndef NDEBUG
             // That's not really a speculation.... could potentially handle this here, but
             // I think it's better to just not generate bad speculations:
-            assert(!rtn->canConvertTo(speculated_type));
+            if (rtn->canConvertTo(speculated_type)) {
+                auto source = irstate->getSourceInfo();
+                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->body[0]->lineno,
+                       source->getName()->c_str());
+                irstate->getSourceInfo()->cfg->print();
+            }
+            RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
+                           speculated_type->debugName().c_str());
+#endif
 
             ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
             rtn->decvref(emitter);
@@ -2003,7 +2017,7 @@ private:
         ConcreteCompilerVariable* dest = NULL;
         if (node->dest) {
             auto d = evalExpr(node->dest, unw_info);
-            dest = d->makeConverted(emitter, d->getConcreteType());
+            dest = d->makeConverted(emitter, d->getBoxType());
             d->decvref(emitter);
         } else {
             llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout);
@@ -2012,63 +2026,22 @@ private:
         }
         assert(dest);
 
-        static BoxedString* write_str = internStringImmortal("write");
-        static BoxedString* newline_str = internStringImmortal("\n");
-        static BoxedString* space_str = internStringImmortal(" ");
+        assert(node->values.size() <= 1);
+        ConcreteCompilerVariable* converted;
 
-        // TODO: why are we inline-generating all this code instead of just emitting a call to some runtime function?
-        // (=printHelper())
-        int nvals = node->values.size();
-        for (int i = 0; i < nvals; i++) {
-            CompilerVariable* var = evalExpr(node->values[i], unw_info);
-            ConcreteCompilerVariable* converted = var->makeConverted(emitter, var->getBoxType());
+        if (node->values.size() == 1) {
+            CompilerVariable* var = evalExpr(node->values[0], unw_info);
+            converted = var->makeConverted(emitter, var->getBoxType());
             var->decvref(emitter);
-
-            // begin code for handling of softspace
-            bool new_softspace = (i < nvals - 1) || (!node->nl);
-            llvm::Value* dospace = emitter.createCall(unw_info, g.funcs.softspace,
-                                                      { dest->getValue(), getConstantInt(new_softspace, g.i1) });
-            assert(dospace->getType() == g.i1);
-
-            llvm::BasicBlock* ss_block = llvm::BasicBlock::Create(g.context, "softspace", irstate->getLLVMFunction());
-            llvm::BasicBlock* join_block = llvm::BasicBlock::Create(g.context, "print", irstate->getLLVMFunction());
-
-            emitter.getBuilder()->CreateCondBr(dospace, ss_block, join_block);
-
-            curblock = ss_block;
-            emitter.getBuilder()->SetInsertPoint(ss_block);
-            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, { makeStr(space_str) },
-                                    NULL);
-            r->decvref(emitter);
-
-            emitter.getBuilder()->CreateBr(join_block);
-            curblock = join_block;
-            emitter.getBuilder()->SetInsertPoint(join_block);
-            // end code for handling of softspace
-
-
-            llvm::Value* v = emitter.createCall(unw_info, g.funcs.strOrUnicode, converted->getValue());
-            v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
-            auto s = new ConcreteCompilerVariable(STR, v, true);
-            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags, { s }, NULL);
-            s->decvref(emitter);
-            r->decvref(emitter);
-            converted->decvref(emitter);
+        } else {
+            converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), true);
         }
 
-        if (node->nl) {
-            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), write_str, flags,
-                                    { makeStr(newline_str) }, NULL);
-            r->decvref(emitter);
-
-            if (nvals == 0) {
-                emitter.createCall(unw_info, g.funcs.softspace, { dest->getValue(), getConstantInt(0, g.i1) });
-            }
-        }
+        emitter.createCall3(unw_info, g.funcs.printHelper, dest->getValue(), converted->getValue(),
+                            getConstantInt(node->nl, g.i1));
 
         dest->decvref(emitter);
+        converted->decvref(emitter);
     }
 
     void doReturn(AST_Return* node, const UnwindInfo& unw_info) {
@@ -2229,9 +2202,11 @@ private:
             ConcreteCompilerVariable* var = p.second->makeConverted(emitter, p.second->getConcreteType());
             converted_args.push_back(var);
 
+#if ENABLE_UNBOXED_VALUES
             assert(var->getType() != BOXED_INT && "should probably unbox it, but why is it boxed in the first place?");
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
+#endif
 
             // This line can never get hit right now for the same reason that the variables must already be
             // concrete,
@@ -2678,8 +2653,10 @@ public:
         assert(name.s() != FRAME_INFO_PTR_NAME);
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
+#if ENABLE_UNBOXED_VALUES
         assert(var->getType() != BOXED_INT);
         assert(var->getType() != BOXED_FLOAT);
+#endif
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = var;
