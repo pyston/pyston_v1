@@ -99,6 +99,7 @@ private:
 
     Value visit_attribute(AST_Attribute* node);
     Value visit_dict(AST_Dict* node);
+    Value visit_ellipsis(AST_Ellipsis* node);
     Value visit_expr(AST_expr* node);
     Value visit_expr(AST_Expr* node);
     Value visit_extslice(AST_ExtSlice* node);
@@ -549,7 +550,7 @@ Value ASTInterpreter::visit_slice(AST_slice* node) {
         case AST_TYPE::ExtSlice:
             return visit_extslice(static_cast<AST_ExtSlice*>(node));
         case AST_TYPE::Ellipsis:
-            RELEASE_ASSERT(0, "not implemented");
+            return visit_ellipsis(static_cast<AST_Ellipsis*>(node));
             break;
         case AST_TYPE::Index:
             return visit_index(static_cast<AST_Index*>(node));
@@ -560,7 +561,12 @@ Value ASTInterpreter::visit_slice(AST_slice* node) {
     }
     return Value();
 }
-
+Value ASTInterpreter::visit_ellipsis(AST_Ellipsis* node)
+{
+     Value v;
+     v.o = createEllipsis();
+     return v;
+}
 Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();
     Value upper = node->upper ? visit_expr(node->upper) : getNone();
