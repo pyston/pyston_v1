@@ -649,6 +649,7 @@ void setupSys() {
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
+    sys_module->giveAttr("subversion", BoxedTuple::create({ boxString("Pyston"), boxString(""), boxString("") }));
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
