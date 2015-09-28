@@ -812,10 +812,16 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
 /* Without Py_TRACE_REFS, there's little enough to do that we expand code
  * inline.
  */
+/* Pyston change: we don't have a refcount
 #define _Py_NewReference(op) (                          \
     _Py_INC_TPALLOCS(op) _Py_COUNT_ALLOCS_COMMA         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA               \
     Py_REFCNT(op) = 1)
+*/
+#define _Py_NewReference(op) (                          \
+    _Py_INC_TPALLOCS(op) _Py_COUNT_ALLOCS_COMMA         \
+    _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA               \
+    (void)(op))
 
 #define _Py_ForgetReference(op) _Py_INC_TPFREES(op)
 

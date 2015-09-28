@@ -53,3 +53,22 @@ print os.renames.__globals__ == globals()
 d = {}
 exec "def foo(): pass" in d
 print d["foo"].func_globals == d
+
+func_without_defaults.func_code = func_with_defaults.func_code
+print func_without_defaults.func_name, func_without_defaults.func_code.co_name
+try:
+    func_without_defaults(2)
+except TypeError, e:
+    print e
+func_without_defaults(2, 3)
+
+def foo():
+    return 0
+def bar():
+    return 1
+s = 0
+for i in xrange(1000):
+    s += foo()
+    if not i % 100:
+        foo.func_code, bar.func_code = bar.func_code, foo.func_code
+print s

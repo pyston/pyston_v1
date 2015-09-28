@@ -112,6 +112,7 @@ typedef struct _ts {
 #endif
 typedef struct _ts {
     int recursion_depth;
+    int gilstate_counter;
 
     PyObject *curexc_type;
     PyObject *curexc_value;

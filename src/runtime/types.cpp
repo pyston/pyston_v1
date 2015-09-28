@@ -34,6 +34,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
+#include "runtime/code.h"
 #include "runtime/complex.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
@@ -1682,6 +1683,24 @@ static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     return codeForFunction(func);
+}
+
+static void functionSetCode(Box* self, Box* v, void*) {
+    assert(self->cls == function_cls);
+
+    if (v == NULL || !PyCode_Check(v))
+        raiseExcHelper(TypeError, "__code__ must be set to a code object");
+
+    BoxedFunction* func = static_cast<BoxedFunction*>(self);
+    BoxedCode* code = static_cast<BoxedCode*>(v);
+
+    RELEASE_ASSERT(func->f->source && code->f->source, "__code__ can only be set on python functions");
+
+    RELEASE_ASSERT(!func->f->internal_callable.get<CXX>() && !func->f->internal_callable.get<CAPI>(),
+                   "this could cause invalidation issues");
+
+    func->f = code->f;
+    func->dependent_ics.invalidateAll();
 }
 
 static Box* functionDefaults(Box* self, void*) {
@@ -3867,7 +3886,8 @@ void setupRuntime() {
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
-    function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
+    function_cls->giveAttr("func_code",
+                           new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, functionSetCode, NULL));
     function_cls->giveAttr("__code__", function_cls->getattr(internStringMortal("func_code")));
     function_cls->giveAttr("func_name", function_cls->getattr(internStringMortal("__name__")));
     function_cls->giveAttr("func_defaults",
