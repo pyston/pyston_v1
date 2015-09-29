@@ -1,15 +1,16 @@
-From 27b69179b90851da187d698a0817b0b8190a0449 Mon Sep 17 00:00:00 2001
+From e0257ba4efd903da2a0f1909d21d51ff1799a3c6 Mon Sep 17 00:00:00 2001
 From: Marius Wachtler <undingen@gmail.com>
 Date: Tue, 9 Jun 2015 19:26:44 +0200
 Subject: [PATCH] Pyston change: we don't support custom traceback entries yet
 
 ---
- Cython/Compiler/ExprNodes.py    |  9 +++++++++
- Cython/Compiler/ModuleNode.py   |  8 ++++++--
- Cython/Utility/CythonFunction.c |  4 +++-
- Cython/Utility/Exceptions.c     |  7 ++++++-
- Cython/Utility/Generator.c      | 41 +++++++++++++++++++++++++++++------------
- 5 files changed, 53 insertions(+), 16 deletions(-)
+ Cython/Compiler/ExprNodes.py     |  9 +++++++++
+ Cython/Compiler/ModuleNode.py    |  8 ++++++--
+ Cython/Utility/CythonFunction.c  |  4 +++-
+ Cython/Utility/Exceptions.c      |  7 ++++++-
+ Cython/Utility/Generator.c       | 41 ++++++++++++++++++++++++++++------------
+ Cython/Utility/ModuleSetupCode.c |  2 +-
+ 6 files changed, 54 insertions(+), 17 deletions(-)
 
 diff --git a/Cython/Compiler/ExprNodes.py b/Cython/Compiler/ExprNodes.py
 index f99ec6e..7ab41f3 100644
@@ -188,6 +189,19 @@ index 0310570..70e550c 100644
  #endif
      0,                                  /*tp_version_tag*/
  #if PY_VERSION_HEX >= 0x030400a1
+diff --git a/Cython/Utility/ModuleSetupCode.c b/Cython/Utility/ModuleSetupCode.c
+index 6477fb2..75dcdda 100644
+--- a/Cython/Utility/ModuleSetupCode.c
++++ b/Cython/Utility/ModuleSetupCode.c
+@@ -32,7 +32,7 @@
+   #define Py_HUGE_VAL HUGE_VAL
+ #endif
+ 
+-#ifdef PYPY_VERSION
++#if defined(PYPY_VERSION) || defined(PYSTON_VERSION)
+ #define CYTHON_COMPILING_IN_PYPY 1
+ #define CYTHON_COMPILING_IN_CPYTHON 0
+ #else
 -- 
 1.9.1
 

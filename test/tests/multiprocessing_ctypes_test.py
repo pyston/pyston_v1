@@ -1,6 +1,4 @@
-# expected: fail
-# - relies on ctypes
-
+# skip-if: True
 import multiprocessing
 
 # from https://docs.python.org/2/library/multiprocessing.html

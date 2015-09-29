@@ -3274,7 +3274,9 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
 }
 
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
-    assert(op);
+    if (op == NULL)
+        return PyErr_NoMemory();
+
     assert(tp);
 
     assert(gc::isValidGCMemory(op));

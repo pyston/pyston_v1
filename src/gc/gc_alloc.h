@@ -51,6 +51,10 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     // inline it, which is especially useful for this function.
     ScopedStatTimer gc_alloc_stattimer(gc_alloc_stattimer_counter, 15);
 #endif
+
+    if ((size_t)(bytes) > (size_t)PY_SSIZE_T_MAX)
+        return NULL;
+
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 
 #ifndef NVALGRIND
@@ -123,6 +127,9 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
     // Normal realloc() supports receiving a NULL pointer, but we need to know what the GCKind is:
     assert(ptr);
+
+    if ((size_t)(bytes) > (size_t)PY_SSIZE_T_MAX)
+        return NULL;
 
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 

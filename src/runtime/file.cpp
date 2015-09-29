@@ -929,11 +929,17 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m, Box** args) {
 
     assert(cls == file_cls);
 
-    if (s->cls == unicode_cls)
+    if (s->cls == unicode_cls) {
         s = _PyUnicode_AsDefaultEncodedString(s, NULL);
+        if (!s)
+            throwCAPIException();
+    }
 
-    if (m->cls == unicode_cls)
+    if (m->cls == unicode_cls) {
         m = _PyUnicode_AsDefaultEncodedString(m, NULL);
+        if (!m)
+            throwCAPIException();
+    }
 
     if (s->cls != str_cls) {
         raiseExcHelper(TypeError, "coercing to Unicode: need string of buffer, %s found", getTypeName(s));
