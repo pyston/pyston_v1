@@ -3582,6 +3582,7 @@ void setupRuntime() {
     object_cls->tp_setattro = PyObject_GenericSetAttr;
     object_cls->tp_init = object_init;
     object_cls->tp_new = object_new;
+    type_cls->tp_getattro = type_getattro;
 
     none_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(Box), false, "NoneType");
     None = new (none_cls) Box();

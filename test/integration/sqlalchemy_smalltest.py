@@ -126,6 +126,7 @@ MODULES_TO_TEST = [
     'test.dialect.test_sybase',
     'test.engine.test_bind',
     'test.engine.test_ddlevents',
+    'test.engine.test_logging',
     'test.engine.test_parseconnect',
     'test.engine.test_pool',
     'test.engine.test_reconnect',
@@ -176,7 +177,6 @@ FAILING = [
     # 'test.aaa_profiling.test_memusage',   # Wants gc.get_objects
     # 'test.aaa_profiling.test_resultset',  # Wants sys.getrefcount
     # 'test.dialect.test_sqlite',           # ascii codec can't encode
-    # 'test.engine.test_logging',           # Unclear
     # 'test.ext.test_extendedattr',         # does `locals()[42] = 99` in a classdef to prove it can.  maybe we could say is_pypy to avoid it.
     'test.ext.test_hybrid',
     'test.ext.test_orderinglist',

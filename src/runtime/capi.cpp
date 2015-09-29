@@ -234,7 +234,7 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
     try {
         BoxedString* s = static_cast<BoxedString*>(name);
         internStringMortalInplace(s);
-        Box* r = getattrInternalGeneric(o, s, NULL, false, false, NULL, NULL);
+        Box* r = getattrInternalGeneric<false>(o, s, NULL, false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                          PyString_AS_STRING(name));
