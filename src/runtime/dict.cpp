@@ -22,6 +22,7 @@
 #include "runtime/ics.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -510,11 +511,12 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
         raiseExcHelper(TypeError, "descriptor 'setdefault' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
-    auto it = self->d.find(k);
+    BoxAndHash k_hash(k);
+    auto it = self->d.find(k_hash);
     if (it != self->d.end())
         return it->second;
 
-    self->d.insert(std::make_pair(k, v));
+    self->d.insert(std::make_pair(k_hash, v));
     return v;
 }
 
@@ -559,8 +561,14 @@ Box* dictNonzero(BoxedDict* self) {
 
 Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
     auto rtn = new BoxedDict();
-    for (Box* e : iterable->pyElements()) {
-        dictSetitem(rtn, e, default_value);
+    if (PyAnySet_Check(iterable)) {
+        for (auto&& elt : ((BoxedSet*)iterable)->s) {
+            rtn->d.insert(std::make_pair(elt, default_value));
+        }
+    } else {
+        for (Box* e : iterable->pyElements()) {
+            dictSetitem(rtn, e, default_value);
+        }
     }
 
     return rtn;
