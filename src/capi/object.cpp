@@ -564,10 +564,6 @@ extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) noexcept {
     return 0;
 }
 
-extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 // I'm not sure how we can support this one:
 extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
