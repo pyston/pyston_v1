@@ -1,5 +1,3 @@
-# expected: fail
-# - relies on ctypes
 
 import multiprocessing
 
