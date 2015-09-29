@@ -1250,6 +1250,9 @@ extern "C" PyObject* PyEval_GetBuiltins(void) noexcept {
     return builtins_module;
 }
 
+Box* ellipsisRepr(Box* self) {
+    return boxString("Ellipsis");
+}
 Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
@@ -1529,6 +1532,7 @@ void setupBuiltins() {
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
     BoxedClass* ellipsis_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
+    ellipsis_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);

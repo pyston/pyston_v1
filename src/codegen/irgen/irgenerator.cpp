@@ -1073,6 +1073,11 @@ private:
         return rtn;
     }
 
+    ConcreteCompilerVariable* getEllipsis() {
+        llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
+        auto ellipsis_cls = Ellipsis->cls;
+        return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis, false);
+    }
     ConcreteCompilerVariable* getNone() {
         llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
         return new ConcreteCompilerVariable(typeFromClass(none_cls), none, false);
@@ -1590,6 +1595,9 @@ private:
         switch (node->type) {
             case AST_TYPE::ExtSlice:
                 rtn = evalExtSlice(ast_cast<AST_ExtSlice>(node), unw_info);
+                break;
+            case AST_TYPE::Ellipsis:
+                rtn = getEllipsis();
                 break;
             case AST_TYPE::Index:
                 rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
