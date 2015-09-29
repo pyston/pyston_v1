@@ -11,6 +11,8 @@ print type(sys.maxsize)
 print sys.stdout is sys.__stdout__
 print sys.stderr is sys.__stderr__
 print sys.stdin is sys.__stdin__
+print type(sys.subversion)
+print len(sys.subversion)
 
 try:
     1/0
