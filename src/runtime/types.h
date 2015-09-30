@@ -1069,6 +1069,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, llvm::StringRef attr);
+BoxedDict* attrwrapperToDict(Box* b);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);

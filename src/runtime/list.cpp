@@ -1078,12 +1078,6 @@ Box* listRemove(BoxedList* self, Box* elt) {
 BoxedClass* list_iterator_cls = NULL;
 BoxedClass* list_reverse_iterator_cls = NULL;
 
-Box* listNew(BoxedClass* cls, Box* container) {
-    assert(PyType_Check(cls));
-    assert(isSubclass(cls, list_cls));
-    return new (cls) BoxedList();
-}
-
 Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
 
@@ -1337,9 +1331,9 @@ void setupList() {
     list_cls->giveAttr("extend", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
 
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));
-    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
-    list_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
-    list_cls->giveAttr("__imul__", new BoxedFunction(boxRTFunction((void*)listImul, LIST, 2)));
+    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, UNKNOWN, 2)));
+    list_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)listMul, UNKNOWN, 2)));
+    list_cls->giveAttr("__imul__", new BoxedFunction(boxRTFunction((void*)listImul, UNKNOWN, 2)));
 
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));
@@ -1349,7 +1343,6 @@ void setupList() {
                                                  { None, None, False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
 
-    list_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, false, false), { None }));
     list_cls->giveAttr("__init__",
                        new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, false, false), { NULL }));
 
