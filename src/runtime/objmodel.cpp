@@ -3134,7 +3134,8 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
     if (S == CXX && rtn == NULL && !flags.null_on_nonexistent) {
         raiseAttributeError(obj, attr->s());
     } else if (S == CAPI) {
-        assert(rtn || PyErr_Occurred());
+        if (!rtn && !PyErr_Occurred())
+            raiseAttributeErrorCapi(obj, attr->s());
     }
 
     return rtn;

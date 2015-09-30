@@ -796,6 +796,9 @@ void setupDict() {
     dict_items_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
                                         false, "dict_items");
 
+    dict_iterator_cls->instances_are_nonzero = dict_keys_cls->instances_are_nonzero
+        = dict_values_cls->instances_are_nonzero = dict_items_cls->instances_are_nonzero = true;
+
     dict_cls->tp_dealloc = &BoxedDict::dealloc;
     dict_cls->has_safe_tp_dealloc = true;
 

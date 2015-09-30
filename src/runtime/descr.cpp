@@ -593,6 +593,13 @@ static Box* wrapperDescrRepr(Box* _o) {
     return PyString_FromFormat("<slot wrapper '%s' of '%s' objects>", name, getNameOfClass(wd->type));
 }
 
+static Box* wrapperobjectGetDoc(Box* b, void*) {
+    assert(b->cls == wrapperobject_cls);
+    auto s = static_cast<BoxedWrapperObject*>(b)->descr->wrapper->doc;
+    assert(s.size());
+    return boxString(s);
+}
+
 static Box* wrapperObjectRepr(Box* _o) {
     assert(_o->cls == wrapperobject_cls);
     BoxedWrapperObject* wp = static_cast<BoxedWrapperObject*>(_o);
@@ -765,6 +772,8 @@ void setupDescr() {
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, true, true)));
     wrapperobject_cls->tpp_call.capi_val = BoxedWrapperObject::tppCall<CAPI>;
     wrapperobject_cls->tpp_call.cxx_val = BoxedWrapperObject::tppCall<CXX>;
+    wrapperobject_cls->giveAttr("__doc__",
+                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperobjectGetDoc, NULL, NULL));
     wrapperobject_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperObjectRepr, UNKNOWN, 1)));
     wrapperobject_cls->freeze();
 }

@@ -40,3 +40,7 @@
 [submodule "test/lib/pyinotify"]
 	path = test/lib/pyinotify
 	url = https://github.com/seb-m/pyinotify.git
+[submodule "test/lib/sqlalchemy_0.5"]
+	path = test/lib/sqlalchemy_0.5
+	url = https://github.com/zzzeek/sqlalchemy
+	ignore = untracked
