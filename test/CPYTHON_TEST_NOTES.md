@@ -23,7 +23,6 @@ test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
 test_argparse           [unknown]
-test_array              [unknown]
 test_ascii_formattd     [unknown]
 test_ast                [unknown]
 test_asynchat           [unknown]
@@ -248,9 +247,7 @@ test_unicode_file       exit code 139, no error message
 test_unittest           serialize_ast assert
 test_univnewlines2k     [unknown]
 test_univnewlines       [unknown]
-test_urllib2_localnet   [unknown]
 test_urllib2net         [unknown]
-test_urllib2            segfault due to attrwrapper corruption
 test_urllibnet          [unknown]
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)

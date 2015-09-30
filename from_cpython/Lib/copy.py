@@ -257,6 +257,14 @@ def _deepcopy_dict(x, memo):
         y[deepcopy(key, memo)] = deepcopy(value, memo)
     return y
 d[dict] = _deepcopy_dict
+
+# Pyston change: teach copy how to handle attrwrappers
+def get_attrwrapper_type():
+    class C(object):
+        pass
+    return type(C().__dict__)
+d[get_attrwrapper_type()] = _deepcopy_dict
+
 if PyStringMap is not None:
     d[PyStringMap] = _deepcopy_dict
 
