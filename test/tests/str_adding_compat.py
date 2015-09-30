@@ -7,3 +7,8 @@ try:
     print "".__add__(1)
 except TypeError as e:
     print e
+
+try:
+    print [].__add__(1)
+except TypeError as e:
+    print e

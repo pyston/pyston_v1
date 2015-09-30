@@ -786,7 +786,8 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 }
 
 Box* listAdd(BoxedList* self, Box* _rhs) {
-    if (_rhs->cls != list_cls) {
+    if (!PyList_Check(_rhs)) {
+        return NotImplemented;
         raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs));
     }
 
