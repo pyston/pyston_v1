@@ -1599,7 +1599,7 @@ extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
 
 void setupClassobj() {
     classobj_cls = BoxedClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
-                                      0, sizeof(BoxedClassobj), false, "classobj");
+                                      offsetof(BoxedClassobj, weakreflist), sizeof(BoxedClassobj), false, "classobj");
     instance_cls = BoxedClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
                                       offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
 

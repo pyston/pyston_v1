@@ -46,6 +46,8 @@ public:
     BoxedTuple* bases;
     BoxedString* name;
 
+    Box** weakreflist;
+
     BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {}
 
     static void gcHandler(GCVisitor* v, Box* _o) {

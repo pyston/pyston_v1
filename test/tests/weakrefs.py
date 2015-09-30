@@ -48,6 +48,9 @@ test_wr(frozenset())
 test_wr((i*i for i in range(1000000)))
 test_wr(set)
 test_wr(file("/etc/passwd"))
+class Old:
+    pass
+test_wr(Old)
 # missing: db cursor from the bsddb module
 # missing: sockets
 test_wr(array.array('d', [1.0, 2.0, 3.14]))
