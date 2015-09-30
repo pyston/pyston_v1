@@ -571,6 +571,9 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
+    if (_rhs->cls == attrwrapper_cls)
+        _rhs = attrwrapperToDict(_rhs);
+
     if (!PyDict_Check(_rhs))
         return NotImplemented;
 

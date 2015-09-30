@@ -307,6 +307,23 @@ extern "C" void raiseAttributeErrorCapi(Box* obj, llvm::StringRef attr) noexcept
     }
 }
 
+extern "C" PyObject* type_getattro(PyObject* o, PyObject* name) noexcept {
+    assert(PyString_Check(name));
+    BoxedString* s = static_cast<BoxedString*>(name);
+    assert(PyString_CHECK_INTERNED(name));
+
+    try {
+        Box* r = getattrInternalGeneric<true>(o, s, NULL, false, false, NULL, NULL);
+        if (!r && !PyErr_Occurred())
+            PyErr_Format(PyExc_AttributeError, "type object '%.50s' has no attribute '%.400s'",
+                         static_cast<BoxedClass*>(o)->tp_name, PyString_AS_STRING(name));
+        return r;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 extern "C" void raiseIndexErrorStr(const char* typeName) {
     raiseExcHelper(IndexError, "%s index out of range", typeName);
 }
@@ -1461,6 +1478,19 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 return slotTpGetattrHookInternal<S>(obj, attr, rewrite_args);
             } else if (obj->cls->tp_getattro == instance_getattro) {
                 return instanceGetattroInternal<S>(obj, attr, rewrite_args);
+            } else if (obj->cls->tp_getattro == type_getattro) {
+                try {
+                    Box* r = getattrInternalGeneric<true>(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out,
+                                                          r_bind_obj_out);
+                    return r;
+                } catch (ExcInfo e) {
+                    if (S == CAPI) {
+                        setCAPIException(e);
+                        return NULL;
+                    } else {
+                        throw e;
+                    }
+                }
             }
 
             Box* r = obj->cls->tp_getattro(obj, attr);
@@ -1522,7 +1552,9 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
     if (S == CAPI) {
         try {
-            return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+            assert(!PyType_Check(obj)); // There would be a tp_getattro
+            return getattrInternalGeneric<false>(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out,
+                                                 r_bind_obj_out);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return NULL;
@@ -1532,7 +1564,8 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             class Helper {
             public:
                 static Box* call(Box* obj, BoxedString* attr, bool cls_only) {
-                    return getattrInternalGeneric(obj, attr, NULL, cls_only, false, NULL, NULL);
+                    assert(!PyType_Check(obj) || cls_only); // There would be a tp_getattro
+                    return getattrInternalGeneric<false>(obj, attr, NULL, cls_only, false, NULL, NULL);
                 }
             };
 
@@ -1545,7 +1578,8 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             return Helper::call(obj, attr, cls_only);
         }
 
-        return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+        assert(!PyType_Check(obj) || cls_only); // There would be a tp_getattro
+        return getattrInternalGeneric<false>(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
     }
 }
 
@@ -1631,10 +1665,17 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
 }
 
 
+template <bool IsType>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
                             Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (for_call) {
         *bind_obj_out = NULL;
+    }
+
+    if (IsType) {
+        if (!PyType_Check(obj))
+            raiseExcHelper(TypeError, "descriptor '__getattribute__' requires a 'type' object but received a '%s'",
+                           obj->cls->tp_name);
     }
 
     assert(obj->cls != closure_cls);
@@ -1791,7 +1832,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     }
 
     if (!cls_only) {
-        if (!PyType_Check(obj)) {
+        if (!IsType) {
             // Look up the val in the object's dictionary and if you find it, return it.
 
             if (unlikely(rewrite_args && !descr && obj->cls != instancemethod_cls

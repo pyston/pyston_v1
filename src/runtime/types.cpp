@@ -2731,6 +2731,13 @@ void attrwrapperDel(Box* b, llvm::StringRef attr) {
     AttrWrapper::delitem(b, boxString(attr));
 }
 
+BoxedDict* attrwrapperToDict(Box* b) {
+    assert(b->cls == attrwrapper_cls);
+    Box* d = AttrWrapper::copy(static_cast<AttrWrapper*>(b));
+    assert(d->cls == dict_cls);
+    return static_cast<BoxedDict*>(d);
+}
+
 static int excess_args(PyObject* args, PyObject* kwds) noexcept {
     return PyTuple_GET_SIZE(args) || (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
@@ -3582,6 +3589,7 @@ void setupRuntime() {
     object_cls->tp_setattro = PyObject_GenericSetAttr;
     object_cls->tp_init = object_init;
     object_cls->tp_new = object_new;
+    type_cls->tp_getattro = type_getattro;
 
     none_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(Box), false, "NoneType");
     None = new (none_cls) Box();

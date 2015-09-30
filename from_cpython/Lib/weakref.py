@@ -468,7 +468,7 @@ class WeakKeyDictionary(UserDict.UserDict):
 
     def pop(self, key, *args):
         r = ref(key)
-        self.keys.pop(r, None)
+        self.refs.pop(r, None)
         return self.data.pop(r, *args)
 
     def setdefault(self, key, default=None):

@@ -157,8 +157,11 @@ Box* getattrInternal(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_ar
 // This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
 // data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
 // __getattribute__.
+template <bool IsType>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
                             Box** bind_obj_out, RewriterVar** r_bind_obj_out);
+
+extern "C" PyObject* type_getattro(PyObject* o, PyObject* name) noexcept;
 
 // This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
 // appropriate order. It does not do any descriptor logic.

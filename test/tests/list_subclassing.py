@@ -36,3 +36,24 @@ print MyList((1,2,3)) < MyList((1,2,3,4))
 
 print MyList((1,2,3)) >= MyList((1,2,3))
 print MyList((1,2,3)) <= MyList((1,2,3))
+
+print type(MyList((1, 2, 3)) * 1)
+
+class ListWithInit(list):
+    def __init__(self, *args, **kwargs):
+        print "ListWithInit.__init__", args, kwargs
+
+l = ListWithInit(1, 2, 3, a=5)
+l.a = 1
+l.b = 2
+# Adapted from the sqlalchemy test:
+import pickle
+l2 = pickle.loads(pickle.dumps(l))
+print l == l2
+assert l.__dict__ == l2.__dict__, (l.__dict__, l2.__dict__)
+
+# Regression test:
+def f(l):
+    l *= 1
+for i in xrange(3000):
+    f(l)

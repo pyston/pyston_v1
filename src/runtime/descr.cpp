@@ -697,6 +697,8 @@ void setupDescr() {
     member_descriptor_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_descriptor_cls->freeze();
 
+    property_cls->instances_are_nonzero = true;
+
     property_cls->giveAttr("__init__",
                            new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, false, false,
                                                            ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),

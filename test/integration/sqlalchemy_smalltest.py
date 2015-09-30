@@ -126,17 +126,23 @@ MODULES_TO_TEST = [
     'test.dialect.test_sybase',
     'test.engine.test_bind',
     'test.engine.test_ddlevents',
+    'test.engine.test_logging',
     'test.engine.test_parseconnect',
     'test.engine.test_pool',
     'test.engine.test_reconnect',
     'test.ext.test_compiler',
+    'test.ext.test_hybrid',
+    'test.ext.test_orderinglist',
     'test.orm.test_association',
     'test.orm.test_assorted_eager',
+    'test.orm.test_attributes',
     'test.orm.test_backref_mutations',
     'test.orm.test_bind',
     'test.orm.test_bulk',
     'test.orm.test_bundle',
+    'test.orm.test_collection',
     'test.orm.test_compile',
+    'test.orm.test_composites',
     'test.orm.test_cycles',
     'test.orm.test_defaults',
     'test.orm.test_default_strategies',
@@ -145,10 +151,18 @@ MODULES_TO_TEST = [
     'test.orm.test_descriptor',
     'test.orm.test_eager_relations',
     'test.orm.test_evaluator',
+    'test.orm.test_events',
     'test.orm.test_expire',
+    'test.orm.test_hasparent',
+    'test.orm.test_immediate_load',
     'test.orm.test_inspect',
+    'test.orm.test_joins',
+    'test.orm.test_lazy_relations',
     'test.orm.test_load_on_fks',
     'test.orm.test_lockmode',
+    'test.orm.test_manytomany',
+    'test.orm.test_naturalpks',
+    'test.orm.test_of_type',
     'test.orm.test_onetoone',
     'test.orm.test_options',
     'test.orm.test_query',
@@ -156,6 +170,10 @@ MODULES_TO_TEST = [
     'test.orm.test_scoping',
     'test.orm.test_selectable',
     'test.orm.test_sync',
+    'test.orm.test_transaction',
+    'test.orm.test_unitofworkv2',
+    'test.orm.test_update_delete',
+    'test.orm.test_utils',
     'test.orm.test_validators',
     'test.sql.test_case_statement',
     'test.sql.test_constraints',
@@ -163,6 +181,7 @@ MODULES_TO_TEST = [
     'test.sql.test_ddlemit',
     'test.sql.test_delete',
     'test.sql.test_functions',
+    'test.sql.test_generative',
     'test.sql.test_insert',
     'test.sql.test_inspect',
     'test.sql.test_join_rewriting',
@@ -170,42 +189,23 @@ MODULES_TO_TEST = [
     'test.sql.test_operators',
     'test.sql.test_query',
     'test.sql.test_rowcount',
+    'test.sql.test_selectable',
+    'test.sql.test_text',
 ]
 
 FAILING = [
     # 'test.aaa_profiling.test_memusage',   # Wants gc.get_objects
     # 'test.aaa_profiling.test_resultset',  # Wants sys.getrefcount
     # 'test.dialect.test_sqlite',           # ascii codec can't encode
-    # 'test.engine.test_logging',           # Unclear
     # 'test.ext.test_extendedattr',         # does `locals()[42] = 99` in a classdef to prove it can.  maybe we could say is_pypy to avoid it.
-    'test.ext.test_hybrid',
-    'test.ext.test_orderinglist',
-    'test.orm.test_attributes',
-    'test.orm.test_collection',
-    'test.orm.test_composites',
-    'test.orm.test_dynamic',
-    'test.orm.test_events',
-    'test.orm.test_hasparent',
-    'test.orm.test_immediate_load',
-    'test.orm.test_joins',
-    'test.orm.test_lazy_relations',
-    'test.orm.test_manytomany',
-    'test.orm.test_merge',
-    'test.orm.test_naturalpks',
-    'test.orm.test_of_type',
-    'test.orm.test_relationships',
-    'test.orm.test_session',
-    'test.orm.test_transaction',
-    'test.orm.test_unitofworkv2',
-    'test.orm.test_update_delete',
-    'test.orm.test_utils',
-    'test.orm.test_versioning',
-    'test.sql.test_compiler',
-    'test.sql.test_generative',
-    'test.sql.test_quote',
-    'test.sql.test_selectable',
-    'test.sql.test_text',
-    'test.sql.test_unicode'
+    # 'test.orm.test_dynamic',              # not sure; things end up being put in tuples
+    # 'test.orm.test_merge',                # needs PyObject_AsWriteBuffer
+    # 'test.orm.test_relationships',        # not sure; things end up being put in tuples
+    # 'test.orm.test_session',              # unclear
+    # 'test.orm.test_versioning',           # crashes in the uuid module with an AttributeError from ctypes
+    # 'test.sql.test_compiler',             # unclear
+    # 'test.sql.test_quote',                # unclear
+    # 'test.sql.test_unicode',              # "ascii codec can't encod character"
 ]
 
 # MODULES_TO_TEST = ['test.orm.test_bulk']

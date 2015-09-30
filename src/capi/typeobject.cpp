@@ -962,7 +962,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
 
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             try {
-                res = getattrInternalGeneric(self, name, &grewrite_args, false, false, NULL, NULL);
+                assert(!PyType_Check(self)); // There would be a getattribute
+                res = getattrInternalGeneric<false>(self, name, &grewrite_args, false, false, NULL, NULL);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {
@@ -1005,7 +1006,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             }
         } else {
             try {
-                res = getattrInternalGeneric(self, name, NULL, false, false, NULL, NULL);
+                assert(!PyType_Check(self)); // There would be a getattribute
+                res = getattrInternalGeneric<false>(self, name, NULL, false, false, NULL, NULL);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {
