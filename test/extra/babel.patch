@@ -1,0 +1,13 @@
+diff --git a/babel/messages/extract.py b/babel/messages/extract.py
+index 2f8084a..22fc289 100644
+--- a/babel/messages/extract.py
++++ b/babel/messages/extract.py
+@@ -421,7 +421,7 @@ def extract_python(fileobj, keywords, comment_tags, options):
+                 # https://sourceforge.net/tracker/?func=detail&atid=355470&
+                 # aid=617979&group_id=5470
+                 value = eval('# coding=%s\n%s' % (str(encoding), value),
+-                             {'__builtins__':{}}, {})
++                             {}, {})
+                 if PY2 and not isinstance(value, text_type):
+                     value = value.decode(encoding)
+                 buf.append(value)

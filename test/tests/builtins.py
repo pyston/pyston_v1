@@ -129,3 +129,11 @@ print format(5.011111111111, '+.6')
 print format("abc", '')
 
 print '{n}'.format(n=None)
+
+# Thankfully, setting __builtins__ has no effect:
+__builtins__ = {'zzz': 2}
+try:
+    print zzz
+    assert 0
+except NameError as e:
+    print "caught NameError"
