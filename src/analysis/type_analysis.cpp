@@ -196,6 +196,8 @@ private:
         }
     }
 
+    void* visit_ellipsis(AST_Ellipsis* node) override { return ELLIPSIS; }
+
     void* visit_attribute(AST_Attribute* node) override {
         CompilerType* t = getType(node->value);
         CompilerType* rtn = t->getattrType(node->attr, false);

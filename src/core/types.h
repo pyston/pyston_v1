@@ -88,7 +88,7 @@ template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
 ConcreteCompilerType* typeFromClass(BoxedClass*);
 
-extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE,
+extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE,*ELLIPSIS,
     *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX,
     *FRAME_INFO;
 extern CompilerType* UNDEF;
