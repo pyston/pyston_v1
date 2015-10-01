@@ -99,22 +99,22 @@ bool checkInst(LookupScope scope) {
 }
 
 template <ExceptionStyle S>
-static inline Box* callattrInternal0(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+static inline Box* callattrInternal0(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                                      ArgPassSpec argspec) noexcept(S == CAPI) {
     return callattrInternal<S>(obj, attr, scope, rewrite_args, argspec, NULL, NULL, NULL, NULL, NULL);
 }
 template <ExceptionStyle S>
-static inline Box* callattrInternal1(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+static inline Box* callattrInternal1(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                                      ArgPassSpec argspec, Box* arg1) noexcept(S == CAPI) {
     return callattrInternal<S>(obj, attr, scope, rewrite_args, argspec, arg1, NULL, NULL, NULL, NULL);
 }
 template <ExceptionStyle S>
-static inline Box* callattrInternal2(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+static inline Box* callattrInternal2(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                                      ArgPassSpec argspec, Box* arg1, Box* arg2) noexcept(S == CAPI) {
     return callattrInternal<S>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, NULL, NULL, NULL);
 }
 template <ExceptionStyle S>
-static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                                      ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3) noexcept(S == CAPI) {
     return callattrInternal<S>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
 }
@@ -739,7 +739,7 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
 
         if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
             if (rewrite_args)
-                assert(!rewrite_args->out_success);
+                assert(!rewrite_args->isSuccessful());
             rewrite_args = NULL;
             Box* d = attrs->attr_list->attrs[0];
             assert(d);
@@ -769,10 +769,8 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
 
         int offset = hcls->getOffset(attr);
         if (offset == -1) {
-            if (rewrite_args) {
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
-            }
+            if (rewrite_args)
+                rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
             return NULL;
         }
 
@@ -783,15 +781,10 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
             } else {
                 RewriterVar* r_attrs
                     = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
-                rewrite_args->out_rtn
+                RewriterVar* r_rtn
                     = r_attrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), Location::any());
+                rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
-        }
-
-        if (rewrite_args) {
-            rewrite_args->out_success = true;
-            assert(rewrite_args->out_rtn);
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
         }
 
         Box* rtn = attrs->attr_list->attrs[offset];
@@ -811,11 +804,8 @@ Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
         return it->second;
     }
 
-    if (rewrite_args) {
-        rewrite_args->out_success = true;
-        assert(rewrite_args->out_rtn == NULL);
-        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
-    }
+    if (rewrite_args)
+        rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
 
     return NULL;
 }
@@ -991,7 +981,7 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
     Box* val;
 
     if (rewrite_args) {
-        assert(!rewrite_args->out_success);
+        assert(!rewrite_args->isSuccessful());
 
         RewriterVar* obj_saved = rewrite_args->obj;
 
@@ -1011,7 +1001,6 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
         for (auto base : *mro) {
             if (rewrite_args) {
-                rewrite_args->out_success = false;
                 if (base == cls) {
                     // Small optimization: don't have to load the class again since it was given to us in
                     // a register.
@@ -1025,18 +1014,20 @@ Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_
             }
             val = base->getattr(attr, rewrite_args);
 
-            if (rewrite_args && !rewrite_args->out_success)
+            if (rewrite_args && !rewrite_args->isSuccessful())
                 rewrite_args = NULL;
 
             if (val)
                 return val;
+
+            if (rewrite_args) {
+                rewrite_args->assertReturnConvention(ReturnConvention::NO_RETURN);
+                rewrite_args->clearReturn();
+            }
         }
 
-        if (rewrite_args) {
-            assert(rewrite_args->out_success);
-            assert(!rewrite_args->out_rtn);
-            rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
-        }
+        if (rewrite_args)
+            rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
         return NULL;
     } else {
         assert(attr->interned_state != SSTATE_NOT_INTERNED);
@@ -1135,18 +1126,15 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
         if (!for_call) {
             if (rewrite_args) {
-                rewrite_args->out_rtn
+                RewriterVar* r_rtn
                     = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
             return boxInstanceMethod(im_self, im_func, im_class);
         } else {
             *bind_obj_out = im_self;
             if (rewrite_args) {
-                rewrite_args->out_rtn = r_im_func;
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
             }
             return im_func;
@@ -1160,18 +1148,14 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         if (rewrite_args) {
             RewriterVar* r_sm_callable = r_descr->getAttr(offsetof(BoxedStaticmethod, sm_callable));
             r_sm_callable->addGuardNotEq(0);
-            rewrite_args->out_success = true;
-            rewrite_args->out_rtn = r_sm_callable;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            rewrite_args->setReturn(r_sm_callable, ReturnConvention::HAS_RETURN);
         }
 
         return sm->sm_callable;
     } else if (descr->cls == wrapperdescr_cls) {
         if (for_call) {
             if (rewrite_args) {
-                rewrite_args->out_success = true;
-                rewrite_args->out_rtn = r_descr;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = rewrite_args->obj;
             }
             *bind_obj_out = obj;
@@ -1188,9 +1172,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                     /* has_side_effects= */ false, (void*)&BoxedWrapperDescriptor::descr_get, r_descr,
                     rewrite_args->obj, r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)));
 
-                rewrite_args->out_success = true;
-                rewrite_args->out_rtn = r_rtn;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);
             }
             return r;
         }
@@ -1199,6 +1181,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
     return NULL;
 }
 
+// r_descr must represent a valid object.
 Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls, Box* descr, RewriterVar* r_descr,
                                bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     // Special case: functions
@@ -1210,18 +1193,16 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             if (rewrite_args) {
                 // return an unbound instancemethod
                 RewriterVar* r_cls = rewrite_args->obj;
-                rewrite_args->out_rtn
+                RewriterVar* r_rtn
                     = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr, r_cls);
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
             return boxUnboundInstanceMethod(descr, cls);
         }
 
         if (rewrite_args) {
-            rewrite_args->out_success = true;
-            rewrite_args->out_rtn = r_descr;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            // This is assuming that r_descr was passed in as a valid object
+            rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
         return descr;
     }
@@ -1233,9 +1214,8 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
         if (rewrite_args) {
-            rewrite_args->out_rtn = r_descr;
-            rewrite_args->out_success = true;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            // This is assuming that r_descr was passed in as a valid object
+            rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
         return descr;
     }
@@ -1249,6 +1229,7 @@ Box* boxChar(char c) {
     return boxString(llvm::StringRef(d, 1));
 }
 
+// r_descr needs to represent a valid object
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedString* attr_name, Box* obj, Box* descr,
                                         RewriterVar* r_descr, bool for_call, Box** bind_obj_out,
                                         RewriterVar** r_bind_obj_out) {
@@ -1277,10 +1258,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         switch (member_desc->type) {
             case BoxedMemberDescriptor::OBJECT_EX: {
                 if (rewrite_args) {
-                    rewrite_args->out_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
-                    rewrite_args->out_rtn->addGuardNotEq(0);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    RewriterVar* r_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    r_rtn->addGuardNotEq(0);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
@@ -1294,9 +1274,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
                     // TODO would be faster to not use a call
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
@@ -1309,10 +1288,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
-                    rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->offset);
@@ -1324,10 +1301,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
-                    rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 float rtn = *reinterpret_cast<float*>((char*)obj + member_desc->offset);
@@ -1338,9 +1313,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     case BoxedMemberDescriptor::TYPE: {                                                                                \
         if (rewrite_args) {                                                                                            \
             RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val);                   \
-            rewrite_args->out_success = true;                                                                          \
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;                                    \
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val);                      \
+            /* XXX assuming that none of these throw a capi error! */                                                  \
+            rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);                                              \
         }                                                                                                              \
         type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->offset);                                         \
         return boxFn((cast)rtn);                                                                                       \
@@ -1362,9 +1337,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             case BoxedMemberDescriptor::STRING: {
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 char* rtn = *reinterpret_cast<char**>((char*)obj + member_desc->offset);
@@ -1372,11 +1346,10 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             }
             case BoxedMemberDescriptor::STRING_INPLACE: {
                 if (rewrite_args) {
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(
                         true, (void*)boxStringFromCharPtr,
                         rewrite_args->rewriter->add(rewrite_args->obj, member_desc->offset, rewrite_args->destination));
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 rewrite_args = NULL;
@@ -1407,9 +1380,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             if (!crewrite_args.out_success) {
                 rewrite_args = NULL;
             } else {
-                rewrite_args->out_success = true;
-                rewrite_args->out_rtn = crewrite_args.out_rtn;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::HAS_RETURN);
             }
             return rtn;
         }
@@ -1442,14 +1413,11 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
 
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(
                 /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
-            if (descr->cls == capi_getset_cls)
-                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-
-            rewrite_args->out_success = true;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            rewrite_args->setReturn(r_rtn, descr->cls == capi_getset_cls ? ReturnConvention::CAPI_RETURN
+                                                                         : ReturnConvention::HAS_RETURN);
         }
 
         return getset_descr->get(obj, getset_descr->closure);
@@ -1511,14 +1479,8 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
 
-                if (S == CXX)
-                    rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
-                else
-                    rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
-
-                rewrite_args->out_rtn = r_rtn;
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
+                rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);
             }
 
             if (!r) {
@@ -1577,12 +1539,11 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 }
             };
 
-            rewrite_args->out_rtn
+            RewriterVar* r_rtn
                 = rewrite_args->rewriter->call(true, (void*)Helper::call, rewrite_args->obj,
                                                rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)),
                                                rewrite_args->rewriter->loadConst(cls_only, Location::forArg(2)));
-            rewrite_args->out_success = true;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::NOEXC_POSSIBLE;
+            rewrite_args->setReturn(r_rtn, ReturnConvention::NOEXC_POSSIBLE);
             return Helper::call(obj, attr, cls_only);
         }
 
@@ -1633,9 +1594,9 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         gotten = getclsattrInternal(obj, attr, &rewrite_args);
 
-        if (rewrite_args.out_success && gotten) {
-            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            rewriter->commitReturning(rewrite_args.out_rtn);
+        if (rewrite_args.isSuccessful() && gotten) {
+            RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            rewriter->commitReturning(r_rtn);
         }
 #endif
 }
@@ -1714,13 +1675,12 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, rewrite_args->destination);
         descr = typeLookup(obj->cls, attr, &grewrite_args);
 
-        if (!grewrite_args.out_success) {
+        if (!grewrite_args.isSuccessful()) {
             rewrite_args = NULL;
         } else if (descr) {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            r_descr = grewrite_args.out_rtn;
+            r_descr = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
         } else {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+            grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
         descr = typeLookup(obj->cls, attr, NULL);
@@ -1762,11 +1722,10 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _get_ = typeLookup(descr->cls, get_str, &grewrite_args);
                     assert(_get_);
-                    if (!grewrite_args.out_success) {
+                    if (!grewrite_args.isSuccessful()) {
                         rewrite_args = NULL;
                     } else if (_get_) {
-                        assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                        r_get = grewrite_args.out_rtn;
+                        r_get = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                     }
                 } else {
                     // Don't look up __get__ if we can't rewrite under the assumption that it will
@@ -1786,11 +1745,11 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
-                    if (!grewrite_args.out_success) {
+                    if (!grewrite_args.isSuccessful()) {
                         rewrite_args = NULL;
                     } else {
-                        assert(grewrite_args.out_return_convention
-                               == (_set_ ? GetattrRewriteArgs::VALID_RETURN : GetattrRewriteArgs::NO_RETURN));
+                        grewrite_args.assertReturnConvention(_set_ ? ReturnConvention::HAS_RETURN
+                                                                   : ReturnConvention::NO_RETURN);
                     }
                 } else {
                     _set_ = typeLookup(descr->cls, set_str, NULL);
@@ -1824,9 +1783,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                         if (!crewrite_args.out_success) {
                             rewrite_args = NULL;
                         } else {
-                            rewrite_args->out_success = true;
-                            rewrite_args->out_rtn = crewrite_args.out_rtn;
-                            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                            rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::HAS_RETURN);
                         }
                     } else {
                         res = descr_get(descr, obj, obj->cls);
@@ -1851,40 +1808,31 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     static Box* call(Box* obj, BoxedString* attr) { return obj->getattr(attr); }
                 };
 
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                RewriterVar* r_rtn = rewrite_args->rewriter->call(
                     false, (void*)Helper::call, rewrite_args->obj,
                     rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)));
-                rewrite_args->out_success = true;
-                rewrite_args->out_return_convention = GetattrRewriteArgs::NOEXC_POSSIBLE;
+                rewrite_args->setReturn(r_rtn, ReturnConvention::NOEXC_POSSIBLE);
                 return Helper::call(obj, attr);
             }
 
             Box* val;
-            RewriterVar* r_val = NULL;
             if (rewrite_args) {
                 GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
                 val = obj->getattr(attr, &hrewrite_args);
 
-                if (!hrewrite_args.out_success) {
+                if (!hrewrite_args.isSuccessful()) {
                     rewrite_args = NULL;
                 } else if (val) {
-                    assert(hrewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                    r_val = hrewrite_args.out_rtn;
+                    rewrite_args->setReturn(hrewrite_args.getReturn());
                 } else {
-                    assert(hrewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+                    hrewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
                 }
             } else {
                 val = obj->getattr(attr, NULL);
             }
 
-            if (val) {
-                if (rewrite_args) {
-                    rewrite_args->out_rtn = r_val;
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
-                }
+            if (val)
                 return val;
-            }
         } else {
             // More complicated when obj is a type
             // We have to look up the attr in the entire
@@ -1898,11 +1846,12 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
 
                 val = typeLookup(static_cast<BoxedClass*>(obj), attr, &grewrite_args);
-                if (!grewrite_args.out_success) {
+                if (!grewrite_args.isSuccessful()) {
                     rewrite_args = NULL;
                 } else if (val) {
-                    assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                    r_val = grewrite_args.out_rtn;
+                    r_val = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+                } else {
+                    grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
                 }
             } else {
                 val = typeLookup(static_cast<BoxedClass*>(obj), attr, NULL);
@@ -1923,11 +1872,8 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 }
 
                 if (!local_get) {
-                    if (rewrite_args) {
-                        rewrite_args->out_rtn = r_val;
-                        rewrite_args->out_success = true;
-                        rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
-                    }
+                    if (rewrite_args)
+                        rewrite_args->setReturn(r_val, ReturnConvention::HAS_RETURN);
                     return val;
                 }
 
@@ -1937,12 +1883,11 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     throwCAPIException();
 
                 if (rewrite_args) {
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(
                         true, (void*)local_get, r_val, rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
                         rewrite_args->obj);
-                    rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    // rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+                    rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);
                 }
 
                 return r;
@@ -1987,9 +1932,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 if (!crewrite_args.out_success) {
                     rewrite_args = NULL;
                 } else {
-                    rewrite_args->out_success = true;
-                    rewrite_args->out_rtn = crewrite_args.out_rtn;
-                    rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::HAS_RETURN);
                 }
             } else {
                 res = descr_get(descr, obj, obj->cls);
@@ -2001,24 +1944,20 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
 
         // Otherwise, just return descr.
         if (rewrite_args) {
-            rewrite_args->out_rtn = r_descr;
-            rewrite_args->out_success = true;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
         return descr;
     }
 
     // TODO this shouldn't go here; it should be in instancemethod_cls->tp_getattr[o]
     if (obj->cls == instancemethod_cls) {
-        assert(!rewrite_args || !rewrite_args->out_success);
+        assert(!rewrite_args || !rewrite_args->isSuccessful());
         return getattrInternalEx<CXX>(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
                                       bind_obj_out, NULL);
     }
 
-    if (rewrite_args) {
-        rewrite_args->out_success = true;
-        rewrite_args->out_return_convention = GetattrRewriteArgs::NO_RETURN;
-    }
+    if (rewrite_args)
+        rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
     return NULL;
 }
 
@@ -2128,30 +2067,33 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
         val = getattrInternal<S>(obj, attr, &rewrite_args);
 
-        if (rewrite_args.out_success) {
-            assert(rewrite_args.out_return_convention != GetattrRewriteArgs::UNSPECIFIED);
+        if (rewrite_args.isSuccessful()) {
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = rewrite_args.getReturn();
 
-            if (rewrite_args.out_return_convention != GetattrRewriteArgs::VALID_RETURN) {
+            // Try to munge the return into the right form:
+            if (return_convention != ReturnConvention::HAS_RETURN) {
                 if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
-                    if (rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN) {
-                        assert(!rewrite_args.out_rtn);
-                        rewrite_args.out_rtn = rewriter->loadConst(0, Location::forArg(1));
+                    if (return_convention == ReturnConvention::NO_RETURN) {
+                        assert(!rtn);
+                        rtn = rewriter->loadConst(0, Location::forArg(1));
                     }
-                    rewriter->call(true, (void*)NoexcHelper::call, rewrite_args.out_rtn, rewriter->getArg(0),
+                    rewriter->call(true, (void*)NoexcHelper::call, rtn, rewriter->getArg(0),
                                    rewriter->loadConst((intptr_t)attr, Location::forArg(2)));
-                    rewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+                    return_convention = (S == CXX) ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN;
                 }
             }
 
-            if (rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN) {
-                RewriterVar* r_rtn = rewrite_args.out_rtn;
+            if (return_convention == ReturnConvention::HAS_RETURN
+                || (S == CAPI && return_convention == ReturnConvention::CAPI_RETURN)) {
                 if (recorder) {
-                    r_rtn = rewriter->call(false, (void*)recordType,
-                                           rewriter->loadConst((intptr_t)recorder, Location::forArg(0)), r_rtn);
+                    rtn = rewriter->call(false, (void*)recordType,
+                                         rewriter->loadConst((intptr_t)recorder, Location::forArg(0)), rtn);
                     recordType(recorder, val);
                 }
 
-                rewriter->commitReturning(r_rtn);
+                rewriter->commitReturning(rtn);
             }
         }
     } else {
@@ -2248,11 +2190,12 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_cls, rewrite_args->rewriter->getReturnDestination());
         descr = typeLookup(obj->cls, attr, &grewrite_args);
 
-        if (!grewrite_args.out_success) {
+        if (!grewrite_args.isSuccessful()) {
             rewrite_args = NULL;
         } else if (descr) {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            r_descr = grewrite_args.out_rtn;
+            r_descr = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+        } else {
+            grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
         descr = typeLookup(obj->cls, attr, NULL);
@@ -2271,11 +2214,12 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
             RewriterVar* r_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_cls, Location::any());
             _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
-            if (!grewrite_args.out_success) {
+            if (!grewrite_args.isSuccessful()) {
                 rewrite_args = NULL;
             } else if (_set_) {
-                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                r_set = grewrite_args.out_rtn;
+                r_set = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            } else {
+                grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
             }
         } else {
             _set_ = typeLookup(descr->cls, set_str, NULL);
@@ -2368,9 +2312,8 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
             setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
             assert(setattr);
 
-            if (rewrite_args.out_success) {
-                r_setattr = rewrite_args.out_rtn;
-                assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
+            if (rewrite_args.isSuccessful()) {
+                r_setattr = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                 // TODO this is not good enough, since the object could get collected:
                 r_setattr->addGuard((intptr_t)setattr);
             } else {
@@ -2535,22 +2478,28 @@ extern "C" bool nonzero(Box* obj) {
     static BoxedString* len_str = internStringImmortal("__len__");
 
     // try __nonzero__
-    CallRewriteArgs crewrite_args(rewriter.get(), r_obj,
-                                  rewriter.get() ? rewriter->getReturnDestination() : Location());
+    CallattrRewriteArgs crewrite_args(rewriter.get(), r_obj,
+                                      rewriter.get() ? rewriter->getReturnDestination() : Location());
     Box* rtn
         = callattrInternal0<CXX>(obj, nonzero_str, CLASS_ONLY, rewriter.get() ? &crewrite_args : NULL, ArgPassSpec(0));
-    if (!crewrite_args.out_success)
+    if (!crewrite_args.isSuccessful())
         rewriter.reset();
 
     if (!rtn) {
+        if (rewriter.get())
+            crewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
+
         // try __len__
-        crewrite_args
-            = CallRewriteArgs(rewriter.get(), r_obj, rewriter.get() ? rewriter->getReturnDestination() : Location());
+        crewrite_args = CallattrRewriteArgs(rewriter.get(), r_obj,
+                                            rewriter.get() ? rewriter->getReturnDestination() : Location());
         rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, rewriter.get() ? &crewrite_args : NULL, ArgPassSpec(0));
-        if (!crewrite_args.out_success)
+        if (!crewrite_args.isSuccessful())
             rewriter.reset();
 
         if (rtn == NULL) {
+            if (rewriter.get()) {
+                crewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
+            }
             ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
                        || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == file_cls
                        || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
@@ -2567,8 +2516,10 @@ extern "C" bool nonzero(Box* obj) {
             return true;
         }
     }
-    if (crewrite_args.out_success) {
-        RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, crewrite_args.out_rtn);
+
+    if (crewrite_args.isSuccessful()) {
+        RewriterVar* rtn = crewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+        RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, rtn);
         rewriter->commitReturning(b);
     }
     return nonzeroHelper(rtn);
@@ -2742,12 +2693,24 @@ template <ExceptionStyle S> BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewr
     Box* rtn;
     try {
         if (rewrite_args) {
-            CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+            CallattrRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
-            if (!crewrite_args.out_success)
+            if (!crewrite_args.isSuccessful())
                 rewrite_args = NULL;
-            else if (rtn)
-                rewrite_args->out_rtn = crewrite_args.out_rtn;
+            else {
+                RewriterVar* rtn;
+                ReturnConvention return_convention;
+                std::tie(rtn, return_convention) = crewrite_args.getReturn();
+                if (return_convention != ReturnConvention::HAS_RETURN
+                    && return_convention != ReturnConvention::NO_RETURN)
+                    rewrite_args = NULL;
+                else {
+                    rewrite_args->out_rtn = rtn;
+                }
+
+                if (rewrite_args)
+                    assert((bool)rtn == (return_convention == ReturnConvention::HAS_RETURN));
+            }
         } else {
             rtn = callattrInternal0<CXX>(obj, len_str, CLASS_ONLY, NULL, ArgPassSpec(0));
         }
@@ -2851,7 +2814,7 @@ extern "C" i64 unboxedLen(Box* obj) {
 // For rewriting purposes, this function assumes that nargs will be constant.
 // That's probably fine for some uses (ex binops), but otherwise it should be guarded on beforehand.
 template <ExceptionStyle S>
-Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
+Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                       ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                       const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     assert(gc::isValidGCObject(attr));
@@ -2896,19 +2859,29 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
         val = getattrInternalEx<S>(obj, attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
         // TODO: maybe callattrs should have return conventions as well.
-        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
+
+        if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
-        } else if (val) {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            r_val = grewrite_args.out_rtn;
+        else {
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = grewrite_args.getReturn();
+            if (return_convention != ReturnConvention::HAS_RETURN && return_convention != ReturnConvention::NO_RETURN)
+                rewrite_args = NULL;
+            else
+                r_val = rtn;
+
+            if (rewrite_args)
+                assert((bool)val == (return_convention == ReturnConvention::HAS_RETURN));
         }
     } else {
         val = getattrInternalEx<S>(obj, attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
     }
 
     if (val == NULL) {
-        if (rewrite_args && (S == CXX || !PyErr_Occurred()))
-            rewrite_args->out_success = true;
+        if (rewrite_args)
+            rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
+
         return val;
     }
 
@@ -2968,14 +2941,23 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallRewrit
         else
             arg_array->setAttr(8, rewrite_args->rewriter->loadConst(0));
 
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
-        rewrite_args->out_success = true;
+        auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
+        rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
         return Helper::call(val, argspec, arg1, arg2, arg3, _args);
     }
 
-    return runtimeCallInternal<S>(val, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    if (rewrite_args) {
+        CallRewriteArgs crewrite_args(rewrite_args);
+        Box* r = runtimeCallInternal<S>(val, &crewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        if (crewrite_args.out_success)
+            rewrite_args->setReturn(crewrite_args.out_rtn,
+                                    S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
+        return r;
+    } else {
+        return runtimeCallInternal<S>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    }
 }
 
 template <ExceptionStyle S>
@@ -3036,7 +3018,7 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         // or this kind of thing is necessary in a lot more places
         // rewriter->getArg(3).addGuard(npassed_args);
 
-        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        CallattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         if (npassed_args >= 1)
             rewrite_args.arg1 = rewriter->getArg(3);
         if (npassed_args >= 2)
@@ -3048,13 +3030,21 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         rtn = callattrInternal<S>(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         assert(!(S == CAPI && flags.null_on_nonexistent));
-        if (!rewrite_args.out_success) {
+        if (!rewrite_args.isSuccessful()) {
             rewriter.reset(NULL);
-        } else if (rtn || S == CAPI) {
-            rewriter->commitReturning(rewrite_args.out_rtn);
-        } else if (flags.null_on_nonexistent) {
-            assert(!rewrite_args.out_rtn);
-            rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
+        } else {
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = rewrite_args.getReturn();
+
+            if (return_convention == ReturnConvention::HAS_RETURN
+                || (S == CAPI && return_convention == ReturnConvention::CAPI_RETURN)) {
+                assert(rtn);
+                rewriter->commitReturning(rtn);
+            } else if (return_convention == ReturnConvention::NO_RETURN && flags.null_on_nonexistent) {
+                assert(!rtn);
+                rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
+            }
         }
     } else {
         rtn = callattrInternal<S>(obj, attr, scope, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -3081,7 +3071,7 @@ extern "C" Box* callattrCapi(Box* obj, BoxedString* attr, CallattrFlags flags, B
                                 __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
-static inline RewriterVar* getArg(int idx, CallRewriteArgs* rewrite_args) {
+static inline RewriterVar* getArg(int idx, _CallRewriteArgsBase* rewrite_args) {
     if (idx == 0)
         return rewrite_args->arg1;
     if (idx == 1)
@@ -3206,8 +3196,8 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
 
-ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
-                            Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args) {
+ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewriteArgsBase* rewrite_args,
+                            ArgPassSpec argspec, Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args) {
     int npassed_args = argspec.totalPassed();
 
     assert((new_args != NULL) == (npassed_args >= 3));
@@ -3235,7 +3225,7 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, CallRewriteA
 }
 
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
+                        Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
                         const std::vector<BoxedString*>* keyword_names) {
     /*
@@ -4017,8 +4007,27 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         }
 
         if (rewrite_args) {
-            rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
+            CallattrRewriteArgs crewrite_args(rewrite_args);
+            rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, &crewrite_args, argspec, arg1, arg2, arg3, args,
                                       keyword_names);
+
+            if (!crewrite_args.isSuccessful())
+                rewrite_args = NULL;
+            else {
+                RewriterVar* rtn;
+                ReturnConvention return_convention;
+                std::tie(rtn, return_convention) = crewrite_args.getReturn();
+
+                if (return_convention == ReturnConvention::HAS_RETURN) {
+                    rewrite_args->out_rtn = rtn;
+                    rewrite_args->out_success = true;
+                } else if (return_convention == ReturnConvention::NO_RETURN) {
+                    // Could handle this, but currently don't, and probably not that important.
+                    rewrite_args = NULL;
+                } else {
+                    rewrite_args = NULL;
+                }
+            }
         } else {
             rtn = callattrInternal<S>(obj, call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
         }
@@ -4026,8 +4035,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         if (!rtn) {
             if (S == CAPI) {
                 if (!PyErr_Occurred()) {
-                    if (rewrite_args)
-                        rewrite_args->out_success = false;
+                    assert(!rewrite_args); // would need to rewrite this.
                     PyErr_Format(TypeError, "'%s' object is not callable", getTypeName(obj));
                 }
                 return NULL;
@@ -4240,20 +4248,31 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
     }
 
+    struct NotImplementedHelper {
+        static void call(Box* r, bool was_notimplemented) { assert((r == NotImplemented) == was_notimplemented); }
+    };
+
     Box* irtn = NULL;
     if (inplace) {
         BoxedString* iop_name = getInplaceOpName(op_type);
         if (rewrite_args) {
-            CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
+            CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
             srewrite_args.arg1 = rewrite_args->rhs;
             srewrite_args.args_guarded = true;
             irtn = callattrInternal1<CXX>(lhs, iop_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
-            if (!srewrite_args.out_success) {
+            if (!srewrite_args.isSuccessful()) {
                 rewrite_args = NULL;
             } else if (irtn) {
-                if (irtn != NotImplemented)
-                    rewrite_args->out_rtn = srewrite_args.out_rtn;
+                rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+// If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
+// or not based only on the types of the inputs.
+#ifndef NDEBUG
+                rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
+                                             rewrite_args->rewriter->loadConst(irtn == NotImplemented));
+#endif
+            } else {
+                srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
             }
         } else {
             irtn = callattrInternal1<CXX>(lhs, iop_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
@@ -4262,9 +4281,12 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         if (irtn) {
             if (irtn != NotImplemented) {
                 if (rewrite_args) {
+                    assert(rewrite_args->out_rtn);
                     rewrite_args->out_success = true;
                 }
                 return irtn;
+            } else {
+                assert(!rewrite_args);
             }
         }
     }
@@ -4272,15 +4294,22 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     BoxedString* op_name = getOpName(op_type);
     Box* lrtn;
     if (rewrite_args) {
-        CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
+        CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
         srewrite_args.arg1 = rewrite_args->rhs;
         lrtn = callattrInternal1<CXX>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
-        if (!srewrite_args.out_success)
+        if (!srewrite_args.isSuccessful()) {
             rewrite_args = NULL;
-        else if (lrtn) {
-            if (lrtn != NotImplemented)
-                rewrite_args->out_rtn = srewrite_args.out_rtn;
+        } else if (lrtn) {
+            rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+// If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
+// or not based only on the types of the inputs.
+#ifndef NDEBUG
+            rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
+                                         rewrite_args->rewriter->loadConst(irtn == NotImplemented));
+#endif
+        } else {
+            srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
         lrtn = callattrInternal1<CXX>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
@@ -4290,6 +4319,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     if (lrtn) {
         if (lrtn != NotImplemented) {
             if (rewrite_args) {
+                assert(rewrite_args->out_rtn);
                 rewrite_args->out_success = true;
             }
             return lrtn;
@@ -4297,6 +4327,8 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     }
 
     // TODO patch these cases
+    // actually, I think our guarding up to here is correct; the issue is we won't be able to complete
+    // the rewrite since we have more guards to do, but we already did some mutations.
     if (rewrite_args) {
         assert(rewrite_args->out_success == false);
         rewrite_args = NULL;
@@ -4517,14 +4549,25 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         Box* contained;
         RewriterVar* r_contained = NULL;
         if (rewrite_args) {
-            CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->rhs, rewrite_args->destination);
+            CallattrRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->rhs, rewrite_args->destination);
             crewrite_args.arg1 = rewrite_args->lhs;
             contained = callattrInternal1<CXX>(rhs, contains_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), lhs);
 
-            if (!crewrite_args.out_success)
+            if (!crewrite_args.isSuccessful())
                 rewrite_args = NULL;
-            else if (contained)
-                r_contained = crewrite_args.out_rtn;
+            else {
+                RewriterVar* rtn;
+                ReturnConvention return_convention;
+                std::tie(rtn, return_convention) = crewrite_args.getReturn();
+                if (return_convention != ReturnConvention::HAS_RETURN
+                    && return_convention != ReturnConvention::NO_RETURN)
+                    rewrite_args = NULL;
+                else
+                    r_contained = rtn;
+
+                if (rewrite_args)
+                    assert((bool)contained == (return_convention == ReturnConvention::HAS_RETURN));
+            }
         } else {
             contained = callattrInternal1<CXX>(rhs, contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
         }
@@ -4623,14 +4666,24 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
     Box* lrtn;
     if (rewrite_args) {
-        CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
+        CallattrRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
         crewrite_args.arg1 = rewrite_args->rhs;
         lrtn = callattrInternal1<CXX>(lhs, op_name, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), rhs);
 
-        if (!crewrite_args.out_success)
+        if (!crewrite_args.isSuccessful()) {
             rewrite_args = NULL;
-        else if (lrtn)
-            rewrite_args->out_rtn = crewrite_args.out_rtn;
+        } else {
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = crewrite_args.getReturn();
+            if (return_convention != ReturnConvention::HAS_RETURN && return_convention != ReturnConvention::NO_RETURN)
+                rewrite_args = NULL;
+            else
+                rewrite_args->out_rtn = rtn;
+
+            if (rewrite_args)
+                assert((bool)lrtn == (return_convention == ReturnConvention::HAS_RETURN));
+        }
     } else {
         lrtn = callattrInternal1<CXX>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
     }
@@ -4757,12 +4810,16 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     Box* rtn = NULL;
     if (rewriter.get()) {
-        CallRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        CallattrRewriteArgs srewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rtn = callattrInternal0<CXX>(operand, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(0));
-        if (srewrite_args.out_success && rtn)
-            rewriter->commitReturning(srewrite_args.out_rtn);
-        else
-            rewriter.reset();
+
+        if (srewrite_args.isSuccessful()) {
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = srewrite_args.getReturn();
+            if (return_convention == ReturnConvention::HAS_RETURN)
+                rewriter->commitReturning(rtn);
+        }
     } else
         rtn = callattrInternal0<CXX>(operand, op_name, CLASS_ONLY, NULL, ArgPassSpec(0));
 
@@ -4775,10 +4832,29 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 template <ExceptionStyle S>
 static Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* value,
                          CallRewriteArgs* rewrite_args) noexcept(S == CAPI) {
-    if (value) {
-        return callattrInternal2<S>(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), item, value);
+
+    if (rewrite_args) {
+        CallattrRewriteArgs crewrite_args(rewrite_args);
+        Box* r;
+        if (value)
+            r = callattrInternal2<S>(target, item_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(2), item, value);
+        else
+            r = callattrInternal1<S>(target, item_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), item);
+
+        if (crewrite_args.isSuccessful()) {
+            rewrite_args->out_success = true;
+            if (r || PyErr_Occurred())
+                rewrite_args->out_rtn
+                    = crewrite_args.getReturn(S == CAPI ? ReturnConvention::CAPI_RETURN : ReturnConvention::HAS_RETURN);
+            else
+                rewrite_args->out_rtn = crewrite_args.getReturn(ReturnConvention::NO_RETURN);
+        }
+        return r;
     } else {
-        return callattrInternal1<S>(target, item_str, CLASS_ONLY, rewrite_args, ArgPassSpec(1), item);
+        if (value)
+            return callattrInternal2<S>(target, item_str, CLASS_ONLY, NULL, ArgPassSpec(2), item, value);
+        else
+            return callattrInternal1<S>(target, item_str, CLASS_ONLY, NULL, ArgPassSpec(1), item);
     }
 }
 
@@ -4809,11 +4885,17 @@ static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString*
         RewriterVar* target_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, target_cls, Location::any());
         slice_attr = typeLookup(target->cls, slice_str, &grewrite_args);
-        if (!grewrite_args.out_success) {
+        if (!grewrite_args.isSuccessful()) {
             rewrite_args = NULL;
         } else {
-            assert(grewrite_args.out_return_convention
-                   == (slice_attr ? GetattrRewriteArgs::VALID_RETURN : GetattrRewriteArgs::NO_RETURN));
+            RewriterVar* rtn;
+            ReturnConvention return_convention;
+            std::tie(rtn, return_convention) = grewrite_args.getReturn();
+            if (return_convention != ReturnConvention::HAS_RETURN && return_convention != ReturnConvention::NO_RETURN)
+                rewrite_args = NULL;
+
+            if (rewrite_args)
+                assert((bool)slice_attr == (return_convention == ReturnConvention::HAS_RETURN));
         }
     } else {
         slice_attr = typeLookup(target->cls, slice_str, NULL);
@@ -4875,12 +4957,27 @@ static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString*
         Box* boxedStart = boxInt(start);
         Box* boxedStop = boxInt(stop);
 
-        if (value) {
-            return callattrInternal3<S>(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(3), boxedStart,
-                                        boxedStop, value);
+        if (rewrite_args) {
+            CallattrRewriteArgs crewrite_args(rewrite_args);
+            Box* r;
+            if (value)
+                r = callattrInternal3<S>(target, slice_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(3), boxedStart,
+                                         boxedStop, value);
+            else
+                r = callattrInternal2<S>(target, slice_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(2), boxedStart,
+                                         boxedStop);
+
+            if (crewrite_args.isSuccessful()) {
+                rewrite_args->out_success = true;
+                rewrite_args->out_rtn = crewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            }
+            return r;
         } else {
-            return callattrInternal2<S>(target, slice_str, CLASS_ONLY, rewrite_args, ArgPassSpec(2), boxedStart,
-                                        boxedStop);
+            if (value)
+                return callattrInternal3<S>(target, slice_str, CLASS_ONLY, NULL, ArgPassSpec(3), boxedStart, boxedStop,
+                                            value);
+            else
+                return callattrInternal2<S>(target, slice_str, CLASS_ONLY, NULL, ArgPassSpec(2), boxedStart, boxedStop);
         }
     }
 }
@@ -5287,22 +5384,18 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
         RewriterVar* r_cls = r_o->getAttr(offsetof(Box, cls));
         GetattrRewriteArgs rewrite_args(rewriter.get(), r_cls, rewriter->getReturnDestination());
         Box* r = typeLookup(o->cls, hasnext_str, &rewrite_args);
-        if (!rewrite_args.out_success) {
+        if (!rewrite_args.isSuccessful()) {
             rewriter.reset(NULL);
         } else if (r) {
-            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            rewrite_args.out_rtn->addGuard((uint64_t)r);
-            if (rewrite_args.out_success) {
-                rewriter->commitReturning(r_o);
-                return o;
-            }
-        } else if (!r) {
-            assert(rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+            RewriterVar* rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            rtn->addGuard((uint64_t)r);
+            rewriter->commitReturning(r_o);
+            return o;
+        } else /* if (!r) */ {
+            rewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
             RewriterVar* var = rewriter.get()->call(true, (void*)createBoxedIterWrapper, rewriter->getArg(0));
-            if (rewrite_args.out_success) {
-                rewriter->commitReturning(var);
-                return createBoxedIterWrapper(o);
-            }
+            rewriter->commitReturning(var);
+            return createBoxedIterWrapper(o);
         }
     }
 
@@ -5797,18 +5890,15 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
                 GetattrRewriteArgs rewrite_args(rewriter.get(), r_mod, rewriter->getReturnDestination());
                 r = m->getattr(name, &rewrite_args);
-                if (!rewrite_args.out_success) {
+                if (!rewrite_args.isSuccessful()) {
                     rewriter.reset(NULL);
                 } else {
-                    if (r)
-                        assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                    else
-                        assert(rewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+                    rewrite_args.assertReturnConvention(r ? ReturnConvention::HAS_RETURN : ReturnConvention::NO_RETURN);
                 }
                 if (r) {
-                    if (rewriter.get()) {
-                        rewriter->commitReturning(rewrite_args.out_rtn);
-                    }
+                    if (rewriter.get())
+                        rewriter->commitReturning(rewrite_args.getReturn(ReturnConvention::HAS_RETURN));
+
                     return r;
                 }
             } else {
@@ -5841,14 +5931,14 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
             rewrite_args.obj_shape_guarded = true; // always builtin module
             rtn = builtins_module->getattr(name, &rewrite_args);
 
-            if (!rtn || !rewrite_args.out_success) {
+            if (!rewrite_args.isSuccessful())
                 rewriter.reset(NULL);
+            else if (rtn) {
+                auto r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+                rewriter->commitReturning(r_rtn);
             } else {
-                assert(rewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            }
-
-            if (rewriter.get()) {
-                rewriter->commitReturning(rewrite_args.out_rtn);
+                rewrite_args.getReturn(); // just to make the asserts happy
+                rewriter.reset(NULL);
             }
         } else {
             rtn = builtins_module->getattr(name, NULL);

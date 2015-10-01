@@ -92,6 +92,7 @@ static thread_local Timer per_thread_cleanup_timer(-1);
 #ifndef NDEBUG
 static __thread bool in_cleanup_code = false;
 #endif
+static __thread bool is_unwinding = false;
 
 extern "C" {
 
@@ -567,6 +568,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
 #if STAT_TIMERS
             pyston::StatTimer::finishOverride();
 #endif
+            pyston::is_unwinding = false;
         }
         static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
         // there is a python unwinding implementation detail leaked
@@ -608,6 +610,10 @@ void std::terminate() noexcept {
     // The default std::terminate assumes things about the C++ exception state which aren't true for our custom
     // unwinder.
     RELEASE_ASSERT(0, "std::terminate() called!");
+}
+
+bool std::uncaught_exception() noexcept {
+    return pyston::is_unwinding;
 }
 
 // wrong type signature, but that's okay, it's extern "C"
@@ -684,9 +690,13 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     pyston::ExcInfo* exc_data = (pyston::ExcInfo*)exc_obj;
     checkExcInfo(exc_data);
 
+    ASSERT(!pyston::is_unwinding, "We don't support throwing exceptions in destructors!");
+
+    pyston::is_unwinding = true;
 #if STAT_TIMERS
     pyston::StatTimer::overrideCounter(unwinding_stattimer);
 #endif
+
     // let unwinding.cpp know we've started unwinding
     pyston::logException(exc_data);
     pyston::unwind(exc_data);

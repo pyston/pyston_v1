@@ -908,7 +908,11 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
     getattr = typeLookup(self->cls, _getattr_str, NULL);
 
     if (getattr == NULL) {
-        assert(!rewrite_args || !rewrite_args->out_success);
+        if (rewrite_args) {
+            // Don't bother rewriting this case:
+            assert(!rewrite_args->isSuccessful());
+            rewrite_args = NULL;
+        }
 
         /* No __getattr__ hook: use a simpler dispatcher */
         self->cls->tp_getattro = slot_tp_getattro;
@@ -931,13 +935,12 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, Location::any());
 
         getattribute = typeLookup(self->cls, _getattribute_str, &grewrite_args);
-        if (!grewrite_args.out_success)
+        if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
         else if (getattribute) {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-            r_getattribute = grewrite_args.out_rtn;
+            r_getattribute = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
         } else {
-            assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+            grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
         getattribute = typeLookup(self->cls, _getattribute_str, NULL);
@@ -973,35 +976,38 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                         throw e;
                 }
 
-                grewrite_args.out_success = false;
+                if (grewrite_args.isSuccessful()) {
+                    grewrite_args.getReturn(); // to make the asserts happy
+                    grewrite_args.clearReturn();
+                }
                 res = NULL;
             }
 
-            if (!grewrite_args.out_success)
+            if (!grewrite_args.isSuccessful())
                 rewrite_args = NULL;
-            else if (res) {
-                rewrite_args->out_rtn = grewrite_args.out_rtn;
-                rewrite_args->out_return_convention = grewrite_args.out_return_convention;
-            }
+            else {
+                RewriterVar* rtn;
+                ReturnConvention return_convention;
+                std::tie(rtn, return_convention) = grewrite_args.getReturn();
 
-            // Guarding here is a bit tricky, since we need to make sure that we call getattr
-            // (or not) at the right times.
-            // Right now this section is a bit conservative.
-            if (rewrite_args) {
-                if (grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN) {
-                    // Do nothing
-                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN) {
-                    // TODO we should have a HAS_RETURN that takes out the NULL case
+                if (return_convention == ReturnConvention::HAS_RETURN) {
                     assert(res);
-                    if (res)
-                        grewrite_args.out_rtn->addGuardNotEq(0);
-                    else
-                        grewrite_args.out_rtn->addGuard(0);
-                } else if (grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE) {
-                    // TODO maybe we could handle this
-                    rewrite_args = NULL;
+                    rewrite_args->setReturn(rtn, ReturnConvention::HAS_RETURN);
+                    return res;
+                } else if (return_convention == ReturnConvention::NO_RETURN) {
+                    assert(!res);
+                } else if (return_convention == ReturnConvention::CAPI_RETURN) {
+                    // If we get a CAPI return, we probably did a function call, and these guards
+                    // will probably just make the rewrite fail:
+                    if (res) {
+                        rtn->addGuardNotEq(0);
+                        rewrite_args->setReturn(rtn, ReturnConvention::HAS_RETURN);
+                        return res;
+                    } else
+                        rtn->addGuard(0);
                 } else {
-                    RELEASE_ASSERT(0, "%d", grewrite_args.out_return_convention);
+                    assert(return_convention == ReturnConvention::NOEXC_POSSIBLE);
+                    rewrite_args = NULL;
                 }
             }
         } else {
@@ -1044,8 +1050,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
     // doesn't exist.
 
     if (res) {
-        if (rewrite_args)
-            rewrite_args->out_success = true;
+        assert(!rewrite_args); // should have been handled already
         return res;
     }
 
@@ -1059,7 +1064,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         // - we have no way of signalling that "we didn't get an attribute this time but that may be different
         //   in future executions through the IC".
         // I think this should only end up mattering anyway if the getattr site throws every single time.
-        CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+        CallattrRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
         assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
         crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
 
@@ -1067,11 +1072,10 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                                   NULL, NULL, NULL, NULL);
         assert(res || S == CAPI);
 
-        if (!crewrite_args.out_success)
+        if (!crewrite_args.isSuccessful())
             rewrite_args = NULL;
         else {
-            rewrite_args->out_rtn = crewrite_args.out_rtn;
-            rewrite_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+            rewrite_args->setReturn(crewrite_args.getReturn());
         }
     } else {
         // TODO: we already fetched the getattr attribute, it would be faster to call it rather than do
@@ -1084,8 +1088,6 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         assert(res || S == CAPI);
     }
 
-    if (rewrite_args)
-        rewrite_args->out_success = true;
     return res;
 }
 // Force instantiation of the template

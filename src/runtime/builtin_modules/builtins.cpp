@@ -569,16 +569,15 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
         rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
         // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
-        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE)
+        if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
         else {
-            if (!rtn && !PyErr_Occurred()) {
-                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+            ReturnConvention return_convention;
+            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+            // Convert to NOEXC_POSSIBLE:
+            if (return_convention == ReturnConvention::NO_RETURN)
                 r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else {
-                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                r_rtn = grewrite_args.out_rtn;
-            }
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str, NULL);
@@ -681,16 +680,15 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
         rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        if (!grewrite_args.out_success || grewrite_args.out_return_convention == GetattrRewriteArgs::NOEXC_POSSIBLE)
+        if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
         else {
-            if (!rtn && !PyErr_Occurred()) {
-                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::NO_RETURN);
+            ReturnConvention return_convention;
+            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+            // Convert to NOEXC_POSSIBLE:
+            if (return_convention == ReturnConvention::NO_RETURN)
                 r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else {
-                assert(grewrite_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
-                r_rtn = grewrite_args.out_rtn;
-            }
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str, NULL);

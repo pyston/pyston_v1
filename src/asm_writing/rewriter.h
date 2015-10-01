@@ -277,6 +277,8 @@ public:
         assert(rewriter);
     }
 
+    Rewriter* getRewriter() { return rewriter; }
+
     friend class Rewriter;
     friend class JitFragmentWriter;
 };
