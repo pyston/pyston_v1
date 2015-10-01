@@ -684,9 +684,14 @@ extern "C" PyObject* PyDescr_NewGetSet(PyTypeObject* x, struct PyGetSetDef* y) n
     return new (capi_getset_cls) BoxedGetsetDescriptor(y->get, (void (*)(Box*, Box*, void*))y->set, y->closure);
 }
 
-extern "C" PyObject* PyDescr_NewClassMethod(PyTypeObject* x, PyMethodDef* y) noexcept {
-    Py_FatalError("unimplemented");
-    return NULL;
+extern "C" PyObject* PyDescr_NewClassMethod(PyTypeObject* type, PyMethodDef* method) noexcept {
+    // Pyston change: we don't have a separate capi classmethod descriptor type, we just use the normal
+    // one but with the METH_CLASS flag set.
+    if (!(method->ml_flags & METH_CLASS)) {
+        method = new PyMethodDef(*method);
+        method->ml_flags |= METH_CLASS;
+    }
+    return new pyston::BoxedMethodDescriptor(method, type);
 }
 
 extern "C" PyObject* PyDescr_NewMethod(PyTypeObject* type, PyMethodDef* method) noexcept {

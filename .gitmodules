@@ -37,3 +37,6 @@
 [submodule "test/lib/decorator"]
 	path = test/lib/decorator
 	url = https://github.com/micheles/decorator
+[submodule "test/lib/pyinotify"]
+	path = test/lib/pyinotify
+	url = https://github.com/seb-m/pyinotify.git
