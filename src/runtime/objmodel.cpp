@@ -1560,7 +1560,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
 
     if (S == CAPI) {
         try {
-            assert(!PyType_Check(obj)); // There would be a tp_getattro
+            assert(!PyType_Check(obj) || cls_only); // There would be a tp_getattro
             return getattrInternalGeneric<false>(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out,
                                                  r_bind_obj_out);
         } catch (ExcInfo e) {
