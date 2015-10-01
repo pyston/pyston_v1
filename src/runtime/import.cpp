@@ -17,6 +17,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <limits.h>
+#include <link.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -786,7 +787,16 @@ Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
 
 // Parses the memory map and registers all memory regions with "rwxp" permission and which contain the requested file
 // path with the GC. In addition adds the BSS segment.
-static void registerDataSegment(void* dl_handle, llvm::StringRef lib_path) {
+static void registerDataSegment(void* dl_handle) {
+    // get library path and resolve symlinks
+    link_map* map = NULL;
+    dlinfo(dl_handle, RTLD_DI_LINKMAP, &map);
+    RELEASE_ASSERT(map && map->l_name, "this should never be NULL");
+    char* converted_path = realpath(map->l_name, NULL);
+    RELEASE_ASSERT(converted_path, "");
+    std::string lib_path = converted_path;
+    free(converted_path);
+
     std::ifstream mapmap("/proc/self/maps");
     std::string line;
     llvm::SmallVector<std::pair<uint64_t, uint64_t>, 4> mem_ranges;
@@ -802,7 +812,7 @@ static void registerDataSegment(void* dl_handle, llvm::StringRef lib_path) {
         llvm::StringRef permissions = line_split[1].trim();
         llvm::StringRef pathname = line_split[5].trim();
 
-        if (permissions == "rwxp" && pathname.endswith(lib_path)) {
+        if (permissions == "rwxp" && pathname == lib_path) {
             llvm::StringRef mem_range = line_split[0].trim();
             auto mem_range_split = mem_range.split('-');
             uint64_t lower_addr = 0;
@@ -863,7 +873,7 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
     assert(init);
 
     // Let the GC know about the static variables.
-    registerDataSegment(handle, path);
+    registerDataSegment(handle);
 
     char* packagecontext = strdup(full_name->c_str());
     char* oldcontext = _Py_PackageContext;
