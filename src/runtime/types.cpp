@@ -908,13 +908,12 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
         new_attr = typeLookup(cls, new_str, &grewrite_args);
+        assert(new_attr);
 
-        if (!grewrite_args.out_success)
+        if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
         else {
-            assert(new_attr);
-            assert(grewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN);
-            r_new = grewrite_args.out_rtn;
+            r_new = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
             r_new->addGuard((intptr_t)new_attr);
         }
 
@@ -1052,15 +1051,14 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
             init_attr = typeLookup(cls, init_str, &grewrite_args);
 
-            if (!grewrite_args.out_success)
+            if (!grewrite_args.isSuccessful())
                 rewrite_args = NULL;
             else {
                 if (init_attr) {
-                    assert(grewrite_args.out_return_convention = GetattrRewriteArgs::VALID_RETURN);
-                    r_init = grewrite_args.out_rtn;
+                    r_init = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                     r_init->addGuard((intptr_t)init_attr);
                 } else {
-                    assert(grewrite_args.out_return_convention = GetattrRewriteArgs::NO_RETURN);
+                    grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
                 }
             }
         } else {

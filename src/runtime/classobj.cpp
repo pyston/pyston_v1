@@ -32,15 +32,20 @@ BoxedClass* classobj_cls, *instance_cls;
 
 static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args = NULL) {
     if (rewrite_args)
-        assert(!rewrite_args->out_success);
+        assert(!rewrite_args->isSuccessful());
 
     Box* r = cls->getattr(attr, rewrite_args);
-    if (r)
+    if (r) {
+        if (rewrite_args)
+            rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
         return r;
+    }
 
     if (rewrite_args) {
-        // abort rewriting because we currenly don't guard the particular 'bases' hierarchy
-        rewrite_args->out_success = false;
+        if (rewrite_args->isSuccessful()) {
+            rewrite_args->getReturn(); // just to make the asserts happy
+            rewrite_args->clearReturn();
+        }
         rewrite_args = NULL;
     }
 
@@ -322,62 +327,71 @@ Box* classobjRepr(Box* _obj) {
 
 // Analogous to CPython's instance_getattr2
 static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_str,
-                                       GetattrRewriteArgs* rewriter_args = NULL) {
-    Box* r = inst->getattr(attr_str, rewriter_args);
-    if (r)
+                                       GetattrRewriteArgs* rewrite_args = NULL) {
+    Box* r = inst->getattr(attr_str, rewrite_args);
+    if (r) {
+        if (rewrite_args)
+            rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
         return r;
+    }
 
     RewriterVar* r_inst = NULL;
     RewriterVar* r_inst_cls = NULL;
-    if (rewriter_args) {
-        if (!rewriter_args->out_success)
-            rewriter_args = NULL;
+    if (rewrite_args) {
+        if (!rewrite_args->isSuccessful())
+            rewrite_args = NULL;
         else {
-            rewriter_args->out_success = false;
-            r_inst = rewriter_args->obj;
+            rewrite_args->assertReturnConvention(ReturnConvention::NO_RETURN);
+            rewrite_args->clearReturn();
+
+            r_inst = rewrite_args->obj;
             r_inst_cls = r_inst->getAttr(offsetof(BoxedInstance, inst_cls));
         }
     }
-    GetattrRewriteArgs grewriter_inst_args(rewriter_args ? rewriter_args->rewriter : NULL, r_inst_cls,
-                                           rewriter_args ? rewriter_args->rewriter->getReturnDestination()
-                                                         : Location());
-    r = classLookup(inst->inst_cls, attr_str, rewriter_args ? &grewriter_inst_args : NULL);
-    if (!grewriter_inst_args.out_success)
-        rewriter_args = NULL;
-    else
-        assert(grewriter_inst_args.out_return_convention == GetattrRewriteArgs::VALID_RETURN);
+    GetattrRewriteArgs grewriter_inst_args(rewrite_args ? rewrite_args->rewriter : NULL, r_inst_cls,
+                                           rewrite_args ? rewrite_args->rewriter->getReturnDestination() : Location());
+    r = classLookup(inst->inst_cls, attr_str, rewrite_args ? &grewriter_inst_args : NULL);
+    if (!grewriter_inst_args.isSuccessful())
+        rewrite_args = NULL;
 
     if (r) {
         Box* rtn = processDescriptor(r, inst, inst->inst_cls);
-        if (rewriter_args) {
-            RewriterVar* r_rtn = rewriter_args->rewriter->call(true, (void*)processDescriptor,
-                                                               grewriter_inst_args.out_rtn, r_inst, r_inst_cls);
-            rewriter_args->out_rtn = r_rtn;
-            rewriter_args->out_success = true;
-            rewriter_args->out_return_convention = GetattrRewriteArgs::VALID_RETURN;
+        if (rewrite_args) {
+            RewriterVar* r_rtn = rewrite_args->rewriter->call(
+                true, (void*)processDescriptor, grewriter_inst_args.getReturn(ReturnConvention::HAS_RETURN), r_inst,
+                r_inst_cls);
+            rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
         }
         return rtn;
     }
+
+    if (rewrite_args)
+        grewriter_inst_args.assertReturnConvention(ReturnConvention::NO_RETURN);
 
     return NULL;
 }
 
 static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* attr_str,
-                                             GetattrRewriteArgs* rewriter_args = NULL) {
-    Box* attr_obj = instanceGetattributeSimple(inst, attr_str, rewriter_args);
+                                             GetattrRewriteArgs* rewrite_args = NULL) {
+    Box* attr_obj = instanceGetattributeSimple(inst, attr_str, rewrite_args);
 
     if (attr_obj) {
+        if (rewrite_args && rewrite_args->isSuccessful())
+            rewrite_args->assertReturnConvention(
+                ReturnConvention::HAS_RETURN); // otherwise need to guard on the success
         return attr_obj;
     }
 
-    if (rewriter_args) {
-        if (!rewriter_args->out_success)
-            rewriter_args = NULL;
-        else
-            rewriter_args->out_success = false;
+    if (rewrite_args) {
+        if (!rewrite_args->isSuccessful())
+            rewrite_args = NULL;
+        else {
+            rewrite_args->assertReturnConvention(ReturnConvention::NO_RETURN);
+            rewrite_args->clearReturn();
+        }
 
         // abort rewriting for now
-        rewriter_args = NULL;
+        rewrite_args = NULL;
     }
 
     static BoxedString* getattr_str = internStringImmortal("__getattr__");
@@ -392,7 +406,7 @@ static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* a
 }
 
 static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing,
-                                  GetattrRewriteArgs* rewriter_args = NULL) {
+                                  GetattrRewriteArgs* rewrite_args = NULL) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
@@ -405,7 +419,7 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
             return inst->inst_cls;
     }
 
-    Box* attr = instanceGetattributeWithFallback(inst, attr_str, rewriter_args);
+    Box* attr = instanceGetattributeWithFallback(inst, attr_str, rewrite_args);
     if (attr) {
         return attr;
     } else if (!raise_on_missing) {

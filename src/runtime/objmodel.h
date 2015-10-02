@@ -141,8 +141,9 @@ enum LookupScope {
     INST_ONLY = 2,
     CLASS_OR_INST = 3,
 };
+struct CallattrRewriteArgs;
 template <ExceptionStyle S>
-Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallattrRewriteArgs* rewrite_args, ArgPassSpec argspec,
                       Box* arg1, Box* arg2, Box* arg3, Box** args,
                       const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 extern "C" void delattr_internal(Box* obj, BoxedString* attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
