@@ -463,6 +463,9 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
         v->visit(&f->globals);
 
     v->visit(&f->defaults);
+
+    if (f->f && f->f->source && f->f->source->parent_module)
+        v->visit(&f->f->source->parent_module);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
@@ -1697,6 +1700,15 @@ static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     return codeForFunction(func);
+}
+
+extern "C" PyObject* PyFunction_GetCode(PyObject* func) noexcept {
+    try {
+        return functionCode((Box*)func, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 static void functionSetCode(Box* self, Box* v, void*) {

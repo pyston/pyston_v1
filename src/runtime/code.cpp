@@ -110,6 +110,11 @@ extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, Py
     RELEASE_ASSERT(0, "not implemented");
 }
 
+extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
+    RELEASE_ASSERT(PyCode_Check((Box*)op), "");
+    return unboxInt(BoxedCode::argcount((Box*)op, NULL));
+}
+
 void setupCode() {
     code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
 

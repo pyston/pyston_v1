@@ -615,6 +615,15 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
     return PyImport_Import(boxString(name));
 }
 
+extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
+    try {
+        return getSysModulesDict();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 /* Get the module object corresponding to a module name.
    First check the modules dictionary if there's one there,
    if not, create a new one and insert it in the modules dictionary.

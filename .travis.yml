@@ -51,6 +51,7 @@ addons:
     - libxml2-dev 
     - libxslt1-dev
     - libssl-dev
+    - swig
 
 before_install:
   - if [ "$CC" = "clang" ]; then export CC="clang-3.5" CXX="clang++-3.5"; fi

@@ -1,7 +1,7 @@
 class C():
     pass
 
-print C, type(C)
+print C, type(C), sorted(dir(C))
 print map(str, C.__bases__), C.__name__
 print type(C())
 
