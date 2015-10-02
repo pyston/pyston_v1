@@ -837,7 +837,7 @@ private:
 public:
     PyCmpComparer(Box* cmp) : cmp(cmp) {}
     bool operator()(Box* lhs, Box* rhs) {
-        Box* r = runtimeCallInternal<CXX>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+        Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
         if (!PyInt_Check(r))
             raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
         return static_cast<BoxedInt*>(r)->n < 0;
@@ -1141,7 +1141,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
         } else if (op_type == AST_TYPE::NotEq) {
             return boxBool(true);
         } else {
-            Box* r = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], op_type, NULL);
+            Box* r = compareInternal<NOT_REWRITABLE>(lhs->elts->elts[i], rhs->elts->elts[i], op_type, NULL);
             return r;
         }
     }

@@ -83,7 +83,7 @@ extern "C" Box* vars(Box* obj) {
         return fastLocalsToBoxedLocals();
 
     static BoxedString* dict_str = internStringImmortal("__dict__");
-    Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str, NULL);
+    Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str);
     if (!rtn)
         raiseExcHelper(TypeError, "vars() argument must have __dict__ attribute");
     return rtn;
@@ -580,7 +580,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
                 r_rtn = rewrite_args->rewriter->loadConst(0);
         }
     } else {
-        rtn = getattrInternal<CAPI>(obj, str, NULL);
+        rtn = getattrInternal<CAPI>(obj, str);
     }
 
     if (rewrite_args) {
@@ -691,7 +691,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
                 r_rtn = rewrite_args->rewriter->loadConst(0);
         }
     } else {
-        rtn = getattrInternal<CAPI>(obj, str, NULL);
+        rtn = getattrInternal<CAPI>(obj, str);
     }
 
     if (rewrite_args) {
@@ -1252,7 +1252,7 @@ Box* ellipsisRepr(Box* self) {
     return boxString("Ellipsis");
 }
 Box* divmod(Box* lhs, Box* rhs) {
-    return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
+    return binopInternal<NOT_REWRITABLE>(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
 
 Box* powFunc(Box* x, Box* y, Box* z) {
@@ -1326,7 +1326,7 @@ Box* getreversed(Box* o) {
         return r;
 
     static BoxedString* getitem_str = internStringImmortal("__getitem__");
-    if (!typeLookup(o->cls, getitem_str, NULL)) {
+    if (!typeLookup(o->cls, getitem_str)) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }
     int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there

@@ -29,12 +29,17 @@ extern "C" {
 BoxedClass* classobj_cls, *instance_cls;
 }
 
+template <Rewritable rewritable>
+static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
 
-static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args = NULL) {
     if (rewrite_args)
         assert(!rewrite_args->isSuccessful());
 
-    Box* r = cls->getattr(attr, rewrite_args);
+    Box* r = cls->getattr<rewritable>(attr, rewrite_args);
     if (r) {
         if (rewrite_args)
             rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
@@ -51,12 +56,16 @@ static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArg
 
     for (auto b : *cls->bases) {
         RELEASE_ASSERT(b->cls == classobj_cls, "");
-        Box* r = classLookup(static_cast<BoxedClassobj*>(b), attr, rewrite_args);
+        Box* r = classLookup<NOT_REWRITABLE>(static_cast<BoxedClassobj*>(b), attr, rewrite_args);
         if (r)
             return r;
     }
 
     return NULL;
+}
+
+static Box* classLookup(BoxedClassobj* cls, BoxedString* attr) {
+    return classLookup<NOT_REWRITABLE>(cls, attr, NULL);
 }
 
 extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexcept {
@@ -68,7 +77,7 @@ extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexce
 
     try {
         internStringMortalInplace(name);
-        Box* v = inst->getattr(name, NULL);
+        Box* v = inst->getattr(name);
         if (v == NULL)
             v = classLookup(inst->inst_cls, name);
         return v;
@@ -326,9 +335,15 @@ Box* classobjRepr(Box* _obj) {
 }
 
 // Analogous to CPython's instance_getattr2
+template <Rewritable rewritable>
 static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_str,
                                        GetattrRewriteArgs* rewrite_args = NULL) {
-    Box* r = inst->getattr(attr_str, rewrite_args);
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
+    Box* r = inst->getattr<rewritable>(attr_str, rewrite_args);
     if (r) {
         if (rewrite_args)
             rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
@@ -350,7 +365,7 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
     }
     GetattrRewriteArgs grewriter_inst_args(rewrite_args ? rewrite_args->rewriter : NULL, r_inst_cls,
                                            rewrite_args ? rewrite_args->rewriter->getReturnDestination() : Location());
-    r = classLookup(inst->inst_cls, attr_str, rewrite_args ? &grewriter_inst_args : NULL);
+    r = classLookup<rewritable>(inst->inst_cls, attr_str, rewrite_args ? &grewriter_inst_args : NULL);
     if (!grewriter_inst_args.isSuccessful())
         rewrite_args = NULL;
 
@@ -371,9 +386,15 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
     return NULL;
 }
 
+template <Rewritable rewritable>
 static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* attr_str,
                                              GetattrRewriteArgs* rewrite_args = NULL) {
-    Box* attr_obj = instanceGetattributeSimple(inst, attr_str, rewrite_args);
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
+    Box* attr_obj = instanceGetattributeSimple<rewritable>(inst, attr_str, rewrite_args);
 
     if (attr_obj) {
         if (rewrite_args && rewrite_args->isSuccessful())
@@ -399,14 +420,21 @@ static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* a
 
     if (getattr) {
         getattr = processDescriptor(getattr, inst, inst->inst_cls);
-        return runtimeCallInternal<CXX>(getattr, NULL, ArgPassSpec(1), attr_str, NULL, NULL, NULL, NULL);
+        return runtimeCallInternal<CXX, NOT_REWRITABLE>(getattr, NULL, ArgPassSpec(1), attr_str, NULL, NULL, NULL,
+                                                        NULL);
     }
 
     return NULL;
 }
 
+template <Rewritable rewritable>
 static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing,
-                                  GetattrRewriteArgs* rewrite_args = NULL) {
+                                  GetattrRewriteArgs* rewrite_args) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
@@ -419,7 +447,7 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
             return inst->inst_cls;
     }
 
-    Box* attr = instanceGetattributeWithFallback(inst, attr_str, rewrite_args);
+    Box* attr = instanceGetattributeWithFallback<rewritable>(inst, attr_str, rewrite_args);
     if (attr) {
         return attr;
     } else if (!raise_on_missing) {
@@ -428,6 +456,9 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
         raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->data(),
                        attr_str->data());
     }
+}
+static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing) {
+    return _instanceGetattribute<NOT_REWRITABLE>(_inst, attr_str, raise_on_missing, NULL);
 }
 
 // Analogous to CPython's instance_getattr
@@ -444,13 +475,13 @@ Box* instanceGetattroInternal(Box* cls, Box* _attr, GetattrRewriteArgs* rewrite_
 
     if (S == CAPI) {
         try {
-            return _instanceGetattribute(cls, attr, true, rewrite_args);
+            return _instanceGetattribute<REWRITABLE>(cls, attr, true, rewrite_args);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return NULL;
         }
     } else {
-        return _instanceGetattribute(cls, attr, true, rewrite_args);
+        return _instanceGetattribute<REWRITABLE>(cls, attr, true, rewrite_args);
     }
 }
 
@@ -1137,7 +1168,7 @@ static void instance_dealloc(Box* _inst) noexcept {
     static BoxedString* del_str = internStringImmortal("__del__");
 
     // TODO: any exceptions here should get caught + printed, instead of causing a std::terminate:
-    Box* func = instanceGetattributeSimple(inst, del_str);
+    Box* func = instanceGetattributeSimple<NOT_REWRITABLE>(inst, del_str, NULL);
     if (func)
         runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }

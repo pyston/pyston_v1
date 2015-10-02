@@ -1563,7 +1563,7 @@ public:
     CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = typeLookup(cls, attr, nullptr);
+            Box* rtattr = typeLookup(cls, attr);
             if (rtattr == NULL)
                 return UNDEF;
 
@@ -1588,7 +1588,7 @@ public:
                               bool cls_only) override {
         // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = typeLookup(cls, attr, nullptr);
+            Box* rtattr = typeLookup(cls, attr);
             if (rtattr == NULL) {
                 ExceptionStyle exception_style = info.preferredExceptionStyle();
                 llvm::Value* raise_func = exception_style == CXX ? g.funcs.raiseAttributeErrorStr

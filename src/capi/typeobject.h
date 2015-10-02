@@ -55,7 +55,7 @@ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexce
 int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept;
 
 class GetattrRewriteArgs;
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable>
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI);
 }
 

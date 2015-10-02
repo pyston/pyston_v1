@@ -486,7 +486,7 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
         if (value == NULL)
             delattrGeneric(obj, str, NULL);
         else
-            setattrGeneric(obj, str, value, NULL);
+            setattrGeneric<NOT_REWRITABLE>(obj, str, value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -534,7 +534,7 @@ extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     try {
-        Box* r = getattrInternal<ExceptionStyle::CXX>(o, internStringMortal(attr), NULL);
+        Box* r = getattrInternal<ExceptionStyle::CXX>(o, internStringMortal(attr));
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, attr);
         return r;

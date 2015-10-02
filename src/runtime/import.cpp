@@ -381,7 +381,7 @@ static Box* importSub(const std::string& name, BoxedString* full_name, Box* pare
         path_list = NULL;
     } else {
         static BoxedString* path_str = internStringImmortal("__path__");
-        path_list = static_cast<BoxedList*>(getattrInternal<ExceptionStyle::CXX>(parent_module, path_str, NULL));
+        path_list = static_cast<BoxedList*>(getattrInternal<ExceptionStyle::CXX>(parent_module, path_str));
         if (path_list == NULL || path_list->cls != list_cls) {
             return None;
         }
@@ -558,7 +558,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
     static BoxedString* path_str = internStringImmortal("__path__");
     Box* pathlist = NULL;
     try {
-        pathlist = getattrInternal<ExceptionStyle::CXX>(module, path_str, NULL);
+        pathlist = getattrInternal<ExceptionStyle::CXX>(module, path_str);
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -580,14 +580,14 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
                 continue;
 
             static BoxedString* all_str = internStringImmortal("__all__");
-            Box* all = getattrInternal<ExceptionStyle::CXX>(module, all_str, NULL);
+            Box* all = getattrInternal<ExceptionStyle::CXX>(module, all_str);
             if (all) {
                 ensureFromlist(module, all, buf, true);
             }
             continue;
         }
 
-        Box* attr = getattrInternal<ExceptionStyle::CXX>(module, s, NULL);
+        Box* attr = getattrInternal<ExceptionStyle::CXX>(module, s);
         if (attr != NULL)
             continue;
 

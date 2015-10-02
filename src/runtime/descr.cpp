@@ -47,7 +47,7 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
 
     static BoxedString* doc_str = internStringImmortal("__doc__");
     try {
-        get_doc = getattrInternal<ExceptionStyle::CXX>(fget, doc_str, NULL);
+        get_doc = getattrInternal<ExceptionStyle::CXX>(fget, doc_str);
     } catch (ExcInfo e) {
         if (!e.matches(Exception)) {
             throw e;

@@ -220,7 +220,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr) noexcept {
     BoxedString* s = static_cast<BoxedString*>(attr);
     internStringMortalInplace(s);
 
-    Box* r = getattrInternal<ExceptionStyle::CAPI>(o, s, NULL);
+    Box* r = getattrInternal<ExceptionStyle::CAPI>(o, s);
 
     if (!r && !PyErr_Occurred()) {
         PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
@@ -234,7 +234,7 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
     try {
         BoxedString* s = static_cast<BoxedString*>(name);
         internStringMortalInplace(s);
-        Box* r = getattrInternalGeneric<false>(o, s, NULL, false, false, NULL, NULL);
+        Box* r = getattrInternalGeneric<false, NOT_REWRITABLE>(o, s, NULL, false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                          PyString_AS_STRING(name));
@@ -458,7 +458,7 @@ done:
 
 
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
-    return getitemInternal<ExceptionStyle::CAPI>(o, key, NULL);
+    return getitemInternal<ExceptionStyle::CAPI>(o, key);
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
@@ -580,11 +580,11 @@ extern "C" int PyObject_Not(PyObject* o) noexcept {
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
     if (kw)
-        return runtimeCallInternal<ExceptionStyle::CAPI>(callable_object, NULL, ArgPassSpec(0, 0, true, true), args, kw,
-                                                         NULL, NULL, NULL);
+        return runtimeCallInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
+            callable_object, NULL, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
     else
-        return runtimeCallInternal<ExceptionStyle::CAPI>(callable_object, NULL, ArgPassSpec(0, 0, true, false), args,
-                                                         NULL, NULL, NULL, NULL);
+        return runtimeCallInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
+            callable_object, NULL, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
 }
 
 extern "C" int PyObject_GetBuffer(PyObject* obj, Py_buffer* view, int flags) noexcept {

@@ -51,6 +51,11 @@ enum ExceptionStyle {
     CXX,
 };
 
+enum Rewritable {
+    REWRITABLE,
+    NOT_REWRITABLE,
+};
+
 template <typename T> struct ExceptionSwitchable {
 public:
     T capi_val;
@@ -545,8 +550,9 @@ public:
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
+    template <Rewritable rewritable = REWRITABLE>
     Box* getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args);
-    Box* getattr(BoxedString* attr) { return getattr(attr, NULL); }
+    Box* getattr(BoxedString* attr) { return getattr<NOT_REWRITABLE>(attr, NULL); }
     bool hasattr(BoxedString* attr) { return getattr(attr) != NULL; }
     void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 

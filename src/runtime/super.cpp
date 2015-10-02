@@ -127,7 +127,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, attr, NULL);
+    Box* r = typeLookup(s->cls, attr);
     // TODO implement this
     RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
     return processDescriptor(r, s, s->cls);
