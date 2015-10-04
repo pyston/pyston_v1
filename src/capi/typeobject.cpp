@@ -484,7 +484,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
             return NULL;
     }
 
-    Box* obj = typeLookup(self->cls, (BoxedString*)*attrobj, NULL);
+    Box* obj = typeLookup(self->cls, (BoxedString*)*attrobj);
     if (obj) {
         try {
             return processDescriptor(obj, self, self->cls);
@@ -809,7 +809,7 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     PyObject* get;
 
     static BoxedString* get_str = internStringImmortal("__get__");
-    get = typeLookup(tp, get_str, NULL);
+    get = typeLookup(tp, get_str);
     if (get == NULL) {
         /* Avoid further slowdowns */
         if (tp->tp_descr_get == slot_tp_descr_get)
@@ -883,11 +883,16 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 
 /* Pyston change: static */ PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     assert(name->cls == str_cls);
-    return slotTpGetattrHookInternal<CAPI>(self, (BoxedString*)name, NULL);
+    return slotTpGetattrHookInternal<CAPI, NOT_REWRITABLE>(self, (BoxedString*)name, NULL);
 }
 
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable>
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
     STAT_TIMER(t0, "us_timer_slot_tpgetattrhook", SLOT_AVOIDABILITY(self));
 
     PyObject* getattr, *getattribute, * res = NULL;
@@ -905,7 +910,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
     // - if we never get to the "call __getattr__" portion and the "calling __getattribute__"
     //   portion still has its guards pass, then that section is still behaviorally correct, and
     //   I think should be close to as fast as the normal rewritten version we would generate.
-    getattr = typeLookup(self->cls, _getattr_str, NULL);
+    getattr = typeLookup(self->cls, _getattr_str);
 
     if (getattr == NULL) {
         if (rewrite_args) {
@@ -943,7 +948,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
-        getattribute = typeLookup(self->cls, _getattribute_str, NULL);
+        getattribute = typeLookup(self->cls, _getattribute_str);
     }
 
     // Not sure why CPython checks if getattribute is NULL since I don't think that should happen.
@@ -966,7 +971,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             try {
                 assert(!PyType_Check(self)); // There would be a getattribute
-                res = getattrInternalGeneric<false>(self, name, &grewrite_args, false, false, NULL, NULL);
+                res = getattrInternalGeneric<false, rewritable>(self, name, &grewrite_args, false, false, NULL, NULL);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {
@@ -1013,7 +1018,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         } else {
             try {
                 assert(!PyType_Check(self)); // There would be a getattribute
-                res = getattrInternalGeneric<false>(self, name, NULL, false, false, NULL, NULL);
+                res = getattrInternalGeneric<false, rewritable>(self, name, NULL, false, false, NULL, NULL);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {
@@ -1068,8 +1073,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         assert(PyString_CHECK_INTERNED(name) == SSTATE_INTERNED_IMMORTAL);
         crewrite_args.arg1 = rewrite_args->rewriter->loadConst((intptr_t)name, Location::forArg(1));
 
-        res = callattrInternal<S>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args, ArgPassSpec(1), name,
-                                  NULL, NULL, NULL, NULL);
+        res = callattrInternal<S, REWRITABLE>(self, _getattr_str, LookupScope::CLASS_ONLY, &crewrite_args,
+                                              ArgPassSpec(1), name, NULL, NULL, NULL, NULL);
         assert(res || S == CAPI);
 
         if (!crewrite_args.isSuccessful())
@@ -1083,16 +1088,22 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         // the rewrite_args and non-rewrite_args case the same.
         // Actually, we might have gotten to the point that doing a runtimeCall on an instancemethod is as
         // fast as a callattr, but that hasn't typically been the case.
-        res = callattrInternal<S>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1), name, NULL, NULL,
-                                  NULL, NULL);
+        res = callattrInternal<S, NOT_REWRITABLE>(self, _getattr_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1),
+                                                  name, NULL, NULL, NULL, NULL);
         assert(res || S == CAPI);
     }
 
     return res;
 }
 // Force instantiation of the template
-template Box* slotTpGetattrHookInternal<CAPI>(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args);
-template Box* slotTpGetattrHookInternal<CXX>(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args);
+template Box* slotTpGetattrHookInternal<CAPI, REWRITABLE>(Box* self, BoxedString* name,
+                                                          GetattrRewriteArgs* rewrite_args);
+template Box* slotTpGetattrHookInternal<CXX, REWRITABLE>(Box* self, BoxedString* name,
+                                                         GetattrRewriteArgs* rewrite_args);
+template Box* slotTpGetattrHookInternal<CAPI, NOT_REWRITABLE>(Box* self, BoxedString* name,
+                                                              GetattrRewriteArgs* rewrite_args);
+template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedString* name,
+                                                             GetattrRewriteArgs* rewrite_args);
 
 /* Pyston change: static */ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpnew", SLOT_AVOIDABILITY(self));
@@ -1100,7 +1111,7 @@ template Box* slotTpGetattrHookInternal<CXX>(Box* self, BoxedString* name, Getat
     try {
         // TODO: runtime ICs?
         static BoxedString* _new_str = internStringImmortal("__new__");
-        Box* new_attr = typeLookup(self, _new_str, NULL);
+        Box* new_attr = typeLookup(self, _new_str);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
 
@@ -1115,7 +1126,7 @@ static PyObject* slot_tp_del(PyObject* self) noexcept {
     static BoxedString* del_str = internStringImmortal("__del__");
     try {
         // TODO: runtime ICs?
-        Box* del_attr = typeLookup(self->cls, del_str, NULL);
+        Box* del_attr = typeLookup(self->cls, del_str);
         assert(del_attr);
 
         CallattrFlags flags{.cls_only = false,
@@ -1155,7 +1166,7 @@ static PyObject* slot_tp_del(PyObject* self) noexcept {
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqitem", SLOT_AVOIDABILITY(self));
-    return getitemInternal<CAPI>(self, boxInt(i), NULL);
+    return getitemInternal<CAPI>(self, boxInt(i));
 }
 
 /* Pyston change: static */ Py_ssize_t slot_sq_length(PyObject* self) noexcept {
@@ -1823,7 +1834,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
     }
 
     do {
-        descr = typeLookup(type, p->name_strobj, NULL);
+        descr = typeLookup(type, p->name_strobj);
 
         if (p->flags & PyWrapperFlag_BOOL) {
             // We are supposed to iterate over each slotdef; for now just assert that

@@ -842,7 +842,8 @@ template <ExceptionStyle S> static Box* try_special_method(Box* self) noexcept(S
 
     static BoxedString* float_str = internStringImmortal("__float__");
     if (PyObject_HasAttr((PyObject*)self, float_str)) {
-        Box* r_f = callattrInternal<S>(self, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* r_f = callattrInternal<S, NOT_REWRITABLE>(self, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL,
+                                                       NULL, NULL, NULL);
         if (!PyFloat_Check(r_f)) {
             if (S == CAPI) {
                 if (!PyErr_Occurred())
@@ -857,8 +858,8 @@ template <ExceptionStyle S> static Box* try_special_method(Box* self) noexcept(S
 
     static BoxedString* complex_str = internStringImmortal("__complex__");
     if (PyObject_HasAttr((PyObject*)self, complex_str)) {
-        Box* r
-            = callattrInternal<S>(self, complex_str, CLASS_OR_INST, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* r = callattrInternal<S, NOT_REWRITABLE>(self, complex_str, CLASS_OR_INST, NULL, ArgPassSpec(0), NULL, NULL,
+                                                     NULL, NULL, NULL);
         if (!r) {
             if (S == CAPI) {
                 if (!PyErr_Occurred())

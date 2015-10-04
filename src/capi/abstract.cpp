@@ -758,7 +758,7 @@ exit:
 }
 
 extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
-    BoxedInt* r = lenInternal<ExceptionStyle::CAPI>(o, NULL);
+    BoxedInt* r = lenInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, NULL);
     if (!r)
         return -1;
     return r->n;
@@ -2252,7 +2252,7 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     // Pyston change: this should be an optimization
     // PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
     static BoxedString* trunc_str = internStringImmortal("__trunc__");
-    PyObject* trunc_func = getattrInternal<ExceptionStyle::CAPI>(o, trunc_str, NULL);
+    PyObject* trunc_func = getattrInternal<ExceptionStyle::CAPI>(o, trunc_str);
 
     if (trunc_func) {
         PyObject* truncated = PyEval_CallObject(trunc_func, NULL);

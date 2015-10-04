@@ -327,12 +327,12 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
         /* preserve the existing exception */
         PyObject* err_type, *err_value, *err_tb;
         PyErr_Fetch(&err_type, &err_value, &err_tb);
-        Box* b = getitemInternal<CAPI>(dict, key, NULL);
+        Box* b = getitemInternal<CAPI>(dict, key);
         /* ignore errors */
         PyErr_Restore(err_type, err_value, err_tb);
         return b;
     } else {
-        Box* b = getitemInternal<CAPI>(dict, key, NULL);
+        Box* b = getitemInternal<CAPI>(dict, key);
         if (b == NULL)
             PyErr_Clear();
         return b;
@@ -691,7 +691,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = internStringImmortal("keys");
-        if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str, NULL)) {
+        if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str)) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);
