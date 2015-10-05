@@ -41,3 +41,15 @@ def f4(a, b):
     assert id(a) == id(b)
 for i in xrange(11000):
     f4(1000, 1000)
+
+
+# This applies to other data types as well.  (maybe should call this test file something else)
+def ident(x):
+    return x
+
+def f5():
+    t = (1, 2, 3)
+    print ident(t) is t
+
+for i in xrange(10):
+    f5()

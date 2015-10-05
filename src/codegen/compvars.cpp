@@ -2266,8 +2266,116 @@ ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, Compil
     return boolFromI1(emitter, cmp);
 }
 
+template <typename T> struct UnboxedVal {
+    T val;
+    ConcreteCompilerVariable* boxed;
+};
+
+template <typename T, typename D> class UnboxedType : public ValuedCompilerType<UnboxedVal<T>*> {
+public:
+    typedef UnboxedVal<T> Unboxed;
+    typedef typename ValuedCompilerType<UnboxedVal<T>*>::VAR VAR;
+
+    void drop(IREmitter& emitter, VAR* var) override final {
+        Unboxed* v = var->getValue();
+        if (v->boxed)
+            v->boxed->decvref(emitter);
+        static_cast<D*>(this)->_drop(emitter, v->val);
+    }
+
+    void grab(IREmitter& emitter, VAR* var) override final { RELEASE_ASSERT(0, ""); }
+
+    CompilerVariable* dup(VAR* var, DupCache& cache) override final {
+        CompilerVariable*& rtn = cache[var];
+
+        if (rtn == NULL) {
+            Unboxed* orig_v = var->getValue();
+
+            T val_duped = static_cast<D*>(this)->_dup(orig_v->val, cache);
+
+            CompilerVariable* box_duped = orig_v->boxed ? orig_v->boxed->dup(cache) : NULL;
+            assert(!box_duped || box_duped->getType() == box_duped->getType()->getBoxType());
+
+            rtn = new VAR(this, new Unboxed{ std::move(val_duped), static_cast<ConcreteCompilerVariable*>(box_duped) },
+                          var->isGrabbed());
+            while (rtn->getVrefs() < var->getVrefs())
+                rtn->incvref();
+        }
+        return rtn;
+    }
+
+    bool canConvertTo(ConcreteCompilerType* other_type) override final {
+        return (other_type == UNKNOWN || other_type == this->getBoxType());
+    }
+
+    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var,
+                                            ConcreteCompilerType* other_type) override final {
+        assert(canConvertTo(other_type));
+
+        Unboxed* val = var->getValue();
+        ConcreteCompilerVariable* boxed = val->boxed;
+
+        if (!boxed) {
+            boxed = static_cast<D*>(this)->_makeConverted(emitter, val->val, this->getBoxType());
+            ASSERT(boxed->getType() == this->getBoxType(), "%s %s", boxed->getType()->debugName().c_str(),
+                   this->getBoxType()->debugName().c_str());
+
+            val->boxed = boxed;
+        }
+
+        if (boxed->getType() != other_type) {
+            assert(other_type == UNKNOWN);
+            return boxed->makeConverted(emitter, other_type);
+        }
+
+        boxed->incvref();
+        return boxed;
+    }
+
+    // Serialization strategy is a bit silly for now: we will emit a bool saying whether we emitted the
+    // boxed or unboxed value.  There's no reason that has to be in the serialization though (it could
+    // be in the metadata), and we shouldn't have to pad the smaller version to the size of the larger one.
+    int numFrameArgs() override final {
+        return 1 + std::max(static_cast<D*>(this)->_numFrameArgs(), this->getBoxType()->numFrameArgs());
+    }
+
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override final {
+        Unboxed* v = var->getValue();
+
+        int total_args = numFrameArgs();
+        int needed_args = stackmap_args.size() + total_args;
+
+        if (v->boxed) {
+            stackmap_args.push_back(getConstantInt(1, g.i64));
+            v->boxed->serializeToFrame(stackmap_args);
+        } else {
+            stackmap_args.push_back(getConstantInt(0, g.i64));
+            static_cast<D*>(this)->_serializeToFrame(v->val, stackmap_args);
+        }
+
+        while (stackmap_args.size() < needed_args)
+            stackmap_args.push_back(getConstantInt(0, g.i64));
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override final {
+        assert(vals.size() == numFrameArgs());
+
+
+        bool is_boxed = vals[0];
+
+        if (is_boxed) {
+            // TODO: inefficient
+            FrameVals sub_vals(vals.begin() + 1, vals.begin() + 1 + this->getBoxType()->numFrameArgs());
+            return this->getBoxType()->deserializeFromFrame(sub_vals);
+        } else {
+            FrameVals sub_vals(vals.begin() + 1, vals.begin() + 1 + static_cast<D*>(this)->_numFrameArgs());
+            return static_cast<D*>(this)->_deserializeFromFrame(sub_vals);
+        }
+    }
+};
+
 ConcreteCompilerType* BOXED_TUPLE;
-class TupleType : public ValuedCompilerType<const std::vector<CompilerVariable*>*> {
+class TupleType : public UnboxedType<const std::vector<CompilerVariable*>, TupleType> {
 private:
     std::string name;
     const std::vector<CompilerType*> elt_types;
@@ -2287,56 +2395,39 @@ private:
 public:
     typedef const std::vector<CompilerVariable*> VEC;
 
-    void assertMatches(const std::vector<CompilerVariable*>* v) override {
-        assert(v->size() == elt_types.size());
+    void assertMatches(Unboxed* v) override {
+        assert(v->val.size() == elt_types.size());
 
-        for (int i = 0; i < v->size(); i++) {
-            assert((*v)[i]->getType() == elt_types[i]);
+        for (int i = 0; i < v->val.size(); i++) {
+            assert((v->val)[i]->getType() == elt_types[i]);
         }
     }
 
     std::string debugName() override { return name; }
 
-    void drop(IREmitter& emitter, VAR* var) override {
-        const std::vector<CompilerVariable*>* elts = var->getValue();
-        for (int i = 0; i < elts->size(); i++) {
-            (*elts)[i]->decvref(emitter);
+    void _drop(IREmitter& emitter, const VEC& val) {
+        for (int i = 0; i < val.size(); i++) {
+            val[i]->decvref(emitter);
         }
     }
 
-    void grab(IREmitter& emitter, VAR* var) override { RELEASE_ASSERT(0, ""); }
+    VEC _dup(const VEC& orig_elts, DupCache& cache) {
+        std::vector<CompilerVariable*> elts;
 
-    CompilerVariable* dup(VAR* var, DupCache& cache) override {
-        CompilerVariable*& rtn = cache[var];
-
-        if (rtn == NULL) {
-            std::vector<CompilerVariable*>* elts = new std::vector<CompilerVariable*>();
-            const std::vector<CompilerVariable*>* orig_elts = var->getValue();
-
-            for (int i = 0; i < orig_elts->size(); i++) {
-                elts->push_back((*orig_elts)[i]->dup(cache));
-            }
-            rtn = new VAR(this, elts, var->isGrabbed());
-            while (rtn->getVrefs() < var->getVrefs())
-                rtn->incvref();
+        for (int i = 0; i < orig_elts.size(); i++) {
+            elts.push_back(orig_elts[i]->dup(cache));
         }
-        return rtn;
+        return std::move(elts);
     }
 
-    bool canConvertTo(ConcreteCompilerType* other_type) override {
-        return (other_type == UNKNOWN || other_type == BOXED_TUPLE);
-    }
-
-    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
+    ConcreteCompilerVariable* _makeConverted(IREmitter& emitter, const VEC& v, ConcreteCompilerType* other_type) {
         assert(other_type == UNKNOWN || other_type == BOXED_TUPLE);
-
-        VEC* v = var->getValue();
 
         std::vector<ConcreteCompilerVariable*> converted_args;
 
-        llvm::Value* nelts = llvm::ConstantInt::get(g.i64, v->size(), false);
+        llvm::Value* nelts = llvm::ConstantInt::get(g.i64, v.size(), false);
 
-        llvm::Value* _scratch = emitter.getScratch(v->size() * sizeof(void*));
+        llvm::Value* _scratch = emitter.getScratch(v.size() * sizeof(void*));
         auto scratch = emitter.getBuilder()->CreateBitCast(_scratch, g.llvm_value_type_ptr->getPointerTo());
 
         // First, convert all the args, before putting any in the scratch.
@@ -2345,12 +2436,12 @@ public:
         // TODO could probably do this better: create a scratch reservation that gets released
         // at some point, so that we know which scratch space is still in use, so that we can handle
         // multiple concurrent scratch users.
-        for (int i = 0; i < v->size(); i++) {
-            ConcreteCompilerVariable* converted = (*v)[i]->makeConverted(emitter, (*v)[i]->getBoxType());
+        for (int i = 0; i < v.size(); i++) {
+            ConcreteCompilerVariable* converted = v[i]->makeConverted(emitter, v[i]->getBoxType());
             converted_args.push_back(converted);
         }
 
-        for (int i = 0; i < v->size(); i++) {
+        for (int i = 0; i < v.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(scratch, i);
             emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
         }
@@ -2375,7 +2466,8 @@ public:
             assert(v->getType() == g.i64);
             if (llvm::ConstantInt* ci = llvm::dyn_cast<llvm::ConstantInt>(v)) {
                 int64_t i = ci->getSExtValue();
-                auto elts = var->getValue();
+                Unboxed* v = var->getValue();
+                const VEC* elts = &v->val;
                 if (i >= 0 && i < elts->size()) {
                     CompilerVariable* rtn = (*elts)[i];
                     rtn->incvref();
@@ -2409,7 +2501,7 @@ public:
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
-        return new ConcreteCompilerVariable(INT, getConstantInt(var->getValue()->size(), g.i64), true);
+        return new ConcreteCompilerVariable(INT, getConstantInt(var->getValue()->val.size(), g.i64), true);
     }
 
     CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
@@ -2431,7 +2523,7 @@ public:
 
         ConcreteCompilerVariable* converted_lhs = lhs->makeConverted(emitter, lhs->getConcreteType());
 
-        for (CompilerVariable* e : *var->getValue()) {
+        for (CompilerVariable* e : var->getValue()->val) {
             // TODO: we could potentially avoid the identity tests if we know that either type has
             // an __eq__ that is reflexive (returns True for the same object).
             {
@@ -2483,14 +2575,14 @@ public:
             ->callattr(emitter, info, attr, flags, args, keyword_names);
     }
 
-    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
-        for (auto v : *var->getValue()) {
-            v->serializeToFrame(stackmap_args);
+    void _serializeToFrame(const VEC& val, std::vector<llvm::Value*>& stackmap_args) {
+        for (auto elt : val) {
+            elt->serializeToFrame(stackmap_args);
         }
     }
 
-    Box* deserializeFromFrame(const FrameVals& vals) override {
-        assert(vals.size() == numFrameArgs());
+    Box* _deserializeFromFrame(const FrameVals& vals) {
+        assert(vals.size() == _numFrameArgs());
 
         BoxedTuple* rtn = BoxedTuple::create(elt_types.size());
         int rtn_idx = 0;
@@ -2508,7 +2600,7 @@ public:
         return rtn;
     }
 
-    int numFrameArgs() override {
+    int _numFrameArgs() {
         int rtn = 0;
         for (auto e : elt_types)
             rtn += e->numFrameArgs();
@@ -2521,10 +2613,10 @@ public:
         }
 
         // Not sure if this is right:
-        for (auto e : *var->getValue())
+        for (auto e : var->getValue()->val)
             e->incvref();
 
-        return *var->getValue();
+        return var->getValue()->val;
     }
 
     std::vector<CompilerType*> unpackTypes(int num_into) override {
@@ -2548,8 +2640,8 @@ CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts) {
     }
     TupleType* type = TupleType::make(elt_types);
 
-    const std::vector<CompilerVariable*>* alloc_elts = new std::vector<CompilerVariable*>(elts);
-    return new TupleType::VAR(type, alloc_elts, true);
+    auto alloc_var = new TupleType::Unboxed({ elts, NULL });
+    return new TupleType::VAR(type, alloc_var, true);
 }
 
 class UndefType : public ConcreteCompilerType {
