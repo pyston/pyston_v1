@@ -2887,9 +2887,6 @@ void setupStr() {
 
     str_cls->giveAttr("__getslice__", new BoxedFunction(FunctionMetadata::create((void*)strGetslice, STR, 3)));
 
-    str_cls->giveAttr("__iter__",
-                      new BoxedFunction(FunctionMetadata::create((void*)strIter, typeFromClass(str_iterator_cls), 1)));
-
     for (auto& md : string_methods) {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
     }
