@@ -527,21 +527,7 @@ extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) noexc
 }
 
 extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
-    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
-    // won't end up doing a GIL check?
-    // threading::GLDemoteRegion _gil_demote;
-
-    try {
-        Box* r;
-        if (args)
-            r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
-        else
-            r = runtimeCall(obj, ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
-        return r;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    return PyEval_CallObjectWithKeywords(obj, args, NULL);
 }
 
 extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssize_t* buffer_len) noexcept {
@@ -657,36 +643,26 @@ static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
 
 extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const char* format, ...) noexcept {
     va_list va;
-    PyObject* args;
-    PyObject* func = NULL;
+    PyObject* args = NULL;
     PyObject* retval = NULL;
 
     if (o == NULL || name == NULL)
         return null_error();
 
-    func = PyObject_GetAttrString(o, name);
-    if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
-        return 0;
-    }
-
-    if (!PyCallable_Check(func)) {
-        type_error("attribute of type '%.200s' is not callable", func);
-        goto exit;
-    }
-
+    ArgPassSpec argspec(0, 0, true, false);
     if (format && *format) {
         va_start(va, format);
         args = Py_VaBuildValue(format, va);
         va_end(va);
+
+        if (!PyTuple_Check(args))
+            argspec = ArgPassSpec(1);
     } else
-        args = PyTuple_New(0);
-
-    retval = call_function_tail(func, args);
-
-exit:
-    /* args gets consumed in call_function_tail */
-    Py_XDECREF(func);
+        argspec = ArgPassSpec(0);
+    retval = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
+                                                                    argspec, args, NULL, NULL, NULL, NULL);
+    if (!retval && !PyErr_Occurred())
+        PyErr_SetString(PyExc_AttributeError, name);
 
     return retval;
 }
@@ -698,10 +674,6 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
     if (callable == NULL || name == NULL)
         return null_error();
 
-    callable = PyObject_GetAttr(callable, name);
-    if (callable == NULL)
-        return NULL;
-
     /* count the args */
     va_start(vargs, name);
     args = objargs_mktuple(vargs);
@@ -710,7 +682,27 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
         Py_DECREF(callable);
         return NULL;
     }
-    tmp = PyObject_Call(callable, args, NULL);
+
+    BoxedString* attr = (BoxedString*)name;
+    if (!PyString_Check(attr)) {
+        if (PyUnicode_Check(attr)) {
+            attr = (BoxedString*)_PyUnicode_AsDefaultEncodedString(attr, NULL);
+            if (attr == NULL)
+                return NULL;
+        } else {
+            PyErr_Format(TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr)->tp_name);
+            return NULL;
+        }
+    }
+
+    internStringMortalInplace(attr);
+    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
+        callable, attr, CLASS_OR_INST, NULL, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
+    if (!tmp && !PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", callable->cls->tp_name,
+                     PyString_AS_STRING(attr));
+
+
     Py_DECREF(args);
     Py_DECREF(callable);
 
@@ -719,42 +711,35 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
 
 
 extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, const char* name, const char* format, ...) noexcept {
-    // TODO it looks like this could be made much more efficient by calling our callattr(), but
-    // I haven't taken the time to verify that that has the same behavior
-
-    va_list va;
-    PyObject* args;
-    PyObject* func = NULL;
-    PyObject* retval = NULL;
+    PyObject* args = NULL, *tmp;
+    va_list vargs;
 
     if (o == NULL || name == NULL)
         return null_error();
 
-    func = PyObject_GetAttrString(o, name);
-    if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
-        return 0;
-    }
+    ArgPassSpec argspec(0, 0, true, false);
 
-    if (!PyCallable_Check(func)) {
-        type_error("attribute of type '%.200s' is not callable", func);
-        goto exit;
-    }
-
+    /* count the args */
     if (format && *format) {
-        va_start(va, format);
-        args = _Py_VaBuildValue_SizeT(format, va);
-        va_end(va);
+        va_start(vargs, format);
+        args = _Py_VaBuildValue_SizeT(format, vargs);
+        va_end(vargs);
+
+        if (!PyTuple_Check(args))
+            argspec = ArgPassSpec(1);
     } else
-        args = PyTuple_New(0);
+        argspec = ArgPassSpec(0);
 
-    retval = call_function_tail(func, args);
+    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
+                                                                 argspec, args, NULL, NULL, NULL, NULL);
+    if (!tmp && !PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, name);
 
-exit:
-    /* args gets consumed in call_function_tail */
-    Py_XDECREF(func);
 
-    return retval;
+    Py_DECREF(args);
+    Py_DECREF(o);
+
+    return tmp;
 }
 
 extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
