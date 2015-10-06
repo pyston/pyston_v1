@@ -3232,9 +3232,10 @@ enum class KeywordDest {
     POSITIONAL,
     KWARGS,
 };
+template <typename FuncNameCB>
 static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled,
                                 BoxedString* kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
-                                BoxedDict* okwargs, const char* func_name) {
+                                BoxedDict* okwargs, FuncNameCB func_name_cb) {
     assert(kw_val);
     assert(gc::isValidGCObject(kw_val));
     assert(kw_name);
@@ -3243,7 +3244,7 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
     for (int j = 0; j < param_names->args.size(); j++) {
         if (param_names->args[j] == kw_name->s() && kw_name->size() > 0) {
             if (params_filled[j]) {
-                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name,
+                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                                kw_name->c_str());
             }
 
@@ -3257,13 +3258,13 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
     if (okwargs) {
         Box*& v = okwargs->d[kw_name];
         if (v) {
-            raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name,
+            raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                            kw_name->c_str());
         }
         v = kw_val;
         return KeywordDest::KWARGS;
     } else {
-        raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name, kw_name->c_str());
+        raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name_cb(), kw_name->c_str());
     }
 }
 
@@ -3305,10 +3306,11 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewrite
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
 }
 
-void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
-                        const std::vector<BoxedString*>* keyword_names) {
+template <typename FuncNameCB>
+void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
+                                Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
+                                ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
+                                const std::vector<BoxedString*>* keyword_names) {
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3531,7 +3533,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name_cb(), paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
@@ -3575,7 +3577,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     };
 
     if ((!param_names || !param_names->takes_param_names) && argspec.num_keywords && !paramspec.takes_kwargs) {
-        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name_cb());
     }
 
     if (argspec.num_keywords) {
@@ -3595,7 +3597,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             }
 
             auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3,
-                                     oargs, okwargs, func_name);
+                                     oargs, okwargs, func_name_cb);
             assert(!rewrite_args);
         }
     }
@@ -3622,27 +3624,28 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             okwargs = get_okwargs();
 
             if (!okwargs && (!param_names || !param_names->takes_param_names))
-                raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name);
+                raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", func_name_cb());
         }
 
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr<CXX>(p.first);
 
             if (k->cls != str_cls)
-                raiseExcHelper(TypeError, "%s() keywords must be strings", func_name);
+                raiseExcHelper(TypeError, "%s() keywords must be strings", func_name_cb());
 
             BoxedString* s = static_cast<BoxedString*>(k);
 
             if (param_names && param_names->takes_param_names) {
                 assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
-                placeKeyword(param_names, params_filled, s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, func_name);
+                placeKeyword(param_names, params_filled, s, p.second, oarg1, oarg2, oarg3, oargs, okwargs,
+                             func_name_cb);
             } else {
                 assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
                 assert(okwargs);
 
                 Box*& v = okwargs->d[p.first];
                 if (v) {
-                    raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'", func_name,
+                    raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'", func_name_cb(),
                                    s->data());
                 }
                 v = p.second;
@@ -3656,7 +3659,7 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name, paramspec.num_args,
+        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name_cb(), paramspec.num_args,
                        argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
@@ -3684,6 +3687,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
 
         getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
     }
+}
+
+void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                        Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
+                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
+                        const std::vector<BoxedString*>* keyword_names) {
+    auto func = [func_name]() { return func_name; };
+    return rearrangeArgumentsInternal(paramspec, param_names, func, defaults, rewrite_args, rewrite_success, argspec,
+                                      oarg1, oarg2, oarg3, args, oargs, keyword_names);
 }
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
@@ -3727,9 +3739,10 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 
     try {
-        rearrangeArguments(paramspec, &f->param_names, getFunctionName(f).data(),
-                           paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success, argspec,
-                           arg1, arg2, arg3, args, oargs, keyword_names);
+        auto func_name_cb = [f]() { return getFunctionName(f).data(); };
+        rearrangeArgumentsInternal(paramspec, &f->param_names, func_name_cb,
+                                   paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success,
+                                   argspec, arg1, arg2, arg3, args, oargs, keyword_names);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
