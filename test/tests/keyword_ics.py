@@ -1,12 +1,13 @@
-# expected: statfail
-# - rewriter bails on keywords for now
+# statcheck: noninit_count('slowpath_runtimecall') <= 500
+# statcheck: noninit_count('slowpath_callfunc') <= 500
+# run_args: -n
 
-# statcheck: stats['slowpath_runtimecall'] <= 20
-# statcheck: stats.get("slowpath_callclfunc", 0) <= 20
-# statcheck: stats['rewriter_nopatch'] <= 20
-def f(a, b):
-    print a, b
+def f(a=-1, b=-2):
+    return a + b
 
-for i in xrange(10000):
-    f(a=1, b=2)
-    f(b=1, a=2)
+s = 0
+for i in xrange(20000):
+    s += f(a=1, b=2)
+    s += f(b=3, a=4)
+    s += f(b=5)
+print s
