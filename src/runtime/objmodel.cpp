@@ -3267,7 +3267,7 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
                             void** extra_args) {
     Box** args = (Box**)extra_args[0];
     auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
-    return callFunc<S>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    return callFunc<S, NOT_REWRITABLE>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
