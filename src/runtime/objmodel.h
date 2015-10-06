@@ -138,7 +138,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable = REWRITABLE>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
@@ -200,7 +200,7 @@ Box* typeNewGeneric(Box* cls, Box* arg1, Box* arg2, Box** _args);
 Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable>
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI);

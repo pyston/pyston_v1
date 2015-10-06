@@ -1730,7 +1730,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
             grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
     } else {
-        descr = typeLookup<rewritable>(obj->cls, attr, NULL);
+        descr = typeLookup(obj->cls, attr);
     }
 
     // Check if it's a data descriptor
@@ -3306,11 +3306,16 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewrite
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
 }
 
-template <typename FuncNameCB>
+template <Rewritable rewritable, typename FuncNameCB>
 void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
                                 Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
                                 ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
                                 const std::vector<BoxedString*>* keyword_names) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3689,19 +3694,35 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     }
 }
 
+template <Rewritable rewritable>
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
                         const std::vector<BoxedString*>* keyword_names) {
     auto func = [func_name]() { return func_name; };
-    return rearrangeArgumentsInternal(paramspec, param_names, func, defaults, rewrite_args, rewrite_success, argspec,
-                                      oarg1, oarg2, oarg3, args, oargs, keyword_names);
+    return rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, rewrite_success,
+                                                  argspec, oarg1, oarg2, oarg3, args, oargs, keyword_names);
 }
+template void rearrangeArguments<REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
+                                             _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
+                                             Box**, const std::vector<BoxedString*>*);
+template void rearrangeArguments<NOT_REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
+                                                 _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
+                                                 Box**, const std::vector<BoxedString*>*);
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
+    if (rewritable == REWRITABLE && !rewrite_args)
+        return callFunc<S, NOT_REWRITABLE>(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+
 #if STAT_TIMERS
     StatTimer::assertActive();
     STAT_TIMER(t0, "us_timer_slowpath_callFunc", 0);
@@ -3740,9 +3761,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     try {
         auto func_name_cb = [f]() { return getFunctionName(f).data(); };
-        rearrangeArgumentsInternal(paramspec, &f->param_names, func_name_cb,
-                                   paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args, rewrite_success,
-                                   argspec, arg1, arg2, arg3, args, oargs, keyword_names);
+        rearrangeArgumentsInternal<rewritable>(paramspec, &f->param_names, func_name_cb,
+                                               paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
+                                               rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -3842,7 +3863,8 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             rewrite_args->out_success = true;
         }
     } else {
-        res = callCLFunc<S>(f, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2, arg3, oargs);
+        res = callCLFunc<S, rewritable>(f, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
+                                        arg3, oargs);
     }
 
     return res;
@@ -3926,10 +3948,15 @@ static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*
     }
 }
 
-template <ExceptionStyle S>
+template <ExceptionStyle S, Rewritable rewritable>
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
     CompiledFunction* chosen_cf = pickVersion(f, S, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
@@ -4053,11 +4080,18 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 }
 
 // force instantiation:
-template Box* callCLFunc<CAPI>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                               BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
-                               Box** oargs);
-template Box* callCLFunc<CXX>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                              BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
+template Box* callCLFunc<CAPI, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+                                           BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
+                                           Box* oarg2, Box* oarg3, Box** oargs);
+template Box* callCLFunc<CXX, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+                                          BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
+                                          Box* oarg2, Box* oarg3, Box** oargs);
+template Box* callCLFunc<CAPI, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+                                               BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                                               Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
+template Box* callCLFunc<CXX, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+                                              BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                                              Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
@@ -4481,6 +4515,8 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     raiseExcHelper(TypeError, "unsupported operand type(s) for %s%s: '%s' and '%s'", op_sym.data(), op_sym_suffix,
                    getTypeName(lhs), getTypeName(rhs));
 }
+template Box* binopInternal<REWRITABLE>(Box*, Box*, int, bool, BinopRewriteArgs*);
+template Box* binopInternal<NOT_REWRITABLE>(Box*, Box*, int, bool, BinopRewriteArgs*);
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);

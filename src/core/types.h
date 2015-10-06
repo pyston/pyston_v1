@@ -52,8 +52,8 @@ enum ExceptionStyle {
 };
 
 enum Rewritable {
-    REWRITABLE,
     NOT_REWRITABLE,
+    REWRITABLE,
 };
 
 template <typename T> struct ExceptionSwitchable {
