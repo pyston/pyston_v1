@@ -207,6 +207,11 @@ for run_idx in xrange(1):
                 if clsname == "SelectTest" and t == 'test_binds':
                     continue
 
+                # This test relies on quick destruction of cursor objects,
+                # since it's not getting freed explicitly.
+                if 'test_bind' in mname and t == 'test_clauseelement':
+                    continue
+
                 print "Running", t
                 try:
                     try:
