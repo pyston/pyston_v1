@@ -240,3 +240,16 @@ print d
 # Remove an item using a different key:
 d = {1:1}
 d.pop(1L)
+
+
+# dict() will try to access the "keys" attribute, but it should swallow all exceptions
+class MyObj(object):
+    def __iter__(self):
+        print "iter!"
+        return [(1, 2)].__iter__()
+
+    def __getattr__(self, attr):
+        print "getattr", attr
+        1/0
+
+print dict(MyObj())
