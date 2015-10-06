@@ -39,6 +39,8 @@ print MyList((1,2,3)) <= MyList((1,2,3))
 
 print type(MyList((1, 2, 3)) * 1)
 
+print [1] + MyList([3])
+
 class ListWithInit(list):
     def __init__(self, *args, **kwargs):
         print "ListWithInit.__init__", args, kwargs

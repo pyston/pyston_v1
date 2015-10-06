@@ -3864,6 +3864,7 @@ void setupRuntime() {
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
+    none_cls->giveAttr("__doc__", None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
 

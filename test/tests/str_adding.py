@@ -18,3 +18,7 @@ try:
 except TypeError as e:
     print e
 print "" + D()
+
+
+# This also applies to list:
+print [] + D()

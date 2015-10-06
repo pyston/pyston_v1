@@ -213,6 +213,7 @@ void setupThread() {
     thread_lock_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
     thread_lock_cls->has_safe_tp_dealloc = true;
+    thread_lock_cls->instances_are_nonzero = true;
 
     thread_lock_cls->giveAttr("__module__", boxString("thread"));
     thread_lock_cls->giveAttr(
