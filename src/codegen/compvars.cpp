@@ -1987,7 +1987,7 @@ public:
         CompilerVariable* called_constant = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, flags.argspec,
                                                                 args, keyword_names, no_attribute_ptr, exception_style);
 
-        if (no_attribute)
+        if (flags.null_on_nonexistent && no_attribute)
             return new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
 
         if (called_constant)
