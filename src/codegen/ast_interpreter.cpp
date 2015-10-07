@@ -1854,9 +1854,8 @@ static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST
     }
 
     ASTInterpreter interpreter(clfunc, vregs);
-
-    assert(clfunc->source->scoping->areGlobalsFromModule());
-    interpreter.setGlobals(source_info->parent_module);
+    if (source_info->scoping->areGlobalsFromModule())
+        interpreter.setGlobals(source_info->parent_module);
 
     for (const auto& p : *frame_state.locals) {
         assert(p.first->cls == str_cls);
@@ -1867,6 +1866,9 @@ static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST
             interpreter.setPassedClosure(p.second);
         } else if (name == CREATED_CLOSURE_NAME) {
             interpreter.setCreatedClosure(p.second);
+        } else if (name == PASSED_GLOBALS_NAME) {
+            assert(!source_info->scoping->areGlobalsFromModule());
+            interpreter.setGlobals(p.second);
         } else {
             InternedString interned = clfunc->source->getInternedStrings().get(name);
             interpreter.addSymbol(interned, p.second, false);
@@ -1880,7 +1882,7 @@ static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST
     while (true) {
         if (enclosing_stmt->type == AST_TYPE::Assign) {
             auto asgn = ast_cast<AST_Assign>(enclosing_stmt);
-            assert(asgn->value == after_expr);
+            RELEASE_ASSERT(asgn->value == after_expr, "%p %p", asgn->value, after_expr);
             assert(asgn->targets.size() == 1);
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
@@ -1889,6 +1891,7 @@ static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
+            RELEASE_ASSERT(expr->value == after_expr, "%p %p", expr->value, after_expr);
             assert(expr->value == after_expr);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
