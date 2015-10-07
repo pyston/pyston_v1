@@ -831,6 +831,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                                     int num_slots, int slot_size) {
+    assembler->comment("_emitPPCall");
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.
@@ -856,7 +857,12 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     // make space for patchpoint
     uint8_t* pp_start = rewrite->getSlotStart() + assembler->bytesWritten();
     constexpr int call_size = 16;
+#ifndef NDEBUG
+    for (int i=0; i<pp_size + call_size; ++i)
+        assembler->trap();
+#else
     assembler->skipBytes(pp_size + call_size);
+#endif
     uint8_t* pp_end = rewrite->getSlotStart() + assembler->bytesWritten();
     assert(assembler->hasFailed() || (pp_start + pp_size + call_size == pp_end));
 

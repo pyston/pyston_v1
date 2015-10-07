@@ -22,11 +22,14 @@
 #if LLVMREV < 227586
 #include "llvm/DebugInfo/DIContext.h"
 #else
-#include "llvm/DebugInfo/DWARF/DIContext.h"
+//#include "llvm/DebugInfo/DWARF/DIContext.h"
 #endif
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/IR/DebugInfo.h"
+#include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/SymbolSize.h"
 
 #include "asm_writing/types.h"
 #include "analysis/scoping_analysis.h"
@@ -172,27 +175,52 @@ class TracebacksEventListener : public llvm::JITEventListener {
 public:
     virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
                                      const llvm::RuntimeDyld::LoadedObjectInfo& L) {
-        std::unique_ptr<llvm::DIContext> Context(llvm::DIContext::getDWARFContext(Obj));
+        //llvm::DIContext Context(llvm::DIContext::CK_DWARF);
 
         assert(g.cur_cf);
 
         uint64_t func_addr = 0; // remains 0 until we find a function
 
+        llvm::object::OwningBinary<llvm::object::ObjectFile> DebugObjOwner = L.getObjectForDebug(Obj);
+        const llvm::object::ObjectFile &DebugObj = *DebugObjOwner.getBinary();
+        for (const std::pair<llvm::object::SymbolRef, uint64_t> &P : llvm::object::computeSymbolSizes(DebugObj)) {
+            llvm::object::SymbolRef Sym = P.first;
+            if (Sym.getType() != llvm::object::SymbolRef::ST_Function)
+              continue;
+
+            llvm::ErrorOr<llvm::StringRef> NameOrErr = Sym.getName();
+            if (NameOrErr.getError())
+              continue;
+            llvm::ErrorOr<uint64_t> AddrOrErr = Sym.getAddress();
+            if (AddrOrErr.getError())
+              continue;
+            func_addr = *AddrOrErr;
+            uint64_t Size = P.second;
+
+            assert(g.cur_cf->code_start == 0);
+            g.cur_cf->code_start = func_addr;
+            g.cur_cf->code_size = Size;
+            cf_registry.registerCF(g.cur_cf);
+            // TODO: support line number info (similar to IntelJITEventListener.cpp)
+          }
+#if 0
         // Search through the symbols to find the function that got JIT'ed.
         // (We only JIT one function at a time.)
         for (const auto& sym : Obj.symbols()) {
-            llvm::object::SymbolRef::Type SymType;
-            if (sym.getType(SymType) || SymType != llvm::object::SymbolRef::ST_Function)
+            llvm::object::SymbolRef::Type SymType = sym.getType();
+            if (SymType != llvm::object::SymbolRef::ST_Function)
                 continue;
 
             llvm::StringRef Name;
             uint64_t Size;
-            if (sym.getName(Name) || sym.getSize(Size))
+
+            auto Name_or = sym.getName();
+            if (!Name_or || sym.getSize(Size))
                 continue;
 
             // Found a function!
             assert(!func_addr);
-            func_addr = L.getSymbolLoadAddress(Name);
+            func_addr = g.engine->getGlobalValueAddress(Name);
             assert(func_addr);
 
 // TODO this should be the Python name, not the C name:
@@ -218,7 +246,7 @@ public:
             g.cur_cf->code_size = Size;
             cf_registry.registerCF(g.cur_cf);
         }
-
+#endif
         assert(func_addr);
 
         // Libunwind support:
@@ -234,7 +262,7 @@ public:
             uint64_t addr, size;
             if (name == ".eh_frame") {
                 assert(!found_eh_frame);
-                eh_frame_addr = L.getSectionLoadAddress(name);
+                eh_frame_addr = L.getSectionLoadAddress(sec);
                 eh_frame_size = sec.getSize();
 
                 if (VERBOSITY() >= 2)
@@ -242,7 +270,7 @@ public:
                 found_eh_frame = true;
             } else if (name == ".text") {
                 assert(!found_text);
-                text_addr = L.getSectionLoadAddress(name);
+                text_addr = L.getSectionLoadAddress(sec);
                 text_size = sec.getSize();
 
                 if (VERBOSITY() >= 2)

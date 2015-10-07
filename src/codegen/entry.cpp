@@ -26,6 +26,7 @@
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
+#include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -108,9 +109,10 @@ static llvm::Module* loadStdlib() {
 #endif
 
     // llvm::ErrorOr<llvm::Module*> m_or = llvm::parseBitcodeFile(buffer, g.context);
-    llvm::ErrorOr<llvm::Module*> m_or = llvm::getLazyBitcodeModule(std::move(buffer), g.context);
+    llvm::ErrorOr<std::unique_ptr<Module>> m_or = llvm::getLazyBitcodeModule(std::move(buffer), g.context);
     RELEASE_ASSERT(m_or, "");
-    llvm::Module* m = m_or.get();
+    llvm::Module* m = m_or->get();
+    m_or->release();
     assert(m);
 
     for (llvm::Module::global_iterator I = m->global_begin(), E = m->global_end(); I != E; ++I) {
@@ -413,7 +415,7 @@ void initCodegen() {
     // eb.setOptLevel(llvm::CodeGenOpt::Aggressive); // -O3
 
     llvm::TargetOptions target_options;
-    target_options.NoFramePointerElim = true;
+    //target_options.NoFramePointerElim = true;
     // target_options.EnableFastISel = true;
     eb.setTargetOptions(target_options);
 

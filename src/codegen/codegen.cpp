@@ -19,10 +19,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/SymbolSize.h"
 #include "llvm/Support/FileSystem.h"
 
 #include "analysis/function_analysis.h"
@@ -236,36 +238,24 @@ public:
         static StatCounter code_bytes("code_bytes");
         code_bytes.log(Obj.getData().size());
 
-        llvm_error_code code;
-        for (const auto& sym : Obj.symbols()) {
-            llvm::object::section_iterator section(Obj.section_end());
-            code = sym.getSection(section);
-            assert(!code);
-            bool is_text;
-#if LLVMREV < 219314
-            code = section->isText(is_text);
-            assert(!code);
-#else
-            is_text = section->isText();
-#endif
-            if (!is_text)
+        llvm::object::OwningBinary<llvm::object::ObjectFile> DebugObjOwner = L.getObjectForDebug(Obj);
+        const llvm::object::ObjectFile &DebugObj = *DebugObjOwner.getBinary();
+
+        for (const auto& sym : llvm::object::computeSymbolSizes(DebugObj)) {
+            if (sym.first.getType() != llvm::object::SymbolRef::ST_Function)
                 continue;
 
-            llvm::StringRef name;
-            code = sym.getName(name);
-            assert(!code);
-            uint64_t size;
-            code = sym.getSize(size);
-            assert(!code);
+            auto name = sym.first.getName();
+            assert(!name.getError());
+            uint64_t size = sym.second;
 
-            if (name == ".text")
+            if (*name == ".text" || name->empty() || !size)
                 continue;
 
+            auto sym_addr = sym.first.getAddress();
+            assert(sym_addr && *sym_addr);
 
-            uint64_t sym_addr = L.getSymbolLoadAddress(name);
-            assert(sym_addr);
-
-            g.func_addr_registry.registerFunction(name.data(), (void*)sym_addr, size, NULL);
+            g.func_addr_registry.registerFunction(name->str(), (void*)*sym_addr, size, NULL);
         }
     }
 };

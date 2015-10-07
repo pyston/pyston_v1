@@ -76,7 +76,7 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
     static __thread llvm::MCInstPrinter* IP = NULL;
 
     if (!DisAsm) {
-        const llvm::StringRef triple = g.tm->getTargetTriple();
+        const std::string triple = g.tm->getTargetTriple().getTriple();
         std::string err;
         const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple, err);
         assert(target);
@@ -91,7 +91,11 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
         const llvm::MCSubtargetInfo* STI = target->createMCSubtargetInfo(triple, CPU, FeaturesStr);
         assert(STI);
         int AsmPrinterVariant = MAI->getAssemblerDialect(); // 0 is ATT, 1 is Intel
+#if LLVMREV < 233648
         IP = target->createMCInstPrinter(AsmPrinterVariant, *MAI, *MII, *MRI, *STI);
+#else
+        IP = target->createMCInstPrinter(llvm::Triple(triple), AsmPrinterVariant, *MAI, *MII, *MRI);
+#endif
         assert(IP);
         llvm::MCObjectFileInfo* MOFI = new llvm::MCObjectFileInfo();
         assert(MOFI);
@@ -113,9 +117,13 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
         llvm::MCDisassembler::DecodeStatus s = DisAsm->getInstruction(
             inst /* out */, size /* out */, llvm::ArrayRef<uint8_t>(start_addr + pos, end_addr), 0, llvm::nulls(),
             llvm::nulls());
-        assert(s == llvm::MCDisassembler::Success);
 
+        assert(s == llvm::MCDisassembler::Success);
+#if LLVMREV < 233648
         IP->printInst(&inst, stream, "");
+#else
+        IP->printInst(&inst, stream, "", DisAsm->getSubtargetInfo());
+#endif
         stream << "\n";
 
         pos += size;

@@ -17,6 +17,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -36,14 +37,15 @@
 using namespace llvm;
 
 namespace llvm {
-void initializePystonAAPass(PassRegistry&);
+void initializePystonAAWrapperPassPass(PassRegistry&);
 }
 
 namespace pyston {
 
-class PystonAA : public ImmutablePass, public AliasAnalysis {
+class PystonAAResult : public AAResultBase<PystonAAResult> {
 private:
     int depth;
+    EscapeAnalysis& EA;
 
     void indent() {
         for (int i = 0; i < depth - 1; i++) {
@@ -52,20 +54,11 @@ private:
     }
 
 public:
-    static char ID; // Class identification, replacement for typeinfo
-    PystonAA() : ImmutablePass(ID), depth(0) { initializePystonAAPass(*PassRegistry::getPassRegistry()); }
+    PystonAAResult(TargetLibraryInfo& TLI, EscapeAnalysis& EA) : AAResultBase<PystonAAResult>(TLI), depth(0), EA(EA) {}
 
-    void initializePass() override { AliasAnalysis::InitializeAliasAnalysis(this); }
-
-    void getAnalysisUsage(AnalysisUsage& AU) const override {
-        AliasAnalysis::getAnalysisUsage(AU);
-        AU.addRequired<AliasAnalysis>();
-        AU.addRequired<EscapeAnalysis>();
-        AU.setPreservesAll();
-    }
-
-    AliasResult _alias(const Location& LocA, const Location& LocB) {
-        AliasResult base = AliasAnalysis::alias(LocA, LocB);
+    AliasResult _alias(const MemoryLocation& LocA, const MemoryLocation& LocB) {
+        RELEASE_ASSERT(0, "");
+        AliasResult base = AAResultBase::alias(LocA, LocB);
 
         if (VERBOSITY("opt.aa") >= 4) {
             indent();
@@ -89,7 +82,7 @@ public:
             return MustAlias;
         }
 
-        const Location locs[] = { LocA, LocB };
+        const MemoryLocation locs[] = { LocA, LocB };
 
         for (int i = 0; i < 2; i++) {
             const BitCastInst* BI = dyn_cast<BitCastInst>(locs[i].Ptr);
@@ -101,7 +94,7 @@ public:
                 indent();
                 errs() << "loc " << i << " is bitcast, recursing\n";
             }
-            AliasResult bc_base_aliases = alias(locs[i ^ 1], Location(bc_base, locs[i].Size));
+            AliasResult bc_base_aliases = alias(locs[i ^ 1], MemoryLocation(bc_base, locs[i].Size));
             if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 bc_base->dump();
@@ -112,11 +105,11 @@ public:
         }
 
         {
-            const GetElementPtrInst* GIa, *GIb;
+            const GetElementPtrInst *GIa, *GIb;
             GIa = dyn_cast<GetElementPtrInst>(LocA.Ptr);
             GIb = dyn_cast<GetElementPtrInst>(LocB.Ptr);
             if (GIa && GIb) {
-                const Value* baseA, *baseB;
+                const Value *baseA, *baseB;
                 baseA = GIa->getPointerOperand();
                 baseB = GIb->getPointerOperand();
                 assert(baseA);
@@ -126,7 +119,7 @@ public:
                     indent();
                     errs() << "2 geps, recursing\n";
                 }
-                AliasResult bases_alias = alias(Location(baseA), Location(baseB));
+                AliasResult bases_alias = alias(MemoryLocation(baseA), MemoryLocation(baseB));
                 if (VERBOSITY("opt.aa") >= 4) {
                     indent();
                     errs() << "2gep base aliases: " << bases_alias << '\n';
@@ -141,10 +134,9 @@ public:
 
                 if (bases_alias == MustAlias) {
                     APInt offsetA(64, 0, true), offsetB(64, 0, true);
-                    const DataLayout* DL = getDataLayout();
-                    assert(DL);
-                    bool accumA = GIa->accumulateConstantOffset(*DL, offsetA);
-                    bool accumB = GIb->accumulateConstantOffset(*DL, offsetB);
+                    const DataLayout& DL = GIa->getParent()->getParent()->getParent()->getDataLayout();
+                    bool accumA = GIa->accumulateConstantOffset(DL, offsetA);
+                    bool accumB = GIb->accumulateConstantOffset(DL, offsetB);
                     if (accumA && accumB) {
                         if (VERBOSITY("opt.aa") >= 4) {
                             indent();
@@ -188,7 +180,7 @@ public:
                 indent();
                 errs() << "loc " << i << " is gep, recursing\n";
             }
-            AliasResult gep_base_aliases = alias(locs[i ^ 1], Location(gep_base));
+            AliasResult gep_base_aliases = alias(locs[i ^ 1], MemoryLocation(gep_base));
             if (VERBOSITY("opt.aa") >= 4) {
                 indent();
                 gep_base->dump();
@@ -221,7 +213,7 @@ public:
         return MayAlias;
     }
 
-    AliasResult alias(const Location& LocA, const Location& LocB) override {
+    AliasResult alias(const MemoryLocation& LocA, const MemoryLocation& LocB) {
         if (VERBOSITY("opt.aa") >= 4 && depth == 0 && isa<Instruction>(LocA.Ptr)) {
             cast<Instruction>(LocA.Ptr)->getParent()->dump();
         }
@@ -242,11 +234,8 @@ public:
         return rtn;
     }
 
-    // There are multiple (overloaded) "getModRefInfo" functions in AliasAnalysis, and apparently
-    // this means you need to add this line:
-    using AliasAnalysis::getModRefInfo;
-    ModRefResult getModRefInfo(ImmutableCallSite CS, const Location& Loc) override {
-        ModRefResult base = AliasAnalysis::getModRefInfo(CS, Loc);
+    ModRefInfo getModRefInfo(ImmutableCallSite CS, const MemoryLocation& Loc) {
+        ModRefInfo base = AAResultBase::getModRefInfo(CS, Loc);
         if (!CS.getCalledFunction())
             return base;
 
@@ -257,29 +246,29 @@ public:
             outs() << "base: " << base << '\n';
         }
 
-        ModRefResult mask = ModRef;
+        ModRefInfo mask = MRI_ModRef;
 
         StringRef name = CS.getCalledFunction()->getName();
         if (isAllocCall(name)) {
-            return NoModRef;
+            return MRI_NoModRef;
         }
 
-        EscapeAnalysis& escape = getAnalysis<EscapeAnalysis>();
-        EscapeAnalysis::EscapeResult escapes = escape.escapes(Loc.Ptr, CS.getInstruction());
+
+        EscapeAnalysis::EscapeResult escapes = EA.escapes(Loc.Ptr, CS.getInstruction());
         if (escapes != EscapeAnalysis::Escaped) {
             StatCounter num_improved("opt_modref_noescape");
             num_improved.log();
             if (VERBOSITY("opt.aa") >= 4) {
                 errs() << "Was able to show that " << *CS.getInstruction() << " can't modify " << *Loc.Ptr << '\n';
             }
-            return NoModRef;
+            return MRI_NoModRef;
         }
 
         /*if (name == "printf" || name == "my_realloc" || name == "print_space_if_necessary" || name == "write") {
             mask = Ref;
             bool found_alias = false;
             for (User::const_op_iterator op_it = CS.arg_begin(), op_end = CS.arg_end(); op_it != op_end; ++op_it) {
-                if (alias(Loc, Location(op_it->get())) != NoAlias) {
+                if (alias(Loc, MemoryLocation(op_it->get())) != NoAlias) {
                     found_alias = true;
                     break;
                 }
@@ -290,7 +279,7 @@ public:
             mask = ModRef;
             bool found_alias = false;
             for (User::const_op_iterator op_it = CS.arg_begin(), op_end = CS.arg_end(); op_it != op_end; ++op_it) {
-                if (alias(Loc, Location(op_it->get())) != NoAlias) {
+                if (alias(Loc, MemoryLocation(op_it->get())) != NoAlias) {
                     //errs() << '\n';
                     //errs() << *CS.getInstruction() << '\n';
                     //errs() << **op_it << '\n';
@@ -305,27 +294,59 @@ public:
             mask = NoModRef;
         }*/
 
-        return ModRefResult(mask & base);
-    }
-
-    void* getAdjustedAnalysisPointer(const void* ID) override {
-        if (ID == &AliasAnalysis::ID)
-            return (AliasAnalysis*)this;
-        return this;
+        return ModRefInfo(mask & base);
     }
 };
-char PystonAA::ID = 0;
 
-llvm::ImmutablePass* createPystonAAPass() {
-    return new PystonAA();
+class PystonAAWrapperPass : public ImmutablePass {
+    std::unique_ptr<PystonAAResult> Result;
+
+public:
+    static char ID;
+
+    PystonAAWrapperPass();
+
+    PystonAAResult& getResult() { return *Result; }
+    const PystonAAResult& getResult() const { return *Result; }
+
+    bool doInitialization(Module& M) override;
+    bool doFinalization(Module& M) override;
+    void getAnalysisUsage(AnalysisUsage& AU) const override;
+};
+
+char PystonAAWrapperPass::ID = 0;
+
+
+ImmutablePass* createPystonAAWrapperPass() {
+    return new PystonAAWrapperPass();
+}
+
+PystonAAWrapperPass::PystonAAWrapperPass() : ImmutablePass(ID) {
+    initializePystonAAWrapperPassPass(*PassRegistry::getPassRegistry());
+}
+
+bool PystonAAWrapperPass::doInitialization(Module& M) {
+    EscapeAnalysis& escape = getAnalysis<EscapeAnalysis>();
+    Result.reset(new PystonAAResult(getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(), escape));
+    return false;
+}
+
+bool PystonAAWrapperPass::doFinalization(Module& M) {
+    Result.reset();
+    return false;
+}
+
+void PystonAAWrapperPass::getAnalysisUsage(AnalysisUsage& AU) const {
+    AU.setPreservesAll();
+    AU.addRequired<AAResultsWrapperPass>();
+    AU.addRequired<EscapeAnalysis>();
+    AU.addRequired<TargetLibraryInfoWrapperPass>();
 }
 }
 
 using namespace pyston;
-INITIALIZE_AG_PASS(PystonAA, AliasAnalysis, "pystonaa", "Pyston AA", false, true, false)
-
-namespace {
-struct Foo {
-    Foo() { initializePystonAAPass(*PassRegistry::getPassRegistry()); }
-} _f;
-}
+INITIALIZE_PASS_BEGIN(PystonAAWrapperPass, "pystonaa", "Pyston AA", false, true)
+INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(EscapeAnalysis)
+INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
+INITIALIZE_PASS_END(PystonAAWrapperPass, "pystonaa", "Pyston AA", false, true)

@@ -262,7 +262,7 @@ public:
                     // llvm::InlineFunctionInfo InlineInfo(&cg);
 
                     llvm::InlineFunctionInfo InlineInfo;
-                    bool inlined = llvm::InlineFunction(cs, InlineInfo, false);
+                    bool inlined = llvm::InlineFunction(cs, InlineInfo, nullptr, false);
                     did_inline = did_inline || inlined;
                     did_any_inlining = did_any_inlining || inlined;
 
@@ -292,7 +292,7 @@ public:
         }
         MyMaterializer materializer(cur_module);
         for (llvm::inst_iterator I = llvm::inst_begin(f), E = llvm::inst_end(f); I != E; ++I) {
-            RemapInstruction(&(*I), VMap, llvm::RF_None, NULL, &materializer);
+            RemapInstruction(&(*I), VMap, llvm::RF_MoveDistinctMDs, NULL, &materializer);
         }
 
         _t.split("cleaning up");

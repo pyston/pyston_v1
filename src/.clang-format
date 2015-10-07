@@ -16,6 +16,7 @@ Language: Cpp
 MaxEmptyLinesToKeep: 3
 NamespaceIndentation: None
 PointerBindsToType: true
+PointerAlignment: Left
 SpaceBeforeParens: ControlStatements
 SpacesInAngles: false
 SpacesInCStyleCastParentheses: false
@@ -23,5 +24,4 @@ SpacesInParentheses: false
 Standard: Cpp11
 TabWidth: 4
 UseTab: Never
-
-# Unset settings are undecided
+PenaltyBreakComment: 1000

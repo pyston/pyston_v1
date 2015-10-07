@@ -161,7 +161,8 @@ private:
 
             Value* new_parent = deriveSimilarly(gep->getPointerOperand(), ancestor, new_ancestor, insert_before, added);
 
-            Instruction* rtn = GetElementPtrInst::Create(new_parent, indices, "t", insert_before);
+            Instruction* rtn
+                = GetElementPtrInst::Create(nullptr, new_parent, indices, "t", insert_before);
             if (VERBOSITY() >= 2)
                 errs() << "Added: " << *rtn << '\n';
             added.push_back(rtn);
@@ -193,20 +194,20 @@ private:
         if (chain.seen.count(inst) == 0)
             return NULL;
 
-        AliasAnalysis* aa = &getAnalysis<AliasAnalysis>();
+        AliasAnalysis* aa = &getAnalysis<AAResultsWrapperPass>().getAAResults();
         assert(aa);
-        const DataLayout* dl = &getAnalysis<DataLayoutPass>().getDataLayout();
+        const DataLayout* dl = &inst->getParent()->getModule()->getDataLayout();
         assert(dl);
 
         Type* elt_type = cast<PointerType>(ptr->getType())->getElementType();
-        AliasAnalysis::Location ptr_loc(ptr, dl->getTypeStoreSize(elt_type));
+        MemoryLocation ptr_loc(ptr, dl->getTypeStoreSize(elt_type));
 
         if (StoreInst* si = dyn_cast<StoreInst>(inst)) {
-            AliasAnalysis::AliasResult ar = aa->alias(ptr_loc, aa->getLocation(si));
-            if (ar == AliasAnalysis::NoAlias)
+            AliasResult ar = aa->alias(ptr_loc, MemoryLocation::get(si));
+            if (ar == NoAlias)
                 return NULL;
 
-            if (ar == AliasAnalysis::MustAlias) {
+            if (ar == MustAlias) {
                 if (ptr->getType() == si->getPointerOperand()->getType()) {
                     return si->getValueOperand();
                 }
@@ -222,8 +223,8 @@ private:
                 RELEASE_ASSERT(0, "");
             }
             errs() << ar << ' ' << *inst << '\n';
-            assert(ar != AliasAnalysis::MayAlias);
-            assert(ar != AliasAnalysis::PartialAlias);
+            assert(ar != MayAlias);
+            assert(ar != PartialAlias);
             RELEASE_ASSERT(0, "");
         }
 
@@ -417,8 +418,10 @@ public:
 
     virtual void getAnalysisUsage(AnalysisUsage& info) const {
         info.setPreservesCFG();
-        info.addRequiredTransitive<AliasAnalysis>();
+        info.addRequiredTransitive<AAResultsWrapperPass>();
+#if LLVMREV < 231270
         info.addRequiredTransitive<DataLayoutPass>();
+#endif
     }
 
     virtual bool runOnFunction(Function& F) {

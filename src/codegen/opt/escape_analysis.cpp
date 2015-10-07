@@ -49,7 +49,9 @@ EscapeAnalysis::~EscapeAnalysis() {
 
 void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage& info) const {
     info.setPreservesCFG();
+#if LLVMREV < 231270
     info.addRequiredTransitive<DataLayoutPass>();
+#endif
 }
 
 bool EscapeAnalysis::runOnFunction(Function& F) {
@@ -234,9 +236,12 @@ EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Ins
 
 
 char EscapeAnalysis::ID = 0;
-static RegisterPass<EscapeAnalysis> X("escape_analysis", "Escape analysis", false, true);
 
 FunctionPass* createEscapeAnalysisPass() {
     return new EscapeAnalysis();
 }
 }
+
+using namespace pyston;
+INITIALIZE_PASS_BEGIN(EscapeAnalysis, "pystonea", "Pyston Escape Analysis", false, true)
+INITIALIZE_PASS_END(EscapeAnalysis, "pystonea", "Pyston Escape Analysis", false, true)
