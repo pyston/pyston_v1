@@ -326,7 +326,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
-    Box* r = astInterpretFunction(clfunc, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    Box* r = astInterpretFunction(clfunc, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == None);
 }
 

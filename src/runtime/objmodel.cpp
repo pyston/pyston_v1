@@ -3936,20 +3936,30 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
 // only supports calling functions with at most 6 since it can currently only pass arguments
 // in registers.
-static Box* astInterpretHelper(CLFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
-                               Box* globals, Box** _args) {
+static Box* astInterpretHelper(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                               Box** _args) {
     Box* arg1 = _args[0];
     Box* arg2 = _args[1];
     Box* arg3 = _args[2];
     Box* args = _args[3];
 
-    return astInterpretFunction(f, num_args, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
+    return astInterpretFunction(f, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-static Box* astInterpretHelperCapi(CLFunction* f, int num_args, BoxedClosure* closure, BoxedGenerator* generator,
-                                   Box* globals, Box** _args) noexcept {
+static Box* astInterpretHelperCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                                   Box** _args) noexcept {
     try {
-        return astInterpretHelper(f, num_args, closure, generator, globals, _args);
+        return astInterpretHelper(f, closure, generator, globals, _args);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+static Box* astInterpretHelper2ArgsCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                                        Box* arg1, Box* arg2) noexcept {
+    try {
+        return astInterpretFunction(f, closure, generator, globals, arg1, arg2, NULL, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -3988,42 +3998,53 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
             // TODO this kind of embedded reference needs to be tracked by the GC somehow?
             // Or maybe it's ok, since we've guarded on the function object?
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)f, Location::forArg(0)));
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)num_output_args, Location::forArg(1)));
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(2)));
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(3)));
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(4)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(1)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(2)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(3)));
 
-            // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
-            // to unpack some of the additional arguments:
-            // TODO if there's only one arg we could just pass it normally
-            RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
-            arg_vec.push_back(arg_array);
-            if (num_output_args >= 1)
-                arg_array->setAttr(0, rewrite_args->arg1);
-            if (num_output_args >= 2)
-                arg_array->setAttr(8, rewrite_args->arg2);
-            if (num_output_args >= 3)
-                arg_array->setAttr(16, rewrite_args->arg3);
-            if (num_output_args >= 4)
-                arg_array->setAttr(24, rewrite_args->args);
+            if (num_output_args <= 2) {
+                if (num_output_args >= 1)
+                    arg_vec.push_back(rewrite_args->arg1);
+                if (num_output_args >= 2)
+                    arg_vec.push_back(rewrite_args->arg2);
 
-            if (S == CXX)
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
-            else
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec);
+                if (S == CXX)
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretFunction, arg_vec);
+                else
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)astInterpretHelper2ArgsCapi, arg_vec);
+            } else {
+                // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
+                // to unpack some of the additional arguments:
+                RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
+                arg_vec.push_back(arg_array);
+                if (num_output_args >= 1)
+                    arg_array->setAttr(0, rewrite_args->arg1);
+                if (num_output_args >= 2)
+                    arg_array->setAttr(8, rewrite_args->arg2);
+                if (num_output_args >= 3)
+                    arg_array->setAttr(16, rewrite_args->arg3);
+                if (num_output_args >= 4)
+                    arg_array->setAttr(24, rewrite_args->args);
+
+                if (S == CXX)
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+                else
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec);
+            }
+
             rewrite_args->out_success = true;
         }
 
         if (S == CAPI) {
             try {
-                return astInterpretFunction(f, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
-                                            oargs);
+                return astInterpretFunction(f, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 return NULL;
             }
         } else {
-            return astInterpretFunction(f, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
+            return astInterpretFunction(f, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
         }
     }
 
