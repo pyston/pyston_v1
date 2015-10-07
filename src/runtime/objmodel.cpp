@@ -3229,14 +3229,10 @@ static llvm::StringRef getFunctionName(CLFunction* f) {
     return "<unknown function>";
 }
 
-enum class KeywordDest {
-    POSITIONAL,
-    KWARGS,
-};
 template <typename FuncNameCB>
-static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled,
-                                BoxedString* kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
-                                BoxedDict* okwargs, FuncNameCB func_name_cb) {
+static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled, BoxedString* kw_name,
+                        Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs, BoxedDict* okwargs,
+                        FuncNameCB func_name_cb) {
     assert(kw_val);
     assert(gc::isValidGCObject(kw_val));
     assert(kw_name);
@@ -3248,11 +3244,9 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
                 raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                                kw_name->c_str());
             }
-
             getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
             params_filled[j] = true;
-
-            return KeywordDest::POSITIONAL;
+            return j;
         }
     }
 
@@ -3263,7 +3257,7 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
                            kw_name->c_str());
         }
         v = kw_val;
-        return KeywordDest::KWARGS;
+        return -1;
     } else {
         raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name_cb(), kw_name->c_str());
     }
@@ -3274,7 +3268,7 @@ static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* a
                             void** extra_args) {
     Box** args = (Box**)extra_args[0];
     auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
-    return callFunc<S>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    return callFunc<S, NOT_REWRITABLE>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 typedef std::function<Box*(int, int, RewriterVar*&)> GetDefaultFunc;
@@ -3411,7 +3405,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
     slowpath_rearrangeargs_slowpath.log();
 
-    if (argspec.has_starargs || argspec.has_kwargs || argspec.num_keywords) {
+    if (argspec.has_starargs || argspec.has_kwargs || (paramspec.takes_kwargs && argspec.num_keywords)) {
         rewrite_args = NULL;
     }
 
@@ -3589,9 +3583,24 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     if (argspec.num_keywords) {
         assert(argspec.num_keywords == keyword_names->size());
 
+        RewriterVar::SmallVector r_vars;
+        if (rewrite_args) {
+            for (int i = argspec.num_args; i < argspec.num_args + argspec.num_keywords; i++) {
+                if (i == 0)
+                    r_vars.push_back(rewrite_args->arg1);
+                if (i == 1)
+                    r_vars.push_back(rewrite_args->arg2);
+                if (i == 2)
+                    r_vars.push_back(rewrite_args->arg3);
+                if (i >= 3)
+                    r_vars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+            }
+        }
+
         BoxedDict* okwargs = get_okwargs();
         for (int i = 0; i < argspec.num_keywords; i++) {
-            assert(!rewrite_args && "would need to be handled here");
+            if (rewrite_args)
+                assert(!okwargs && "would need to be handled here");
 
             int arg_idx = i + argspec.num_args;
             Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
@@ -3602,9 +3611,19 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 continue;
             }
 
-            auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3,
-                                     oargs, okwargs, func_name_cb);
-            assert(!rewrite_args);
+            int dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
+                                    okwargs, func_name_cb);
+            if (rewrite_args) {
+                assert(dest != -1);
+                if (dest == 0)
+                    rewrite_args->arg1 = r_vars[i];
+                else if (dest == 1)
+                    rewrite_args->arg2 = r_vars[i];
+                else if (dest == 2)
+                    rewrite_args->arg3 = r_vars[i];
+                else
+                    rewrite_args->args->setAttr((dest - 3) * sizeof(Box*), r_vars[i]);
+            }
         }
     }
 

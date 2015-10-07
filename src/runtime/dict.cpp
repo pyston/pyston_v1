@@ -633,7 +633,7 @@ void dictMerge(BoxedDict* self, Box* other) {
     assert(keys);
 
     for (Box* k : keys->pyElements()) {
-        self->d[k] = getitem(other, k);
+        self->d[k] = getitemInternal<CXX>(other, k);
     }
 }
 
