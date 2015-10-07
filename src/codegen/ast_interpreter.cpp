@@ -1729,12 +1729,8 @@ Box* astInterpretFunction(CLFunction* clfunc, Box* closure, Box* generator, Box*
     assert((!globals) == source_info->scoping->areGlobalsFromModule());
     bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER;
 
-    // If the cfg hasn't been computed yet, just conservatively say that it will be a big function.
-    // It shouldn't matter, since the cfg should only be NULL if this is the first execution of this
-    // function.
-    int num_blocks = source_info->cfg ? source_info->cfg->blocks.size() : 10000;
-    int threshold = num_blocks <= 20 ? (REOPT_THRESHOLD_BASELINE / 3) : REOPT_THRESHOLD_BASELINE;
-    if (unlikely(can_reopt && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || clfunc->times_interpreted > threshold))) {
+    if (unlikely(can_reopt
+                 && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || clfunc->times_interpreted > REOPT_THRESHOLD_BASELINE))) {
         clfunc->times_interpreted = 0;
 
         EffortLevel new_effort = EffortLevel::MODERATE;
