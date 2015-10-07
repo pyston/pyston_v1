@@ -1676,7 +1676,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     return bs;
 }
 
-static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
+static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) noexcept {
     BoxedString* a = static_cast<BoxedString*>(o);
     if (i < 0)
         i = 0;
@@ -1695,7 +1695,7 @@ static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
 }
 
 // Analoguous to CPython's, used for sq_ slots.
-static Py_ssize_t str_length(Box* a) {
+static Py_ssize_t str_length(Box* a) noexcept {
     return Py_SIZE(a);
 }
 
@@ -2284,11 +2284,12 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     return result;
 }
 
-static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) {
+static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) noexcept {
     BoxedString* boxedString = (BoxedString*)self;
 
     if (i < 0 || i >= boxedString->size()) {
-        raiseExcHelper(IndexError, "string index out of range");
+        PyErr_SetString(IndexError, "string index out of range");
+        return NULL;
     }
 
     char c = boxedString->s()[i];
