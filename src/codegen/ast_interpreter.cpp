@@ -1733,7 +1733,8 @@ Box* astInterpretFunction(CLFunction* clfunc, Box* closure, Box* generator, Box*
                  && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || clfunc->times_interpreted > REOPT_THRESHOLD_BASELINE))) {
         clfunc->times_interpreted = 0;
 
-        EffortLevel new_effort = EffortLevel::MODERATE;
+        // EffortLevel new_effort = EffortLevel::MODERATE;
+        EffortLevel new_effort = EffortLevel::MAXIMAL; // always use max opt (disabled moderate opt tier)
         if (FORCE_OPTIMIZE)
             new_effort = EffortLevel::MAXIMAL;
 
