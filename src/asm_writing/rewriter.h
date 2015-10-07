@@ -489,7 +489,8 @@ protected:
     void _slowpathJump(bool condition_eq);
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
-    void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm);
+    void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
+                    Location preserve = Location::any());
     void _call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                llvm::ArrayRef<RewriterVar*> args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
