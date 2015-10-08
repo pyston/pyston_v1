@@ -1631,6 +1631,11 @@ extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod
     RELEASE_ASSERT(false, "builtinFunctionOrMethodRepr not properly implemented");
 }
 
+static Box* builtinFunctionOrMethodCall(BoxedBuiltinFunctionOrMethod* self, Box* args, Box* kwargs) {
+    return runtimeCallInternal<CXX, NOT_REWRITABLE>(self, NULL, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL,
+                                                    NULL);
+}
+
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     if (!v->name)
         return (BoxedString*)PyString_FromFormat("<function <name_missing?> at %p>", v);
@@ -3940,6 +3945,9 @@ void setupRuntime() {
     builtin_function_or_method_cls->giveAttr(
         "__module__",
         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, modname)));
+    builtin_function_or_method_cls->giveAttr(
+        "__call__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodCall, UNKNOWN, 1, true, true)));
+
     builtin_function_or_method_cls->giveAttr(
         "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
     builtin_function_or_method_cls->giveAttr(
