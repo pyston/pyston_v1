@@ -2931,7 +2931,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
         val = getattrInternalEx<S, REWRITABLE>(obj, attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj,
                                                &r_bind_obj);
-        // TODO: maybe callattrs should have return conventions as well.
 
         if (!grewrite_args.isSuccessful())
             rewrite_args = NULL;
@@ -2939,6 +2938,12 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
             RewriterVar* rtn;
             ReturnConvention return_convention;
             std::tie(rtn, return_convention) = grewrite_args.getReturn();
+
+            if (S == CXX && return_convention == ReturnConvention::CAPI_RETURN) {
+                rewrite_args->rewriter->checkAndThrowCAPIException(rtn);
+                return_convention = ReturnConvention::HAS_RETURN;
+            }
+
             if (return_convention != ReturnConvention::HAS_RETURN && return_convention != ReturnConvention::NO_RETURN)
                 rewrite_args = NULL;
             else
