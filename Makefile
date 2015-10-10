@@ -1043,6 +1043,7 @@ $(FROM_CPYTHON_SRCS:.c=.prof.o): %.prof.o: %.c $(BUILD_SYSTEM_DEPS)
 .PHONY: update_section_ordering
 update_section_ordering: pyston_release
 	perf record -o perf_section_ordering.data -- ./pyston_release -q minibenchmarks/combined.py
+	perf record -o perf_section_ordering.data -- ./pyston_release -q minibenchmarks/combined.py
 	$(MAKE) pyston_pgo
 	python tools/generate_section_ordering_from_pgo_build.py pyston_pgo perf_section_ordering.data > section_ordering.txt
 	rm perf_section_ordering.data
