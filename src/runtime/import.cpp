@@ -35,7 +35,6 @@ namespace pyston {
 static const std::string all_str("__all__");
 static const std::string name_str("__name__");
 static const std::string package_str("__package__");
-static BoxedClass* null_importer_cls;
 
 static void removeModule(BoxedString* name) {
     BoxedDict* d = getSysModulesDict();
@@ -264,6 +263,18 @@ SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedLi
     }
 
     return SearchResult("", SearchResult::SEARCH_ERROR);
+}
+
+PyObject* PyImport_GetImporter(PyObject* path) noexcept {
+    PyObject* importer = NULL, * path_importer_cache = NULL, * path_hooks = NULL;
+
+    if ((path_importer_cache = PySys_GetObject("path_importer_cache"))) {
+        if ((path_hooks = PySys_GetObject("path_hooks"))) {
+            importer = get_path_importer(path_importer_cache, path_hooks, path);
+        }
+    }
+    Py_XINCREF(importer); /* get_path_importer returns a borrowed reference */
+    return importer;
 }
 
 /* Return the package that an import is being performed in.  If globals comes

@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <limits.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <stdint.h>
@@ -265,6 +266,29 @@ static int RunModule(const char* module, int set_argv0) {
     return 0;
 }
 
+static int RunMainFromImporter(const char* filename) {
+    PyObject* argv0 = NULL, * importer = NULL;
+
+    if ((argv0 = PyString_FromString(filename)) && (importer = PyImport_GetImporter(argv0))
+        && (importer->cls != null_importer_cls)) {
+        /* argv0 is usable as an import source, so
+               put it in sys.path[0] and import __main__ */
+        PyObject* sys_path = NULL;
+        if ((sys_path = PySys_GetObject("path")) && !PyList_SetItem(sys_path, 0, argv0)) {
+            Py_INCREF(argv0);
+            Py_DECREF(importer);
+            sys_path = NULL;
+            return RunModule("__main__", 0) != 0;
+        }
+    }
+    Py_XDECREF(argv0);
+    Py_XDECREF(importer);
+    if (PyErr_Occurred()) {
+        PyErr_Print();
+        return 1;
+    }
+    return -1;
+}
 
 static int main(int argc, char** argv) {
     argv0 = argv[0];
@@ -431,9 +455,14 @@ static int main(int argc, char** argv) {
             main_module = createModule(boxString("__main__"), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
+            main_module = createModule(boxString("__main__"), fn);
             rtncode = 0;
             if (fn != NULL) {
-                llvm::SmallString<128> path;
+                rtncode = RunMainFromImporter(fn);
+            }
+
+            if (rtncode == -1 && fn != NULL) {
+                llvm::SmallString<PATH_MAX> path;
 
                 if (!llvm::sys::fs::exists(fn)) {
                     fprintf(stderr, "[Errno 2] No such file or directory: '%s'\n", fn);
@@ -455,10 +484,10 @@ static int main(int argc, char** argv) {
                 prependToSysPath(real_path);
                 free(real_path);
 
-                main_module = createModule(boxString("__main__"), fn);
                 try {
                     AST_Module* ast = caching_parse_file(fn, /* future_flags = */ 0);
                     compileAndRunModule(ast, main_module);
+                    rtncode = 0;
                 } catch (ExcInfo e) {
                     setCAPIException(e);
                     PyErr_Print();
