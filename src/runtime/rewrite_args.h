@@ -55,14 +55,21 @@ private:
     bool out_success;
     RewriterVar* out_rtn;
     ReturnConvention out_return_convention;
+#ifndef NDEBUG
     bool return_convention_checked;
+#endif
 
 public:
     _ReturnConventionBase()
         : out_success(false),
           out_rtn(NULL),
-          out_return_convention(ReturnConvention::UNSPECIFIED),
-          return_convention_checked(false) {}
+          out_return_convention(ReturnConvention::UNSPECIFIED)
+#ifndef NDEBUG
+          ,
+          return_convention_checked(false)
+#endif
+    {
+    }
 
 #ifndef NDEBUG
     ~_ReturnConventionBase() {
@@ -112,13 +119,17 @@ public:
         out_success = false;
         out_rtn = NULL;
         out_return_convention = ReturnConvention::UNSPECIFIED;
+#ifndef NDEBUG
         return_convention_checked = false;
+#endif
     }
 
     RewriterVar* getReturn(ReturnConvention required_convention) {
         assert(isSuccessful());
         assert(this->out_return_convention == required_convention);
+#ifndef NDEBUG
         return_convention_checked = true;
+#endif
         return this->out_rtn;
     }
 
@@ -126,12 +137,16 @@ public:
         assert(isSuccessful());
         ASSERT(this->out_return_convention == required_convention, "user asked for convention %d but got %d",
                required_convention, this->out_return_convention);
+#ifndef NDEBUG
         return_convention_checked = true;
+#endif
     }
 
     std::pair<RewriterVar*, ReturnConvention> getReturn() {
         assert(isSuccessful());
+#ifndef NDEBUG
         return_convention_checked = true;
+#endif
         return std::make_pair(this->out_rtn, this->out_return_convention);
     }
 
