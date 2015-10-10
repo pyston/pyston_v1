@@ -70,8 +70,8 @@ struct Value {
     Value(Box* o, RewriterVar* var) : o(o), var(var) {}
 };
 
-Box* astInterpretFunction(CLFunction* f, int nargs, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args);
+Box* astInterpretFunction(CLFunction* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args);
 Box* astInterpretFunctionEval(CLFunction* cf, Box* globals, Box* boxedLocals);
 Box* astInterpretDeopt(CLFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state);
