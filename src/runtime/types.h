@@ -175,6 +175,12 @@ extern "C" void printFloat(double d);
 Box* objectStr(Box*);
 Box* objectRepr(Box*);
 
+void checkAndThrowCAPIException();
+void throwCAPIException() __attribute__((noreturn));
+void ensureCAPIExceptionSet();
+struct ExcInfo;
+void setCAPIException(const ExcInfo& e);
+
 // In Pyston, this is the same type as CPython's PyTypeObject (they are interchangeable, but we
 // use BoxedClass in Pyston wherever possible as a convention).
 class BoxedClass : public BoxVar {
@@ -387,6 +393,7 @@ public:
     // optimizations and inlining, creating a new one each time shouldn't have any cost.
     llvm::StringRef s() const { return llvm::StringRef(s_data, ob_size); };
 
+    long hash; // -1 means not yet computed
     char interned_state;
 
     char* data() { return s_data; }
@@ -430,6 +437,7 @@ public:
     // creates an uninitialized string of length n; useful for directly constructing into the string and avoiding
     // copies:
     static BoxedString* createUninitializedString(ssize_t n) { return new (n) BoxedString(n); }
+    static BoxedString* createUninitializedString(BoxedClass* cls, ssize_t n) { return new (cls, n) BoxedString(n); }
 
     // Gets a writeable pointer to the contents of a string.
     // Is only meant to be used with something just created from createUninitializedString(), though
@@ -447,6 +455,7 @@ private:
 };
 
 extern "C" size_t strHashUnboxed(BoxedString* self);
+extern "C" int64_t hashUnboxed(Box* obj);
 
 class BoxedInstanceMethod : public Box {
 public:
@@ -678,15 +687,33 @@ static_assert(offsetof(BoxedTuple, elts) == offsetof(PyTupleObject, ob_item), ""
 extern BoxedString* characters[UCHAR_MAX + 1];
 
 struct PyHasher {
-    size_t operator()(Box*) const;
+    size_t operator()(Box* b) const {
+        if (b->cls == str_cls) {
+            auto s = static_cast<BoxedString*>(b);
+            if (s->hash != -1)
+                return s->hash;
+            return strHashUnboxed(s);
+        }
+        return hashUnboxed(b);
+    }
 };
 
 struct PyEq {
-    bool operator()(Box*, Box*) const;
+    bool operator()(Box* lhs, Box* rhs) const {
+        int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
+        if (r == -1)
+            throwCAPIException();
+        return (bool)r;
+    }
 };
 
 struct PyLt {
-    bool operator()(Box*, Box*) const;
+    bool operator()(Box* lhs, Box* rhs) const {
+        int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
+        if (r == -1)
+            throwCAPIException();
+        return (bool)r;
+    }
 };
 
 // llvm::DenseMap doesn't store the original hash values, choosing to instead
@@ -1076,12 +1103,6 @@ AST* unboxAst(Box* b);
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
-
-void checkAndThrowCAPIException();
-void throwCAPIException() __attribute__((noreturn));
-void ensureCAPIExceptionSet();
-struct ExcInfo;
-void setCAPIException(const ExcInfo& e);
 
 #define fatalOrError(exception, message)                                                                               \
     do {                                                                                                               \

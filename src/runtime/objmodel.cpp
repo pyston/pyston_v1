@@ -120,45 +120,6 @@ static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope sc
     return callattrInternal<S, rewritable>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
 }
 
-#if STAT_TIMERS
-static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
-static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
-static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
-#endif
-size_t PyHasher::operator()(Box* b) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyhasher_timer_counter, 10);
-#endif
-    if (b->cls == str_cls) {
-        auto s = static_cast<BoxedString*>(b);
-        return strHashUnboxed(s);
-    }
-
-    return hashUnboxed(b);
-}
-
-bool PyEq::operator()(Box* lhs, Box* rhs) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyeq_timer_counter, 10);
-#endif
-
-    int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
-    if (r == -1)
-        throwCAPIException();
-    return (bool)r;
-}
-
-bool PyLt::operator()(Box* lhs, Box* rhs) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pylt_timer_counter, 10);
-#endif
-
-    int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
-    if (r == -1)
-        throwCAPIException();
-    return (bool)r;
-}
-
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
     STAT_TIMER(t0, "us_timer_deopt", 10);
 
