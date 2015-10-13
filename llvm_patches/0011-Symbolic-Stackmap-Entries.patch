@@ -1,15 +1,15 @@
-From a27e2f111d85c2e55c5a9672b9ef39494b4d7fd8 Mon Sep 17 00:00:00 2001
+From 43051cb630af1427f0cba1d432480985bf635210 Mon Sep 17 00:00:00 2001
 From: Marius Wachtler <undingen@gmail.com>
 Date: Wed, 15 Apr 2015 09:40:51 +0200
 Subject: [PATCH] Add support for symbolic entries in the stackmap constant
  table
 
 ---
- include/llvm/CodeGen/StackMaps.h                 | 18 ++++++++++--
+ include/llvm/CodeGen/StackMaps.h                 | 18 +++++++++--
  lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp |  9 ++++++
- lib/CodeGen/StackMaps.cpp                        | 36 +++++++++++++++++++++---
- test/CodeGen/X86/stackmap.ll                     | 26 +++++++++++++++--
- 4 files changed, 79 insertions(+), 10 deletions(-)
+ lib/CodeGen/StackMaps.cpp                        | 39 +++++++++++++++++++++---
+ test/CodeGen/X86/stackmap.ll                     | 26 ++++++++++++++--
+ 4 files changed, 82 insertions(+), 10 deletions(-)
 
 diff --git a/include/llvm/CodeGen/StackMaps.h b/include/llvm/CodeGen/StackMaps.h
 index 4e48afe..30cae3b 100644
@@ -89,7 +89,7 @@ index c0a8299..98cc692 100644
        Ops.push_back(OpVal);
    }
 diff --git a/lib/CodeGen/StackMaps.cpp b/lib/CodeGen/StackMaps.cpp
-index 0797d56..7151166 100644
+index 0797d56..3b9791a 100644
 --- a/lib/CodeGen/StackMaps.cpp
 +++ b/lib/CodeGen/StackMaps.cpp
 @@ -107,6 +107,16 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
@@ -129,7 +129,7 @@ index 0797d56..7151166 100644
 +      I->LocType = Location::ConstantIndex;
 +      auto Result = ConstSymPool.insert(std::make_pair(I->Sym, I->Sym));
 +      // The symbolic entries will be emitted after the ConstPool entries.
-+      I->Offset = ConstPool.size() + Result.first - ConstSymPool.begin();
++      I->Offset = Result.first - ConstSymPool.begin();
 +    }
 +  }
 +
@@ -159,7 +159,17 @@ index 0797d56..7151166 100644
  }
  
  /// Emit the callsite info for each callsite.
-@@ -511,7 +537,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS,
+@@ -429,6 +455,9 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS,
+     for (const auto &Loc : CSLocs) {
+       int RegNo = 0;
+       int Offset = Loc.Offset;
++      if(Loc.Sym)
++        Offset += ConstPool.size();
++
+       if(Loc.Reg) {
+         RegNo = getDwarfRegNum(Loc.Reg, TRI);
+         assert(RegNo >= 0 && "Invalid Dwarf register number.");
+@@ -511,7 +540,8 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS,
  void StackMaps::serializeToStackMapSection() {
    (void) WSMP;
    // Bail out if there's no stack map data.
@@ -169,7 +179,7 @@ index 0797d56..7151166 100644
           "Expected empty constant pool too!");
    assert((!CSInfos.empty() || (CSInfos.empty() && FnStackSize.empty())) &&
           "Expected empty function record too!");
-@@ -541,4 +568,5 @@ void StackMaps::serializeToStackMapSection() {
+@@ -541,4 +571,5 @@ void StackMaps::serializeToStackMapSection() {
    // Clean up.
    CSInfos.clear();
    ConstPool.clear();
@@ -243,5 +253,5 @@ index 5e356f3..59fa50f 100644
  }
  
 -- 
-2.1.0
+1.9.1
 
