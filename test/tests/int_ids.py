@@ -42,6 +42,14 @@ def f4(a, b):
 for i in xrange(11000):
     f4(1000, 1000)
 
+def f6():
+    for i in xrange(11000):
+        a = b = 1000
+        if True:
+            pass
+        f4(a, b)
+f6()
+
 
 # This applies to other data types as well.  (maybe should call this test file something else)
 def ident(x):
@@ -49,7 +57,7 @@ def ident(x):
 
 def f5():
     t = (1, 2, 3)
-    print ident(t) is t
+    assert ident(t) is t
 
 for i in xrange(10):
     f5()
