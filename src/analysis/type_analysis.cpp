@@ -57,12 +57,12 @@ ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(InternedString name, C
 
 
 // Note: the behavior of this function must match irgenerator.cpp::unboxVar()
-static ConcreteCompilerType* unboxedType(ConcreteCompilerType* t) {
+static CompilerType* unboxedType(ConcreteCompilerType* t) {
     if (t == BOXED_BOOL)
         return BOOL;
-#if ENABLE_UNBOXED_VALUES
     if (t == BOXED_INT)
         return INT;
+#if ENABLE_UNBOXED_VALUES
     if (t == BOXED_FLOAT)
         return FLOAT;
 #endif
@@ -117,17 +117,17 @@ private:
         assert(speculation != TypeAnalysis::NONE);
 
         if (speculated_cls != NULL && speculated_cls->is_constant) {
-            ConcreteCompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));
-            if (VERBOSITY() >= 2) {
-                printf("in propagator, speculating that %s would actually be %s, at ", old_type->debugName().c_str(),
-                       speculated_type->debugName().c_str());
-                fflush(stdout);
-                print_ast(node);
-                llvm::outs().flush();
-                printf("\n");
-            }
-
+            CompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));
             if (!old_type->canConvertTo(speculated_type)) {
+                if (VERBOSITY() >= 2) {
+                    printf("in propagator, speculating that %s would actually be %s, at ",
+                           old_type->debugName().c_str(), speculated_type->debugName().c_str());
+                    fflush(stdout);
+                    print_ast(node);
+                    llvm::outs().flush();
+                    printf("\n");
+                }
+
                 type_speculations[node] = speculated_cls;
                 return speculated_type;
             }
@@ -147,6 +147,7 @@ private:
         }
 
         expr_types[node] = rtn;
+        assert(rtn->isUsable());
         return rtn;
     }
 
@@ -163,10 +164,12 @@ private:
         }
 
         expr_types[node] = rtn;
+        assert(rtn->isUsable());
         return rtn;
     }
 
     void _doSet(InternedString target, CompilerType* t) {
+        assert(t->isUsable());
         if (t)
             sym_table[target] = t;
     }

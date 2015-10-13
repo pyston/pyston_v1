@@ -270,7 +270,7 @@ void setupXrange() {
         "__iter__", new BoxedFunction(boxRTFunction((void*)xrangeIterIter, typeFromClass(xrange_iterator_cls), 1)));
     xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1);
+    CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, UNBOXED_INT, 1);
     addRTFunction(next, (void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT);
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 
