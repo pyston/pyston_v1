@@ -67,7 +67,7 @@ test_compileall         [unknown]
 test_compiler           [unknown]
 test_compile            [unknown]
 test_cookie             [unknown]
-test_copy               [unknown]
+test_copy               Please debug this test in VM.
 test_cpickle            [unknown]
 test_cprofile           [unknown]
 test_crypt              [unknown]
@@ -173,7 +173,6 @@ test_pep352             various unique bugs
 test_pickletools        [unknown]
 test_pickle             unknown
 test_pkg                unknown bug
-test_platform           [unknown]
 test_poll               [unknown]
 test_poplib             [unknown]
 test_pprint             [unknown]
@@ -184,7 +183,6 @@ test_pyclbr             [unknown]
 test_py_compile         [unknown]
 test_pydoc              [unknown]
 test_random             long("invalid number")
-test_readline           [unknown]
 test_repr               complex.__hash__; some unknown issues
 test_resource           [unknown]
 test_richcmp            PyObject_Not

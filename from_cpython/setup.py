@@ -83,6 +83,12 @@ def curses_ext():
             ]), libraries = ['curses'])
 
 @unique
+def readline_ext():
+    return Extension("readline", sources = map(relpath, [
+            "Modules/readline.c",
+            ]))
+
+@unique
 def termios_ext():
     return Extension("termios", sources = map(relpath, [
             "Modules/termios.c",
@@ -142,6 +148,7 @@ ext_modules = [future_builtins_ext(),
                ctypes_test_ext(),
                grp_ext(),
                curses_ext(),
+               readline_ext(),
                termios_ext(),
                mmap_ext(),
                ]

@@ -123,6 +123,7 @@ add_custom_command(OUTPUT
                        ${CMAKE_BINARY_DIR}/lib_pyston/bz2.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_ctypes.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/grp.pyston.so
+                       ${CMAKE_BINARY_DIR}/lib_pyston/readline.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/termios.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/_curses.pyston.so
                        ${CMAKE_BINARY_DIR}/lib_pyston/mmap.pyston.so
@@ -149,6 +150,7 @@ add_custom_command(OUTPUT
                        Modules/_elementtree.c
 		       Modules/bz2module.c
 		       Modules/grpmodule.c
+		       Modules/readline.c
 		       Modules/termios.c
 		       Modules/_cursesmodule.c
 		       Modules/mmapmodule.c
