@@ -127,6 +127,17 @@ void Assembler::emitInt(int64_t n, int bytes) {
     ASSERT(n == 0 || n == -1, "%ld", n);
 }
 
+void Assembler::emitUInt(uint64_t n, int bytes) {
+    assert(bytes > 0 && bytes <= 8);
+    if (bytes < 8)
+        assert(n < ((1UL << (8 * bytes))));
+
+    for (int i = 0; i < bytes; i++) {
+        emitByte(n & 0xff);
+        n >>= 8;
+    }
+    ASSERT(n == 0, "%lu", n);
+}
 void Assembler::emitRex(uint8_t rex) {
     emitByte(rex | 0x40);
 }
@@ -167,7 +178,7 @@ void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
     if (rex)
         emitRex(rex);
     emitByte(0xb8 + dest_idx);
-    emitInt(val.val, force_64bit_load ? 8 : 4);
+    emitUInt(val.val, force_64bit_load ? 8 : 4);
 }
 
 void Assembler::movq(Immediate src, Indirect dest) {

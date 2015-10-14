@@ -83,6 +83,7 @@ private:
 private:
     void emitByte(uint8_t b);
     void emitInt(int64_t n, int bytes);
+    void emitUInt(uint64_t n, int bytes);
     void emitRex(uint8_t rex);
     void emitModRM(uint8_t mod, uint8_t reg, uint8_t rm);
     void emitSIB(uint8_t scalebits, uint8_t index, uint8_t base);

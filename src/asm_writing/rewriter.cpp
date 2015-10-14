@@ -270,6 +270,11 @@ void Rewriter::assertArgsInPlace() {
 void RewriterVar::addGuard(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    if (isConstant()) {
+        RELEASE_ASSERT(constant_value == val, "added guard which is always false");
+        return;
+    }
+
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
