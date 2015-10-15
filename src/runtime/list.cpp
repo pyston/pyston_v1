@@ -462,9 +462,7 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
 
         /* protect against a[::-1] = a */
         if (self == value) {
-            abort();
-            // seq = list_slice((PyListObject*)value, 0,
-            // PyList_GET_SIZE(value));
+            seq = list_slice(value, 0, PyList_GET_SIZE(value));
         } else {
             seq = PySequence_Fast(value, "must assign iterable "
                                          "to extended slice");
@@ -1021,13 +1019,16 @@ Box* listCount(BoxedList* self, Box* elt) {
     return boxInt(count);
 }
 
-Box* listIndex(BoxedList* self, Box* elt, BoxedInt* _start, Box** args) {
-    BoxedInt* _stop = (BoxedInt*)args[0];
-    RELEASE_ASSERT(!_start || _start->cls == int_cls, "");
-    RELEASE_ASSERT(!_stop || _stop->cls == int_cls, "");
+Box* listIndex(BoxedList* self, Box* elt, Box* _start, Box** args) {
+    Box* _stop = (BoxedInt*)args[0];
 
-    int64_t start = _start ? _start->n : 0;
-    int64_t stop = _stop ? _stop->n : self->size;
+    int64_t start = 0;
+    int64_t stop = self->size;
+
+    if (!_PyEval_SliceIndex(_start, &start))
+        throwCAPIException();
+    if (!_PyEval_SliceIndex(_stop, &stop))
+        throwCAPIException();
 
     if (start < 0) {
         start += self->size;

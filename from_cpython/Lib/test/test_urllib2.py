@@ -1,4 +1,3 @@
-# expected: fail
 import unittest
 from test import test_support
 
@@ -8,11 +7,6 @@ import StringIO
 
 import urllib2
 from urllib2 import Request, OpenerDirector
-
-try:
-    import ssl
-except ImportError:
-    ssl = None
 
 # XXX
 # Request
@@ -26,7 +20,7 @@ class TrivialTests(unittest.TestCase):
         self.assertRaises(ValueError, urllib2.urlopen, 'bogus url')
 
         # XXX Name hacking to get this to work on Windows.
-        fname = os.path.abspath(urllib2.__file__).replace(os.sep, '/')
+        fname = os.path.abspath(urllib2.__file__).replace('\\', '/')
 
         # And more hacking to get it to work on MacOS. This assumes
         # urllib.pathname2url works, unfortunately...
@@ -52,14 +46,6 @@ class TrivialTests(unittest.TestCase):
                  ('a="b\\"c", d="e\\,f", g="h\\\\i"', ['a="b"c"', 'd="e,f"', 'g="h\\i"'])]
         for string, list in tests:
             self.assertEqual(urllib2.parse_http_list(string), list)
-
-    @unittest.skipUnless(ssl, "ssl module required")
-    def test_cafile_and_context(self):
-        context = ssl.create_default_context()
-        with self.assertRaises(ValueError):
-            urllib2.urlopen(
-                "https://localhost", cafile="/nonexistent/path", context=context
-            )
 
 
 def test_request_headers_dict():

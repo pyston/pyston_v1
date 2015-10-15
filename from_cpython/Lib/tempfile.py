@@ -29,8 +29,7 @@ __all__ = [
 
 # Imports.
 
-# Pyston change: don't import io
-# import io as _io
+import io as _io
 import os as _os
 import errno as _errno
 from random import Random as _Random
@@ -198,10 +197,8 @@ def _get_default_tempdir():
                 fd = _os.open(filename, flags, 0o600)
                 try:
                     try:
-                        # Pyston change: simplify this so that it doesn't need the _io module:
-                        _os.write(fd, b'blat')
-                        # with _io.open(fd, 'wb', closefd=False) as fp:
-                            # fp.write(b'blat')
+                        with _io.open(fd, 'wb', closefd=False) as fp:
+                            fp.write(b'blat')
                     finally:
                         _os.close(fd)
                 finally:

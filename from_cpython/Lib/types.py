@@ -33,8 +33,7 @@ try:
 except NameError:
     StringTypes = (StringType,)
 
-# Pyston change: 'buffer' is not implemented yet
-# BufferType = buffer
+BufferType = buffer
 
 TupleType = tuple
 ListType = list
