@@ -799,7 +799,7 @@ private:
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
-                ConcreteCompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
+                CompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
                 obj->decvref(emitter);
                 return rtn;
             }
@@ -807,7 +807,7 @@ private:
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
-                ConcreteCompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
+                CompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
                 obj->decvref(emitter);
                 return rtn;
             }
@@ -1348,18 +1348,18 @@ private:
         CompilerVariable* operand = evalExpr(node->operand, unw_info);
 
         if (node->op_type == AST_TYPE::Not) {
-            ConcreteCompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, unw_info));
+            CompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, unw_info));
             operand->decvref(emitter);
 
             assert(rtn->getType() == BOOL);
-            llvm::Value* v = i1FromBool(emitter, rtn);
+            llvm::Value* v = i1FromBool(emitter, static_cast<ConcreteCompilerVariable*>(rtn));
             assert(v->getType() == g.i1);
 
             llvm::Value* negated = emitter.getBuilder()->CreateNot(v);
             rtn->decvref(emitter);
             return boolFromI1(emitter, negated);
         } else {
-            ConcreteCompilerVariable* rtn = operand->unaryop(emitter, getOpInfoForNode(node, unw_info), node->op_type);
+            CompilerVariable* rtn = operand->unaryop(emitter, getOpInfoForNode(node, unw_info), node->op_type);
             operand->decvref(emitter);
             return rtn;
         }
@@ -1517,19 +1517,13 @@ private:
     }
 
     // Note: the behavior of this function must match type_analysis.cpp:unboxedType()
-    ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
-#if ENABLE_UNBOXED_VALUES
+    CompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
         if (t == BOXED_INT) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
-            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(INT, unboxed, true);
-            return rtn;
+            return makeUnboxedInt(emitter, v);
         }
         if (t == BOXED_FLOAT) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v);
-            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
-            return rtn;
+            return makeUnboxedFloat(emitter, v);
         }
-#endif
         if (t == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
@@ -1548,7 +1542,7 @@ private:
 
             ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
             if (VERBOSITY("irgen") >= 2) {
-                printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
+                printf("Speculating that %s is actually %s, at ", rtn->getType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 fflush(stdout);
                 print_ast(node);
@@ -1580,6 +1574,7 @@ private:
         }
 
         assert(rtn);
+        assert(rtn->getType()->isUsable());
 
         return rtn;
     }
@@ -1728,6 +1723,7 @@ private:
     void _doSet(InternedString name, CompilerVariable* val, const UnwindInfo& unw_info) {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
+        assert(val->getType()->isUsable());
 
         auto scope_info = irstate->getScopeInfo();
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
@@ -2210,11 +2206,9 @@ private:
             ConcreteCompilerVariable* var = p.second->makeConverted(emitter, p.second->getConcreteType());
             converted_args.push_back(var);
 
-#if ENABLE_UNBOXED_VALUES
-            assert(var->getType() != BOXED_INT && "should probably unbox it, but why is it boxed in the first place?");
+            assert(var->getType() != BOXED_INT);
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
-#endif
 
             // This line can never get hit right now for the same reason that the variables must already be
             // concrete,
@@ -2438,13 +2432,13 @@ private:
 
     void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         assert(name.s() != FRAME_INFO_PTR_NAME);
-        ConcreteCompilerVariable* var = unboxVar(t, v, false);
+        CompilerVariable* var = unboxVar(t, v, false);
         _doSet(name, var, unw_info);
         var->decvref(emitter);
     }
 
     void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
-        ConcreteCompilerVariable* var = unboxVar(t, v, false);
+        CompilerVariable* var = unboxVar(t, v, false);
         _doSet(name, var, unw_info);
         var->decvref(emitter);
     }
@@ -2467,6 +2461,7 @@ private:
         std::map<InternedString, CompilerVariable*> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
         for (const auto& p : sorted_symbol_table) {
             assert(p.first.s() != FRAME_INFO_PTR_NAME);
+            assert(p.second->getType()->isUsable());
             if (allowableFakeEndingSymbol(p.first))
                 continue;
 
@@ -2483,6 +2478,7 @@ private:
             } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
                 assert(scope_info->getScopeTypeOfName(p.first) != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(p.first, myblock);
+                assert(phi_type->isUsable());
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
                 // printf("have to convert %s from %s to %s\n", p.first.c_str(),
@@ -2533,6 +2529,7 @@ private:
             } else {
                 // printf("no st entry, setting undefined\n");
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
+                assert(phi_type->isUsable());
                 cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()), true);
                 _setFake(defined_name, makeBool(0));
             }
@@ -2553,7 +2550,7 @@ public:
             pp->addFrameVar(PASSED_GLOBALS_NAME, UNKNOWN);
         }
 
-        assert(INT->llvmType() == g.i64);
+        assert(UNBOXED_INT->llvmType() == g.i64);
         if (ENABLE_JIT_OBJECT_CACHE) {
             llvm::Value* v;
             if (current_stmt)
@@ -2565,7 +2562,7 @@ public:
             stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
         }
 
-        pp->addFrameVar("!current_stmt", INT);
+        pp->addFrameVar("!current_stmt", UNBOXED_INT);
 
         if (ENABLE_FRAME_INTROSPECTION) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
@@ -2599,6 +2596,10 @@ public:
 
         // This should have been consumed:
         assert(incoming_exc_state.empty());
+
+        for (auto&& p : symbol_table) {
+            ASSERT(p.second->getType()->isUsable(), "%s", p.first.c_str());
+        }
 
         if (myblock->successors.size() == 0) {
             for (auto& p : *st) {
@@ -2645,6 +2646,7 @@ public:
                 } else {
                     ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                 }
+                assert(ending_type->isUsable());
                 //(*phi_st)[it->first] = it->second->makeConverted(emitter, it->second->getConcreteType());
                 // printf("%s %p %d\n", it->first.c_str(), it->second, it->second->getVrefs());
                 (*phi_st)[it->first] = it->second->split(emitter)->makeConverted(emitter, ending_type);
@@ -2661,10 +2663,9 @@ public:
         assert(name.s() != FRAME_INFO_PTR_NAME);
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
-#if ENABLE_UNBOXED_VALUES
-        assert(var->getType() != BOXED_INT);
-        assert(var->getType() != BOXED_FLOAT);
-#endif
+
+        ASSERT(var->getType()->isUsable(), "%s", name.c_str());
+
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = var;
@@ -2675,7 +2676,9 @@ public:
         DupCache cache;
         for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
             // printf("Copying in %s: %p, %d\n", it->first.c_str(), it->second, it->second->getVrefs());
+            // printf("Copying in %s, a %s\n", it->first.c_str(), it->second->getType()->debugName().c_str());
             symbol_table[it->first] = it->second->dup(cache);
+            assert(symbol_table[it->first]->getType()->isUsable());
             // printf("got: %p, %d\n", symbol_table[it->first], symbol_table[it->first]->getVrefs());
         }
     }

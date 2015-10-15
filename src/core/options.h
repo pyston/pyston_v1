@@ -51,12 +51,6 @@ extern bool ENABLE_ICS, ENABLE_ICGENERICS, ENABLE_ICGETITEMS, ENABLE_ICSETITEMS,
 extern bool BOOLS_AS_I64;
 
 #define ENABLE_SAMPLING_PROFILER 0
-
-// Our current implementation of unbox values has some minor compatibility issues, where it can
-// change the apparent id() / is-equality of a boxed value (by inserting extra unbox+box pairs).
-// I think it can be rescued (we need the unboxed compilertype to remember the boxed value),
-// but for now it's just turned off with this flag.
-#define ENABLE_UNBOXED_VALUES 0
 }
 }
 
