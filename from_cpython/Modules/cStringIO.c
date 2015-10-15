@@ -222,12 +222,13 @@ IO_creadline(PyObject *self, char **output) {
 }
 
 static PyObject *
-IO_readline(IOobject *self, PyObject *args) {
+IO_readline(IOobject *self, PyObject *m_obj) {
     int n, m=-1;
     char *output;
 
-    if (args)
-        if (!PyArg_ParseTuple(args, "|i:readline", &m)) return NULL;
+    // Pyston change:
+    if (m_obj)
+        if (!PyArg_ParseSingle(m_obj, 1, "readline", "i", &m)) return NULL;
 
     if( (n=IO_creadline((PyObject*)self,&output)) < 0) return NULL;
     if (m >= 0 && m < n) {
@@ -514,7 +515,7 @@ static struct PyMethodDef O_methods[] = {
   {"getvalue",  (PyCFunction)IO_getval,   METH_VARARGS, IO_getval__doc__},
   {"isatty",    (PyCFunction)IO_isatty,   METH_NOARGS,  IO_isatty__doc__},
   {"read",      (PyCFunction)IO_read,     METH_VARARGS, IO_read__doc__},
-  {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
+  {"readline",  (PyCFunction)IO_readline, /* Pyston change: */ METH_O | METH_D1, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
   {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},
@@ -621,7 +622,7 @@ static struct PyMethodDef I_methods[] = {
   {"getvalue",  (PyCFunction)IO_getval,   METH_VARARGS, IO_getval__doc__},
   {"isatty",    (PyCFunction)IO_isatty,   METH_NOARGS,  IO_isatty__doc__},
   {"read",      (PyCFunction)IO_read,     METH_VARARGS, IO_read__doc__},
-  {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
+  {"readline",  (PyCFunction)IO_readline, /* Pyston change: */ METH_O | METH_D1, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
   {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},

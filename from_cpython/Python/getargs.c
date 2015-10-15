@@ -569,8 +569,7 @@ float_argument_error(PyObject *arg)
         return 0;
 }
 
-int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, const char* format, ...) {
-    va_list va;
+int vgetsingle(PyObject* obj, int arg_idx, const char* fname, const char* format, va_list *v_pa, int flags) {
     char* msg;
     char msgbuf[256];
 
@@ -582,9 +581,7 @@ int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, cons
     assert(format[1] != '*'); // would need to pass a non-null freelist
     assert(format[0] != 'e'); // would need to pass a non-null freelist
 
-    va_start(va, format);
-    msg = convertsimple(obj, &format, &va, FLAG_SIZE_T, msgbuf, sizeof(msgbuf), NULL);
-    va_end(va);
+    msg = convertsimple(obj, &format, v_pa, flags, msgbuf, sizeof(msgbuf), NULL);
 
     if (msg) {
         int levels[1];
@@ -596,6 +593,26 @@ int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, cons
     // Should have consumed the entire format string:
     assert(format[0] == '\0');
     return 1;
+}
+
+int PyArg_ParseSingle(PyObject* obj, int arg_idx, const char* fname, const char* format, ...) {
+    va_list va;
+    va_start(va, format);
+
+    int r = vgetsingle(obj, arg_idx, fname, format, &va, 0);
+
+    va_end(va);
+    return r;
+}
+
+int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, const char* format, ...) {
+    va_list va;
+    va_start(va, format);
+
+    int r = vgetsingle(obj, arg_idx, fname, format, &va, FLAG_SIZE_T);
+
+    va_end(va);
+    return r;
 }
 
 /* Convert a non-tuple argument.  Return NULL if conversion went OK,
