@@ -418,8 +418,13 @@ CompilerVariable* makeInt(llvm::Value*);
 CompilerVariable* makeUnboxedInt(IREmitter&, ConcreteCompilerVariable*);
 CompilerVariable* makeUnboxedInt(IREmitter&, llvm::Value*);
 
+// Same for floats:
+CompilerVariable* makeFloat(llvm::Value*);
+CompilerVariable* makeFloat(double);
+CompilerVariable* makeUnboxedFloat(IREmitter&, ConcreteCompilerVariable*);
+CompilerVariable* makeUnboxedFloat(IREmitter&, llvm::Value*);
+
 ConcreteCompilerVariable* makeBool(bool);
-ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeLong(Box*);
 ConcreteCompilerVariable* makePureImaginary(Box*);
 CompilerVariable* makeStr(BoxedString*);

@@ -1521,13 +1521,9 @@ private:
         if (t == BOXED_INT) {
             return makeUnboxedInt(emitter, v);
         }
-#if ENABLE_UNBOXED_VALUES
         if (t == BOXED_FLOAT) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v);
-            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
-            return rtn;
+            return makeUnboxedFloat(emitter, v);
         }
-#endif
         if (t == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
@@ -2211,10 +2207,8 @@ private:
             converted_args.push_back(var);
 
             assert(var->getType() != BOXED_INT);
-#if ENABLE_UNBOXED_VALUES
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
-#endif
 
             // This line can never get hit right now for the same reason that the variables must already be
             // concrete,
@@ -2672,9 +2666,6 @@ public:
 
         ASSERT(var->getType()->isUsable(), "%s", name.c_str());
 
-#if ENABLE_UNBOXED_VALUES
-        assert(var->getType() != BOXED_FLOAT);
-#endif
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = var;

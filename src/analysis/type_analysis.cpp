@@ -62,10 +62,8 @@ static CompilerType* unboxedType(ConcreteCompilerType* t) {
         return BOOL;
     if (t == BOXED_INT)
         return INT;
-#if ENABLE_UNBOXED_VALUES
     if (t == BOXED_FLOAT)
         return FLOAT;
-#endif
     return t;
 }
 

@@ -973,14 +973,16 @@ public:
             CompilerVariable* box_duped = orig_v->boxed ? orig_v->boxed->dup(cache) : NULL;
             assert(!box_duped || box_duped->getType() == box_duped->getType()->getBoxType());
 
-            auto val = std::make_shared<Unboxed>( std::move(val_duped), static_cast<ConcreteCompilerVariable*>(box_duped) );
-            rtn = new VAR(this, val,
-                          var->isGrabbed());
+            auto val
+                = std::make_shared<Unboxed>(std::move(val_duped), static_cast<ConcreteCompilerVariable*>(box_duped));
+            rtn = new VAR(this, val, var->isGrabbed());
             while (rtn->getVrefs() < var->getVrefs())
                 rtn->incvref();
         }
         return rtn;
     }
+
+    ConcreteCompilerType* getConcreteType() override final { return this->getBoxType(); }
 
     bool canConvertTo(CompilerType* other_type) override final {
         return (other_type == this || other_type == UNKNOWN || other_type == this->getBoxType());
@@ -1062,8 +1064,6 @@ public:
 
     void _assertMatches(llvm::Value* v) { assert(v->getType() == g.i64); }
 
-    ConcreteCompilerType* getConcreteType() override { return BOXED_INT; }
-
     std::string debugName() override { return "int"; }
 
     CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
@@ -1097,8 +1097,8 @@ public:
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
             AbstractFunctionType::Sig* int__float_sig = new AbstractFunctionType::Sig();
-            int__float_sig->rtn_type = FLOAT;
-            int__float_sig->arg_types.push_back(FLOAT);
+            int__float_sig->rtn_type = UNBOXED_FLOAT;
+            int__float_sig->arg_types.push_back(UNBOXED_FLOAT);
             sigs.push_back(int__float_sig);
 
             AbstractFunctionType::Sig* unknown_sig = new AbstractFunctionType::Sig();
@@ -1208,7 +1208,7 @@ public:
                     return makeBool(op_type == AST_TYPE::IsNot);
 
                 llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(var->getValue()->val, g.double_);
-                auto converted_left = new ConcreteCompilerVariable(FLOAT, conv, true);
+                auto converted_left = makeFloat(conv);
                 return converted_left->binexp(emitter, info, rhs, op_type, exp_type);
             }
 
@@ -1316,6 +1316,11 @@ public:
     }
 
     void _serializeToFrame(llvm::Value* val, std::vector<llvm::Value*>& stackmap_args) { stackmap_args.push_back(val); }
+
+    static llvm::Value* extractInt(CompilerVariable* v) {
+        assert(v->getType() == INT);
+        return static_cast<VAR*>(v)->getValue()->val;
+    }
 } _INT;
 CompilerType* INT = &_INT;
 
@@ -1331,7 +1336,7 @@ CompilerVariable* makeInt(int64_t n) {
 CompilerVariable* makeUnboxedInt(IREmitter& emitter, ConcreteCompilerVariable* v) {
     assert(v->getType() == BOXED_INT);
     llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v->getValue());
-    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>( unboxed, v ), true);
+    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(unboxed, v), true);
 }
 
 CompilerVariable* makeUnboxedInt(IREmitter& emitter, llvm::Value* v) {
@@ -1339,31 +1344,30 @@ CompilerVariable* makeUnboxedInt(IREmitter& emitter, llvm::Value* v) {
     return makeUnboxedInt(emitter, new ConcreteCompilerVariable(BOXED_INT, v, false));
 }
 
-class FloatType : public ConcreteCompilerType {
+class FloatType : public UnboxedType<llvm::Value*, FloatType> {
 public:
     FloatType() {}
 
-    llvm::Type* llvmType() override { return g.double_; }
+    std::string debugName() override { return "float"; }
 
-    bool isFitBy(BoxedClass* c) override { return false; }
-
-    void drop(IREmitter& emitter, ConcreteCompilerVariable* var) override {
+    void _drop(IREmitter& emitter, llvm::Value* v) {
         // pass
     }
-    void grab(IREmitter& emitter, ConcreteCompilerVariable* var) override {
-        // pass
-    }
+
+    void _assertMatches(llvm::Value* v) { assert(v->getType() == g.double_); }
+
+    llvm::Value* _dup(llvm::Value* v, DupCache& cache) { return v; }
 
     CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
             AbstractFunctionType::Sig* float_sig = new AbstractFunctionType::Sig();
-            float_sig->rtn_type = FLOAT;
-            float_sig->arg_types.push_back(FLOAT);
+            float_sig->rtn_type = UNBOXED_FLOAT;
+            float_sig->arg_types.push_back(UNBOXED_FLOAT);
             sigs.push_back(float_sig);
 
             AbstractFunctionType::Sig* int_sig = new AbstractFunctionType::Sig();
-            int_sig->rtn_type = FLOAT;
+            int_sig->rtn_type = UNBOXED_FLOAT;
             int_sig->arg_types.push_back(UNBOXED_INT);
             sigs.push_back(int_sig);
 
@@ -1388,7 +1392,7 @@ public:
         return BOXED_FLOAT->getattrType(attr, cls_only);
     }
 
-    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
+    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
                               bool cls_only) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
@@ -1396,8 +1400,8 @@ public:
         return rtn;
     }
 
-    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
-                               CallattrFlags flags, const std::vector<CompilerVariable*>& args,
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr, CallattrFlags flags,
+                               const std::vector<CompilerVariable*>& args,
                                const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
@@ -1419,35 +1423,27 @@ public:
         call.setDoesNotReturn();
     }
 
-    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
-                                            ConcreteCompilerType* other_type) override {
-        if (other_type == this) {
-            var->incvref();
-            return var;
-        } else if (other_type == UNKNOWN || other_type == BOXED_FLOAT) {
-            llvm::Value* unboxed = var->getValue();
-            llvm::Value* boxed;
-            if (llvm::ConstantFP* llvm_val = llvm::dyn_cast<llvm::ConstantFP>(unboxed)) {
-                // Will this ever hit the cache?
-                boxed = embedRelocatablePtr(emitter.getFloatConstant(llvm_val->getValueAPF().convertToDouble()),
-                                            g.llvm_value_type_ptr);
-            } else {
-                boxed = emitter.getBuilder()->CreateCall(g.funcs.boxFloat, var->getValue());
-            }
-            return new ConcreteCompilerVariable(other_type, boxed, true);
+    ConcreteCompilerVariable* _makeConverted(IREmitter& emitter, llvm::Value* unboxed,
+                                             ConcreteCompilerType* other_type) {
+        assert(other_type == BOXED_FLOAT);
+        llvm::Value* boxed;
+        if (llvm::ConstantFP* llvm_val = llvm::dyn_cast<llvm::ConstantFP>(unboxed)) {
+            // Will this ever hit the cache?
+            boxed = embedRelocatablePtr(emitter.getFloatConstant(llvm_val->getValueAPF().convertToDouble()),
+                                        g.llvm_value_type_ptr);
         } else {
-            printf("Don't know how to convert float to %s\n", other_type->debugName().c_str());
-            abort();
+            boxed = emitter.getBuilder()->CreateCall(g.funcs.boxFloat, unboxed);
         }
+        return new ConcreteCompilerVariable(other_type, boxed, true);
     }
 
-    ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        llvm::Value* cmp = emitter.getBuilder()->CreateFCmpUNE(var->getValue(), llvm::ConstantFP::get(g.double_, 0));
+    ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) override {
+        llvm::Value* cmp
+            = emitter.getBuilder()->CreateFCmpUNE(var->getValue()->val, llvm::ConstantFP::get(g.double_, 0));
         return boolFromI1(emitter, cmp);
     }
 
-    CompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                              AST_TYPE::AST_TYPE op_type) override {
+    CompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, VAR* var, AST_TYPE::AST_TYPE op_type) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         auto rtn = converted->unaryop(emitter, info, op_type);
         converted->decvref(emitter);
@@ -1463,6 +1459,8 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        assert(rhs->getType() != UNBOXED_FLOAT); // we could handle this here but it shouldn't happen
+
         if (rhs->getType() != INT && rhs->getType() != FLOAT) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
             CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
@@ -1470,33 +1468,28 @@ public:
             return rtn;
         }
 
-        ConcreteCompilerVariable* converted_right;
+        llvm::Value* rhs_val;
         if (rhs->getType() == FLOAT) {
-            converted_right = rhs->makeConverted(emitter, FLOAT);
+            rhs_val = static_cast<FloatType::VAR*>(rhs)->getValue()->val;
         } else {
             if (op_type == AST_TYPE::IsNot || op_type == AST_TYPE::Is)
                 return makeBool(op_type == AST_TYPE::IsNot);
 
             assert(rhs->getType() == INT);
-            llvm::Value* right_val = static_cast<IntType::VAR*>(rhs)->getValue()->val;
-            llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(right_val, g.double_);
-            converted_right = new ConcreteCompilerVariable(FLOAT, conv, true);
+            llvm::Value* right_val = IntType::extractInt(rhs);
+            rhs_val = emitter.getBuilder()->CreateSIToFP(right_val, g.double_);
         }
 
         llvm::Value* v;
         bool succeeded = true;
         if (op_type == AST_TYPE::Mod) {
-            v = emitter.createCall2(info.unw_info, g.funcs.mod_float_float, var->getValue(),
-                                    converted_right->getValue());
+            v = emitter.createCall2(info.unw_info, g.funcs.mod_float_float, var->getValue()->val, rhs_val);
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::TrueDiv) {
-            v = emitter.createCall2(info.unw_info, g.funcs.div_float_float, var->getValue(),
-                                    converted_right->getValue());
+            v = emitter.createCall2(info.unw_info, g.funcs.div_float_float, var->getValue()->val, rhs_val);
         } else if (op_type == AST_TYPE::FloorDiv) {
-            v = emitter.createCall2(info.unw_info, g.funcs.floordiv_float_float, var->getValue(),
-                                    converted_right->getValue());
+            v = emitter.createCall2(info.unw_info, g.funcs.floordiv_float_float, var->getValue()->val, rhs_val);
         } else if (op_type == AST_TYPE::Pow) {
-            v = emitter.createCall2(info.unw_info, g.funcs.pow_float_float, var->getValue(),
-                                    converted_right->getValue());
+            v = emitter.createCall2(info.unw_info, g.funcs.pow_float_float, var->getValue()->val, rhs_val);
         } else if (exp_type == BinOp || exp_type == AugBinOp) {
             llvm::Instruction::BinaryOps binopcode;
             switch (op_type) {
@@ -1523,7 +1516,7 @@ public:
             }
 
             if (succeeded) {
-                v = emitter.getBuilder()->CreateBinOp(binopcode, var->getValue(), converted_right->getValue());
+                v = emitter.getBuilder()->CreateBinOp(binopcode, var->getValue()->val, rhs_val);
             }
         } else {
             assert(exp_type == Compare);
@@ -1554,13 +1547,12 @@ public:
                     abort();
                     break;
             }
-            v = emitter.getBuilder()->CreateFCmp(cmp_pred, var->getValue(), converted_right->getValue());
+            v = emitter.getBuilder()->CreateFCmp(cmp_pred, var->getValue()->val, rhs_val);
         }
-        converted_right->decvref(emitter);
 
         if (succeeded) {
             if (v->getType() == g.double_) {
-                return new ConcreteCompilerVariable(FLOAT, v, true);
+                return makeFloat(v);
             } else {
                 return boolFromI1(emitter, v);
             }
@@ -1582,14 +1574,18 @@ public:
 
     ConcreteCompilerType* getBoxType() override { return BOXED_FLOAT; }
 
-    Box* deserializeFromFrame(const FrameVals& vals) override {
+    int _numFrameArgs() { return 1; }
+
+    void _serializeToFrame(llvm::Value* v, std::vector<llvm::Value*>& stackmap_args) { stackmap_args.push_back(v); }
+
+    Box* _deserializeFromFrame(const FrameVals& vals) {
         assert(vals.size() == 1);
 
         double d = *reinterpret_cast<const double*>(&vals[0]);
         return boxFloat(d);
     }
 } _FLOAT;
-ConcreteCompilerType* FLOAT = &_FLOAT;
+CompilerType* FLOAT = &_FLOAT;
 
 class PhonyUnboxedType : public ConcreteCompilerType {
 private:
@@ -1601,9 +1597,7 @@ public:
 
     std::string debugName() { return "phony(" + ConcreteCompilerType::debugName() + ")"; }
 
-    CompilerType* getUsableType() override {
-        return usable_type;
-    }
+    CompilerType* getUsableType() override { return usable_type; }
 
     llvm::Type* llvmType() override { return t; }
 
@@ -1611,10 +1605,28 @@ public:
 };
 
 ConcreteCompilerType* UNBOXED_INT = new PhonyUnboxedType(llvm::Type::getInt64Ty(llvm::getGlobalContext()), INT);
+ConcreteCompilerType* UNBOXED_FLOAT = new PhonyUnboxedType(llvm::Type::getDoubleTy(llvm::getGlobalContext()), FLOAT);
 
-ConcreteCompilerVariable* makeFloat(double d) {
-    return new ConcreteCompilerVariable(FLOAT, llvm::ConstantFP::get(g.double_, d), true);
+CompilerVariable* makeFloat(llvm::Value* n) {
+    assert(n->getType() == g.double_);
+    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(n, nullptr), true);
 }
+
+CompilerVariable* makeFloat(double n) {
+    return makeFloat(llvm::ConstantFP::get(g.double_, n));
+}
+
+CompilerVariable* makeUnboxedFloat(IREmitter& emitter, ConcreteCompilerVariable* v) {
+    assert(v->getType() == BOXED_FLOAT);
+    llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v->getValue());
+    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(unboxed, v), true);
+}
+
+CompilerVariable* makeUnboxedFloat(IREmitter& emitter, llvm::Value* v) {
+    assert(v->getType() == g.llvm_value_type_ptr);
+    return makeUnboxedFloat(emitter, new ConcreteCompilerVariable(BOXED_FLOAT, v, false));
+}
+
 
 ConcreteCompilerVariable* makeLong(Box* v) {
     return new ConcreteCompilerVariable(LONG, embedRelocatablePtr(v, g.llvm_value_type_ptr), true);
@@ -1937,12 +1949,9 @@ public:
         if (rtn_type == UNBOXED_INT) {
             return makeInt(rtn->getValue());
         }
-#if ENABLE_UNBOXED_VALUES
         if (rtn_type == BOXED_FLOAT) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, rtn->getValue());
-            return new ConcreteCompilerVariable(FLOAT, unboxed, true);
+            return makeUnboxedFloat(emitter, rtn);
         }
-#endif
 
         return rtn;
     }
@@ -2500,13 +2509,12 @@ public:
 
     ConcreteCompilerType* getBoxType() override { return BOXED_TUPLE; }
 
-    ConcreteCompilerType* getConcreteType() override { return BOXED_TUPLE; }
-
     static TupleType* make(const std::vector<CompilerType*>& elt_types) { return new TupleType(elt_types); }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
+        assert(slice->getType() != UNBOXED_INT);
         if (slice->getType() == INT) {
-            llvm::Value* v = static_cast<ConcreteCompilerVariable*>(slice)->getValue();
+            llvm::Value* v = IntType::extractInt(slice);
             assert(v->getType() == g.i64);
             if (llvm::ConstantInt* ci = llvm::dyn_cast<llvm::ConstantInt>(v)) {
                 int64_t i = ci->getSExtValue();
