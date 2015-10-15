@@ -120,45 +120,6 @@ static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope sc
     return callattrInternal<S, rewritable>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
 }
 
-#if STAT_TIMERS
-static uint64_t* pyhasher_timer_counter = Stats::getStatCounter("us_timer_PyHasher");
-static uint64_t* pyeq_timer_counter = Stats::getStatCounter("us_timer_PyEq");
-static uint64_t* pylt_timer_counter = Stats::getStatCounter("us_timer_PyLt");
-#endif
-size_t PyHasher::operator()(Box* b) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyhasher_timer_counter, 10);
-#endif
-    if (b->cls == str_cls) {
-        auto s = static_cast<BoxedString*>(b);
-        return strHashUnboxed(s);
-    }
-
-    return hashUnboxed(b);
-}
-
-bool PyEq::operator()(Box* lhs, Box* rhs) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pyeq_timer_counter, 10);
-#endif
-
-    int r = PyObject_RichCompareBool(lhs, rhs, Py_EQ);
-    if (r == -1)
-        throwCAPIException();
-    return (bool)r;
-}
-
-bool PyLt::operator()(Box* lhs, Box* rhs) const {
-#if EXPENSIVE_STAT_TIMERS
-    ScopedStatTimer _st(pylt_timer_counter, 10);
-#endif
-
-    int r = PyObject_RichCompareBool(lhs, rhs, Py_LT);
-    if (r == -1)
-        throwCAPIException();
-    return (bool)r;
-}
-
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
     STAT_TIMER(t0, "us_timer_deopt", 10);
 
@@ -465,7 +426,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     tp_weaklistoffset = weaklist_offset;
     tp_name = name;
 
-    tp_flags |= Py_TPFLAGS_DEFAULT_EXTERNAL;
+    tp_flags |= Py_TPFLAGS_DEFAULT_CORE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
     tp_flags |= Py_TPFLAGS_HAVE_GC;
@@ -574,6 +535,7 @@ void BoxedClass::finishInitialization() {
     this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
+    tp_flags |= Py_TPFLAGS_READY;
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
@@ -987,13 +949,75 @@ extern "C" PyObject* _PyType_Lookup(PyTypeObject* type, PyObject* name) noexcept
     }
 }
 
+#define MCACHE_MAX_ATTR_SIZE 100
+#define MCACHE_SIZE_EXP 10
+#define MCACHE_HASH(version, name_hash)                                                                                \
+    (((unsigned int)(version) * (unsigned int)(name_hash)) >> (8 * sizeof(unsigned int) - MCACHE_SIZE_EXP))
+#define MCACHE_HASH_METHOD(type, name) MCACHE_HASH((type)->tp_version_tag, ((BoxedString*)(name))->hash)
+#define MCACHE_CACHEABLE_NAME(name) PyString_CheckExact(name) && PyString_GET_SIZE(name) <= MCACHE_MAX_ATTR_SIZE
+
+struct method_cache_entry {
+    unsigned int version;
+    PyObject* name;  /* reference to exactly a str or None */
+    PyObject* value; /* borrowed */
+};
+
+static struct method_cache_entry method_cache[1 << MCACHE_SIZE_EXP];
+static unsigned int next_version_tag = 0;
+
+int assign_version_tag(PyTypeObject* type) noexcept {
+    /* Ensure that the tp_version_tag is valid and set
+       Py_TPFLAGS_VALID_VERSION_TAG.  To respect the invariant, this
+       must first be done on all super classes.  Return 0 if this
+       cannot be done, 1 if Py_TPFLAGS_VALID_VERSION_TAG.
+    */
+    Py_ssize_t i, n;
+    PyObject* bases;
+
+    if (PyType_HasFeature(type, Py_TPFLAGS_VALID_VERSION_TAG))
+        return 1;
+    if (!PyType_HasFeature(type, Py_TPFLAGS_HAVE_VERSION_TAG))
+        return 0;
+    if (!PyType_HasFeature(type, Py_TPFLAGS_READY))
+        return 0;
+
+    type->tp_version_tag = next_version_tag++;
+    /* for stress-testing: next_version_tag &= 0xFF; */
+
+    if (type->tp_version_tag == 0) {
+        /* wrap-around or just starting Python - clear the whole
+           cache by filling names with references to Py_None.
+           Values are also set to NULL for added protection, as they
+           are borrowed reference */
+        for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
+            method_cache[i].value = NULL;
+            Py_XDECREF(method_cache[i].name);
+            method_cache[i].name = Py_None;
+            Py_INCREF(Py_None);
+        }
+        /* mark all version tags as invalid */
+        PyType_Modified(&PyBaseObject_Type);
+        return 1;
+    }
+    bases = type->tp_bases;
+    n = PyTuple_GET_SIZE(bases);
+    for (i = 0; i < n; i++) {
+        PyObject* b = PyTuple_GET_ITEM(bases, i);
+        assert(PyType_Check(b));
+        if (!assign_version_tag((PyTypeObject*)b))
+            return 0;
+    }
+    type->tp_flags |= Py_TPFLAGS_VALID_VERSION_TAG;
+    return 1;
+}
+
 template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
     }
 
-    Box* val;
+    Box* val = NULL;
 
     if (rewrite_args) {
         assert(!rewrite_args->isSuccessful());
@@ -1048,6 +1072,17 @@ template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* a
         assert(attr->interned_state != SSTATE_NOT_INTERNED);
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
+
+        if (MCACHE_CACHEABLE_NAME(attr) && PyType_HasFeature(cls, Py_TPFLAGS_VALID_VERSION_TAG)) {
+            if (attr->hash == -1)
+                strHashUnboxed(attr);
+
+            /* fast path */
+            unsigned int h = MCACHE_HASH_METHOD(cls, attr);
+            if (method_cache[h].version == cls->tp_version_tag && method_cache[h].name == attr)
+                return method_cache[h].value;
+        }
+
         for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
             // object_cls will get checked very often, but it only
             // has attributes that start with an underscore.
@@ -1060,9 +1095,18 @@ template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* a
 
             val = b->getattr(attr);
             if (val)
-                return val;
+                break;
         }
-        return NULL;
+
+        if (MCACHE_CACHEABLE_NAME(attr) && assign_version_tag(cls)) {
+            unsigned int h = MCACHE_HASH_METHOD(cls, attr);
+            method_cache[h].version = cls->tp_version_tag;
+            method_cache[h].value = val; /* borrowed */
+            Py_INCREF(attr);
+            Py_DECREF(method_cache[h].name);
+            method_cache[h].name = attr;
+        }
+        return val;
     }
 }
 template Box* typeLookup<REWRITABLE>(BoxedClass*, BoxedString*, GetattrRewriteArgs*);
@@ -2321,6 +2365,10 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
+
+        // update_slot() calls PyType_Modified() internally so we only have to explicitly call it inside the IC
+        if (rewrite_args)
+            rewrite_args->rewriter->call(true, (void*)PyType_Modified, rewrite_args->obj);
     }
 }
 

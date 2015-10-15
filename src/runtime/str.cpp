@@ -55,33 +55,33 @@ namespace pyston {
 BoxedString* EmptyString;
 BoxedString* characters[UCHAR_MAX + 1];
 
-BoxedString::BoxedString(const char* s, size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(const char* s, size_t n) : hash(-1), interned_state(SSTATE_NOT_INTERNED) {
     assert(s);
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
-    memmove(data(), s, n);
+    memcpy(data(), s, n);
     data()[n] = 0;
 }
 
-BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : hash(-1), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(lhs.size() + rhs.size() != llvm::StringRef::npos, "");
-    memmove(data(), lhs.data(), lhs.size());
-    memmove(data() + lhs.size(), rhs.data(), rhs.size());
+    memcpy(data(), lhs.data(), lhs.size());
+    memcpy(data() + lhs.size(), rhs.data(), rhs.size());
     data()[lhs.size() + rhs.size()] = 0;
 }
 
-BoxedString::BoxedString(llvm::StringRef s) : interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(llvm::StringRef s) : hash(-1), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(s.size() != llvm::StringRef::npos, "");
-    memmove(data(), s.data(), s.size());
+    memcpy(data(), s.data(), s.size());
     data()[s.size()] = 0;
 }
 
-BoxedString::BoxedString(size_t n, char c) : interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(size_t n, char c) : hash(-1), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
     data()[n] = 0;
 }
 
-BoxedString::BoxedString(size_t n) : interned_state(SSTATE_NOT_INTERNED) {
+BoxedString::BoxedString(size_t n) : hash(-1), interned_state(SSTATE_NOT_INTERNED) {
     RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     // Note: no memset.  add the null-terminator for good measure though
     // (CPython does the same thing).
@@ -1586,13 +1586,15 @@ extern "C" size_t strHashUnboxed(BoxedString* self) {
 #ifdef Py_DEBUG
     assert(_Py_HashSecret_Initialized);
 #endif
-
+    if (self->hash != -1)
+        return self->hash;
     long len = Py_SIZE(self);
     /*
       We make the hash of the empty string be 0, rather than using
       (prefix ^ suffix), since this slightly obfuscates the hash secret
     */
     if (len == 0) {
+        self->hash = 0;
         return 0;
     }
     p = self->s().data();
@@ -1604,7 +1606,7 @@ extern "C" size_t strHashUnboxed(BoxedString* self) {
     x ^= _Py_HashSecret.suffix;
     if (x == -1)
         x = -2;
-
+    self->hash = x;
     return x;
 }
 
@@ -1661,6 +1663,11 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
 
     if (length == 0)
         return EmptyString;
+
+    if (length == 1) {
+        char c = self->s()[start];
+        return characters[c & UCHAR_MAX];
+    }
 
     BoxedString* bs = BoxedString::createUninitializedString(length);
     copySlice(bs->data(), s.data(), start, step, length);
@@ -2531,19 +2538,18 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     if (newsize < s->size()) {
         // XXX resize the box (by reallocating) smaller if it makes sense
         s->ob_size = newsize;
+        s->hash = -1; /* invalidate cached hash value */
         s->data()[newsize] = 0;
         return 0;
     }
 
     BoxedString* resized;
-
     if (s->cls == str_cls)
-        resized = new (newsize) BoxedString(newsize, 0); // we need an uninitialized string, but this will memset
+        resized = BoxedString::createUninitializedString(newsize);
     else
-        resized = new (s->cls, newsize)
-            BoxedString(newsize, 0); // we need an uninitialized string, but this will memset
-    memmove(resized->data(), s->data(), s->size());
-
+        resized = BoxedString::createUninitializedString(s->cls, newsize);
+    memcpy(resized->data(), s->data(), s->size());
+    resized->data()[newsize] = 0;
     *pv = resized;
     return 0;
 }
