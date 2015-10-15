@@ -161,11 +161,19 @@ cleanup_buffer(PyObject *self)
     }
 }
 
+// A special cleanup "list" that specifies that we don't need to keep track of cleanups.
+// This is useful for vgetsingle, where there are no partial-failure cases that require
+// keeping track of cleanups.
+#define NOCLEANUP ((PyObject**)1)
+
 static int
 addcleanup(void *ptr, PyObject **freelist, PyCapsule_Destructor destr)
 {
     PyObject *cobj;
     const char *name;
+
+    if (freelist == NOCLEANUP)
+        return 0;
 
     if (!*freelist) {
         *freelist = PyList_New(0);
@@ -576,12 +584,8 @@ int vgetsingle(PyObject* obj, int arg_idx, const char* fname, const char* format
     assert(format[0] != '\0');
     assert(format[0] != '(');
     assert(format[0] != '|');
-    assert(format[0] != '|');
 
-    assert(format[1] != '*'); // would need to pass a non-null freelist
-    assert(format[0] != 'e'); // would need to pass a non-null freelist
-
-    msg = convertsimple(obj, &format, v_pa, flags, msgbuf, sizeof(msgbuf), NULL);
+    msg = convertsimple(obj, &format, v_pa, flags, msgbuf, sizeof(msgbuf), NOCLEANUP);
 
     if (msg) {
         int levels[1];
