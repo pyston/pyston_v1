@@ -88,6 +88,7 @@ extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" Box* getitem_capi(Box* value, Box* slice) noexcept;
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
+extern "C" PyObject* apply_slice(PyObject* u, PyObject* v, PyObject* w) noexcept;
 extern "C" Box* getclsattr(Box* obj, BoxedString* attr);
 extern "C" Box* getclsattrMaybeNonstring(Box* obj, Box* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);

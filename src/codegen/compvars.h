@@ -411,6 +411,8 @@ public:
 // Emit the test for whether one variable 'is' another one.
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate);
 
+ConcreteCompilerVariable* getNone();
+
 // These functions all return an INT variable, from either an unboxed representation (makeInt) or
 // a boxed representation (makeUnboxedInt)
 CompilerVariable* makeInt(int64_t);
@@ -429,6 +431,13 @@ ConcreteCompilerVariable* makeLong(Box*);
 ConcreteCompilerVariable* makePureImaginary(Box*);
 CompilerVariable* makeStr(BoxedString*);
 CompilerVariable* makeUnicode(Box*);
+
+struct UnboxedSlice {
+    CompilerVariable* start, *stop, *step;
+};
+CompilerVariable* makeSlice(CompilerVariable* start, CompilerVariable* stop, CompilerVariable* step);
+UnboxedSlice extractSlice(CompilerVariable* slice);
+
 #if 0
 CompilerVariable* makeUnicode(IREmitter& emitter, llvm::StringRef);
 #endif

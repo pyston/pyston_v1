@@ -163,9 +163,9 @@ print unicodestr[-2:]
 # Calling the slice operator directly does not have the same behavior
 # as using the slice notation []. Namely, it will not modify negative
 # indices.
-print numbers.__getslice__(0, -1);
-print letters.__getslice__(0, -1);
-print unicodestr.__getslice__(0, -1);
+print numbers.__getslice__(0, -1)
+print letters.__getslice__(0, -1)
+print unicodestr.__getslice__(0, -1)
 
 # Other
 class C(object):
@@ -188,3 +188,9 @@ C()[:,:]
 C()[1:2,3:4]
 C()[1:2:3,3:4:5]
 
+# Regression test:
+def f(i):
+    for j in [1, 2, 3][::2]:
+        pass
+for i in xrange(100000):
+    f(i)

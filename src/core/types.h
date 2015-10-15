@@ -96,7 +96,7 @@ ConcreteCompilerType* typeFromClass(BoxedClass*);
 extern ConcreteCompilerType* UNBOXED_INT, *BOXED_INT, *LONG, *UNBOXED_FLOAT, *BOXED_FLOAT, *UNKNOWN, *BOOL, *STR, *NONE,
     *LIST, *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR,
     *BOXED_COMPLEX, *FRAME_INFO;
-extern CompilerType* UNDEF, *INT, *FLOAT;
+extern CompilerType* UNDEF, *INT, *FLOAT, *UNBOXED_SLICE;
 
 class CompilerVariable;
 template <class V> class ValuedCompilerVariable;
