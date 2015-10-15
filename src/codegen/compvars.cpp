@@ -2127,7 +2127,7 @@ public:
     }
 };
 std::unordered_map<BoxedClass*, NormalObjectType*> NormalObjectType::made;
-ConcreteCompilerType* STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE, *ELLIPSIS;
+ConcreteCompilerType* STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE;
 
 class ClosureType : public ConcreteCompilerType {
 public:
