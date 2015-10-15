@@ -619,7 +619,7 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
                 assembler::Register dest_reg = dest.asRegister();
                 assert(dest_reg != reg); // should have been caught by the previous case
 
-                rewriter->allocReg(dest);
+                rewriter->allocReg(dest, otherThan);
 
                 rewriter->assembler->mov(reg, dest_reg);
                 rewriter->addLocationToVar(this, dest_reg);
@@ -858,7 +858,7 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
 }
 
 void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args,
-                          llvm::ArrayRef<RewriterVar*> args_xmm) {
+                          llvm::ArrayRef<RewriterVar*> args_xmm, Location preserve) {
     if (has_side_effects)
         assert(done_guarding);
 
@@ -879,7 +879,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
         if (!marked_inside_ic) {
             uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
             if (isLargeConstant(counter_addr)) {
-                assembler::Register reg = allocReg(Location::any(), getReturnDestination());
+                assembler::Register reg = allocReg(Location::any(), preserve);
                 assembler->mov(assembler::Immediate(counter_addr), reg);
                 assembler->incl(assembler::Indirect(reg, 0));
             } else {
@@ -900,7 +900,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 
             {
                 // this forces the register allocator to spill this register:
-                assembler::Register r2 = allocReg(l);
+                assembler::Register r2 = allocReg(l, preserve);
                 if (failed)
                     return;
                 assert(r == r2);
@@ -977,7 +977,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 
         if (need_to_spill) {
             if (check_reg.type == Location::Register) {
-                spillRegister(check_reg.asRegister());
+                spillRegister(check_reg.asRegister(), preserve);
                 if (failed)
                     return;
             } else {
@@ -1012,8 +1012,10 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
+    if (failed)
+        return;
 
-    _setupCall(has_side_effects, args, args_xmm);
+    _setupCall(has_side_effects, args, args_xmm, assembler::R11);
 
     for (RewriterVar* arg : args) {
         arg->bumpUse();
@@ -1699,7 +1701,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         assembler::Register reg(dest.regnum);
 
         if (vars_by_location.count(reg)) {
-            spillRegister(reg);
+            spillRegister(reg, otherThan);
         }
 
         assert(failed || vars_by_location.count(reg) == 0);
