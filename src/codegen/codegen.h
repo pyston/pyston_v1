@@ -31,6 +31,8 @@ class TargetMachine;
 
 namespace pyston {
 
+class PystonObjectCache;
+
 class FunctionAddressRegistry {
 private:
     struct FuncInfo {
@@ -62,6 +64,7 @@ struct GlobalState {
     CompiledFunction* cur_cf;
     llvm::TargetMachine* tm;
     llvm::ExecutionEngine* engine;
+    PystonObjectCache* object_cache;
 
     std::vector<llvm::JITEventListener*> jit_listeners;
 

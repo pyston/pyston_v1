@@ -15,6 +15,8 @@
 #ifndef PYSTON_CODEGEN_IRGEN_H
 #define PYSTON_CODEGEN_IRGEN_H
 
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
@@ -149,6 +151,35 @@ public:
     TypeRecorder* getTypeRecorder() const { return type_recorder; }
 
     ExceptionStyle preferredExceptionStyle() const { return unw_info.preferredExceptionStyle(); }
+};
+
+
+class PystonObjectCache : public llvm::ObjectCache {
+private:
+    llvm::SmallString<128> cache_dir;
+    std::string module_identifier;
+    std::string hash_before_codegen;
+
+public:
+    PystonObjectCache();
+
+
+#if LLVMREV < 216002
+    virtual void notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj);
+#else
+    virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj);
+#endif
+
+#if LLVMREV < 215566
+    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M);
+#else
+    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M);
+#endif
+
+    void cleanupCacheDirectory();
+
+    void calculateModuleHash(const llvm::Module* M, EffortLevel effort);
+    bool haveCacheFileForHash();
 };
 }
 

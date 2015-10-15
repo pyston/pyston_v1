@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "llvm/Analysis/Passes.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
@@ -1120,8 +1121,18 @@ CompiledFunction* doCompile(CLFunction* clfunc, SourceInfo* source, ParamNames* 
     static StatCounter us_irgen("us_compiling_irgen");
     us_irgen.log(irgen_us);
 
-    if (ENABLE_LLVMOPTS)
-        optimizeIR(f, effort);
+
+    // Calculate the module hash before doing any optimizations.
+    // This has the advantage that we can skip running the opt passes when we have cached object file
+    // but the disadvantage that optimizations are not allowed to add new symbolic constants...
+    if (ENABLE_JIT_OBJECT_CACHE) {
+        g.object_cache->calculateModuleHash(g.cur_module, effort);
+        if (ENABLE_LLVMOPTS && !g.object_cache->haveCacheFileForHash())
+            optimizeIR(f, effort);
+    } else {
+        if (ENABLE_LLVMOPTS)
+            optimizeIR(f, effort);
+    }
 
     g.cur_module = NULL;
 

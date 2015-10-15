@@ -25,7 +25,6 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
-#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -39,6 +38,7 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "codegen/codegen.h"
+#include "codegen/irgen.h"
 #include "codegen/memmgr.h"
 #include "codegen/profiling/profiling.h"
 #include "codegen/stackmaps.h"
@@ -202,91 +202,79 @@ public:
     }
 };
 
-class PystonObjectCache : public llvm::ObjectCache {
-private:
-    // Stream which calculates the SHA256 hash of the data writen to.
-    class HashOStream : public llvm::raw_ostream {
-        EVP_MD_CTX* md_ctx;
 
-        void write_impl(const char* ptr, size_t size) override { EVP_DigestUpdate(md_ctx, ptr, size); }
-        uint64_t current_pos() const override { return 0; }
+// Stream which calculates the SHA256 hash of the data writen to.
+class HashOStream : public llvm::raw_ostream {
+    EVP_MD_CTX* md_ctx;
 
-    public:
-        HashOStream() {
-            md_ctx = EVP_MD_CTX_create();
-            RELEASE_ASSERT(md_ctx, "");
-            int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
-            RELEASE_ASSERT(ret == 1, "");
-        }
-        ~HashOStream() { EVP_MD_CTX_destroy(md_ctx); }
-
-        std::string getHash() {
-            flush();
-            unsigned char md_value[EVP_MAX_MD_SIZE];
-            unsigned int md_len = 0;
-            int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
-            RELEASE_ASSERT(ret == 1, "");
-
-            std::string str;
-            str.reserve(md_len * 2 + 1);
-            llvm::raw_string_ostream stream(str);
-            for (int i = 0; i < md_len; ++i)
-                stream.write_hex(md_value[i]);
-            return stream.str();
-        }
-    };
-
-    llvm::SmallString<128> cache_dir;
-    std::string module_identifier;
-    std::string hash_before_codegen;
+    void write_impl(const char* ptr, size_t size) override { EVP_DigestUpdate(md_ctx, ptr, size); }
+    uint64_t current_pos() const override { return 0; }
 
 public:
-    PystonObjectCache() {
-        llvm::sys::path::home_directory(cache_dir);
-        llvm::sys::path::append(cache_dir, ".cache");
-        llvm::sys::path::append(cache_dir, "pyston");
-        llvm::sys::path::append(cache_dir, "object_cache");
-
-        cleanupCacheDirectory();
+    HashOStream() {
+        md_ctx = EVP_MD_CTX_create();
+        RELEASE_ASSERT(md_ctx, "");
+        int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
+        RELEASE_ASSERT(ret == 1, "");
     }
+    ~HashOStream() { EVP_MD_CTX_destroy(md_ctx); }
 
+    std::string getHash() {
+        flush();
+        unsigned char md_value[EVP_MAX_MD_SIZE];
+        unsigned int md_len = 0;
+        int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
+        RELEASE_ASSERT(ret == 1, "");
+
+        std::string str;
+        str.reserve(md_len * 2 + 1);
+        llvm::raw_string_ostream stream(str);
+        for (int i = 0; i < md_len; ++i)
+            stream.write_hex(md_value[i]);
+        return stream.str();
+    }
+};
+
+PystonObjectCache::PystonObjectCache() {
+    llvm::sys::path::home_directory(cache_dir);
+    llvm::sys::path::append(cache_dir, ".cache");
+    llvm::sys::path::append(cache_dir, "pyston");
+    llvm::sys::path::append(cache_dir, "object_cache");
+
+    cleanupCacheDirectory();
+}
 
 #if LLVMREV < 216002
-    virtual void notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj)
+void PystonObjectCache::notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj)
 #else
-    virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj)
+void PystonObjectCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj)
 #endif
-    {
-        RELEASE_ASSERT(module_identifier == M->getModuleIdentifier(), "");
-        RELEASE_ASSERT(!hash_before_codegen.empty(), "");
+{
+    RELEASE_ASSERT(module_identifier == M->getModuleIdentifier(), "");
+    RELEASE_ASSERT(!hash_before_codegen.empty(), "");
 
-        llvm::SmallString<128> cache_file = cache_dir;
-        llvm::sys::path::append(cache_file, hash_before_codegen);
-        if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directories(cache_dir.str()))
-            return;
+    llvm::SmallString<128> cache_file = cache_dir;
+    llvm::sys::path::append(cache_file, hash_before_codegen);
+    if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directories(cache_dir.str()))
+        return;
 
-        CompressedFile::writeFile(cache_file, Obj.getBuffer());
-    }
+    CompressedFile::writeFile(cache_file, Obj.getBuffer());
+}
 
 #if LLVMREV < 215566
-    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M)
+llvm::MemoryBuffer* PystonObjectCache::getObject(const llvm::Module* M)
 #else
-    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M)
+std::unique_ptr<llvm::MemoryBuffer> PystonObjectCache::getObject(const llvm::Module* M)
 #endif
-    {
-        static StatCounter jit_objectcache_hits("num_jit_objectcache_hits");
-        static StatCounter jit_objectcache_misses("num_jit_objectcache_misses");
+{
+    static StatCounter jit_objectcache_hits("num_jit_objectcache_hits");
+    static StatCounter jit_objectcache_misses("num_jit_objectcache_misses");
 
-        module_identifier = M->getModuleIdentifier();
+    module_identifier = M->getModuleIdentifier();
 
-        // Generate a hash for the module
-        HashOStream hash_stream;
-        llvm::WriteBitcodeToFile(M, hash_stream);
-        hash_before_codegen = hash_stream.getHash();
+    RELEASE_ASSERT(!hash_before_codegen.empty(), "hash should have already got calculated");
 
-        llvm::SmallString<128> cache_file = cache_dir;
-        llvm::sys::path::append(cache_file, hash_before_codegen);
-        if (!llvm::sys::fs::exists(cache_file.str())) {
+    if (!haveCacheFileForHash()) {
 #if 0
             // This code helps with identifying why we got a cache miss for a file.
             // - clear the cache directory
@@ -308,47 +296,62 @@ public:
             fclose(f);
 #endif
 
-            // This file isn't in our cache
-            jit_objectcache_misses.log();
-            return NULL;
-        }
-
-        std::unique_ptr<llvm::MemoryBuffer> mem_buff = CompressedFile::getFile(cache_file);
-        if (!mem_buff) {
-            jit_objectcache_misses.log();
-            return NULL;
-        }
-
-        jit_objectcache_hits.log();
-        return mem_buff;
+        // This file isn't in our cache
+        jit_objectcache_misses.log();
+        return NULL;
     }
 
-    void cleanupCacheDirectory() {
-        // Find all files inside the cache directory, if the number of files is larger than
-        // MAX_OBJECT_CACHE_ENTRIES,
-        // sort them by last modification time and remove the oldest excessive ones.
-        typedef std::pair<std::string, llvm::sys::TimeValue> CacheFileEntry;
-        std::vector<CacheFileEntry> cache_files;
-
-        std::error_code ec;
-        for (llvm::sys::fs::directory_iterator file(cache_dir.str(), ec), end; !ec && file != end; file.increment(ec)) {
-            llvm::sys::fs::file_status status;
-            if (file->status(status))
-                continue; // ignore files where we can't retrieve the file status.
-            cache_files.emplace_back(std::make_pair(file->path(), status.getLastModificationTime()));
-        }
-
-        int num_expired = cache_files.size() - MAX_OBJECT_CACHE_ENTRIES;
-        if (num_expired <= 0)
-            return;
-
-        std::stable_sort(cache_files.begin(), cache_files.end(),
-                         [](const CacheFileEntry& lhs, const CacheFileEntry& rhs) { return lhs.second < rhs.second; });
-
-        for (int i = 0; i < num_expired; ++i)
-            llvm::sys::fs::remove(cache_files[i].first);
+    llvm::SmallString<128> cache_file = cache_dir;
+    llvm::sys::path::append(cache_file, hash_before_codegen);
+    std::unique_ptr<llvm::MemoryBuffer> mem_buff = CompressedFile::getFile(cache_file);
+    if (!mem_buff) {
+        jit_objectcache_misses.log();
+        return NULL;
     }
-};
+
+    jit_objectcache_hits.log();
+    return mem_buff;
+}
+
+void PystonObjectCache::cleanupCacheDirectory() {
+    // Find all files inside the cache directory, if the number of files is larger than
+    // MAX_OBJECT_CACHE_ENTRIES,
+    // sort them by last modification time and remove the oldest excessive ones.
+    typedef std::pair<std::string, llvm::sys::TimeValue> CacheFileEntry;
+    std::vector<CacheFileEntry> cache_files;
+
+    std::error_code ec;
+    for (llvm::sys::fs::directory_iterator file(cache_dir.str(), ec), end; !ec && file != end; file.increment(ec)) {
+        llvm::sys::fs::file_status status;
+        if (file->status(status))
+            continue; // ignore files where we can't retrieve the file status.
+        cache_files.emplace_back(std::make_pair(file->path(), status.getLastModificationTime()));
+    }
+
+    int num_expired = cache_files.size() - MAX_OBJECT_CACHE_ENTRIES;
+    if (num_expired <= 0)
+        return;
+
+    std::stable_sort(cache_files.begin(), cache_files.end(),
+                     [](const CacheFileEntry& lhs, const CacheFileEntry& rhs) { return lhs.second < rhs.second; });
+
+    for (int i = 0; i < num_expired; ++i)
+        llvm::sys::fs::remove(cache_files[i].first);
+}
+
+void PystonObjectCache::calculateModuleHash(const llvm::Module* M, EffortLevel effort) {
+    HashOStream hash_stream;
+    llvm::WriteBitcodeToFile(M, hash_stream);
+    hash_stream << (int)effort;
+    hash_before_codegen = hash_stream.getHash();
+}
+
+bool PystonObjectCache::haveCacheFileForHash() {
+    llvm::SmallString<128> cache_file = cache_dir;
+    llvm::sys::path::append(cache_file, hash_before_codegen);
+    return llvm::sys::fs::exists(cache_file.str());
+}
+
 
 static void handle_sigusr1(int signum) {
     assert(signum == SIGUSR1);
@@ -425,8 +428,10 @@ void initCodegen() {
     g.engine = eb.create(g.tm);
     assert(g.engine && "engine creation failed?");
 
-    if (ENABLE_JIT_OBJECT_CACHE)
-        g.engine->setObjectCache(new PystonObjectCache());
+    if (ENABLE_JIT_OBJECT_CACHE) {
+        g.object_cache = new PystonObjectCache;
+        g.engine->setObjectCache(g.object_cache);
+    }
 
     g.i1 = llvm::Type::getInt1Ty(g.context);
     g.i8 = llvm::Type::getInt8Ty(g.context);
