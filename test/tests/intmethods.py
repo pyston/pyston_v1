@@ -9,6 +9,7 @@ for i in xrange(1, 12):
         print i | j
         print i & j
         print i ^ j
+        print 1 | 2, 1 & 2, 1 & 2
 
 print (2).__int__()
 print (True).__int__()
