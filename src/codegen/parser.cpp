@@ -1074,9 +1074,9 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
 
 const char* getMagic() {
     if (ENABLE_PYPA_PARSER)
-        return "a\ncN";
+        return "a\ncO";
     else
-        return "a\ncn";
+        return "a\nco";
 }
 
 #define MAGIC_STRING_LENGTH 4
