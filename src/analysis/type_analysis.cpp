@@ -284,12 +284,6 @@ private:
         arg_types.push_back(right);
         CompilerType* rtn = attr_type->callType(ArgPassSpec(2), arg_types, NULL);
 
-        if (left == right && (left == INT || left == FLOAT)) {
-            ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into",
-                   "%s %s %s -> %s", left->debugName().c_str(), name->data(), right->debugName().c_str(),
-                   rtn->debugName().c_str());
-        }
-
         ASSERT(rtn != UNDEF, "need to implement the actual semantics here for %s.%s", left->debugName().c_str(),
                name->c_str());
 
