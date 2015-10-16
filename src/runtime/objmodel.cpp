@@ -5090,6 +5090,33 @@ static Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* val
     }
 }
 
+#define ISINDEX(x) ((x) == NULL || PyInt_Check(x) || PyLong_Check(x) || PyIndex_Check(x))
+
+extern "C" PyObject* apply_slice(PyObject* u, PyObject* v, PyObject* w) noexcept /* return u[v:w] */
+{
+    // TODO: add rewriting here
+
+    PyTypeObject* tp = u->cls;
+    PySequenceMethods* sq = tp->tp_as_sequence;
+
+    if (sq && sq->sq_slice && ISINDEX(v) && ISINDEX(w)) {
+        Py_ssize_t ilow = 0, ihigh = PY_SSIZE_T_MAX;
+        if (!_PyEval_SliceIndex(v, &ilow))
+            return NULL;
+        if (!_PyEval_SliceIndex(w, &ihigh))
+            return NULL;
+        return PySequence_GetSlice(u, ilow, ihigh);
+    } else {
+        PyObject* slice = PySlice_New(v, w, NULL);
+        if (slice != NULL) {
+            PyObject* res = PyObject_GetItem(u, slice);
+            Py_DECREF(slice);
+            return res;
+        } else
+            return NULL;
+    }
+}
+
 // This function decides whether to call the slice operator (e.g. __getslice__)
 // or the item operator (__getitem__).
 template <ExceptionStyle S, Rewritable rewritable>

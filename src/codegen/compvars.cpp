@@ -343,6 +343,30 @@ public:
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               CompilerVariable* slice) override {
+        if (slice->getType() == UNBOXED_SLICE) {
+            UnboxedSlice slice_val = extractSlice(slice);
+
+            if (slice_val.step == NULL) {
+                static BoxedString* attr = internStringImmortal("__getitem__");
+                CompilerType* return_type
+                    = var->getType()->getattrType(attr, true)->callType(ArgPassSpec(1), { SLICE }, NULL);
+                assert(return_type->getConcreteType() == return_type);
+
+                llvm::Value* cstart, *cstop;
+                cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
+                                         : getNullPtr(g.llvm_value_type_ptr);
+                cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
+                                       : getNullPtr(g.llvm_value_type_ptr);
+
+                llvm::Value* r
+                    = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
+                emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
+
+
+                return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+            }
+        }
+
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
         ExceptionStyle target_exception_style = info.preferredExceptionStyle();
@@ -935,7 +959,6 @@ template <typename T> struct UnboxedVal {
     UnboxedVal(T val, ConcreteCompilerVariable* boxed) : val(std::move(val)), boxed(boxed) {}
 };
 
-// XXX: make this a over a unique_ptr<UnboxedVal>
 template <typename T, typename D> class UnboxedType : public ValuedCompilerType<std::shared_ptr<UnboxedVal<T>>> {
 public:
     // Subclasses need to implement:
@@ -2022,23 +2045,74 @@ public:
         static BoxedString* attr = internStringImmortal("__getitem__");
         bool no_attribute = false;
 
-        ExceptionStyle exception_style = info.preferredExceptionStyle();
+        if (slice->getType() == UNBOXED_SLICE) {
+            UnboxedSlice slice_val = extractSlice(slice);
 
-        CompilerVariable* called_constant = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0),
-                                                                { slice }, NULL, &no_attribute, exception_style);
+            // This corresponds to the case in apply_slice that calls into PySequence_GetSlice.
+            // Other cases will get handled by UNKNOWN.getitem
+            if (!slice_val.step && canStaticallyResolveGetattrs() && cls->tp_as_sequence
+                && cls->tp_as_sequence->sq_slice) {
+                if ((!slice_val.start || slice_val.start->getType() == INT || slice_val.start->getType() == BOXED_INT)
+                    && (!slice_val.stop || slice_val.stop->getType() == INT
+                        || slice_val.stop->getType() == BOXED_INT)) {
 
-        if (no_attribute) {
-            assert(called_constant->getType() == UNDEF);
+                    CompilerType* return_type = getattrType(attr, true)->callType(ArgPassSpec(1), { SLICE }, NULL);
+                    assert(return_type->getConcreteType() == return_type);
 
-            // Kind of hacky, but just call into getitem like normal.  except...
-            auto r = UNKNOWN->getitem(emitter, info, var, slice);
-            r->decvref(emitter);
-            // ... return the undef value, since that matches what the type analyzer thought we would do.
-            return called_constant;
+                    llvm::Value* start = NULL;
+                    if (!slice_val.start)
+                        start = getConstantInt(0, g.i64);
+                    else {
+                        if (slice_val.start->getType() == BOXED_INT)
+                            slice_val.start
+                                = makeUnboxedInt(emitter, static_cast<ConcreteCompilerVariable*>(slice_val.start));
+                        start = IntType::extractInt(slice_val.start);
+                    }
+
+                    llvm::Value* stop = NULL;
+                    if (!slice_val.stop)
+                        stop = getConstantInt(PY_SSIZE_T_MAX, g.i64);
+                    else {
+                        if (slice_val.stop->getType() == BOXED_INT)
+                            slice_val.stop
+                                = makeUnboxedInt(emitter, static_cast<ConcreteCompilerVariable*>(slice_val.stop));
+                        stop = IntType::extractInt(slice_val.stop);
+                    }
+
+                    static llvm::FunctionType* ft = llvm::FunctionType::get(
+                        g.llvm_value_type_ptr, { g.llvm_value_type_ptr, g.i64, g.i64 }, false);
+                    llvm::Value* r = emitter.createCall3(
+                        info.unw_info, embedConstantPtr((void*)PySequence_GetSlice, ft->getPointerTo()),
+                        var->getValue(), start, stop);
+                    emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
+
+                    return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+                }
+            }
         }
 
-        if (called_constant)
-            return called_constant;
+        // Only try calling getitem if it's not a slice.  For the slice case, defer to UNKNOWN->getitem, which will
+        // call into apply_slice
+        if (slice->getType() != UNBOXED_SLICE || extractSlice(slice).step != NULL) {
+            ExceptionStyle exception_style = info.preferredExceptionStyle();
+
+            CompilerVariable* called_constant
+                = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL,
+                                      &no_attribute, exception_style);
+
+            if (no_attribute) {
+                assert(called_constant->getType() == UNDEF);
+
+                // Kind of hacky, but just call into getitem like normal.  except...
+                auto r = UNKNOWN->getitem(emitter, info, var, slice);
+                r->decvref(emitter);
+                // ... return the undef value, since that matches what the type analyzer thought we would do.
+                return called_constant;
+            }
+
+            if (called_constant)
+                return called_constant;
+        }
 
         return UNKNOWN->getitem(emitter, info, var, slice);
     }
@@ -2694,6 +2768,68 @@ CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts) {
 
     auto alloc_var = std::make_shared<TupleType::Unboxed>(elts, nullptr);
     return new TupleType::VAR(type, alloc_var, true);
+}
+
+class UnboxedSliceType : public ValuedCompilerType<UnboxedSlice> {
+public:
+    std::string debugName() override { return "slice"; }
+
+    void drop(IREmitter& emitter, VAR* var) override {}
+    void grab(IREmitter& emitter, VAR* var) override {}
+
+    void assertMatches(UnboxedSlice slice) {}
+
+    int numFrameArgs() override { RELEASE_ASSERT(0, "unboxed slice should never get serialized"); }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        RELEASE_ASSERT(0, "unboxed slice should never get serialized");
+    }
+
+    void serializeToFrame(VAR* v, std::vector<llvm::Value*>& stackmap_args) override {
+        RELEASE_ASSERT(0, "unboxed slice should never get serialized");
+    }
+
+    ConcreteCompilerType* getConcreteType() override { return SLICE; }
+    ConcreteCompilerType* getBoxType() override { return SLICE; }
+
+    bool canConvertTo(CompilerType* other) override { return other == this || other == SLICE || other == UNKNOWN; }
+
+    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
+        assert(other_type == SLICE || other_type == UNKNOWN);
+
+        auto slice = var->getValue();
+
+        ConcreteCompilerVariable* cstart, *cstop, *cstep;
+        cstart = slice.start ? slice.start->makeConverted(emitter, slice.start->getBoxType()) : getNone();
+        cstop = slice.stop ? slice.stop->makeConverted(emitter, slice.stop->getBoxType()) : getNone();
+        cstep = slice.step ? slice.step->makeConverted(emitter, slice.step->getBoxType()) : getNone();
+
+        std::vector<llvm::Value*> args;
+        args.push_back(cstart->getValue());
+        args.push_back(cstop->getValue());
+        args.push_back(cstep->getValue());
+        llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.createSlice, args);
+
+        cstart->decvref(emitter);
+        cstop->decvref(emitter);
+        cstep->decvref(emitter);
+        return new ConcreteCompilerVariable(SLICE, rtn, true);
+    }
+} _UNBOXED_SLICE;
+CompilerType* UNBOXED_SLICE = &_UNBOXED_SLICE;
+
+CompilerVariable* makeSlice(CompilerVariable* start, CompilerVariable* stop, CompilerVariable* step) {
+    return new UnboxedSliceType::VAR(&_UNBOXED_SLICE, UnboxedSlice{ start, stop, step }, true);
+}
+
+UnboxedSlice extractSlice(CompilerVariable* slice) {
+    assert(slice->getType() == UNBOXED_SLICE);
+    return static_cast<UnboxedSliceType::VAR*>(slice)->getValue();
+}
+
+ConcreteCompilerVariable* getNone() {
+    llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
+    return new ConcreteCompilerVariable(typeFromClass(none_cls), none, false);
 }
 
 class UndefType : public ConcreteCompilerType {

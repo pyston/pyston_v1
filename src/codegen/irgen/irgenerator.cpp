@@ -1078,10 +1078,6 @@ private:
         auto ellipsis_cls = Ellipsis->cls;
         return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis, false);
     }
-    ConcreteCompilerVariable* getNone() {
-        llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
-        return new ConcreteCompilerVariable(typeFromClass(none_cls), none, false);
-    }
 
     llvm::Constant* embedParentModulePtr() {
         BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
@@ -1264,28 +1260,11 @@ private:
 
     CompilerVariable* evalSlice(AST_Slice* node, const UnwindInfo& unw_info) {
         CompilerVariable* start, *stop, *step;
-        start = node->lower ? evalExpr(node->lower, unw_info) : getNone();
-        stop = node->upper ? evalExpr(node->upper, unw_info) : getNone();
-        step = node->step ? evalExpr(node->step, unw_info) : getNone();
+        start = node->lower ? evalExpr(node->lower, unw_info) : NULL;
+        stop = node->upper ? evalExpr(node->upper, unw_info) : NULL;
+        step = node->step ? evalExpr(node->step, unw_info) : NULL;
 
-        ConcreteCompilerVariable* cstart, *cstop, *cstep;
-        cstart = start->makeConverted(emitter, start->getBoxType());
-        cstop = stop->makeConverted(emitter, stop->getBoxType());
-        cstep = step->makeConverted(emitter, step->getBoxType());
-        start->decvref(emitter);
-        stop->decvref(emitter);
-        step->decvref(emitter);
-
-        std::vector<llvm::Value*> args;
-        args.push_back(cstart->getValue());
-        args.push_back(cstop->getValue());
-        args.push_back(cstep->getValue());
-        llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.createSlice, args);
-
-        cstart->decvref(emitter);
-        cstop->decvref(emitter);
-        cstep->decvref(emitter);
-        return new ConcreteCompilerVariable(SLICE, rtn, true);
+        return makeSlice(start, stop, step);
     }
 
     CompilerVariable* evalExtSlice(AST_ExtSlice* node, const UnwindInfo& unw_info) {

@@ -100,6 +100,7 @@ void force() {
     FORCE(yield);
     FORCE(getiterHelper);
     FORCE(hasnext);
+    FORCE(apply_slice);
 
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);
