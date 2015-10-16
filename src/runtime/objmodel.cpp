@@ -3559,7 +3559,20 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             }
         }
 
-        Box* ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
+        Box* ovarargs;
+        if (argspec.num_args == 0 && paramspec.num_args == 0 && (!varargs || varargs->cls == tuple_cls)) {
+            // We probably could have cut out a lot more of the overhead in this case:
+            assert(varargs_size == unused_positional.size());
+
+            if (!varargs)
+                ovarargs = EmptyTuple;
+            else
+                ovarargs = varargs;
+        } else {
+            ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
+        }
+        assert(ovarargs->cls == tuple_cls);
+
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name_cb(), paramspec.num_args,

@@ -1867,7 +1867,8 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     std::string s = self->s();
 
     bool single_char = old->size() == 1;
-    for (int num_replaced = 0; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
+    int num_replaced = 0;
+    for (; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
         if (single_char)
             start_pos = s.find(old->s()[0], start_pos);
         else
@@ -1878,6 +1879,10 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
         s.replace(start_pos, old->size(), new_->s());
         start_pos += new_->size(); // Handles case where 'to' is a substring of 'from'
     }
+
+    if (num_replaced == 0 && self->cls == str_cls)
+        return self;
+
     return boxString(s);
 }
 

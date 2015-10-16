@@ -3538,13 +3538,12 @@ _pair(Py_ssize_t i1, Py_ssize_t i2)
 }
 
 static PyObject*
-match_span(MatchObject* self, PyObject* args)
+match_span(MatchObject* self, PyObject* index_)
 {
     Py_ssize_t index;
 
-    PyObject* index_ = Py_False; /* zero */
-    if (!PyArg_UnpackTuple(args, "span", 0, 1, &index_))
-        return NULL;
+    if (!index_)
+        index_ = Py_False; /* zero */
 
     index = match_getindex(self, index_);
 
@@ -3682,7 +3681,7 @@ static PyMethodDef match_methods[] = {
     {"group", (PyCFunction) match_group, METH_VARARGS, match_group_doc},
     {"start", (PyCFunction) match_start, METH_VARARGS, match_start_doc},
     {"end", (PyCFunction) match_end, METH_VARARGS, match_end_doc},
-    {"span", (PyCFunction) match_span, METH_VARARGS, match_span_doc},
+    {"span", (PyCFunction) match_span, METH_O | METH_D1, match_span_doc},
     {"groups", (PyCFunction) match_groups, METH_VARARGS|METH_KEYWORDS,
         match_groups_doc},
     {"groupdict", (PyCFunction) match_groupdict, METH_VARARGS|METH_KEYWORDS,
