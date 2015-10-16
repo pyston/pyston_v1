@@ -199,3 +199,54 @@ try:
     set(**dict(a=1))
 except TypeError:
     print "TypeError"
+
+
+class MySet(set):
+    def __new__(cls, *args, **kwargs):
+        return set.__new__(cls, *args)
+
+try:
+    MySet(a=1)
+except TypeError as e:
+    print(e.message)
+
+
+class SetSubclassWithKeywordArgs(set):
+    def __init__(self, iterable=[], newarg=None):
+        set.__init__(self, iterable)
+
+SetSubclassWithKeywordArgs(newarg=1)
+
+try:
+    frozenset(a=1)
+except TypeError as e:
+    print(e.message)
+
+
+class MyFrozenSet(frozenset):
+    def __new__(cls, *args, **kwargs):
+        return frozenset.__new__(cls, *args)
+
+MyFrozenSet(a=1)
+
+
+class FrozensetSubclassWithKeywordArgs(frozenset):
+    def __init__(self, iterable=[], newarg=None):
+        frozenset.__init__(self, iterable)
+
+FrozensetSubclassWithKeywordArgs(newarg=1)
+
+print(set() in frozenset([frozenset()]))
+
+
+class MySet(set):
+    def __hash__(self):
+        print("calling __hash__")
+        return id(self)
+
+print("Ready")
+foo = MySet()
+a = set()
+a.add(foo)
+print(a.remove(foo))
+print(foo in set())
