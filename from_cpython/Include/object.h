@@ -430,7 +430,9 @@ typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t);
     destructor tp_del;\
                                                                                 \
     /* Type attribute cache version tag. Added in version 2.6 */\
-    unsigned int tp_version_tag;    \
+    /* Pyston change: change uint to 64bit uint
+    unsigned int tp_version_tag; */    \
+    PY_UINT64_T tp_version_tag;        \
 \
     /* Pyston changes: added these fields */ \
 
