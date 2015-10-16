@@ -1169,6 +1169,7 @@ static AST_Module* parse_with_reader(std::unique_ptr<pypa::Reader> reader, Futur
     pypa::AstModulePtr module;
     pypa::ParserOptions options;
 
+    options.perform_inline_optimizations = true;
     options.printerrors = false;
     options.python3allowed = false;
     options.python3only = false;

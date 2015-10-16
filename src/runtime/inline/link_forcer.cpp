@@ -115,7 +115,6 @@ void force() {
     FORCE(printExprHelper);
     FORCE(printHelper);
 
-    FORCE(strOrUnicode);
     FORCE(printFloat);
     FORCE(listAppendInternal);
     FORCE(getSysStdout);

@@ -166,3 +166,12 @@ class C(object):
 
 print type(unicode(C()))
 print unicode("test", encoding="UTF-8")
+
+class CStr(object):
+    def __str__(self):
+        return u"\u20ac"
+class CRepr(object):
+    def __repr__(self):
+        return u"\u20ac"
+print "%s %s" % (CStr(), CRepr())
+

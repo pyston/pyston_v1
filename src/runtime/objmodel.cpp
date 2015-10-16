@@ -2661,32 +2661,11 @@ extern "C" BoxedString* str(Box* obj) {
     static StatCounter slowpath_str("slowpath_str");
     slowpath_str.log();
 
-    static BoxedString* str_box = internStringImmortal(str_str.c_str());
-    if (obj->cls != str_cls) {
-        // TODO could do an IC optimization here (once we do rewrites here at all):
-        // if __str__ is objectStr, just guard on that and call repr directly.
-        obj = callattrInternal<CXX, NOT_REWRITABLE>(obj, str_box, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL,
-                                                    NULL, NULL);
-    }
-
-    if (isSubclass(obj->cls, unicode_cls)) {
-        obj = PyUnicode_AsASCIIString(obj);
-        checkAndThrowCAPIException();
-    }
-
-    if (!PyString_Check(obj)) {
-        raiseExcHelper(TypeError, "__str__ returned non-string (type %s)", obj->cls->tp_name);
-    }
-    return static_cast<BoxedString*>(obj);
-}
-
-extern "C" Box* strOrUnicode(Box* obj) {
-    STAT_TIMER(t0, "us_timer_strOrUnicode", 10);
-    // Like str, but returns unicode objects unchanged.
-    if (obj->cls == unicode_cls) {
-        return obj;
-    }
-    return str(obj);
+    Box* rtn = PyObject_Str(obj);
+    if (!rtn)
+        throwCAPIException();
+    assert(rtn->cls == str_cls); // PyObject_Str always returns a str
+    return (BoxedString*)rtn;
 }
 
 extern "C" BoxedString* repr(Box* obj) {
@@ -2694,40 +2673,11 @@ extern "C" BoxedString* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 
-    static BoxedString* repr_box = internStringImmortal(repr_str.c_str());
-    obj = callattrInternal<CXX, NOT_REWRITABLE>(obj, repr_box, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL,
-                                                NULL);
-
-    if (isSubclass(obj->cls, unicode_cls)) {
-        obj = PyUnicode_AsASCIIString(obj);
-        checkAndThrowCAPIException();
-    }
-
-    if (!PyString_Check(obj)) {
-        raiseExcHelper(TypeError, "__repr__ returned non-string (type %s)", obj->cls->tp_name);
-    }
-    return static_cast<BoxedString*>(obj);
-}
-
-extern "C" BoxedString* reprOrNull(Box* obj) {
-    STAT_TIMER(t0, "us_timer_reprOrNull", 10);
-    try {
-        Box* r = repr(obj);
-        assert(r->cls == str_cls); // this should be checked by repr()
-        return static_cast<BoxedString*>(r);
-    } catch (ExcInfo e) {
-        return nullptr;
-    }
-}
-
-extern "C" BoxedString* strOrNull(Box* obj) {
-    STAT_TIMER(t0, "us_timer_strOrNull", 10);
-    try {
-        BoxedString* r = str(obj);
-        return static_cast<BoxedString*>(r);
-    } catch (ExcInfo e) {
-        return nullptr;
-    }
+    Box* rtn = PyObject_Repr(obj);
+    if (!rtn)
+        throwCAPIException();
+    assert(rtn->cls == str_cls); // PyObject_Repr always returns a str
+    return (BoxedString*)rtn;
 }
 
 extern "C" bool exceptionMatches(Box* obj, Box* cls) {

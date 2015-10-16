@@ -1613,12 +1613,8 @@ extern "C" Box* boxUnboundInstanceMethod(Box* func, Box* type) {
     return new BoxedInstanceMethod(NULL, func, type);
 }
 
-extern "C" BoxedString* noneRepr(Box* v) {
+extern "C" Box* none_repr(Box* v) noexcept {
     return boxString("None");
-}
-
-extern "C" Box* noneHash(Box* v) {
-    return boxInt(819239); // chosen randomly
 }
 
 extern "C" Box* noneNonzero(Box* v) {
@@ -3867,11 +3863,12 @@ void setupRuntime() {
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
 
-    none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
+    none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)none_repr, STR, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->giveAttr("__doc__", None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
+    none_cls->tp_repr = none_repr;
 
     module_cls->giveAttr("__init__",
                          new BoxedFunction(boxRTFunction((void*)moduleInit, UNKNOWN, 3, false, false), { NULL }));

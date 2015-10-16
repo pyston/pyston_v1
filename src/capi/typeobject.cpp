@@ -632,22 +632,33 @@ extern "C" int _PyObject_SlotCompare(PyObject* self, PyObject* other) noexcept {
 static PyObject* slot_tp_repr(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tprepr", SLOT_AVOIDABILITY(self));
 
-    try {
-        return repr(self);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
+    PyObject* func, *res;
+    static PyObject* repr_str;
+
+    func = lookup_method(self, "__repr__", &repr_str);
+    if (func != NULL) {
+        res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        return res;
     }
+    PyErr_Clear();
+    return PyString_FromFormat("<%s object at %p>", Py_TYPE(self)->tp_name, self);
 }
 
 static PyObject* slot_tp_str(PyObject* self) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpstr", SLOT_AVOIDABILITY(self));
 
-    try {
-        return str(self);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
+    PyObject* func, *res;
+    static PyObject* str_str;
+
+    func = lookup_method(self, "__str__", &str_str);
+    if (func != NULL) {
+        res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        return res;
+    } else {
+        PyErr_Clear();
+        return slot_tp_repr(self);
     }
 }
 
