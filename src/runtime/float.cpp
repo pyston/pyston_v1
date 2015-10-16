@@ -33,6 +33,7 @@ extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexc
 extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
 extern "C" PyObject* float__format__(PyObject* v) noexcept;
 extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+extern "C" PyObject* float_str(PyObject* v) noexcept;
 extern "C" int float_pow_unboxed(double iv, double iw, double* res) noexcept;
 
 namespace pyston {
@@ -1704,6 +1705,7 @@ void setupFloat() {
 
     floatFormatInit();
 
+    float_cls->tp_str = float_str;
     float_cls->tp_as_number->nb_power = float_pow;
 }
 

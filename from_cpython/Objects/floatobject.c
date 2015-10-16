@@ -388,7 +388,7 @@ float_repr(PyFloatObject *v)
     return float_str_or_repr(v, 0, 'r');
 }
 
-static PyObject *
+PyObject *
 float_str(PyFloatObject *v)
 {
     return float_str_or_repr(v, PyFloat_STR_PRECISION, 'g');

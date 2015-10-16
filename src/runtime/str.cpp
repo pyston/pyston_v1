@@ -1278,8 +1278,9 @@ extern "C" Box* strLen(BoxedString* self) {
     return boxInt(self->size());
 }
 
-extern "C" Box* strStr(BoxedString* self) {
-    assert(PyString_Check(self));
+extern "C" Box* str_str(Box* _self) noexcept {
+    assert(PyString_Check(_self));
+    BoxedString* self = (BoxedString*)_self;
 
     if (self->cls == str_cls)
         return self;
@@ -2854,7 +2855,7 @@ void setupStr() {
                                                                         ParamNames::empty(), CAPI)));
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
-    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
+    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)str_str, STR, 1)));
     str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
     str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, UNKNOWN, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
@@ -2935,6 +2936,7 @@ void setupStr() {
     str_cls->freeze();
 
     str_cls->tp_repr = str_repr;
+    str_cls->tp_str = str_str;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
     str_cls->tp_as_sequence->sq_length = str_length;
