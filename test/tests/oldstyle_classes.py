@@ -492,3 +492,22 @@ try:
 except:
     print sys.exc_info()[0].__name__, sys.exc_info()[1]
 
+
+s1 = 0
+class C():
+    pass
+class D():
+    def __setattr__(self, a, v):
+        global s1
+        s1 += v
+
+o = C()
+s2 = 0
+for i in range(500):
+    o.a = 1
+    s2 += o.a
+    if i == 100:
+        C.__bases__ = (D,)
+    if i == 150:
+        C.__bases__ = tuple()
+print s1, s2
