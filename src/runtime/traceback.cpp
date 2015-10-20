@@ -61,7 +61,7 @@ void printTraceback(Box* b) {
 
     for (; tb && tb != None; tb = static_cast<BoxedTraceback*>(tb->tb_next)) {
         auto& line = tb->line;
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line.file->c_str(), line.line, line.func->c_str());
+        fprintf(stderr, "  File \"%s\", line %d, in %s\n", line.file->c_str(), line.line, line.func->c_str());
 
         if (line.line < 0)
             continue;

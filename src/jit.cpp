@@ -455,7 +455,7 @@ static int main(int argc, char** argv) {
             main_module = createModule(boxString("__main__"), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
-            main_module = createModule(boxString("__main__"), fn ? fn : "<string>");
+            main_module = createModule(boxString("__main__"), fn ? fn : "<stdin>");
             rtncode = 0;
             if (fn != NULL) {
                 rtncode = RunMainFromImporter(fn);
