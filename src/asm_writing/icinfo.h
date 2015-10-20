@@ -147,9 +147,13 @@ public:
     // For use of the rewriter for computing aggressiveness:
     int percentMegamorphic() const { return times_rewritten * 100 / IC_MEGAMORPHIC_THRESHOLD; }
     int percentBackedoff() const { return retry_backoff; }
+    int timesRewritten() const { return times_rewritten; }
 
     friend class ICSlotRewrite;
     static void visitGCReferences(gc::GCVisitor* visitor);
+
+    static ICInfo* getICInfoForNode(AST* node);
+    void associateNodeWithICInfo(AST* node);
 };
 
 void registerGCTrackedICInfo(ICInfo* ic);

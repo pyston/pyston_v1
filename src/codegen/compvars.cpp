@@ -259,7 +259,7 @@ public:
         // converted->getValue()->dump(); llvm::errs() << '\n';
         bool do_patchpoint = ENABLE_ICSETATTRS;
         if (do_patchpoint) {
-            ICSetupInfo* pp = createSetattrIC(info.getTypeRecorder());
+            ICSetupInfo* pp = createSetattrIC(info.getTypeRecorder(), info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -374,7 +374,7 @@ public:
         bool do_patchpoint = ENABLE_ICGETITEMS;
         llvm::Value* rtn;
         if (do_patchpoint) {
-            ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder());
+            ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder(), info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -471,7 +471,7 @@ public:
         }
 
         if (do_patchpoint) {
-            ICSetupInfo* pp = createBinexpIC(info.getTypeRecorder());
+            ICSetupInfo* pp = createBinexpIC(info.getTypeRecorder(), info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -554,7 +554,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     bool do_patchpoint = ENABLE_ICGETATTRS;
     if (do_patchpoint) {
-        ICSetupInfo* pp = createGetattrIC(info.getTypeRecorder());
+        ICSetupInfo* pp = createGetattrIC(info.getTypeRecorder(), info.getBJitICInfo());
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
@@ -650,7 +650,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     if (do_patchpoint) {
         assert(func_addr);
 
-        ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size());
+        ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo());
 
         llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style);
 

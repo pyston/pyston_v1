@@ -162,12 +162,12 @@ RewriterVar* JitFragmentWriter::imm(void* val) {
     return loadConst((uint64_t)val);
 }
 
-RewriterVar* JitFragmentWriter::emitAugbinop(RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2, 320);
+RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+    return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2, 320, node);
 }
 
-RewriterVar* JitFragmentWriter::emitBinop(RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 240);
+RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 240, node);
 }
 
 RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
@@ -198,7 +198,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)callattr, call_args, 2, 640, type_recorder);
+    return emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder);
 #else
     // We could make this faster but for now: keep it simple, stupid...
     RewriterVar* attr_var = imm(attr);
@@ -227,9 +227,9 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
 #endif
 }
 
-RewriterVar* JitFragmentWriter::emitCompare(RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     // TODO: can directly emit the assembly for Is/IsNot
-    return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240);
+    return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240, node);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys,
@@ -289,7 +289,7 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
 }
 
 RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
-    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, getTypeRecorderForNode(node));
+    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node));
 }
 
 RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
@@ -319,8 +319,8 @@ RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
     return emitPPCall((void*)getGlobal, { imm(global), imm(s) }, 2, 512);
 }
 
-RewriterVar* JitFragmentWriter::emitGetItem(RewriterVar* value, RewriterVar* slice) {
-    return emitPPCall((void*)getitem, { value, slice }, 2, 512);
+RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice) {
+    return emitPPCall((void*)getitem, { value, slice }, 2, 512, node);
 }
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
@@ -392,7 +392,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)runtimeCall, call_args, 2, 640, type_recorder);
+    return emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder);
 #else
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar* keyword_names_var = keyword_names ? imm(keyword_names) : nullptr;
@@ -491,8 +491,8 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
 }
 
-void JitFragmentWriter::emitSetAttr(RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
-    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512);
+void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
+    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, RewriterVar* v) {
@@ -619,6 +619,7 @@ int JitFragmentWriter::finishCompilation() {
         std::unique_ptr<ICInfo> pp
             = registerCompiledPatchpoint(start_addr, slowpath_start, initialization_info.continue_addr,
                                          slowpath_rtn_addr, pp_info.ic.get(), pp_info.stack_info, LiveOutSet());
+        pp->associateNodeWithICInfo(pp_info.node);
         pp.release();
     }
 
@@ -673,7 +674,7 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 #endif
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
-                                           int slot_size, TypeRecorder* type_recorder) {
+                                           int slot_size, AST* ast_node, TypeRecorder* type_recorder) {
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
@@ -683,7 +684,8 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
     memcpy(_args, args.begin(), sizeof(RewriterVar*) * args_size);
 
     addAction([=]() {
-        this->_emitPPCall(result, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size), num_slots, slot_size);
+        this->_emitPPCall(result, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size), num_slots, slot_size,
+                          ast_node);
     }, args, ActionType::NORMAL);
 
     if (type_recorder) {
@@ -830,7 +832,7 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
 }
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                    int num_slots, int slot_size) {
+                                    int num_slots, int slot_size, AST* ast_node) {
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.
@@ -882,7 +884,7 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     assertConsistent();
 
     StackInfo stack_info(pp_scratch_size, pp_scratch_location);
-    pp_infos.emplace_back(PPInfo{ func_addr, pp_start, pp_end, std::move(setup_info), stack_info });
+    pp_infos.emplace_back(PPInfo{ func_addr, pp_start, pp_end, std::move(setup_info), stack_info, ast_node });
 
     assert(vars_by_location.count(assembler::RAX) == 0);
     result->initializeInReg(assembler::RAX);

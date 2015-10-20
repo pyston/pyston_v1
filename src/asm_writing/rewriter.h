@@ -318,7 +318,7 @@ public:
 
 class RewriterAction {
 public:
-    SmallFunction<48> action;
+    SmallFunction<56> action;
 
     template <typename F> RewriterAction(F&& action) : action(std::forward<F>(action)) {}
 

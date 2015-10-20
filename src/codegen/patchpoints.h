@@ -152,16 +152,17 @@ public:
                                    TypeRecorder* type_recorder);
 };
 
+class ICInfo;
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
-ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args);
+ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
 ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder);
-ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder);
-ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder);
+ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
+ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
 ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder);
-ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder);
+ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
 ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
-ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder);
+ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
 

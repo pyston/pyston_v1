@@ -287,16 +287,31 @@ void* PatchpointInfo::getSlowpathAddr(unsigned int pp_id) {
     return new_patchpoints[pp_id].second;
 }
 
+int numSlots(ICInfo* bjit_ic_info, int default_num_slots) {
+    if (!bjit_ic_info)
+        return default_num_slots;
+
+    // this thresholds are chosen by running the benchmarks several times with different settings.
+    int num_slots = std::max(bjit_ic_info->getNumSlots(), default_num_slots);
+    if (bjit_ic_info->isMegamorphic())
+        num_slots *= 3;
+    else if (bjit_ic_info->timesRewritten() > IC_MEGAMORPHIC_THRESHOLD / 2)
+        num_slots += 2;
+    else
+        num_slots = std::min(std::max(bjit_ic_info->timesRewritten(), 1), default_num_slots);
+    return std::min(num_slots, 10);
+}
+
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
     return ICSetupInfo::initialize(has_return_value, 1, size, ICSetupInfo::Generic, type_recorder);
 }
 
-ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 2, 512, ICSetupInfo::Getattr, type_recorder);
+ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 2), 512, ICSetupInfo::Getattr, type_recorder);
 }
 
-ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1, 512, ICSetupInfo::Getitem, type_recorder);
+ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 1), 512, ICSetupInfo::Getitem, type_recorder);
 }
 
 ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder) {
@@ -307,27 +322,25 @@ ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(false, 1, 512, ICSetupInfo::Delitem, type_recorder);
 }
 
-ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 2, 512, ICSetupInfo::Setattr, type_recorder);
+ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(false, numSlots(bjit_ic_info, 2), 512, ICSetupInfo::Setattr, type_recorder);
 }
 
 ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(false, 1, 144, ICSetupInfo::Delattr, type_recorder);
 }
 
-ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args) {
-    // TODO These are very large, but could probably be made much smaller with IC optimizations
-    // - using rewriter2 for better code
-    // - not emitting duplicate guards
-    return ICSetupInfo::initialize(true, 4, 640 + 48 * num_args, ICSetupInfo::Callsite, type_recorder);
+ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 4), 640 + 48 * num_args, ICSetupInfo::Callsite,
+                                   type_recorder);
 }
 
 ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 1, 128, ICSetupInfo::GetGlobal, type_recorder);
 }
 
-ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 4, 512, ICSetupInfo::Binexp, type_recorder);
+ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 4), 512, ICSetupInfo::Binexp, type_recorder);
 }
 
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder) {

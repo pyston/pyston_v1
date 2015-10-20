@@ -367,4 +367,16 @@ void ICInfo::visitGCReferences(gc::GCVisitor* v) {
     }
 #endif
 }
+
+static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;
+
+ICInfo* ICInfo::getICInfoForNode(AST* node) {
+    auto&& it = ics_by_ast_node.find(node);
+    if (it != ics_by_ast_node.end())
+        return it->second;
+    return NULL;
+}
+void ICInfo::associateNodeWithICInfo(AST* node) {
+    ics_by_ast_node[node] = this;
+}
 }

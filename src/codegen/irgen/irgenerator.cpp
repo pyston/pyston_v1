@@ -20,6 +20,7 @@
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
+#include "asm_writing/icinfo.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen.h"
@@ -596,10 +597,12 @@ private:
             type_recorder = NULL;
         }
 
-        return OpInfo(irstate->getEffortLevel(), type_recorder, unw_info);
+        return OpInfo(irstate->getEffortLevel(), type_recorder, unw_info, ICInfo::getICInfoForNode(ast));
     }
 
-    OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) { return OpInfo(irstate->getEffortLevel(), NULL, unw_info); }
+    OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) {
+        return OpInfo(irstate->getEffortLevel(), NULL, unw_info, NULL);
+    }
 
     void createExprTypeGuard(llvm::Value* check_val, AST* node, llvm::Value* node_value, AST_stmt* current_statement) {
         assert(check_val->getType() == g.i1);

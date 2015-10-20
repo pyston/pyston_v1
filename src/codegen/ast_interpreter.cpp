@@ -75,7 +75,7 @@ public:
 
 private:
     Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
-    Value doBinOp(Value left, Value right, int op, BinExpType exp_type);
+    Value doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
     void doStore(AST_Name* name, Value value);
     Box* doOSR(AST_Jump* node);
@@ -421,14 +421,14 @@ Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block,
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 
-Value ASTInterpreter::doBinOp(Value left, Value right, int op, BinExpType exp_type) {
+Value ASTInterpreter::doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type) {
     switch (exp_type) {
         case BinExpType::AugBinOp:
-            return Value(augbinop(left.o, right.o, op), jit ? jit->emitAugbinop(left, right, op) : NULL);
+            return Value(augbinop(left.o, right.o, op), jit ? jit->emitAugbinop(node, left, right, op) : NULL);
         case BinExpType::BinOp:
-            return Value(binop(left.o, right.o, op), jit ? jit->emitBinop(left, right, op) : NULL);
+            return Value(binop(left.o, right.o, op), jit ? jit->emitBinop(node, left, right, op) : NULL);
         case BinExpType::Compare:
-            return Value(compare(left.o, right.o, op), jit ? jit->emitCompare(left, right, op) : NULL);
+            return Value(compare(left.o, right.o, op), jit ? jit->emitCompare(node, left, right, op) : NULL);
         default:
             RELEASE_ASSERT(0, "not implemented");
     }
@@ -483,7 +483,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
         AST_Attribute* attr = (AST_Attribute*)node;
         Value o = visit_expr(attr->value);
         if (jit)
-            jit->emitSetAttr(o, attr->attr.getBox(), value);
+            jit->emitSetAttr(node, o, attr->attr.getBox(), value);
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
     } else if (node->type == AST_TYPE::Tuple) {
         AST_Tuple* tuple = (AST_Tuple*)node;
@@ -540,7 +540,7 @@ Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
 Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->right);
-    return doBinOp(left, right, node->op_type, BinExpType::BinOp);
+    return doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
 }
 
 Value ASTInterpreter::visit_slice(AST_slice* node) {
@@ -816,7 +816,7 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
 
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->right);
-    return doBinOp(left, right, node->op_type, BinExpType::AugBinOp);
+    return doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
 }
 
 Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
@@ -1276,7 +1276,7 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     RELEASE_ASSERT(node->comparators.size() == 1, "not implemented");
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->comparators[0]);
-    return doBinOp(left, right, node->ops[0], BinExpType::Compare);
+    return doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
 }
 
 Value ASTInterpreter::visit_expr(AST_expr* node) {
@@ -1553,7 +1553,7 @@ Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
     Value slice = visit_slice(node->slice);
 
-    return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(value, slice) : NULL);
+    return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(node, value, slice) : NULL);
 }
 
 Value ASTInterpreter::visit_list(AST_List* node) {
