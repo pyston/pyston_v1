@@ -2780,7 +2780,7 @@ static PyMethodDef string_methods[] = {
     { "rindex", (PyCFunction)string_rindex, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
-    { "replace", (PyCFunction)string_replace, METH_VARARGS, NULL },
+    { "replace", (PyCFunction)string_replace, METH_O3 | METH_D1, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
     { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },

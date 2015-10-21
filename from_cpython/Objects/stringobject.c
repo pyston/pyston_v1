@@ -899,14 +899,19 @@ replace(PyStringObject *self,
     }
 }
 
-PyObject* string_replace(PyStringObject *self, PyObject *args)
+// Pyston change: don't use varags calling convention
+// PyObject* string_replace(PyStringObject *self, PyObject *args)
+PyObject* string_replace(PyStringObject *self, PyObject *from, PyObject* to, PyObject** args)
 {
+    PyObject* _count = args[0];
     Py_ssize_t count = -1;
-    PyObject *from, *to;
     const char *from_s, *to_s;
     Py_ssize_t from_len, to_len;
 
-    if (!PyArg_ParseTuple(args, "OO|n:replace", &from, &to, &count))
+    // Pyston change: don't use varags calling convention
+    // if (!PyArg_ParseTuple(args, "OO|n:replace", &from, &to, &count))
+    //    return NULL;
+    if (_count && !PyArg_ParseSingle(_count, 3, "replace", "n", &count))
         return NULL;
 
     if (PyString_Check(from)) {
