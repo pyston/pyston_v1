@@ -30,3 +30,11 @@ test(Test())
 del Test.__setattr__
 for i in xrange(100):
     test(Test())
+
+class Old():
+    pass
+old = Old()
+for i in xrange(1000):
+    old.a = i
+    assert old.a == i
+

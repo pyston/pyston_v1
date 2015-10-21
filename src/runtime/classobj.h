@@ -85,9 +85,11 @@ public:
 };
 
 Box* instance_getattro(Box* cls, Box* attr) noexcept;
+int instance_setattro(Box* cls, Box* attr, Box* value) noexcept;
 class GetattrRewriteArgs;
 template <ExceptionStyle S>
 Box* instanceGetattroInternal(Box* self, Box* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI);
+Box* instanceSetattroInternal(Box* self, Box* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 }
 
 #endif

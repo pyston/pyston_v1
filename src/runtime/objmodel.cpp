@@ -2429,12 +2429,22 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
         r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattro), (intptr_t)tp_setattro);
     }
 
-
     // Note: setattr will only be retrieved if we think it will be profitable to try calling that as opposed to
     // the tp_setattr function pointer.
     Box* setattr = NULL;
     RewriterVar* r_setattr;
-    if (tp_setattro != PyObject_GenericSetAttr) {
+
+    if (tp_setattro == instance_setattro) {
+        if (rewriter.get()) {
+            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
+            instanceSetattroInternal(obj, attr, attr_val, &rewrite_args);
+            if (rewrite_args.out_success)
+                rewriter->commit();
+        } else
+            instanceSetattroInternal(obj, attr, attr_val, NULL);
+
+        return;
+    } else if (tp_setattro != PyObject_GenericSetAttr) {
         static BoxedString* setattr_str = internStringImmortal("__setattr__");
         if (rewriter.get()) {
             GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),

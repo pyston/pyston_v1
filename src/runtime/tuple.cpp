@@ -372,6 +372,8 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 
         return BoxedTuple::create(elts.size(), &elts[0], cls);
     } else {
+        if (cls == tuple_cls)
+            return EmptyTuple;
         return BoxedTuple::create(0, cls);
     }
 }

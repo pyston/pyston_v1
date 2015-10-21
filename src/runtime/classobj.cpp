@@ -46,6 +46,14 @@ static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArg
         return r;
     }
 
+    if (cls->bases == EmptyTuple) {
+        if (rewrite_args && rewrite_args->isSuccessful()) {
+            rewrite_args->obj->addAttrGuard(offsetof(BoxedClassobj, bases), (uint64_t)EmptyTuple);
+            rewrite_args->assertReturnConvention(ReturnConvention::NO_RETURN);
+        }
+        return NULL;
+    }
+
     if (rewrite_args) {
         if (rewrite_args->isSuccessful()) {
             rewrite_args->getReturn(); // just to make the asserts happy
@@ -489,7 +497,9 @@ Box* instanceGetattroInternal(Box* cls, Box* _attr, GetattrRewriteArgs* rewrite_
 template Box* instanceGetattroInternal<CAPI>(Box*, Box*, GetattrRewriteArgs*) noexcept;
 template Box* instanceGetattroInternal<CXX>(Box*, Box*, GetattrRewriteArgs*);
 
-Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
+Box* instanceSetattroInternal(Box* _inst, Box* _attr, Box* value, SetattrRewriteArgs* rewrite_args) {
+    STAT_TIMER(t0, "us_timer_instance_setattro", 0);
+
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
@@ -513,15 +523,43 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
     }
 
     static BoxedString* setattr_str = internStringImmortal("__setattr__");
-    Box* setattr = classLookup(inst->inst_cls, setattr_str);
 
-    if (setattr) {
-        setattr = processDescriptor(setattr, inst, inst->inst_cls);
-        return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+    if (rewrite_args) {
+        RewriterVar* inst_r = rewrite_args->obj->getAttr(offsetof(BoxedInstance, inst_cls));
+        inst_r->addGuard((uint64_t)inst->inst_cls);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, inst_r,
+                                         rewrite_args->rewriter->getReturnDestination());
+        Box* setattr = classLookup<REWRITABLE>(inst->inst_cls, setattr_str, &grewrite_args);
+
+        if (!grewrite_args.isSuccessful()) {
+            assert(!rewrite_args->out_success);
+            rewrite_args = NULL;
+        }
+
+        if (setattr) {
+            setattr = processDescriptor(setattr, inst, inst->inst_cls);
+            return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+        }
+
+        if (rewrite_args)
+            grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
+
+        _inst->setattr(attr, value, rewrite_args);
+        return None;
+    } else {
+        Box* setattr = classLookup(inst->inst_cls, setattr_str);
+        if (setattr) {
+            setattr = processDescriptor(setattr, inst, inst->inst_cls);
+            return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+        }
+
+        _inst->setattr(attr, value, NULL);
+        return None;
     }
+}
 
-    _inst->setattr(attr, value, NULL);
-    return None;
+Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
+    return instanceSetattroInternal(_inst, _attr, value, NULL);
 }
 
 Box* instanceDelattr(Box* _inst, Box* _attr) {
@@ -552,7 +590,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
     return None;
 }
 
-static int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
+int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
     try {
         if (value) {
             instanceSetattr(cls, attr, value);
