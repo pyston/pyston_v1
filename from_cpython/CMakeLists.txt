@@ -94,6 +94,8 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
 
 # compile specified files in from_cpython/Python
 file(GLOB_RECURSE STDPYTHON_SRCS Python
+    asdl.c
+    ast.c
     dtoa.c
     formatter_string.c
     formatter_unicode.c
@@ -102,6 +104,7 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     mystrtoul.c
     pyctype.c
     pystrtod.c
+    Python-ast.c
     random.c
     structmember.c
     )
