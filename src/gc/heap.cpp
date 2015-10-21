@@ -357,6 +357,8 @@ GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
 #else
     memcpy(rtn, al, std::min(bytes, size));
 #endif
+    if (bytesAllocatedSinceCollection > size)
+        bytesAllocatedSinceCollection -= size;
 
     free(al);
     return rtn;
@@ -772,6 +774,9 @@ GCAllocation* LargeArena::realloc(GCAllocation* al, size_t bytes) {
     GCAllocation* rtn = heap->alloc(bytes);
     memcpy(rtn, al, std::min(bytes, obj->size));
 
+    if (bytesAllocatedSinceCollection > size)
+        bytesAllocatedSinceCollection -= size;
+
     _freeLargeObj(obj);
     return rtn;
 }
@@ -993,6 +998,9 @@ GCAllocation* HugeArena::realloc(GCAllocation* al, size_t bytes) {
 
     GCAllocation* rtn = heap->alloc(bytes);
     memcpy(rtn, al, std::min(bytes, obj->size));
+
+    if (bytesAllocatedSinceCollection > obj->size)
+        bytesAllocatedSinceCollection -= obj->size;
 
     _freeHugeObj(obj);
     return rtn;
