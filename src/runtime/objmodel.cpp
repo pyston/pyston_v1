@@ -2397,6 +2397,8 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
             rewrite_args->rewriter->call(true, (void*)PyType_Modified, rewrite_args->obj);
     }
 }
+template void setattrGeneric<REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+template void setattrGeneric<NOT_REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
 extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
