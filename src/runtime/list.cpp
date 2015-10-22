@@ -1273,7 +1273,6 @@ void setupList() {
     static PyMappingMethods list_as_mapping;
     list_cls->tp_as_mapping = &list_as_mapping;
 
-    list_cls->tp_iter = listIter;
     list_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
                                            sizeof(BoxedListIterator), false, "listiterator");
     list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
@@ -1356,6 +1355,7 @@ void setupList() {
 
     list_cls->giveAttr("__hash__", None);
     list_cls->freeze();
+    list_cls->tp_iter = listIter;
 
     list_cls->tp_as_sequence->sq_length = list_length;
     list_cls->tp_as_sequence->sq_concat = (binaryfunc)list_concat;
