@@ -130,7 +130,8 @@ block_alloc(block *b, size_t size)
 PyArena *
 PyArena_New()
 {
-    PyArena* arena = (PyArena *)malloc(sizeof(PyArena));
+    // Pyston change: conservatively allocate the PyArena metadata object
+    PyArena* arena = (PyArena *)PyMem_Malloc(sizeof(PyArena));
     if (!arena)
         return (PyArena*)PyErr_NoMemory();
 
@@ -176,7 +177,8 @@ PyArena_Free(PyArena *arena)
     */
 
     Py_DECREF(arena->a_objects);
-    free(arena);
+    // Pyston change:
+    PyMem_Free(arena);
 }
 
 void *
