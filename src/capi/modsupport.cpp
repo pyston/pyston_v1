@@ -423,8 +423,6 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     Box* passthrough = static_cast<Box*>(self);
 
     while (methods && methods->ml_name) {
-        RELEASE_ASSERT((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0, "%d",
-                       methods->ml_flags);
         module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods, passthrough, boxString(name)));
 
         methods++;

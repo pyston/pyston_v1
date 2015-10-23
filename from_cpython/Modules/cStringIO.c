@@ -222,12 +222,13 @@ IO_creadline(PyObject *self, char **output) {
 }
 
 static PyObject *
-IO_readline(IOobject *self, PyObject *args) {
+IO_readline(IOobject *self, PyObject *m_obj) {
     int n, m=-1;
     char *output;
 
-    if (args)
-        if (!PyArg_ParseTuple(args, "|i:readline", &m)) return NULL;
+    // Pyston change:
+    if (m_obj)
+        if (!PyArg_ParseSingle(m_obj, 1, "readline", "i", &m)) return NULL;
 
     if( (n=IO_creadline((PyObject*)self,&output)) < 0) return NULL;
     if (m >= 0 && m < n) {
@@ -514,7 +515,7 @@ static struct PyMethodDef O_methods[] = {
   {"getvalue",  (PyCFunction)IO_getval,   METH_VARARGS, IO_getval__doc__},
   {"isatty",    (PyCFunction)IO_isatty,   METH_NOARGS,  IO_isatty__doc__},
   {"read",      (PyCFunction)IO_read,     METH_VARARGS, IO_read__doc__},
-  {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
+  {"readline",  (PyCFunction)IO_readline, /* Pyston change: */ METH_O | METH_D1, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
   {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},
@@ -621,7 +622,7 @@ static struct PyMethodDef I_methods[] = {
   {"getvalue",  (PyCFunction)IO_getval,   METH_VARARGS, IO_getval__doc__},
   {"isatty",    (PyCFunction)IO_isatty,   METH_NOARGS,  IO_isatty__doc__},
   {"read",      (PyCFunction)IO_read,     METH_VARARGS, IO_read__doc__},
-  {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
+  {"readline",  (PyCFunction)IO_readline, /* Pyston change: */ METH_O | METH_D1, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
   {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},
@@ -684,11 +685,8 @@ newIobject(PyObject *s) {
   PyObject *args;
   int result;
 
-  args = Py_BuildValue("(O)", s);
-  if (args == NULL)
-      return NULL;
-  result = PyArg_ParseTuple(args, "s*:StringIO", &buf);
-  Py_DECREF(args);
+  // Pyston change:
+  result = PyArg_ParseSingle(s, 1, "StringIO", "s*", &buf);
   if (!result)
       return NULL;
 
@@ -713,11 +711,7 @@ PyDoc_STRVAR(IO_StringIO__doc__,
 "StringIO([s]) -- Return a StringIO-like stream for reading or writing");
 
 static PyObject *
-IO_StringIO(PyObject *self, PyObject *args) {
-  PyObject *s=0;
-
-  if (!PyArg_UnpackTuple(args, "StringIO", 0, 1, &s)) return NULL;
-
+IO_StringIO(PyObject *self, PyObject *s) {
   if (s) return newIobject(s);
   return newOobject(128);
 }
@@ -726,7 +720,7 @@ IO_StringIO(PyObject *self, PyObject *args) {
 
 static struct PyMethodDef IO_methods[] = {
   {"StringIO",  (PyCFunction)IO_StringIO,
-   METH_VARARGS,        IO_StringIO__doc__},
+   /* Pyston change: */ METH_O | METH_D1,        IO_StringIO__doc__},
   {NULL,                NULL}           /* sentinel */
 };
 

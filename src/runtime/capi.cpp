@@ -1509,6 +1509,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     auto func = self->method_def->ml_meth;
 
     ParamReceiveSpec paramspec(0, 0, true, false);
+    Box** defaults = NULL;
     if (flags == METH_VARARGS) {
         paramspec = ParamReceiveSpec(0, 0, true, false);
     } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
@@ -1519,6 +1520,27 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         paramspec = ParamReceiveSpec(1, 0, false, false);
     } else if (flags == METH_OLDARGS) {
         paramspec = ParamReceiveSpec(1, 0, false, false);
+    } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
+        int num_args = 0;
+        if (flags & METH_O)
+            num_args++;
+        if (flags & METH_O2)
+            num_args += 2;
+
+        int num_defaults = 0;
+        if (flags & METH_D1)
+            num_defaults++;
+        if (flags & METH_D2)
+            num_defaults += 2;
+
+        paramspec = ParamReceiveSpec(num_args, num_defaults, false, false);
+        if (num_defaults) {
+            static Box* _defaults[] = { NULL, NULL, NULL };
+            assert(num_defaults <= 3);
+            defaults = _defaults;
+        }
+
+        assert(paramspec.totalReceived() <= 3); // would need to allocate oargs
     } else {
         RELEASE_ASSERT(0, "0x%x", flags);
     }
@@ -1549,8 +1571,8 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     }
 
     bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method_def->ml_name, NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, oargs, keyword_names);
+    rearrangeArguments(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, rewrite_success, argspec,
+                       arg1, arg2, arg3, args, oargs, keyword_names);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -1578,6 +1600,22 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         rtn = (Box*)func(self->passthrough, arg1);
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+    } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
+        assert(paramspec.totalReceived() <= 3); // would need to pass through oargs
+        rtn = ((Box * (*)(Box*, Box*, Box*, Box*))func)(self->passthrough, arg1, arg2, arg3);
+        if (rewrite_args) {
+            if (paramspec.totalReceived() == 1)
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+            else if (paramspec.totalReceived() == 2)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
+                                                                     rewrite_args->arg1, rewrite_args->arg2);
+            else if (paramspec.totalReceived() == 3)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                    true, (void*)func, r_passthrough, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+            else
+                abort();
+        }
     } else if (flags == METH_OLDARGS) {
         /* the really old style */
 
