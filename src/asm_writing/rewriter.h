@@ -580,6 +580,8 @@ public:
 
     TypeRecorder* getTypeRecorder();
 
+    const ICInfo* getICInfo() { return rewrite->getICInfo(); }
+
     const char* debugName() { return rewrite->debugName(); }
 
     // Register that this rewrite will embed a reference to a particular gc object.

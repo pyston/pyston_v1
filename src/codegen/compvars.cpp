@@ -584,12 +584,16 @@ _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle 
     bool pass_keyword_names = (keyword_names != nullptr);
     assert(pass_keyword_names == (argspec.num_keywords > 0));
 
+    bool has_const_arg_classes = true;
     std::vector<BoxedClass*> guaranteed_classes;
     std::vector<ConcreteCompilerVariable*> converted_args;
     for (int i = 0; i < args.size(); i++) {
         assert(args[i]);
         converted_args.push_back(args[i]->makeConverted(emitter, args[i]->getBoxType()));
-        guaranteed_classes.push_back(converted_args.back()->guaranteedClass());
+        BoxedClass* guaranteed_class = converted_args.back()->guaranteedClass();
+        guaranteed_classes.push_back(guaranteed_class);
+        if (guaranteed_class == NULL)
+            has_const_arg_classes = false;
     }
 
     std::vector<llvm::Value*> llvm_args;
@@ -658,7 +662,8 @@ _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle 
     if (do_patchpoint) {
         assert(func_addr);
 
-        ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo());
+        ICSetupInfo* pp
+            = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo(), has_const_arg_classes);
 
         llvm::Instruction* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style,
                                                        getNullPtr(g.llvm_value_type_ptr));

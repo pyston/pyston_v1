@@ -49,8 +49,9 @@ int ICSetupInfo::totalSize() const {
 static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
 
 ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
-                                     TypeRecorder* type_recorder) {
-    ICSetupInfo* rtn = new ICSetupInfo(type, num_slots, slot_size, has_return_value, type_recorder);
+                                     TypeRecorder* type_recorder, bool has_const_arg_classes) {
+    ICSetupInfo* rtn
+        = new ICSetupInfo(type, num_slots, slot_size, has_return_value, type_recorder, has_const_arg_classes);
 
     // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
     assert(rtn->totalSize() > CALL_ONLY_SIZE);
@@ -325,6 +326,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
             start_addr, initialization_info.slowpath_start, initialization_info.continue_addr,
             initialization_info.slowpath_rtn_addr, ic, StackInfo(scratch_size, scratch_rsp_offset),
             std::move(initialization_info.live_outs));
+        icinfo->setHasConstArgClasses(ic->has_const_arg_classes);
 
         assert(cf);
         // TODO: unsafe.  hard to use a unique_ptr here though.
@@ -403,9 +405,9 @@ ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(false, 1, 144, ICSetupInfo::Delattr, type_recorder);
 }
 
-ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 4), 640 + 48 * num_args, ICSetupInfo::Callsite,
-                                   type_recorder);
+ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info, bool const_arg_classes) {
+    return ICSetupInfo::initialize(true, const_arg_classes ? 1 : numSlots(bjit_ic_info, 4), 640 + 48 * num_args,
+                                   ICSetupInfo::Callsite, type_recorder, const_arg_classes);
 }
 
 ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder) {

@@ -247,6 +247,7 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
       retry_in(0),
       retry_backoff(1),
       times_rewritten(0),
+      has_const_arg_classes(false),
       ic_global_decref_locations(std::move(ic_global_decref_locations)),
       start_addr(start_addr),
       slowpath_rtn_addr(slowpath_rtn_addr),
