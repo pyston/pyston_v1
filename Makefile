@@ -779,7 +779,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-X -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
@@ -825,6 +825,7 @@ perf_report:
 
 .PHONY: run run_% dbg_% debug_% perf_%
 run: run_dbg
+dbg: dbg_dbg
 run_%: run_dbg_%
 	@true
 dbg_%: dbg_dbg_%

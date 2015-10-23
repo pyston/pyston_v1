@@ -387,18 +387,8 @@ static AST_Module* parseExec(llvm::StringRef source, FutureFlags future_flags, b
     const char* code = source.data();
     AST_Module* parsedModule = parse_string(code, future_flags);
 
-    if (interactive) {
-        for (int i = 0; i < parsedModule->body.size(); ++i) {
-            AST_stmt* s = parsedModule->body[i];
-            if (s->type != AST_TYPE::Expr)
-                continue;
-
-            AST_Expr* expr = (AST_Expr*)s;
-            AST_LangPrimitive* print_expr = new AST_LangPrimitive(AST_LangPrimitive::PRINT_EXPR);
-            print_expr->args.push_back(expr->value);
-            expr->value = print_expr;
-        }
-    }
+    if (interactive)
+        makeModuleInteractive(parsedModule);
 
     return parsedModule;
 }

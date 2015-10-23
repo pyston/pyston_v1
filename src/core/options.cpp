@@ -41,6 +41,7 @@ bool USE_STRIPPED_STDLIB = true; // always true
 bool ENABLE_INTERPRETER = true;
 bool ENABLE_BASELINEJIT = true;
 bool ENABLE_PYPA_PARSER = true;
+bool ENABLE_CPYTHON_PARSER = false;
 bool USE_REGALLOC_BASIC = true;
 bool PAUSE_AT_ABORT = false;
 bool ENABLE_TRACEBACKS = true;
@@ -90,9 +91,11 @@ bool BOOLS_AS_I64 = ENABLE_FRAME_INTROSPECTION;
 extern "C" {
 int Py_FrozenFlag = 1;
 int Py_IgnoreEnvironmentFlag = 0;
+int Py_InteractiveFlag = 0;
 int Py_InspectFlag = 0;
 int Py_NoSiteFlag = 0;
 int Py_OptimizeFlag = 0;
 int Py_VerboseFlag = 0;
+int Py_UnicodeFlag = 0;
 }
 }

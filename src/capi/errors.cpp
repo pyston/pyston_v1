@@ -256,7 +256,35 @@ finally:
 }
 
 static void print_error_text(PyObject* f, int offset, const char* text) noexcept {
-    Py_FatalError("unimplemented");
+    const char* nl;
+    if (offset >= 0) {
+        if (offset > 0 && offset == strlen(text) && text[offset - 1] == '\n')
+            offset--;
+        for (;;) {
+            nl = strchr(text, '\n');
+            if (nl == NULL || nl - text >= offset)
+                break;
+            offset -= (int)(nl + 1 - text);
+            text = nl + 1;
+        }
+        while (*text == ' ' || *text == '\t') {
+            text++;
+            offset--;
+        }
+    }
+    PyFile_WriteString("    ", f);
+    PyFile_WriteString(text, f);
+    if (*text == '\0' || text[strlen(text) - 1] != '\n')
+        PyFile_WriteString("\n", f);
+    if (offset == -1)
+        return;
+    PyFile_WriteString("    ", f);
+    offset--;
+    while (offset > 0) {
+        PyFile_WriteString(" ", f);
+        offset--;
+    }
+    PyFile_WriteString("^\n", f);
 }
 
 extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) noexcept {
@@ -468,5 +496,46 @@ extern "C" void PyErr_PrintEx(int set_sys_last_vars) noexcept {
 
 extern "C" void PyErr_Print() noexcept {
     PyErr_PrintEx(1);
+}
+
+/* com_fetch_program_text will attempt to load the line of text that
+   the exception refers to.  If it fails, it will return NULL but will
+   not set an exception.
+
+   XXX The functionality of this function is quite similar to the
+   functionality in tb_displayline() in traceback.c.
+*/
+
+extern "C" PyObject* PyErr_ProgramText(const char* filename, int lineno) noexcept {
+    FILE* fp;
+    int i;
+    char linebuf[1000];
+
+    if (filename == NULL || *filename == '\0' || lineno <= 0)
+        return NULL;
+    fp = fopen(filename, "r" PY_STDIOTEXTMODE);
+    if (fp == NULL)
+        return NULL;
+    for (i = 0; i < lineno; i++) {
+        char* pLastChar = &linebuf[sizeof(linebuf) - 2];
+        do {
+            *pLastChar = '\0';
+            if (Py_UniversalNewlineFgets(linebuf, sizeof linebuf, fp, NULL) == NULL)
+                break;
+            /* fgets read *something*; if it didn't get as
+               far as pLastChar, it must have found a newline
+               or hit the end of the file; if pLastChar is \n,
+               it obviously found a newline; else we haven't
+               yet seen a newline, so must continue */
+        } while (*pLastChar != '\0' && *pLastChar != '\n');
+    }
+    fclose(fp);
+    if (i == lineno) {
+        char* p = linebuf;
+        while (*p == ' ' || *p == '\t' || *p == '\014')
+            p++;
+        return PyString_FromString(p);
+    }
+    return NULL;
 }
 }
