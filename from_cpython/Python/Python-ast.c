@@ -461,7 +461,7 @@ static PyMethodDef ast_type_methods[] = {
 };
 
 static PyTypeObject AST_type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change: &PyType_Type */ NULL, 0)
     "_ast.AST",
     sizeof(PyObject),
     0,
@@ -6779,10 +6779,13 @@ mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode)
         return res;
 }
 
+// Pyston temporary change: we're not using this file for the python module, at least not yet.
+#if 0
 int PyAST_Check(PyObject* obj)
 {
     init_types();
     return PyObject_IsInstance(obj, (PyObject*)&AST_type);
 }
+#endif
 
 

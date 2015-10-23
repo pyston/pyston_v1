@@ -100,8 +100,10 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     formatter_string.c
     formatter_unicode.c
     getargs.c
+    graminit.c
     marshal.c
     mystrtoul.c
+    pyarena.c
     pyctype.c
     pystrtod.c
     Python-ast.c
@@ -111,7 +113,13 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
 
 # compile specified files in from_cpython/Python
 file(GLOB_RECURSE STDPARSER_SRCS Parser
+    acceler.c
+    grammar1.c
     myreadline.c
+    node.c
+    parser.c
+    parsetok.c
+    tokenizer.c
     )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautological-compare -Wno-type-limits -Wno-unused-result -Wno-strict-aliasing -DPy_BUILD_CORE")

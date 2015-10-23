@@ -111,7 +111,8 @@ fixstate(grammar *g, state *s)
         k++;
     if (k < nl) {
         int i;
-        s->s_accel = (int *) PyObject_MALLOC((nl-k) * sizeof(int));
+        // Pyston change:
+        s->s_accel = (int *) PyGC_AddRoot(PyObject_MALLOC((nl-k) * sizeof(int)));
         if (s->s_accel == NULL) {
             fprintf(stderr, "no mem to add parser accelerators\n");
             exit(1);

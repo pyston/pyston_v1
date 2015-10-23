@@ -22,8 +22,10 @@
 
 namespace pyston {
 
-AST_Module* cpythonToPystonAst(mod_ty mod);
-
+// Convert a CPython ast object to a Pyston ast object.
+// This will also check for certain kinds of "syntax errors" (ex continue not in loop) and will
+// throw them as C++ exceptions.
+AST_Module* cpythonToPystonAST(mod_ty mod, llvm::StringRef fn);
 }
 
 #endif

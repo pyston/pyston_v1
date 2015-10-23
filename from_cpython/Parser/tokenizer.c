@@ -19,7 +19,7 @@
 #include "pydebug.h"
 #endif /* PGEN */
 
-extern char *PyOS_Readline(FILE *, FILE *, char *);
+extern char *PyOS_Readline(FILE *, FILE *, const char *);
 /* Return malloc'ed string including trailing \n;
    empty malloc'ed string for EOF;
    NULL if interrupted */
@@ -783,7 +783,7 @@ tok_stdin_decode(struct tok_state *tok, char **inp)
     if (sysstdin == NULL || !PyFile_Check(sysstdin))
         return 0;
 
-    enc = ((PyFileObject *)sysstdin)->f_encoding;
+    enc = PyFile_GetEncoding(sysstdin);
     if (enc == NULL || !PyString_Check(enc))
         return 0;
     Py_INCREF(enc);

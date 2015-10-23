@@ -14,6 +14,16 @@
 
 #include "codegen/irgen/hooks.h"
 
+#include "codegen/cpython_ast.h"
+// These #defines in Python-ast.h conflict with llvm:
+#undef Pass
+#undef Module
+#undef alias
+#undef Option
+#undef Name
+#undef Attribute
+#undef Set
+
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/Support/raw_ostream.h"
 

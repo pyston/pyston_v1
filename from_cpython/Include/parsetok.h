@@ -33,30 +33,30 @@ typedef struct {
 
 
 PyAPI_FUNC(node *) PyParser_ParseString(const char *, grammar *, int,
-                                              perrdetail *);
+                                              perrdetail *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(node *) PyParser_ParseFile (FILE *, const char *, grammar *, int,
-                                             char *, char *, perrdetail *);
+                                             char *, char *, perrdetail *) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(node *) PyParser_ParseStringFlags(const char *, grammar *, int,
-                                              perrdetail *, int);
+                                              perrdetail *, int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(node *) PyParser_ParseFileFlags(FILE *, const char *, grammar *,
 						 int, char *, char *,
-						 perrdetail *, int);
+						 perrdetail *, int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(node *) PyParser_ParseFileFlagsEx(FILE *, const char *, grammar *,
 						 int, char *, char *,
-						 perrdetail *, int *);
+						 perrdetail *, int *) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(node *) PyParser_ParseStringFlagsFilename(const char *,
 					      const char *,
 					      grammar *, int,
-                                              perrdetail *, int);
+                                              perrdetail *, int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(node *) PyParser_ParseStringFlagsFilenameEx(const char *,
 					      const char *,
 					      grammar *, int,
-                                              perrdetail *, int *);
+                                              perrdetail *, int *) PYSTON_NOEXCEPT;
 
 /* Note that he following function is defined in pythonrun.c not parsetok.c. */
-PyAPI_FUNC(void) PyParser_SetError(perrdetail *);
+PyAPI_FUNC(void) PyParser_SetError(perrdetail *) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

@@ -459,7 +459,7 @@ struct _typeobject {
     char _ics[32];
     void* _gcvisit_func;
     int _attrs_offset;
-    bool _flags[7];
+    char _flags[7]; // These are bools in C++
     void* _tpp_descr_get;
     void* _tpp_hasnext;
     void* _tpp_call_capi;

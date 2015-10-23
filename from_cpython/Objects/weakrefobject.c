@@ -951,7 +951,7 @@ PyObject_ClearWeakRefs(PyObject *object)
                 // Pyston change:
                 // current is a stack reference to a GC allocated object.  If it wasn't null when we fetched it from *list, it won't
                 // be collected, and we can trust that it's still valid here.
-                if (true /*current->ob_refcnt > 0*/)
+                if (1 /*current->ob_refcnt > 0*/)
                     handle_callback(current, callback);
                 Py_DECREF(callback);
             }
@@ -973,7 +973,7 @@ PyObject_ClearWeakRefs(PyObject *object)
                 // Pyston change:
                 // current is a stack reference to a GC allocated object.  If it wasn't null when we fetched it from *list, it won't
                 // be collected, and we can trust that it's still valid here.
-                if (true /*current->ob_refcnt > 0*/)
+                if (1 /*current->ob_refcnt > 0*/)
                 {
                     Py_INCREF(current);
                     PyTuple_SET_ITEM(tuple, i * 2, (PyObject *) current);
