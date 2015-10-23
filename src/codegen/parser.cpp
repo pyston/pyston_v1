@@ -1054,13 +1054,12 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
         FILE* fp = fopen(fn, "r");
         PyCompilerFlags cf;
         cf.cf_flags = 0;
-        PyArena* arena = PyArena_New();
+        ArenaWrapper arena;
         assert(arena);
         mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
         if (!mod)
             throwCAPIException();
-        auto rtn = cpythonToPystonAST(mod);
-        PyArena_Free(arena);
+        auto rtn = cpythonToPystonAST(mod, fn);
         return rtn;
     }
 
@@ -1142,12 +1141,12 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
             FILE* fp = fopen(fn, "r");
             PyCompilerFlags cf;
             cf.cf_flags = 0;
-            PyArena* arena = PyArena_New();
+            ArenaWrapper arena;
             assert(arena);
             mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
             if (!mod)
                 throwCAPIException();
-            module = cpythonToPystonAST(mod);
+            module = cpythonToPystonAST(mod, fn);
         } else {
             module = pypa_parse(fn, inherited_flags);
             RELEASE_ASSERT(module, "unknown parse error");

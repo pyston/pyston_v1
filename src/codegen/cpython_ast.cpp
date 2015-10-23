@@ -17,6 +17,7 @@
 #include "llvm/ADT/STLExtras.h"
 
 #include "core/types.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -56,8 +57,13 @@ while lines:
 class Converter {
 private:
     InternedStringPool* pool = NULL;
+    int loop_depth = 0;
+    int in_finally = 0;
+    llvm::StringRef fn;
 
 public:
+    Converter(llvm::StringRef fn) : fn(fn) {}
+
     template <typename T, typename P> std::vector<P> convert(asdl_seq* seq) {
         std::vector<P> rtn;
         if (!seq)
@@ -506,7 +512,12 @@ public:
                 auto v = stmt->v.For;
                 r->target = convert(v.target);
                 r->iter = convert(v.iter);
+                auto fin = in_finally;
+                in_finally = 0;
+                loop_depth++;
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
+                loop_depth--;
+                in_finally = fin;
                 r->orelse = convert<stmt_ty, AST_stmt*>(v.orelse);
                 return r;
             }
@@ -514,7 +525,12 @@ public:
                 auto r = new AST_While();
                 auto v = stmt->v.While;
                 r->test = convert(v.test);
+                auto fin = in_finally;
+                in_finally = 0;
+                loop_depth++;
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
+                loop_depth--;
+                in_finally = fin;
                 r->orelse = convert<stmt_ty, AST_stmt*>(v.orelse);
                 return r;
             }
@@ -554,7 +570,9 @@ public:
                 auto r = new AST_TryFinally();
                 auto v = stmt->v.TryFinally;
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
+                in_finally++;
                 r->finalbody = convert<stmt_ty, AST_stmt*>(v.finalbody);
+                in_finally--;
                 return r;
             }
             case Assert_kind: {
@@ -601,8 +619,16 @@ public:
             case Pass_kind:
                 return new AST_Pass();
             case Break_kind:
+                // This is not really the right place to be handling this, but this whole thing is temporary anyway.
+                if (loop_depth == 0)
+                    raiseSyntaxError("'break' outside loop", stmt->lineno, stmt->col_offset, fn, "", true);
                 return new AST_Break();
             case Continue_kind:
+                if (loop_depth == 0)
+                    raiseSyntaxError("'continue' not properly in loop", stmt->lineno, stmt->col_offset, fn, "", true);
+                if (in_finally)
+                    raiseSyntaxError("'continue' not supported inside 'finally' clause", stmt->lineno, stmt->col_offset,
+                                     fn, "", true);
                 return new AST_Continue();
         };
     }
@@ -630,8 +656,8 @@ public:
     }
 };
 
-AST_Module* cpythonToPystonAST(mod_ty mod) {
-    Converter c;
+AST_Module* cpythonToPystonAST(mod_ty mod, llvm::StringRef fn) {
+    Converter c(fn);
     return c.convert(mod);
 }
 }

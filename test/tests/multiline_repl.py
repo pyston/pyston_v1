@@ -43,3 +43,6 @@ test("import sys\nsys.exit(2)", 2)
 test("import sys; sys.exit(\n2)", 2)
 test("class C(object):\n    a=1\nprint C().a", 0)
 test("class C(object):\n    a=1\n\nprint C().a", 0)
+test("continue", 0)
+test("break", 0)
+# test("exec '+'", 0) # We don't get the traceback 100% right on this one

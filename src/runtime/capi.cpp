@@ -1236,11 +1236,10 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     // d = PyModule_GetDict(m);
     // v = run_mod(mod, filename, d, d, flags, arena);
     assert(PyModule_Check(m));
-    AST_Module* pyston_module = cpythonToPystonAST(mod);
-    makeModuleInteractive(pyston_module);
-
     bool failed = false;
     try {
+        AST_Module* pyston_module = cpythonToPystonAST(mod, filename);
+        makeModuleInteractive(pyston_module);
         compileAndRunModule(pyston_module, static_cast<BoxedModule*>(m));
     } catch (ExcInfo e) {
         setCAPIException(e);
