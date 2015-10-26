@@ -358,6 +358,18 @@ set(CMAKE_EXECUTABLE_FORMAT "ELF")
 install(TARGETS pyston DESTINATION ".")
 
 set(CPACK_GENERATOR "TGZ")
+
+set(CPACK_PACKAGE_VERSION_MAJOR "0")
+set(CPACK_PACKAGE_VERSION_MINOR "4")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+
+set(CPACK_SYSTEM_NAME "linux64")
+
+set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/LICENSE)
+set(CPACK_PACKAGE_DESCRIPTION_FILE ${CMAKE_SOURCE_DIR}/README.md)
+
+install(FILES LICENSE README.md DESTINATION ".")
+
 include(CPack)
 
 # last file added (need to change this if we add a file that is added via a glob):
