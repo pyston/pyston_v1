@@ -133,6 +133,8 @@ public:
             CASE(BitAnd);
             CASE(FloorDiv);
         }
+        // GCC wants this:
+        RELEASE_ASSERT(0, "invalid operator: %d", op);
     }
 
     AST_TYPE::AST_TYPE convert(boolop_ty op) {
@@ -140,6 +142,8 @@ public:
             CASE(Add);
             CASE(Or);
         }
+        // GCC wants this:
+        RELEASE_ASSERT(0, "invalid operator: %d", op);
     }
 
     AST_TYPE::AST_TYPE convert(unaryop_ty op) {
@@ -149,6 +153,8 @@ public:
             CASE(UAdd);
             CASE(USub);
         }
+        // GCC wants this:
+        RELEASE_ASSERT(0, "invalid operator: %d", op);
     }
 
     AST_TYPE::AST_TYPE convert(cmpop_ty op) {
@@ -164,6 +170,8 @@ public:
             CASE(In);
             CASE(NotIn);
         }
+        // GCC wants this:
+        RELEASE_ASSERT(0, "invalid operator: %d", op);
     }
 #undef CASE
 
@@ -207,6 +215,7 @@ public:
             case Ellipsis_kind:
                 return new AST_Ellipsis();
         }
+        RELEASE_ASSERT(0, "invalid slice type: %d", slice->kind);
     }
 
     AST_expr* _convert(expr_ty expr) {
@@ -631,6 +640,8 @@ public:
                                      fn, "", true);
                 return new AST_Continue();
         };
+        // GCC wants this:
+        RELEASE_ASSERT(0, "invalid statement type: %d", stmt->kind);
     }
 
     AST_stmt* convert(stmt_ty stmt) {
