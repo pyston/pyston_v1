@@ -12,6 +12,9 @@ foreach(STDLIB_FILE ${STDLIB_SRCS} ${STD_INCLUDES})
                        COMMENT "Copying ${FN_REL}"
                        )
     set(STDLIB_TARGETS ${STDLIB_TARGETS} ${TARGET})
+
+    get_filename_component(DIR ${FN_REL} DIRECTORY)
+    install(FILES ${STDLIB_FILE} DESTINATION ${DIR})
 endforeach(STDLIB_FILE)
 add_custom_target(copy_stdlib ALL DEPENDS ${STDLIB_TARGETS})
 
@@ -126,19 +129,22 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautolo
 add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS} ${STDPARSER_SRCS})
 add_dependencies(FROM_CPYTHON copy_stdlib)
 
-add_custom_command(OUTPUT
-                       ${CMAKE_BINARY_DIR}/lib_pyston/future_builtins.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/pyexpat.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/_elementtree.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/bz2.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/_ctypes.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/grp.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/readline.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/termios.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/_curses.pyston.so
-                       ${CMAKE_BINARY_DIR}/lib_pyston/mmap.pyston.so
-                   COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib_pyston
+set(STDMODULES
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/future_builtins.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/pyexpat.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_elementtree.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/bz2.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_ctypes.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/grp.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/readline.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/termios.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_curses.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/mmap.pyston.so
+)
+
+add_custom_command(OUTPUT ${STDMODULES}
+    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/from_cpython/Lib
                    DEPENDS
                        pyston
                        copy_stdlib
@@ -166,4 +172,6 @@ add_custom_command(OUTPUT
 		       Modules/_cursesmodule.c
 		       Modules/mmapmodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-add_custom_target(sharedmods DEPENDS ${CMAKE_BINARY_DIR}/lib_pyston/_multiprocessing.pyston.so)
+add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so)
+
+install(FILES ${STDMODULES} DESTINATION from_cpython/Lib)

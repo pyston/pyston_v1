@@ -1079,3 +1079,13 @@ lint_%: %.cpp plugins/clang_linter.so
 
 .PHONY: clang_lint
 clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))
+
+# 'make package' will build a package using the pgo build, since that's the
+# configuration with the best performance.  Testing that is a pain since it
+# requires rerunning the pgo build, so there's also 'make package_nonpgo' mostly
+# for testing.
+package: pyston_pgo
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) package
+
+package_nonpgo:
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) package

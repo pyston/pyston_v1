@@ -13,3 +13,5 @@ foreach(STDLIB_FILE ${LIBPYSTON_SRCS})
     set(LIBPYSTON_TARGETS ${LIBPYSTON_TARGETS} ${TARGET})
 endforeach(STDLIB_FILE)
 add_custom_target(copy_libpyston ALL DEPENDS ${LIBPYSTON_TARGETS})
+
+install(FILES ${LIBPYSTON_SRCS} DESTINATION lib_pyston)
