@@ -72,7 +72,7 @@ FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file)
 
     // Set the defaults for the future flags depending on what version we are
     for (const std::pair<std::string, FutureOption>& p : future_options) {
-        if (PYTHON_VERSION_HEX >= p.second.mandatory_version_hex) {
+        if (PY_VERSION_HEX >= p.second.mandatory_version_hex) {
             ff |= p.second.ff_mask;
         }
     }
@@ -101,7 +101,7 @@ FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file)
                         raiseFutureImportErrorNotFound(file, alias, option_name.c_str());
                     } else {
                         const FutureOption& fo = iter->second;
-                        if (PYTHON_VERSION_HEX >= fo.optional_version_hex) {
+                        if (PY_VERSION_HEX >= fo.optional_version_hex) {
                             ff |= fo.ff_mask;
                         } else {
                             raiseFutureImportErrorNotFound(file, alias, option_name.c_str());

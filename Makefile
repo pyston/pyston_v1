@@ -31,10 +31,6 @@ GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
 
 USE_DEBUG_LIBUNWIND := 0
 
-PYTHON_MAJOR_VERSION := 2
-PYTHON_MINOR_VERSION := 7
-PYTHON_MICRO_VERSION := 3
-
 MAX_MEM_KB := 500000
 MAX_DBG_MEM_KB := 500000
 
@@ -147,7 +143,6 @@ else
 endif
 
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
-COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto -lsqlite3
@@ -476,7 +471,6 @@ quick_check:
 
 Makefile.local:
 	echo "Creating default Makefile.local"
-	python -c 'import sys; v = sys.version_info; print "PYTHON_MAJOR_VERSION:=%d\nPYTHON_MINOR_VERSION:=%d\nPYTHON_MICRO_VERSION:=%d" % (v[0], v[1], v[2])' > Makefile.local || (rm $@; false)
 	which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local
 
 llvm_up:

@@ -21,9 +21,7 @@ extern "C" {
 
 extern int GLOBAL_VERBOSITY;
 #define VERBOSITY(x) pyston::GLOBAL_VERBOSITY
-extern int PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR;
-// Version number we're targeting:
-extern int PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO, PYTHON_VERSION_HEX;
+extern int PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR, PYSTON_VERSION_MICRO;
 
 inline int version_hex(int major, int minor, int micro, int level = 0, int serial = 0) {
     return (major << 24) | (minor << 16) | (micro << 8) | (level << 4) | (serial << 0);

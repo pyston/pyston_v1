@@ -204,7 +204,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
                 Box** oargs) noexcept(S == CAPI);
 
 static const char* objectNewParameterTypeErrorMsg() {
-    if (PYTHON_VERSION_HEX >= version_hex(2, 7, 4)) {
+    if (PY_VERSION_HEX >= version_hex(2, 7, 4)) {
         return "object() takes no parameters";
     } else {
         return "object.__new__() takes no parameters";
