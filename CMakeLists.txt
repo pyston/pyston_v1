@@ -370,6 +370,10 @@ set(CPACK_PACKAGE_DESCRIPTION_FILE ${CMAKE_SOURCE_DIR}/README.md)
 
 install(FILES LICENSE README.md DESTINATION ".")
 
+install(FILES test/lib/virtualenv/virtualenv.py DESTINATION virtualenv)
+install(FILES test/lib/virtualenv/virtualenv_support/pip-6.0.8-py2.py3-none-any.whl DESTINATION virtualenv/virtualenv_support)
+install(FILES test/lib/virtualenv/virtualenv_support/setuptools-12.0.5-py2.py3-none-any.whl DESTINATION virtualenv/virtualenv_support)
+
 include(CPack)
 
 # last file added (need to change this if we add a file that is added via a glob):
