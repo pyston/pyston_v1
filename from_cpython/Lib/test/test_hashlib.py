@@ -1,4 +1,3 @@
-# expected: fail
 # Test hashlib module
 #
 # $Id$

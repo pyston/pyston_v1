@@ -1,4 +1,3 @@
-# expected: fail
 '''
    Test cases for pyclbr.py
    Nick Mathewson

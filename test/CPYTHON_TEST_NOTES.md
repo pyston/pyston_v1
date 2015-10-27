@@ -23,7 +23,6 @@ test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
 test_argparse           [unknown]
-test_ascii_formattd     [unknown]
 test_ast                [unknown]
 test_asynchat           [unknown]
 test_asyncore           [unknown]
@@ -88,7 +87,6 @@ test_distutils          [unknown]
 test_dis                [unknown]
 test_dl                 [unknown]
 test_doctest            hard to know.  also missing some input files
-test_docxmlrpc          [unknown]
 test_dumbdbm            [unknown]
 test_email_codecs       [unknown]
 test_email_renamed      [unknown]
@@ -118,7 +116,6 @@ test_getargs2           [unknown]
 test_global             SyntaxWarnings for global statements after uses
 test_gl                 [unknown]
 test_grammar            bug in our tokenizer
-test_hashlib            [unknown]
 test_heapq              [unknown]
 test_hotshot            [unknown]
 test_httplib            [unknown]
@@ -172,13 +169,11 @@ test_pep352             various unique bugs
 test_pickletools        [unknown]
 test_pickle             unknown
 test_pkg                unknown bug
-test_poll               [unknown]
 test_poplib             [unknown]
 test_pprint             [unknown]
 test_print              [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
-test_pyclbr             [unknown]
 test_py_compile         [unknown]
 test_pydoc              [unknown]
 test_random             long("invalid number")
@@ -195,7 +190,6 @@ test_shelve             [unknown]
 test_shlex              [unknown]
 test_signal             [unknown]
 test_site               [unknown]
-test_smtplib            [unknown]
 test_smtpnet            [unknown]
 test_socketserver       [unknown]
 test_socket             [unknown]
@@ -225,7 +219,6 @@ test_tcl                [unknown]
 test_telnetlib          [unknown]
 test_tempfile           [unknown]
 test_threaded_import    [unknown]
-test_threadedtempfile   [unknown]
 test_threading_local    [unknown]
 test_threading          [unknown]
 test_threadsignals      [unknown]

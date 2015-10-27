@@ -1,4 +1,3 @@
-# expected: fail
 # Test case for the os.poll() function
 
 import os
