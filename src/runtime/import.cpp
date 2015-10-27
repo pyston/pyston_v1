@@ -963,6 +963,30 @@ Box* impIsFrozen(Box* name) {
     return False;
 }
 
+PyDoc_STRVAR(find_module_doc, "find_module(name, [path]) -> (file, filename, (suffix, mode, type))\n\
+Search for a module.  If path is omitted or None, search for a\n\
+built-in, frozen or special module and continue search in sys.path.\n\
+The module name cannot contain '.'; to search for a submodule of a\n\
+package, pass the submodule name and the package's __path__.");
+
+PyDoc_STRVAR(load_module_doc, "load_module(name, file, filename, (suffix, mode, type)) -> module\n\
+Load a module, given information returned by find_module().\n\
+The module name must include the full package name, if any.");
+
+PyDoc_STRVAR(get_suffixes_doc, "get_suffixes() -> [(suffix, mode, type), ...]\n\
+Return a list of (suffix, mode, type) tuples describing the files\n\
+that find_module() looks for.");
+
+PyDoc_STRVAR(acquire_lock_doc, "acquire_lock() -> None\n\
+Acquires the interpreter's import lock for the current thread.\n\
+This lock should be used by import hooks to ensure thread-safety\n\
+when importing modules.\n\
+On platforms without threads, this function does nothing.");
+
+PyDoc_STRVAR(release_lock_doc, "release_lock() -> None\n\
+Release the interpreter's import lock.\n\
+On platforms without threads, this function does nothing.");
+
 void setupImport() {
     BoxedModule* imp_module
         = createModule(boxString("imp"), NULL, "'This module provides the components needed to build your own\n"
@@ -980,17 +1004,19 @@ void setupImport() {
         "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, false, false), { None }));
     null_importer_cls->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(
                                                    boxRTFunction((void*)nullImporterFindModule, NONE, 2, false, false),
-                                                   "find_module", { None }));
+                                                   "find_module", { None }, NULL, find_module_doc));
     null_importer_cls->freeze();
     imp_module->giveAttr("NullImporter", null_importer_cls);
 
     CLFunction* find_module_func
         = boxRTFunction((void*)impFindModule, UNKNOWN, 2, false, false, ParamNames({ "name", "path" }, "", ""));
-    imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None }));
+    imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None },
+                                                                         NULL, find_module_doc));
 
     CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
                                                  ParamNames({ "name", "file", "pathname", "description" }, "", ""));
-    imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
+    imp_module->giveAttr("load_module",
+                         new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module", load_module_doc));
     imp_module->giveAttr("load_source",
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impLoadSource, UNKNOWN, 3, false, false),
                                                           "load_source", { NULL }));
@@ -999,12 +1025,13 @@ void setupImport() {
                                                   ParamNames({ "name", "pathname", "file" }, "", ""));
     imp_module->giveAttr("load_dynamic", new BoxedBuiltinFunctionOrMethod(load_dynamic_func, "load_dynamic", { None }));
 
-    imp_module->giveAttr("get_suffixes", new BoxedBuiltinFunctionOrMethod(
-                                             boxRTFunction((void*)impGetSuffixes, UNKNOWN, 0), "get_suffixes"));
+    imp_module->giveAttr("get_suffixes",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impGetSuffixes, UNKNOWN, 0),
+                                                          "get_suffixes", get_suffixes_doc));
     imp_module->giveAttr("acquire_lock", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impAcquireLock, NONE, 0),
-                                                                          "acquire_lock"));
+                                                                          "acquire_lock", acquire_lock_doc));
     imp_module->giveAttr("release_lock", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impReleaseLock, NONE, 0),
-                                                                          "release_lock"));
+                                                                          "release_lock", release_lock_doc));
 
     imp_module->giveAttr("new_module",
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impNewModule, MODULE, 1), "new_module"));
