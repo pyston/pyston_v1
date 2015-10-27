@@ -42,14 +42,32 @@ static Box* enable() {
     return None;
 }
 
+PyDoc_STRVAR(gc_enable_doc, "enable() -> None\n"
+                            "\n"
+                            "Enable automatic garbage collection.\n");
+
+PyDoc_STRVAR(gc_disable_doc, "disable() -> None\n"
+                             "\n"
+                             "Disable automatic garbage collection.\n");
+
+PyDoc_STRVAR(gc_isenabled_doc, "isenabled() -> status\n"
+                               "\n"
+                               "Returns true if automatic garbage collection is enabled.\n");
+
+PyDoc_STRVAR(gc_collect_doc, "collect() -> n\n"
+                             "\n"
+                             "Run a full collection.\n");
+
 void setupGC() {
     BoxedModule* gc_module = createModule(boxString("gc"));
 
-    gc_module->giveAttr("collect",
-                        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)gcCollect, NONE, 0), "collect"));
-    gc_module->giveAttr("isenabled",
-                        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0), "isenabled"));
-    gc_module->giveAttr("disable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)disable, NONE, 0), "disable"));
-    gc_module->giveAttr("enable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)enable, NONE, 0), "enable"));
+    gc_module->giveAttr("collect", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)gcCollect, NONE, 0), "collect",
+                                                                    gc_collect_doc));
+    gc_module->giveAttr("isenabled", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0),
+                                                                      "isenabled", gc_isenabled_doc));
+    gc_module->giveAttr(
+        "disable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)disable, NONE, 0), "disable", gc_disable_doc));
+    gc_module->giveAttr(
+        "enable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)enable, NONE, 0), "enable", gc_enable_doc));
 }
 }

@@ -1027,7 +1027,7 @@ static void floatFormatInit() {
 }
 
 // ported pretty directly from cpython
-Box* floatGetFormat(BoxedClass* v, Box* arg) {
+Box* floatGetFormat(Box* arg) {
     char* s;
     float_format_type r;
 
@@ -1692,9 +1692,8 @@ void setupFloat() {
     float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
     float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatConjugate, BOXED_FLOAT, 1)));
 
-    float_cls->giveAttr("__getformat__",
-                        new BoxedClassmethod(new BoxedBuiltinFunctionOrMethod(
-                            boxRTFunction((void*)floatGetFormat, STR, 2), "__getformat__", floatGetFormatDoc)));
+    float_cls->giveAttr("__getformat__", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)floatGetFormat, STR, 1),
+                                                                          "__getformat__", floatGetFormatDoc));
 
     for (auto& md : float_methods) {
         float_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, float_cls));
