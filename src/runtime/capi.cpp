@@ -1367,6 +1367,31 @@ cleanup:
 #endif
 
 extern "C" grammar _PyParser_Grammar;
+
+/* Preferred access to parser is through AST. */
+extern "C" mod_ty PyParser_ASTFromString(const char* s, const char* filename, int start, PyCompilerFlags* flags,
+                                         PyArena* arena) noexcept {
+    mod_ty mod;
+    PyCompilerFlags localflags;
+    perrdetail err;
+    int iflags = PARSER_FLAGS(flags);
+
+    node* n = PyParser_ParseStringFlagsFilenameEx(s, filename, &_PyParser_Grammar, start, &err, &iflags);
+    if (flags == NULL) {
+        localflags.cf_flags = 0;
+        flags = &localflags;
+    }
+    if (n) {
+        flags->cf_flags |= iflags & PyCF_MASK;
+        mod = PyAST_FromNode(n, flags, filename, arena);
+        PyNode_Free(n);
+        return mod;
+    } else {
+        err_input(&err);
+        return NULL;
+    }
+}
+
 extern "C" mod_ty PyParser_ASTFromFile(FILE* fp, const char* filename, int start, char* ps1, char* ps2,
                                        PyCompilerFlags* flags, int* errcode, PyArena* arena) noexcept {
     mod_ty mod;
