@@ -63,6 +63,9 @@ PyAPI_FUNC(int) PyFile_SoftSpace(PyObject *, int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyFile_WriteString(const char *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_AsFileDescriptor(PyObject *) PYSTON_NOEXCEPT;
 
+// Pyston temporary addition:
+PyAPI_FUNC(PyObject *) PyFile_GetEncoding(PyObject *) PYSTON_NOEXCEPT;
+
 /* The default encoding used by the platform file system APIs
    If non-NULL, this is different than the default encoding for strings
 */

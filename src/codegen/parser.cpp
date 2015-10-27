@@ -14,6 +14,8 @@
 
 #include "codegen/parser.h"
 
+#include "cpython_ast.h"
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +34,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -1046,6 +1049,20 @@ AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
 AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     Timer _t("parsing");
 
+    if (ENABLE_CPYTHON_PARSER) {
+        ASSERT(!inherited_flags, "unimplemented");
+        FILE* fp = fopen(fn, "r");
+        PyCompilerFlags cf;
+        cf.cf_flags = 0;
+        ArenaWrapper arena;
+        assert(arena);
+        mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
+        if (!mod)
+            throwCAPIException();
+        auto rtn = cpythonToPystonAST(mod, fn);
+        return rtn;
+    }
+
     if (ENABLE_PYPA_PARSER) {
         AST_Module* rtn = pypa_parse(fn, inherited_flags);
         RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
@@ -1073,7 +1090,9 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
 }
 
 const char* getMagic() {
-    if (ENABLE_PYPA_PARSER)
+    if (ENABLE_CPYTHON_PARSER)
+        return "a\nCO";
+    else if (ENABLE_PYPA_PARSER)
         return "a\ncO";
     else
         return "a\nco";
@@ -1116,9 +1135,22 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
     file_data.insert(file_data.end(), (char*)&checksum, (char*)&checksum + CHECKSUM_LENGTH);
     checksum = 0;
 
-    if (ENABLE_PYPA_PARSER || inherited_flags) {
-        module = pypa_parse(fn, inherited_flags);
-        RELEASE_ASSERT(module, "unknown parse error");
+    if (ENABLE_CPYTHON_PARSER || ENABLE_PYPA_PARSER || inherited_flags) {
+        if (ENABLE_CPYTHON_PARSER) {
+            ASSERT(!inherited_flags, "unimplemented");
+            FILE* fp = fopen(fn, "r");
+            PyCompilerFlags cf;
+            cf.cf_flags = 0;
+            ArenaWrapper arena;
+            assert(arena);
+            mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
+            if (!mod)
+                throwCAPIException();
+            module = cpythonToPystonAST(mod, fn);
+        } else {
+            module = pypa_parse(fn, inherited_flags);
+            RELEASE_ASSERT(module, "unknown parse error");
+        }
 
         if (!cache_fp)
             return std::vector<char>();

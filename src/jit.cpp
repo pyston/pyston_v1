@@ -193,9 +193,10 @@ int handleArg(char code) {
         SHOW_DISASM = true;
     else if (code == 'I')
         FORCE_INTERPRETER = true;
-    else if (code == 'i')
+    else if (code == 'i') {
         Py_InspectFlag = true;
-    else if (code == 'n') {
+        Py_InteractiveFlag = true;
+    } else if (code == 'n') {
         ENABLE_INTERPRETER = false;
     } else if (code == 'a') {
         ASSEMBLY_LOGGING = true;
@@ -207,6 +208,8 @@ int handleArg(char code) {
         Stats::setEnabled(true);
     } else if (code == 'S') {
         Py_NoSiteFlag = 1;
+    } else if (code == 'U') {
+        Py_UnicodeFlag++;
     } else if (code == 'u') {
         unbuffered = true;
     } else if (code == 'r') {
@@ -215,6 +218,8 @@ int handleArg(char code) {
         USE_REGALLOC_BASIC = false;
     } else if (code == 'x') {
         ENABLE_PYPA_PARSER = false;
+    } else if (code == 'X') {
+        ENABLE_CPYTHON_PARSER = true;
     } else if (code == 'E') {
         Py_IgnoreEnvironmentFlag = 1;
     } else if (code == 'P') {
@@ -325,7 +330,7 @@ static int main(int argc, char** argv) {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsRSvnxEac:FuPTGm:")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrsRSUvnxXEac:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;
@@ -455,7 +460,7 @@ static int main(int argc, char** argv) {
             main_module = createModule(boxString("__main__"), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
-            main_module = createModule(boxString("__main__"), fn ? fn : "<string>");
+            main_module = createModule(boxString("__main__"), fn ? fn : "<stdin>");
             rtncode = 0;
             if (fn != NULL) {
                 rtncode = RunMainFromImporter(fn);
@@ -497,42 +502,19 @@ static int main(int argc, char** argv) {
         }
 
         if (Py_InspectFlag || !(command || fn || module)) {
+
+            PyObject* v = PyImport_ImportModule("readline");
+            if (!v)
+                PyErr_Clear();
+
             printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
             printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
             Py_InspectFlag = 0;
 
-            if (!main_module) {
-                main_module = createModule(boxString("__main__"), "<stdin>");
-            } else {
-                // main_module->fn = "<stdin>";
-            }
-
-            for (;;) {
-                char* line = readline(">> ");
-                if (!line)
-                    break;
-
-                add_history(line);
-
-                try {
-                    AST_Module* m = parse_string(line, /* future_flags = */ 0);
-
-                    Timer _t("repl");
-
-                    if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                        AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
-                        AST_LangPrimitive* print_expr = new AST_LangPrimitive(AST_LangPrimitive::PRINT_EXPR);
-                        print_expr->args.push_back(e->value);
-                        e->value = print_expr;
-                    }
-
-                    compileAndRunModule(m, main_module);
-                } catch (ExcInfo e) {
-                    setCAPIException(e);
-                    PyErr_Print();
-                }
-            }
+            PyCompilerFlags cf;
+            cf.cf_flags = 0;
+            rtncode = PyRun_InteractiveLoopFlags(stdin, "<stdin>", &cf);
         }
 
         threading::finishMainThread();

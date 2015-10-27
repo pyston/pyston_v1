@@ -41,9 +41,6 @@
 
 #include <assert.h>
 
-// CPython doesn't seem to include this but I'm not sure how they get the definition of 'bool':
-#include <stdbool.h>
-
 #include "pyport.h"
 
 #include "pymath.h"
@@ -133,8 +130,11 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 
 #include "abstract.h"
 
+#include "compile.h"
+
 #include "pyctype.h"
 #include "pystrtod.h"
+#include "pystrcmp.h"
 #include "dtoa.h"
 
 // directly from CPython:
@@ -184,9 +184,6 @@ extern PyTypeObject* Itertool_SafeDealloc_Types[];
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str
-
-// This is in Python-ast.h in CPython, which we don't yet have:
-int PyAST_Check(PyObject* obj) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 #define PyMODINIT_FUNC extern "C" void

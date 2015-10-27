@@ -447,6 +447,7 @@ public:
     virtual void accept_stmt(StmtVisitor* v);
 
     AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
+    AST_Expr(AST_expr* value) : AST_stmt(AST_TYPE::Expr), value(value) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
 };
@@ -1424,6 +1425,10 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
             output.push_back(reinterpret_cast<T*>(n));
     }
 }
+
+// Take a normally-parsed module, and convert it (inplace) to a form that will print out any bare expressions.
+// This is used for "single" mode or the repl.
+void makeModuleInteractive(AST_Module* m);
 
 llvm::StringRef getOpSymbol(int op_type);
 BoxedString* getOpName(int op_type);

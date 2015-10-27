@@ -534,7 +534,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     /* new buffer API */
 
      // Pyston change: made this a function
-    bool _PyObject_CheckBuffer(PyObject* obj) PYSTON_NOEXCEPT;
+    int _PyObject_CheckBuffer(PyObject* obj) PYSTON_NOEXCEPT;
 #define PyObject_CheckBuffer(obj) _PyObject_CheckBuffer((PyObject*)(obj))
 
     /* Return 1 if the getbuffer function is available, otherwise
@@ -847,7 +847,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      // Pyston change: made this a function:
-    PyAPI_FUNC(bool) _PyIndex_Check(PyObject* o) PYSTON_NOEXCEPT;
+    PyAPI_FUNC(int) _PyIndex_Check(PyObject* o) PYSTON_NOEXCEPT;
 #define PyIndex_Check(obj) _PyIndex_Check((PyObject*)(obj))
 #if 0
 #define PyIndex_Check(obj) \

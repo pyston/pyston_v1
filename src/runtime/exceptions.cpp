@@ -33,10 +33,27 @@ void raiseExc(Box* exc_obj) {
 
 // Have a special helper function for syntax errors, since we want to include the location
 // of the syntax error in the traceback, even though it is not part of the execution:
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func) {
-    Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func,
+                      bool compiler_error) {
+    Box* exc;
+    Box* tb = None;
+    if (compiler_error) {
+        // This is how CPython's compiler_error() works:
+        assert(file.data()[file.size()] == '\0');
+        Box* loc = PyErr_ProgramText(file.data(), lineno);
+        if (!loc) {
+            Py_INCREF(Py_None);
+            loc = Py_None;
+        }
 
-    auto tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None);
+        auto args = BoxedTuple::create({ boxString(file), boxInt(lineno), None, loc });
+        exc = runtimeCall(SyntaxError, ArgPassSpec(2), boxString(msg), args, NULL, NULL, NULL);
+    } else {
+        // This is more like how the parser handles it:
+        exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
+        tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None);
+    }
+
     assert(!PyErr_Occurred());
     throw ExcInfo(exc->cls, exc, tb);
 }

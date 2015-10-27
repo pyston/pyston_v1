@@ -212,7 +212,7 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
 
     BoxedLong* rtn = new BoxedLong();
     int r = 0;
-    if (str[strlen(str) - 1] == 'L') {
+    if (str[strlen(str) - 1] == 'L' || str[strlen(str) - 1] == 'l') {
         std::string without_l(str, strlen(str) - 1);
         r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
     } else {

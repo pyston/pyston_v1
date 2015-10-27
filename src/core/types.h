@@ -725,7 +725,11 @@ void addToSysArgv(const char* str);
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func);
+// CPython has slightly different behavior depending on where in the pipeline (parser vs compiler)
+// the SyntaxError was thrown; setting compiler_error=True is for the case that it was thrown in
+// the compiler portion (which calls a function called compiler_error()).
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func,
+                      bool compiler_error = false);
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...)
     __attribute__((format(printf, 4, 5)));
 
@@ -783,6 +787,21 @@ struct CallattrFlags {
     uint64_t asInt() { return (uint64_t(argspec.asInt()) << 32) | (cls_only << 0) | (null_on_nonexistent << 1); }
 };
 static_assert(sizeof(CallattrFlags) == sizeof(uint64_t), "");
+
+// A C++-style way of handling a PyArena*
+class ArenaWrapper {
+private:
+    PyArena* arena;
+
+public:
+    ArenaWrapper() { arena = PyArena_New(); }
+    ~ArenaWrapper() {
+        if (arena)
+            PyArena_Free(arena);
+    }
+
+    operator PyArena*() const { return arena; }
+};
 
 // similar to Java's Array.binarySearch:
 // return values are either:

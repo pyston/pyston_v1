@@ -18,12 +18,23 @@
 
 #include "Python.h"
 
+#include "codegen/cpython_ast.h"
+#include "grammar.h"
+#include "node.h"
+#include "token.h"
+#include "parsetok.h"
+#include "errcode.h"
+#include "ast.h"
+#undef BYTE
+#undef STRING
+
 #include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
+#include "codegen/irgen/hooks.h"
 #include "codegen/unwinding.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -39,12 +50,12 @@ namespace pyston {
 
 BoxedClass* method_cls;
 
-extern "C" bool _PyIndex_Check(PyObject* obj) noexcept {
+extern "C" int _PyIndex_Check(PyObject* obj) noexcept {
     return (Py_TYPE(obj)->tp_as_number != NULL && PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_INDEX)
             && Py_TYPE(obj)->tp_as_number->nb_index != NULL);
 }
 
-extern "C" bool _PyObject_CheckBuffer(PyObject* obj) noexcept {
+extern "C" int _PyObject_CheckBuffer(PyObject* obj) noexcept {
     return ((Py_TYPE(obj)->tp_as_buffer != NULL) && (PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_NEWBUFFER))
             && (Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL));
 }
@@ -1164,6 +1175,252 @@ static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
 }
 }
 
+extern "C" int Py_FdIsInteractive(FILE* fp, const char* filename) noexcept {
+    if (isatty((int)fileno(fp)))
+        return 1;
+    if (!Py_InteractiveFlag)
+        return 0;
+    return (filename == NULL) || (strcmp(filename, "<stdin>") == 0) || (strcmp(filename, "???") == 0);
+}
+
+extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompilerFlags* flags) noexcept {
+    PyObject* m, *d, *v, *w;
+    mod_ty mod;
+    PyArena* arena;
+
+    char _buf[1] = "";
+    char* ps1 = _buf, * ps2 = _buf;
+    int errcode = 0;
+
+    v = PySys_GetObject("ps1");
+    if (v != NULL) {
+        v = PyObject_Str(v);
+        if (v == NULL)
+            PyErr_Clear();
+        else if (PyString_Check(v))
+            ps1 = PyString_AsString(v);
+    }
+    w = PySys_GetObject("ps2");
+    if (w != NULL) {
+        w = PyObject_Str(w);
+        if (w == NULL)
+            PyErr_Clear();
+        else if (PyString_Check(w))
+            ps2 = PyString_AsString(w);
+    }
+    arena = PyArena_New();
+    if (arena == NULL) {
+        Py_XDECREF(v);
+        Py_XDECREF(w);
+        return -1;
+    }
+    mod = PyParser_ASTFromFile(fp, filename, Py_single_input, ps1, ps2, flags, &errcode, arena);
+    Py_XDECREF(v);
+    Py_XDECREF(w);
+    if (mod == NULL) {
+        PyArena_Free(arena);
+        if (errcode == E_EOF) {
+            PyErr_Clear();
+            return E_EOF;
+        }
+        PyErr_Print();
+        return -1;
+    }
+    m = PyImport_AddModule("__main__");
+    if (m == NULL) {
+        PyArena_Free(arena);
+        return -1;
+    }
+
+    // Pyston change:
+    // d = PyModule_GetDict(m);
+    // v = run_mod(mod, filename, d, d, flags, arena);
+    assert(PyModule_Check(m));
+    bool failed = false;
+    try {
+        AST_Module* pyston_module = cpythonToPystonAST(mod, filename);
+        makeModuleInteractive(pyston_module);
+        compileAndRunModule(pyston_module, static_cast<BoxedModule*>(m));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        failed = true;
+    }
+
+    PyArena_Free(arena);
+    if (failed) {
+        PyErr_Print();
+        return -1;
+    }
+    Py_DECREF(v);
+    if (Py_FlushLine())
+        PyErr_Clear();
+    return 0;
+}
+
+/* Set the error appropriate to the given input error code (see errcode.h) */
+
+static void err_input(perrdetail* err) noexcept {
+    PyObject* v, *w, *errtype;
+    PyObject* u = NULL;
+    const char* msg = NULL;
+    errtype = PyExc_SyntaxError;
+    switch (err->error) {
+        case E_ERROR:
+            return;
+        case E_SYNTAX:
+            errtype = PyExc_IndentationError;
+            if (err->expected == INDENT)
+                msg = "expected an indented block";
+            else if (err->token == INDENT)
+                msg = "unexpected indent";
+            else if (err->token == DEDENT)
+                msg = "unexpected unindent";
+            else {
+                errtype = PyExc_SyntaxError;
+                msg = "invalid syntax";
+            }
+            break;
+        case E_TOKEN:
+            msg = "invalid token";
+            break;
+        case E_EOFS:
+            msg = "EOF while scanning triple-quoted string literal";
+            break;
+        case E_EOLS:
+            msg = "EOL while scanning string literal";
+            break;
+        case E_INTR:
+            if (!PyErr_Occurred())
+                PyErr_SetNone(PyExc_KeyboardInterrupt);
+            goto cleanup;
+        case E_NOMEM:
+            PyErr_NoMemory();
+            goto cleanup;
+        case E_EOF:
+            msg = "unexpected EOF while parsing";
+            break;
+        case E_TABSPACE:
+            errtype = PyExc_TabError;
+            msg = "inconsistent use of tabs and spaces in indentation";
+            break;
+        case E_OVERFLOW:
+            msg = "expression too long";
+            break;
+        case E_DEDENT:
+            errtype = PyExc_IndentationError;
+            msg = "unindent does not match any outer indentation level";
+            break;
+        case E_TOODEEP:
+            errtype = PyExc_IndentationError;
+            msg = "too many levels of indentation";
+            break;
+        case E_DECODE: {
+            PyObject* type, *value, *tb;
+            PyErr_Fetch(&type, &value, &tb);
+            if (value != NULL) {
+                u = PyObject_Str(value);
+                if (u != NULL) {
+                    msg = PyString_AsString(u);
+                }
+            }
+            if (msg == NULL)
+                msg = "unknown decode error";
+            Py_XDECREF(type);
+            Py_XDECREF(value);
+            Py_XDECREF(tb);
+            break;
+        }
+        case E_LINECONT:
+            msg = "unexpected character after line continuation character";
+            break;
+        default:
+            fprintf(stderr, "error=%d\n", err->error);
+            msg = "unknown parsing error";
+            break;
+    }
+    v = Py_BuildValue("(ziiz)", err->filename, err->lineno, err->offset, err->text);
+    w = NULL;
+    if (v != NULL)
+        w = Py_BuildValue("(sO)", msg, v);
+    Py_XDECREF(u);
+    Py_XDECREF(v);
+    PyErr_SetObject(errtype, w);
+    Py_XDECREF(w);
+cleanup:
+    if (err->text != NULL) {
+        PyObject_FREE(err->text);
+        err->text = NULL;
+    }
+}
+#if 0
+/* compute parser flags based on compiler flags */
+#define PARSER_FLAGS(flags)                                                                                            \
+    ((flags) ? ((((flags)->cf_flags & PyCF_DONT_IMPLY_DEDENT) ? PyPARSE_DONT_IMPLY_DEDENT : 0)) : 0)
+#endif
+#if 1
+/* Keep an example of flags with future keyword support. */
+#define PARSER_FLAGS(flags)                                                                                            \
+    ((flags) ? ((((flags)->cf_flags & PyCF_DONT_IMPLY_DEDENT) ? PyPARSE_DONT_IMPLY_DEDENT : 0)                         \
+                | (((flags)->cf_flags & CO_FUTURE_PRINT_FUNCTION) ? PyPARSE_PRINT_IS_FUNCTION : 0)                     \
+                | (((flags)->cf_flags & CO_FUTURE_UNICODE_LITERALS) ? PyPARSE_UNICODE_LITERALS : 0))                   \
+             : 0)
+#endif
+
+extern "C" grammar _PyParser_Grammar;
+extern "C" mod_ty PyParser_ASTFromFile(FILE* fp, const char* filename, int start, char* ps1, char* ps2,
+                                       PyCompilerFlags* flags, int* errcode, PyArena* arena) noexcept {
+    mod_ty mod;
+    PyCompilerFlags localflags;
+    perrdetail err;
+    int iflags = PARSER_FLAGS(flags);
+
+    node* n = PyParser_ParseFileFlagsEx(fp, filename, &_PyParser_Grammar, start, ps1, ps2, &err, &iflags);
+    if (flags == NULL) {
+        localflags.cf_flags = 0;
+        flags = &localflags;
+    }
+    if (n) {
+        flags->cf_flags |= iflags & PyCF_MASK;
+        mod = PyAST_FromNode(n, flags, filename, arena);
+        PyNode_Free(n);
+        return mod;
+    } else {
+        err_input(&err);
+        if (errcode)
+            *errcode = err.error;
+        return NULL;
+    }
+}
+
+extern "C" int PyRun_InteractiveLoopFlags(FILE* fp, const char* filename, PyCompilerFlags* flags) noexcept {
+    PyObject* v;
+    int ret;
+    PyCompilerFlags local_flags;
+
+    if (flags == NULL) {
+        flags = &local_flags;
+        local_flags.cf_flags = 0;
+    }
+    v = PySys_GetObject("ps1");
+    if (v == NULL) {
+        PySys_SetObject("ps1", v = PyString_FromString(">> "));
+        Py_XDECREF(v);
+    }
+    v = PySys_GetObject("ps2");
+    if (v == NULL) {
+        PySys_SetObject("ps2", v = PyString_FromString("... "));
+        Py_XDECREF(v);
+    }
+    for (;;) {
+        ret = PyRun_InteractiveOneFlags(fp, filename, flags);
+        // PRINT_TOTAL_REFS();
+        if (ret == E_EOF)
+            return 0;
+        if (ret == E_NOMEM)
+            return -1;
+    }
+}
+
 static const char* progname = "pyston";
 extern "C" void Py_SetProgramName(char* pn) noexcept {
     if (pn && *pn)
@@ -1641,6 +1898,13 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     assert(rtn && "should have set + thrown an exception!");
     return rtn;
 }
+
+/* Warning with explicit origin */
+extern "C" int PyErr_WarnExplicit(PyObject* category, const char* text, const char* filename_str, int lineno,
+                                  const char* module_str, PyObject* registry) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 
 /* extension modules might be compiled with GC support so these
    functions must always be available */

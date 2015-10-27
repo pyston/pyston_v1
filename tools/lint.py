@@ -76,6 +76,12 @@ def verify_include_order(_, dir, files):
 
                 m = include_re.match(l)
                 if m:
+                    # Python-ast.h is a tricky include file since it 1) doesn't have include guards, and 2)
+                    # it doesn't include its dependencies.  Let it (and cpython_ast.h which includes it)
+                    # avoid the lint rules.
+                    if m.group(1) == '"Python-ast.h"' or m.group(1) == '"cpython_ast.h"':
+                        continue
+
                     if section is None:
                         section = []
                     section.append(m.group(1))

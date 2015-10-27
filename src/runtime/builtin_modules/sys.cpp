@@ -151,6 +151,16 @@ extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
     return sys_module->getattr(internStringMortal(name));
 }
 
+extern "C" FILE* PySys_GetFile(char* name, FILE* def) noexcept {
+    FILE* fp = NULL;
+    PyObject* v = PySys_GetObject(name);
+    if (v != NULL && PyFile_Check(v))
+        fp = PyFile_AsFile(v);
+    if (fp == NULL)
+        fp = def;
+    return fp;
+}
+
 static void mywrite(const char* name, FILE* fp, const char* format, va_list va) noexcept {
     PyObject* file;
     PyObject* error_type, *error_value, *error_traceback;

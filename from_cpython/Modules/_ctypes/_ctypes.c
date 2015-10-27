@@ -427,7 +427,7 @@ StructUnionType_new(PyTypeObject *type, PyObject *args, PyObject *kwds, int isSt
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)dict;
-    PyType_SetDict(result, dict);
+    PyType_SetDict(result, (PyObject*)dict);
     dict->format = _ctypes_alloc_format_string(NULL, "B");
     if (dict->format == NULL) {
         Py_DECREF(result);
@@ -999,7 +999,7 @@ PyCPointerType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)stgdict;
-    PyType_SetDict(result, stgdict);
+    PyType_SetDict(result, (PyObject*)stgdict);
 
     return (PyObject *)result;
 }
@@ -1467,7 +1467,7 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)stgdict;
-    PyType_SetDict(result, stgdict);
+    PyType_SetDict(result, (PyObject*)stgdict);
 
     /* Special case for character arrays.
        A permanent annoyance: char arrays are also strings!
@@ -1893,7 +1893,7 @@ static PyObject *CreateSwappedType(PyTypeObject *type, PyObject *args, PyObject 
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)stgdict;
-    PyType_SetDict(result, stgdict);
+    PyType_SetDict(result, (PyObject*)stgdict);
 
     return (PyObject *)result;
 }
@@ -2024,7 +2024,7 @@ PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)stgdict;
-    PyType_SetDict(result, stgdict);
+    PyType_SetDict(result, (PyObject*)stgdict);
 
     /* Install from_param class methods in ctypes base classes.
        Overrides the PyCSimpleType_from_param generic method.
@@ -2407,7 +2407,7 @@ PyCFuncPtrType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     Py_DECREF(result->tp_dict);
     // Pyston change:
     //result->tp_dict = (PyObject *)stgdict;
-    PyType_SetDict(result, stgdict);
+    PyType_SetDict(result, (PyObject*)stgdict);
 
     if (-1 == make_funcptrtype_dict(stgdict)) {
         Py_DECREF(result);
