@@ -31,6 +31,7 @@
 #include "llvm/Support/Signals.h"
 
 #include "osdefs.h"
+#include "patchlevel.h"
 
 #include "asm_writing/disassemble.h"
 #include "capi/types.h"
@@ -507,8 +508,9 @@ static int main(int argc, char** argv) {
             if (!v)
                 PyErr_Clear();
 
-            printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
-            printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
+            printf("Pyston v%d.%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR,
+                   PYSTON_VERSION_MICRO);
+            printf(", targeting Python %d.%d.%d\n", PY_MAJOR_VERSION, PY_MINOR_VERSION, PY_MICRO_VERSION);
 
             Py_InspectFlag = 0;
 

@@ -123,6 +123,25 @@ ExternalProject_Add(libjemalloc
                     LOG_BUILD ON
                     LOG_INSTALL ON)
 
+#
+# CMake (<3.3) has no way of knowing that an ExternalProject creates specific output files.  This is a problem for ninja,
+# which will not know how to build the generated file.
+# Here are a couple hacks to get around it:
+#
+# Add a copy step.  This just hides the dependency but it seems to work.
+# add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc_copied.a DEPENDS libjemalloc COMMAND cp "${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a" ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc_copied.a)
+# add_custom_target(libjemalloc_copied DEPENDS ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc_copied.a)
+#
+# Hack option #2: the existence of the custom target tells ninja that libjemalloc.a will get built somehow.
+# The name of the target doesn't matter.
+add_custom_target(libjemalloc_byproducts DEPENDS ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
+#
+# Hack option #3: delete the .so's and use `-ljemalloc` on the link line so that ninja doesn't know about the dependency.
+# ExternalProject_Add_Step(libjemalloc disable_shared
+# DEPENDEES install
+# COMMAND sh -c "rm -v ${CMAKE_BINARY_DIR}/jemalloc/lib/*.so*"
+# )
+
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 # llvm, clang, and libunwind patches
@@ -261,7 +280,7 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} -L${CMAKE_BINARY_DIR}/jemalloc/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/jemalloc/lib jemalloc)
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
 add_dependencies(pyston libjemalloc)
 
 # copy src/codegen/parse_ast.py to the build directory
@@ -334,6 +353,28 @@ if(DOXYGEN_FOUND)
 else()
   add_custom_target(docs COMMAND ${CMAKE_COMMAND} -E echo "Can't create docs, doxygen not installed \(try sudo apt-get install doxygen grpahviz on Ubuntu and then rerun cmake\)" VERBATIM)
 endif()
+
+set(CMAKE_EXECUTABLE_FORMAT "ELF")
+install(TARGETS pyston DESTINATION ".")
+
+set(CPACK_GENERATOR "TGZ")
+
+set(CPACK_PACKAGE_VERSION_MAJOR "0")
+set(CPACK_PACKAGE_VERSION_MINOR "4")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+
+set(CPACK_SYSTEM_NAME "linux64")
+
+set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/LICENSE)
+set(CPACK_PACKAGE_DESCRIPTION_FILE ${CMAKE_SOURCE_DIR}/README.md)
+
+install(FILES LICENSE README.md DESTINATION ".")
+
+install(FILES test/lib/virtualenv/virtualenv.py DESTINATION virtualenv)
+install(FILES test/lib/virtualenv/virtualenv_support/pip-6.0.8-py2.py3-none-any.whl DESTINATION virtualenv/virtualenv_support)
+install(FILES test/lib/virtualenv/virtualenv_support/setuptools-12.0.5-py2.py3-none-any.whl DESTINATION virtualenv/virtualenv_support)
+
+include(CPack)
 
 # last file added (need to change this if we add a file that is added via a glob):
 # from_cpython/Lib/test/test_zipimport.py

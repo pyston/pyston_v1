@@ -2398,6 +2398,10 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     }
 }
 
+// force template instantiation:
+template void setattrGeneric<NOT_REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+template void setattrGeneric<REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+
 extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
 
@@ -5343,12 +5347,12 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
         rewrite_args = NULL;
 
         // different versions of python give different error messages for this:
-        if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
+        if (PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION < 7) {
             if (S == CAPI)
                 PyErr_Format(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
             else
                 raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(target)); // tested on 2.6.6
-        } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
+        } else if (PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION == 7 && PY_MICRO_VERSION < 3) {
             if (S == CAPI)
                 PyErr_Format(TypeError, "'%s' object is not subscriptable", getTypeName(target)); // tested on 2.7.1
             else

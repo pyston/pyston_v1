@@ -64,3 +64,8 @@ set(CMAKE_REQUIRED_LIBRARIES util)
 check_symbol_exists(openpty "pty.h" HAVE_OPENPTY)
 
 configure_file(from_cpython/Include/pyconfig.h.in from_cpython/Include/pyconfig.h)
+
+# CMake sucks: it has no idea that pyconfig.h is something that can be installed.
+# Just tell it to install whatever file is at that particular location, and rely on
+# the rest of the build rules to ensure that it's made in time.
+install(FILES ${CMAKE_BINARY_DIR}/from_cpython/Include/pyconfig.h DESTINATION from_cpython/Include)
