@@ -1561,7 +1561,8 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             STAT_TIMER(t0, "us_timer_slowpath_tpgetattro", 10);
 
             if (obj->cls->tp_getattro == slot_tp_getattr_hook) {
-                return slotTpGetattrHookInternal<S, rewritable>(obj, attr, rewrite_args);
+                return slotTpGetattrHookInternal<S, rewritable>(obj, attr, rewrite_args, for_call, bind_obj_out,
+                                                                r_bind_obj_out);
             } else if (obj->cls->tp_getattro == instance_getattro) {
                 return instanceGetattroInternal<S>(obj, attr, rewrite_args);
             } else if (obj->cls->tp_getattro == type_getattro) {

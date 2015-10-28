@@ -894,11 +894,12 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 
 /* Pyston change: static */ PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     assert(name->cls == str_cls);
-    return slotTpGetattrHookInternal<CAPI, NOT_REWRITABLE>(self, (BoxedString*)name, NULL);
+    return slotTpGetattrHookInternal<CAPI, NOT_REWRITABLE>(self, (BoxedString*)name, NULL, false, NULL, NULL);
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI) {
+Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args, bool for_call,
+                               Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -982,7 +983,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             try {
                 assert(!PyType_Check(self)); // There would be a getattribute
-                res = getattrInternalGeneric<false, rewritable>(self, name, &grewrite_args, false, false, NULL, NULL);
+                res = getattrInternalGeneric<false, rewritable>(self, name, &grewrite_args, false, for_call,
+                                                                bind_obj_out, r_bind_obj_out);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {
@@ -1108,13 +1110,17 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
 }
 // Force instantiation of the template
 template Box* slotTpGetattrHookInternal<CAPI, REWRITABLE>(Box* self, BoxedString* name,
-                                                          GetattrRewriteArgs* rewrite_args);
-template Box* slotTpGetattrHookInternal<CXX, REWRITABLE>(Box* self, BoxedString* name,
-                                                         GetattrRewriteArgs* rewrite_args);
+                                                          GetattrRewriteArgs* rewrite_args, bool for_call,
+                                                          Box** bind_obj_out, RewriterVar** r_bind_obj_out);
+template Box* slotTpGetattrHookInternal<CXX, REWRITABLE>(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args,
+                                                         bool for_call, Box** bind_obj_out,
+                                                         RewriterVar** r_bind_obj_out);
 template Box* slotTpGetattrHookInternal<CAPI, NOT_REWRITABLE>(Box* self, BoxedString* name,
-                                                              GetattrRewriteArgs* rewrite_args);
+                                                              GetattrRewriteArgs* rewrite_args, bool for_call,
+                                                              Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedString* name,
-                                                             GetattrRewriteArgs* rewrite_args);
+                                                             GetattrRewriteArgs* rewrite_args, bool for_call,
+                                                             Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 /* Pyston change: static */ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpnew", SLOT_AVOIDABILITY(self));

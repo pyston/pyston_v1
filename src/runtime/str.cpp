@@ -42,6 +42,7 @@ extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_replace(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
@@ -1839,53 +1840,6 @@ extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
     return string_join((PyStringObject*)sep, x);
 }
 
-Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
-    if (!PyString_Check(_self))
-        raiseExcHelper(TypeError, "descriptor 'replace' requires a 'str' object but received a '%s'",
-                       getTypeName(_self));
-    BoxedString* self = static_cast<BoxedString*>(_self);
-
-#ifdef Py_USING_UNICODE
-    if (PyUnicode_Check(_old) || PyUnicode_Check(_new))
-        return PyUnicode_Replace((PyObject*)self, _old, _new, -1 /*count*/);
-#endif
-
-    if (!PyString_Check(_old))
-        raiseExcHelper(TypeError, "expected a character buffer object");
-    BoxedString* old = static_cast<BoxedString*>(_old);
-
-    if (!PyString_Check(_new))
-        raiseExcHelper(TypeError, "expected a character buffer object");
-    BoxedString* new_ = static_cast<BoxedString*>(_new);
-
-    Box* _maxreplace = _args[0];
-    if (!PyInt_Check(_maxreplace))
-        raiseExcHelper(TypeError, "an integer is required");
-
-    int max_replaces = static_cast<BoxedInt*>(_maxreplace)->n;
-    size_t start_pos = 0;
-    std::string s = self->s();
-
-    bool single_char = old->size() == 1;
-    int num_replaced = 0;
-    for (; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
-        if (single_char)
-            start_pos = s.find(old->s()[0], start_pos);
-        else
-            start_pos = s.find(old->s(), start_pos);
-
-        if (start_pos == std::string::npos)
-            break;
-        s.replace(start_pos, old->size(), new_->s());
-        start_pos += new_->size(); // Handles case where 'to' is a substring of 'from'
-    }
-
-    if (num_replaced == 0 && self->cls == str_cls)
-        return self;
-
-    return boxString(s);
-}
-
 Box* strPartition(BoxedString* self, BoxedString* sep) {
     RELEASE_ASSERT(PyString_Check(self), "");
     RELEASE_ASSERT(PyString_Check(sep), "");
@@ -2826,6 +2780,7 @@ static PyMethodDef string_methods[] = {
     { "rindex", (PyCFunction)string_rindex, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
+    { "replace", (PyCFunction)string_replace, METH_O3 | METH_D1, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
     { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
@@ -2926,9 +2881,6 @@ void setupStr() {
     str_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)strGetslice, STR, 3)));
 
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
-
-    str_cls->giveAttr("replace",
-                      new BoxedFunction(boxRTFunction((void*)strReplace, UNKNOWN, 4, false, false), { boxInt(-1) }));
 
     for (auto& md : string_methods) {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
