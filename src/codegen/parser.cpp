@@ -1019,9 +1019,8 @@ AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
     inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
 
     if (ENABLE_CPYTHON_PARSER) {
-        RELEASE_ASSERT(!inherited_flags, "unimplemented");
         PyCompilerFlags cf;
-        cf.cf_flags = 0;
+        cf.cf_flags = inherited_flags;
         ArenaWrapper arena;
         assert(arena);
         const char* fn = "<string>";
@@ -1065,11 +1064,9 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     Timer _t("parsing");
 
     if (ENABLE_CPYTHON_PARSER) {
-        RELEASE_ASSERT(!inherited_flags, "unimplemented");
-
         FileHandle fp(fn, "r");
         PyCompilerFlags cf;
-        cf.cf_flags = 0;
+        cf.cf_flags = inherited_flags;
         ArenaWrapper arena;
         assert(arena);
         mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
@@ -1153,11 +1150,9 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
 
     if (ENABLE_CPYTHON_PARSER || ENABLE_PYPA_PARSER || inherited_flags) {
         if (ENABLE_CPYTHON_PARSER) {
-            RELEASE_ASSERT(!inherited_flags, "unimplemented");
-
             FileHandle fp(fn, "r");
             PyCompilerFlags cf;
-            cf.cf_flags = 0;
+            cf.cf_flags = inherited_flags;
             ArenaWrapper arena;
             assert(arena);
             mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
