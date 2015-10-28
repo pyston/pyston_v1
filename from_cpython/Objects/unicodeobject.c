@@ -7221,15 +7221,20 @@ old replaced by new.  If the optional argument count is\n\
 given, only the first count occurrences are replaced.");
 
 static PyObject*
-unicode_replace(PyUnicodeObject *self, PyObject *args)
+// Pyston change: don't use varags calling convention
+// unicode_replace(PyUnicodeObject *self, PyObject *args)
+unicode_replace(PyUnicodeObject *self, PyUnicodeObject *str1, PyUnicodeObject* str2, PyObject** args)
 {
-    PyUnicodeObject *str1;
-    PyUnicodeObject *str2;
+    PyObject* _maxcount = args[0];
     Py_ssize_t maxcount = -1;
     PyObject *result;
 
-    if (!PyArg_ParseTuple(args, "OO|n:replace", &str1, &str2, &maxcount))
+    // Pyston change: don't use varags calling convention
+    // if (!PyArg_ParseTuple(args, "OO|n:replace", &str1, &str2, &maxcount))
+    //    return NULL;
+    if (_maxcount && !PyArg_ParseSingle(_maxcount, 3, "replace", "n", &maxcount))
         return NULL;
+
     str1 = (PyUnicodeObject *)PyUnicode_FromObject((PyObject *)str1);
     if (str1 == NULL)
         return NULL;
@@ -7832,7 +7837,7 @@ unicode_getnewargs(PyUnicodeObject *v)
 
 static PyMethodDef unicode_methods[] = {
     {"encode", (PyCFunction) unicode_encode, METH_VARARGS | METH_KEYWORDS, encode__doc__},
-    {"replace", (PyCFunction) unicode_replace, METH_VARARGS, replace__doc__},
+    {"replace", (PyCFunction) unicode_replace, METH_O3 | METH_D1, replace__doc__},
     {"split", (PyCFunction) unicode_split, METH_VARARGS, split__doc__},
     {"rsplit", (PyCFunction) unicode_rsplit, METH_VARARGS, rsplit__doc__},
     {"join", (PyCFunction) unicode_join, METH_O, join__doc__},

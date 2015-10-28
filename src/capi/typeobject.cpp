@@ -1014,24 +1014,26 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     return res;
                 } else if (return_convention == ReturnConvention::NO_RETURN) {
                     assert(!res);
-                } else if (return_convention == ReturnConvention::CAPI_RETURN) {
+                } else if (return_convention == ReturnConvention::CAPI_RETURN
+                           || return_convention == ReturnConvention::NOEXC_POSSIBLE) {
                     // If we get a CAPI return, we probably did a function call, and these guards
                     // will probably just make the rewrite fail:
                     if (res) {
                         rtn->addGuardNotEq(0);
                         rewrite_args->setReturn(rtn, ReturnConvention::HAS_RETURN);
                         return res;
-                    } else
-                        rtn->addGuard(0);
+                    } else {
+                        // this could set a CAPI exception and we won't clear it inside the rewrite.
+                        rewrite_args = 0;
+                    }
                 } else {
-                    assert(return_convention == ReturnConvention::NOEXC_POSSIBLE);
-                    rewrite_args = NULL;
+                    RELEASE_ASSERT(0, "");
                 }
             }
         } else {
             try {
                 assert(!PyType_Check(self)); // There would be a getattribute
-                res = getattrInternalGeneric<false, rewritable>(self, name, NULL, false, false, NULL, NULL);
+                res = getattrInternalGeneric<false, NOT_REWRITABLE>(self, name, NULL, false, false, NULL, NULL);
             } catch (ExcInfo e) {
                 if (!e.matches(AttributeError)) {
                     if (S == CAPI) {

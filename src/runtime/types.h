@@ -194,11 +194,12 @@ public:
 
     // TODO: these don't actually get deallocated right now
     std::unique_ptr<CallattrCapiIC> next_ic;
-    std::unique_ptr<CallattrIC> hasnext_ic, repr_ic;
+    std::unique_ptr<CallattrIC> hasnext_ic, repr_ic, iter_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
     Box* callHasnextIC(Box* obj, bool null_on_nonexistent);
     Box* call_nextIC(Box* obj) noexcept;
     Box* callReprIC(Box* obj);
+    Box* callIterIC(Box* obj);
     bool callNonzeroIC(Box* obj);
 
     gcvisit_func gc_visit;

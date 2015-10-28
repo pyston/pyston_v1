@@ -5729,8 +5729,7 @@ Box* getiter(Box* o) {
     if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_ITER) && type->tp_iter != slot_tp_iter && type->tp_iter) {
         r = type->tp_iter(o);
     } else {
-        static BoxedString* iter_str = internStringImmortal("__iter__");
-        r = callattrInternal0<CXX, NOT_REWRITABLE>(o, iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
+        r = type->callIterIC(o);
     }
     if (r) {
         if (!PyIter_Check(r)) {
