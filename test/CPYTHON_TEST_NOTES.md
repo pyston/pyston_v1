@@ -23,6 +23,7 @@ test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
 test_argparse           [unknown]
+test_ascii_formatd      segfault in ctypes (but only on CI)
 test_ast                [unknown]
 test_asynchat           [unknown]
 test_asyncore           [unknown]
