@@ -182,6 +182,7 @@ private:
     std::tuple<CtorArgs...> ctor_args;
 #ifndef NDEBUG
     int map_elts = 0;
+    bool got_already_destroyed = false;
 #endif
 
     static void dtor(void* val) {
@@ -189,6 +190,8 @@ private:
         assert(s);
 
         auto* self = s->self;
+
+        ASSERT(!self->got_already_destroyed, "");
 
         LOCK_REGION(&self->lock);
 
@@ -235,6 +238,15 @@ public:
     PerThreadSet(CtorArgs... ctor_args) : ctor_args(std::forward<CtorArgs>(ctor_args)...) {
         int code = pthread_key_create(&pthread_key, &dtor);
         ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
+    }
+
+    ~PerThreadSet() {
+        LOCK_REGION(&lock);
+        ASSERT(this->map.size() == this->map_elts, "%ld %d", this->map.size(), this->map_elts);
+        pthread_key_delete(pthread_key);
+#ifndef NDEBUG
+        got_already_destroyed = true;
+#endif
     }
 
     void forEachValue(std::function<void(T*)> f) {
