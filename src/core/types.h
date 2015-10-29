@@ -803,6 +803,20 @@ public:
     operator PyArena*() const { return arena; }
 };
 
+class FileHandle {
+private:
+    FILE* file;
+
+public:
+    FileHandle(const char* fn, const char* mode) : file(fopen(fn, mode)) {}
+    ~FileHandle() {
+        if (file)
+            fclose(file);
+    }
+
+    operator FILE*() const { return file; }
+};
+
 // similar to Java's Array.binarySearch:
 // return values are either:
 //   >= 0 : the index where a given item was found
