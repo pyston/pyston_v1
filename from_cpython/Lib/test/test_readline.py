@@ -1,4 +1,3 @@
-# expected: fail
 """
 Very minimal unittests for parts of the readline module.
 

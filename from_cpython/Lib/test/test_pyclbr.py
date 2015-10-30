@@ -1,4 +1,6 @@
-# expected: fail
+# skip-if: True
+# - This test passes but takes an extremely long time in debug mode
+
 '''
    Test cases for pyclbr.py
    Nick Mathewson

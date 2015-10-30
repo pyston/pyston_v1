@@ -1,4 +1,3 @@
-# expected: fail
 """
 Create and delete FILES_PER_THREAD temp files (via tempfile.TemporaryFile)
 in each of NUM_THREADS threads, recording the number of successes and

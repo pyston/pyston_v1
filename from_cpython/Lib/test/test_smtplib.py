@@ -1,4 +1,3 @@
-# expected: fail
 import asyncore
 import email.utils
 import socket
