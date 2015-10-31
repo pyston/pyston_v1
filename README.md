@@ -41,7 +41,18 @@ We have some documentation for those interested in contributing: see our [Develo
 - Better performance
  - Match CPython's performance on our small benchmark suite
 
-##### v0.4: Coming soon
+##### v0.4: [released 10/31/2015]
+- Many new features and better language support
+ - Passes most of the tests of several famous python libraries
+ - Unicode support
+ - GC finalizer
+ - much improved C API support
+- Better performance
+ - Custom C++ exception handler
+ - Object Cache (improves startup time)
+ - Baseline JIT
+
+##### v0.5: Coming soon
 
 ### Trying it out
 
