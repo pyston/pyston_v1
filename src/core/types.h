@@ -41,16 +41,35 @@ namespace pyston {
 
 using gc::GCVisitor;
 
+// The "effort" which we will put into compiling a Python function.  This applies to the LLVM tier,
+// where it can affect things such as the amount of type analysis we do, whether or not to run expensive
+// LLVM optimization passes, etc.
+// Currently (Nov '15) these are mostly unused, and we only use MAXIMAL.  There used to be two other levels
+// as well but we stopped using them too.
 enum class EffortLevel {
     MODERATE = 2,
     MAXIMAL = 3,
 };
 
+// Pyston supports two ways of implementing Python exceptions: by using return-code-based exceptions ("CAPI"
+// style since this is what the CPython C API uses), or our custom C++-based exceptions ("CXX" style).  CAPI
+// is faster when an exception is thrown, and CXX is faster when an exception is not thrown, so depending on
+// the situation it can be beneficial to use one or the other.  The JIT will use some light profiling to
+// determine when to emit code in one style or the other.
+// Many runtime functions support being called in either style, and can get passed one of these enum values
+// as a template parameter to switch between them.
 enum ExceptionStyle {
     CAPI,
     CXX,
 };
 
+// Much of our runtime supports "rewriting" aka tracing itself.  Our tracing JIT requires support from the
+// functions to be traced, so our runtime functions will contain checks to see if the tracer is currently
+// activated, and then will do additional work.
+// When the tracer isn't active, these extra "is the tracer active" checks can become expensive.  So when
+// the caller knows that the tracer is not active, they can call a special version of the function where
+// all of the "is the tracer active" checks are hardcoded to false.  This is possible by passing "NOT_REWRITEABLE"
+// as a template argument to the called function.
 enum Rewritable {
     NOT_REWRITABLE,
     REWRITABLE,
@@ -88,6 +107,8 @@ public:
     template <ExceptionStyle S> R call(Args... args) noexcept(S == CAPI) { return this->template get<S>()(args...); }
 };
 
+// CompilerType (and a specific kind of CompilerType, the ConcreteCompilerType) are the way that the LLVM JIT represents
+// type information.  See src/codegen/compvars.h for more information.
 class CompilerType;
 template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
@@ -98,6 +119,8 @@ extern ConcreteCompilerType* UNBOXED_INT, *BOXED_INT, *LONG, *UNBOXED_FLOAT, *BO
     *BOXED_COMPLEX, *FRAME_INFO;
 extern CompilerType* UNDEF, *INT, *FLOAT, *UNBOXED_SLICE;
 
+// CompilerVariables are the way that the LLVM JIT tracks variables, which are a CompilerType combined with some sort
+// of value (the type of value depends on the type of CompilerType).
 class CompilerVariable;
 template <class V> class ValuedCompilerVariable;
 typedef ValuedCompilerVariable<llvm::Value*> ConcreteCompilerVariable;
@@ -125,6 +148,10 @@ class ScopingAnalysis;
 class CLFunction;
 class OSREntryDescriptor;
 
+// Pyston's internal calling convention is to pass around arguments in as unprocessed a form as possible,
+// which lets the callee decide how they would like to receive their arguments.  In addition to the actual
+// argument parameters, functions will often receive an ArgPassSpec struct which specifies the meaning of
+// the raw pointer values, such as whether they were positional arguments or keyword arguments, etc.
 struct ArgPassSpec {
     bool has_starargs : 1;
     bool has_kwargs : 1;
@@ -196,7 +223,8 @@ private:
     ParamNames() : takes_param_names(false), vararg_name(NULL), kwarg_name(NULL) {}
 };
 
-// Probably overkill to copy this from ArgPassSpec
+// Similar to ArgPassSpec, this struct is how functions specify what their parameter signature is.
+// (Probably overkill to copy this from ArgPassSpec)
 struct ParamReceiveSpec {
     bool takes_varargs : 1;
     bool takes_kwargs : 1;
@@ -228,6 +256,14 @@ struct ParamReceiveSpec {
     int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
 };
 
+// Inline-caches contain fastpath code, and need to know that their fastpath is valid for a particular set
+// of arguments.  This is usually done with guards: conditional checks that will avoid the fastpath if the
+// assumptions failed.  This can also be done using invalidation: no checks will be emitted into the generated
+// assembly, but instead if the assumption is invalidated, the IC will get erased.
+// This is useful for cases where we expect the assumption to overwhelmingly be true, or cases where it
+// is not possible to use guards.  It is more difficult to use invalidation because it is much easier to
+// get it wrong by forgetting to invalidate in all places that are necessary (whereas it is easier to be
+// conservative about guarding).
 class ICInvalidator {
 private:
     int64_t cur_version;
@@ -259,17 +295,31 @@ class ICInfo;
 class LocationMap;
 class JitCodeBlock;
 
+// A specific compilation of a CLFunction.  Usually these will be created by the LLVM JIT, which will take a CLFunction
+// and some compilation settings, and produce a CompiledFunction
+// CompiledFunctions can also be created from raw function pointers, using boxRTFunction.
+// A single CLFunction can have multiple CompiledFunctions associated with it, if they have different settings.
+// Typically, this will happen due to specialization on the argument types (ie we will generate a separate versions
+// of a function that are faster but only apply to specific argument types).
 struct CompiledFunction {
 private:
 public:
     CLFunction* clfunc;
     llvm::Function* func; // the llvm IR object
+
+    // Some compilation settings:
+    EffortLevel effort;
+    ExceptionStyle exception_style;
     FunctionSpecialization* spec;
+    // If this compilation was due to an OSR, `entry_descriptor` contains metadata about the OSR.
+    // Otherwise this field is NULL.
     const OSREntryDescriptor* entry_descriptor;
 
     // Pointers that were written directly into the code, which the GC should be aware of.
     std::vector<const void*> pointers_in_code;
 
+    // The function pointer to the generated code.  For convenience, it can be accessed
+    // as one of many different types.
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
@@ -283,14 +333,20 @@ public:
     };
     int code_size;
 
-    EffortLevel effort;
-    ExceptionStyle exception_style;
-
+    // Some simple profiling stats:
     int64_t times_called, times_speculation_failed;
+
+    // A list of ICs that depend on various properties of this CompiledFunction.
+    // These will get invalidated in situations such as: we compiled a higher-effort version of
+    // this function so we want to get old callsites to use the newer and better version, or
+    // we noticed that we compiled the function with speculations that kept on failing and
+    // we want to generate a more conservative version.
     ICInvalidator dependent_callsites;
 
+    // Metadata that lets us find local variables from the C stack fram.
     LocationMap* location_map;
 
+    // List of metadata objects for ICs inside this compilation
     std::vector<ICInfo*> ics;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
@@ -316,9 +372,12 @@ class BoxedModule;
 class ScopeInfo;
 class InternedStringPool;
 class LivenessAnalysis;
+
+// Data about a single textual function definition.
 class SourceInfo {
 private:
     BoxedString* fn; // equivalent of code.co_filename
+
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
@@ -354,16 +413,24 @@ private:
 
 typedef std::vector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
+
+// A BoxedCode is our implementation of the Python "code" object (such as function.func_code).
+// It is implemented as a wrapper around a CLFunction.
 class BoxedCode;
+
 class CLFunction {
+private:
+    // The Python-level "code" object corresponding to this CLFunction.  We store it in the CLFunction
+    // so that multiple attempts to translate from CLFunction->BoxedCode will always return the same
+    // BoxedCode object.
+    // Callers should use getCode()
     BoxedCode* code_obj;
 
 public:
     int num_args;
     bool takes_varargs, takes_kwargs;
-    //ParamReceiveSpec paramspec;
 
-    std::unique_ptr<SourceInfo> source;
+    std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
     ParamNames param_names;
 
     FunctionList
@@ -371,6 +438,7 @@ public:
     CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
+    // Profiling counter:
     int propagated_cxx_exceptions = 0;
 
     // For use by the interpreter/baseline jit:
@@ -426,6 +494,9 @@ typedef int64_t i64;
 
 const char* getNameOfClass(BoxedClass* cls);
 std::string getFullNameOfClass(BoxedClass* cls);
+std::string getFullTypeName(Box* o);
+const char* getTypeName(Box* b);
+
 
 class Rewriter;
 class RewriterVar;
@@ -491,6 +562,8 @@ inline void internStringMortalInplace(BoxedString*& s) noexcept {
     PyString_InternInPlace((PyObject**)&s);
 }
 
+// The data structure definition for hidden-class-based attributes.  Consists of a
+// pointer to the hidden class object, and a pointer to a variable-size attributes array.
 struct HCAttrs {
 public:
     struct AttrList {
@@ -507,12 +580,13 @@ static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 class BoxedDict;
 class BoxedString;
 
-// In Pyston, this is the same type as CPython's PyObject (they are interchangeable, but we
-// use Box in Pyston wherever possible as a convention).
+// "Box" is the base class of any C++ type that implements a Python type.  For example,
+// BoxedString is the data structure that implements Python's str type, and BoxedString
+// inherits from Box.
 //
-// Other types on Pyston inherit from Box (e.g. BoxedString is a Box). Why is this class not
-// polymorphic? Because of C extension support -- having virtual methods would change the layout
-// of the object.
+// This is the same as CPython's PyObject (and they are interchangeable), with the difference
+// since we are in C++ (whereas CPython is in C) we can use C++ inheritance to implement
+// Python inheritance, and avoid the raw pointer casts that CPython needs everywhere.
 class Box {
 private:
     BoxedDict** getDictPtr();
@@ -573,6 +647,12 @@ static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 
+// These are some macros for tying the C++ type hiercharchy to the Pyston type hiercharchy.
+// Classes that inherit from Box have a special operator new() that takes a class object (as
+// a BoxedClass*) since the class is necessary for object allocation.
+// To enable expressions such as `new BoxedString()` instead of having to type
+// `new (str_cls) BoxedString()` everywhere, we need to tell C++ what the default class is.
+// We can do this by putting `DEFAULT_CLASS(str_cls);` anywhere in the definition of BoxedString.
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
         assert(cls->tp_itemsize == 0);                                                                                 \
@@ -615,6 +695,11 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 #endif
 
 
+// In the simple cases, we can inline the fast paths of the following methods and improve allocation speed quite a bit:
+// - Box::operator new
+// - cls->tp_alloc
+// - PystonType_GenericAlloc
+// - PyObject_Init
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
 // asserts in the 1-arg operator new function:
 #define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
@@ -623,12 +708,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
         ALLOC_STATS(default_cls);                                                                                      \
-        /* In the simple cases, we can inline the following methods and simplify things a lot:                         \
-         * - Box::operator new                                                                                         \
-         * - cls->tp_alloc                                                                                             \
-         * - PystonType_GenericAlloc                                                                                   \
-         * - PyObject_Init                                                                                             \
-         */                                                                                                            \
         assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
         assert(default_cls->tp_itemsize == 0);                                                                         \
         assert(default_cls->tp_basicsize == size);                                                                     \
@@ -650,6 +729,22 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
     }
 
+// This corresponds to CPython's PyVarObject, for objects with a variable number of "items" that are stored inline.
+// For example, strings and tuples store their data in line in the main object allocation, so are BoxVars.  Lists,
+// since they have a changeable size, store their elements in a separate array, and their main object is a fixed
+// size and so aren't BoxVar.
+class BoxVar : public Box {
+public:
+    // This field gets initialized in operator new.
+    Py_ssize_t ob_size;
+
+    BoxVar() {}
+
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
+};
+static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
+
+// This is the variant of DEFAULT_CLASS that applies to BoxVar objects.
 #define DEFAULT_CLASS_VAR(default_cls, itemsize)                                                                       \
     static_assert(itemsize > 0, "");                                                                                   \
     /* asserts that the class in question is a subclass of BoxVar */                                                   \
@@ -693,21 +788,6 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         return rtn;                                                                                                    \
     }
 
-// CPython C API compatibility class:
-class BoxVar : public Box {
-public:
-    // This field gets initialized in operator new.
-    Py_ssize_t ob_size;
-
-    BoxVar() {}
-
-    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
-};
-static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
-
-std::string getFullTypeName(Box* o);
-const char* getTypeName(Box* b);
-
 class BoxedClass;
 
 // TODO these shouldn't be here
@@ -733,6 +813,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...)
     __attribute__((format(printf, 4, 5)));
 
+// A data structure used for storing information for tracebacks.
 struct LineInfo {
 public:
     int line, column;
@@ -742,6 +823,7 @@ public:
         : line(line), column(column), file(file), func(func) {}
 };
 
+// A data structure to simplify passing around all the data about a thrown exception.
 struct ExcInfo {
     Box* type, *value, *traceback;
 
@@ -750,7 +832,10 @@ struct ExcInfo {
     void printExcAndTraceback() const;
 };
 
+// Our object that implements Python's "frame" object:
 class BoxedFrame;
+
+// Our internal data structure for storing certain information about a stack frame.
 struct FrameInfo {
     // Note(kmod): we have a number of fields here that all have independent
     // initialization rules.  We could potentially save time on every function-entry
@@ -779,6 +864,7 @@ struct FrameInfo {
     void gcVisit(GCVisitor* visitor);
 };
 
+// callattr() takes a number of flags and arguments, and for performance we pack them into a single register:
 struct CallattrFlags {
     bool cls_only : 1;
     bool null_on_nonexistent : 1;
@@ -788,7 +874,7 @@ struct CallattrFlags {
 };
 static_assert(sizeof(CallattrFlags) == sizeof(uint64_t), "");
 
-// A C++-style way of handling a PyArena*
+// A C++-style RAII way of handling a PyArena*
 class ArenaWrapper {
 private:
     PyArena* arena;
@@ -803,6 +889,7 @@ public:
     operator PyArena*() const { return arena; }
 };
 
+// A C++-style RAII way of handling a FILE*
 class FileHandle {
 private:
     FILE* file;
@@ -841,6 +928,7 @@ int binarySearch(T needle, RandomAccessIterator start, RandomAccessIterator end,
 }
 }
 
+// We need to override these functions so that our GC can know about them.
 namespace std {
 template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept;
 template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p);

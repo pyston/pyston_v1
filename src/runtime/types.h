@@ -307,6 +307,10 @@ protected:
     friend void setupThread();
 };
 
+// Corresponds to PyHeapTypeObject.  Very similar to BoxedClass, but allocates some extra space for
+// structures that otherwise might get allocated statically.  For instance, tp_as_number for builtin
+// types will usually point to a `static PyNumberMethods` object, but for a heap-allocated class it
+// will point to `this->as_number`.
 class BoxedHeapClass : public BoxedClass {
 public:
     PyNumberMethods as_number;
@@ -336,6 +340,7 @@ private:
     friend void setupThread();
 };
 
+// Assert that our data structures have the same layout as the C API ones with which they need to be interchangeable.
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
 static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "");
 
@@ -675,7 +680,7 @@ public:
     // CPython declares ob_item (their version of elts) to have 1 element.  We want to
     // copy that behavior so that the sizes of the objects match, but we want to also
     // have a zero-length array in there since we have some extra compiler warnings turned
-    // on.  _elts[1] will throw an error, but elts[1] will not.
+    // on:  _elts[1] will throw an error, but elts[1] will not.
     union {
         Box* elts[0];
         Box* _elts[1];
@@ -687,6 +692,7 @@ static_assert(offsetof(BoxedTuple, elts) == offsetof(PyTupleObject, ob_item), ""
 
 extern BoxedString* characters[UCHAR_MAX + 1];
 
+// C++ functor objects that implement Python semantics.
 struct PyHasher {
     size_t operator()(Box* b) const {
         if (b->cls == str_cls) {
@@ -719,8 +725,11 @@ struct PyLt {
 
 // llvm::DenseMap doesn't store the original hash values, choosing to instead
 // check for equality more often.  This is probably a good tradeoff when the keys
-// are pointers and comparison is cheap, but we want to make sure that keys with
-// different hash values don't get compared.
+// are pointers and comparison is cheap, but when the equality function is user-defined
+// it can be much faster to avoid Python function invocations by doing some integer
+// comparisons.
+// This also has a user-visible behavior difference of how many times the hash function
+// and equality functions get called.
 struct BoxAndHash {
     Box* value;
     size_t hash;

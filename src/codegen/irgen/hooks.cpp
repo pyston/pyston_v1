@@ -772,11 +772,11 @@ CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization*
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
     : clfunc(NULL),
       func(func),
+      effort(effort),
+      exception_style(exception_style),
       spec(spec),
       entry_descriptor(entry_descriptor),
       code(code),
-      effort(effort),
-      exception_style(exception_style),
       times_called(0),
       times_speculation_failed(0),
       location_map(nullptr) {
