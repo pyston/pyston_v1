@@ -1915,8 +1915,8 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                sanity checks.  I'll buy the first person to
                point out a bug in this reasoning a beer. */
         } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
-                   && static_cast<BoxedFunction*>(descr)->f->always_use_version) {
-            CompiledFunction* cf = static_cast<BoxedFunction*>(descr)->f->always_use_version;
+                   && static_cast<BoxedFunction*>(descr)->md->always_use_version) {
+            CompiledFunction* cf = static_cast<BoxedFunction*>(descr)->md->always_use_version;
             if (cf->exception_style == CXX) {
                 type->tpp_descr_get = (descrgetfunc)cf->code;
                 specific = (void*)slot_tp_tpp_descr_get;

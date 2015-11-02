@@ -78,7 +78,7 @@ Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enc
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 Box* getGlobalsForInterpretedFrame(void* frame_ptr);
-FunctionMetadata* getCLForInterpretedFrame(void* frame_ptr);
+FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);

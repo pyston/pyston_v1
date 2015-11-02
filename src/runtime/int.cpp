@@ -694,10 +694,10 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_ifu{ BOXED_INT, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    FunctionMetadata* cl = new FunctionMetadata(3, false, false);
-    cl->addVersion(float_func, UNKNOWN, v_ifu);
-    cl->addVersion(int_func, UNKNOWN, v_uuu);
-    int_cls->giveAttr(name, new BoxedFunction(cl, { None }));
+    FunctionMetadata* md = new FunctionMetadata(3, false, false);
+    md->addVersion(float_func, UNKNOWN, v_ifu);
+    md->addVersion(int_func, UNKNOWN, v_uuu);
+    int_cls->giveAttr(name, new BoxedFunction(md, { None }));
 }
 
 extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
@@ -1085,11 +1085,11 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    FunctionMetadata* cl = new FunctionMetadata(2, false, false);
-    cl->addVersion(int_func, UNKNOWN, v_ii);
-    cl->addVersion(float_func, BOXED_FLOAT, v_if);
-    cl->addVersion(boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(cl));
+    FunctionMetadata* md = new FunctionMetadata(2, false, false);
+    md->addVersion(int_func, UNKNOWN, v_ii);
+    md->addVersion(float_func, BOXED_FLOAT, v_if);
+    md->addVersion(boxed_func, UNKNOWN, v_iu);
+    int_cls->giveAttr(name, new BoxedFunction(md));
 }
 
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
@@ -1100,10 +1100,10 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    FunctionMetadata* cl = new FunctionMetadata(2, false, false);
-    cl->addVersion(int_func, rtn_type, v_ii);
-    cl->addVersion(boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(cl));
+    FunctionMetadata* md = new FunctionMetadata(2, false, false);
+    md->addVersion(int_func, rtn_type, v_ii);
+    md->addVersion(boxed_func, UNKNOWN, v_iu);
+    int_cls->giveAttr(name, new BoxedFunction(md));
 }
 
 static Box* intIntGetset(Box* b, void*) {

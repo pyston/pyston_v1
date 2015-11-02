@@ -390,12 +390,12 @@ done:
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* complex_func, void* float_func,
                      void* int_func, void* boxed_func) {
-    FunctionMetadata* cl = new FunctionMetadata(2, false, false);
-    cl->addVersion(complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
-    cl->addVersion(float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
-    cl->addVersion(int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
-    cl->addVersion(boxed_func, UNKNOWN, { BOXED_COMPLEX, UNKNOWN });
-    complex_cls->giveAttr(name, new BoxedFunction(cl));
+    FunctionMetadata* md = new FunctionMetadata(2, false, false);
+    md->addVersion(complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
+    md->addVersion(float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
+    md->addVersion(int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
+    md->addVersion(boxed_func, UNKNOWN, { BOXED_COMPLEX, UNKNOWN });
+    complex_cls->giveAttr(name, new BoxedFunction(md));
 }
 
 static Py_complex c_1 = { 1., 0. };

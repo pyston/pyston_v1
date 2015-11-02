@@ -304,7 +304,7 @@ class JitCodeBlock;
 struct CompiledFunction {
 private:
 public:
-    FunctionMetadata* clfunc;
+    FunctionMetadata* md;
     llvm::Function* func; // the llvm IR object
 
     // Some compilation settings:

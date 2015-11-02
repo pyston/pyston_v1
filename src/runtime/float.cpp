@@ -938,11 +938,11 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
     v_fu.push_back(BOXED_FLOAT);
     v_fu.push_back(UNKNOWN);
 
-    FunctionMetadata* cl = new FunctionMetadata(2, false, false);
-    cl->addVersion(float_func, rtn_type, v_ff);
-    cl->addVersion(int_func, rtn_type, v_fi);
-    cl->addVersion(boxed_func, UNKNOWN, v_fu);
-    float_cls->giveAttr(name, new BoxedFunction(cl));
+    FunctionMetadata* md = new FunctionMetadata(2, false, false);
+    md->addVersion(float_func, rtn_type, v_ff);
+    md->addVersion(int_func, rtn_type, v_fi);
+    md->addVersion(boxed_func, UNKNOWN, v_fu);
+    float_cls->giveAttr(name, new BoxedFunction(md));
 }
 
 static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,
@@ -951,11 +951,11 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_fiu{ BOXED_FLOAT, BOXED_INT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_fuu{ BOXED_FLOAT, UNKNOWN, UNKNOWN };
 
-    FunctionMetadata* cl = new FunctionMetadata(3, false, false);
-    cl->addVersion(float_func, rtn_type, v_ffu);
-    cl->addVersion(int_func, rtn_type, v_fiu);
-    cl->addVersion(boxed_func, UNKNOWN, v_fuu);
-    float_cls->giveAttr(name, new BoxedFunction(cl, { None }));
+    FunctionMetadata* md = new FunctionMetadata(3, false, false);
+    md->addVersion(float_func, rtn_type, v_ffu);
+    md->addVersion(int_func, rtn_type, v_fiu);
+    md->addVersion(boxed_func, UNKNOWN, v_fuu);
+    float_cls->giveAttr(name, new BoxedFunction(md, { None }));
 }
 
 static Box* floatConjugate(Box* b, void*) {

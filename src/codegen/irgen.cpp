@@ -974,7 +974,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     return os.str();
 }
 
-CompiledFunction* doCompile(FunctionMetadata* clfunc, SourceInfo* source, ParamNames* param_names,
+CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames* param_names,
                             const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                             ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef nameprefix) {
     Timer _t("in doCompile");
@@ -1093,7 +1093,7 @@ CompiledFunction* doCompile(FunctionMetadata* clfunc, SourceInfo* source, ParamN
     else
         phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
 
-    IRGenState irstate(clfunc, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
+    IRGenState irstate(md, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 

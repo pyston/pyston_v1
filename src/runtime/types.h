@@ -804,7 +804,7 @@ class BoxedFunctionBase : public Box {
 public:
     Box** in_weakreflist;
 
-    FunctionMetadata* f;
+    FunctionMetadata* md;
 
     // TODO these should really go in BoxedFunction but it's annoying because they don't get
     // initializd until after BoxedFunctionBase's constructor is run which means they could have
@@ -823,12 +823,12 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(FunctionMetadata* f);
-    BoxedFunctionBase(FunctionMetadata* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunctionBase(FunctionMetadata* md);
+    BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
     ParamReceiveSpec getParamspec() {
-        return ParamReceiveSpec(f->num_args, defaults ? defaults->size() : 0, f->takes_varargs, f->takes_kwargs);
+        return ParamReceiveSpec(md->num_args, defaults ? defaults->size() : 0, md->takes_varargs, md->takes_kwargs);
     }
 };
 
@@ -836,8 +836,8 @@ class BoxedFunction : public BoxedFunctionBase {
 public:
     HCAttrs attrs;
 
-    BoxedFunction(FunctionMetadata* f);
-    BoxedFunction(FunctionMetadata* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(FunctionMetadata* md);
+    BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
@@ -1133,7 +1133,7 @@ extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
 Box* codeForFunctionMetadata(FunctionMetadata*);
-FunctionMetadata* clfunctionFromCode(Box* code);
+FunctionMetadata* metadataFromCode(Box* code);
 
 Box* getFrame(int depth);
 

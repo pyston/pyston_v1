@@ -75,9 +75,9 @@ BoxedCode* FunctionMetadata::getCode() {
 void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
-    assert(compiled->clfunc == NULL);
+    assert(compiled->md == NULL);
     assert(compiled->code);
-    compiled->clfunc = this;
+    compiled->md = this;
 
     if (compiled->entry_descriptor == NULL) {
         bool could_have_speculations = (source.get() != NULL);

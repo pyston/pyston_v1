@@ -76,7 +76,7 @@ private:
 
 public:
     CompiledFunction* getCF();
-    FunctionMetadata* getCL();
+    FunctionMetadata* getMD();
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
     AST_stmt* getCurrentStatement();

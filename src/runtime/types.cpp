@@ -369,9 +369,9 @@ void Box::gcHandler(GCVisitor* v, Box* b) {
     }
 }
 
-extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f)
+extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
     : in_weakreflist(NULL),
-      f(f),
+      md(md),
       closure(NULL),
       defaults(NULL),
       can_change_defaults(false),
@@ -379,23 +379,23 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f)
       name(NULL),
       doc(NULL) {
 
-    if (f->source) {
-        assert(f->source->scoping->areGlobalsFromModule());
-        Box* globals_for_name = f->source->parent_module;
+    if (md->source) {
+        assert(md->source->scoping->areGlobalsFromModule());
+        Box* globals_for_name = md->source->parent_module;
 
         static BoxedString* name_str = internStringImmortal("__name__");
         this->modname = globals_for_name->getattr(name_str);
-        this->doc = f->source->getDocString();
+        this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
 }
 
-extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f, std::initializer_list<Box*> defaults,
+extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, Box* globals, bool can_change_defaults)
     : in_weakreflist(NULL),
-      f(f),
+      md(md),
       closure(closure),
       globals(globals),
       defaults(NULL),
@@ -403,7 +403,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f, std::initia
       modname(NULL),
       name(NULL),
       doc(NULL) {
-    assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
+    assert((!globals) == (!md->source || md->source->scoping->areGlobalsFromModule()));
 
     if (defaults.size()) {
         // HAX copy+modify the BoxedTuple constructor so that we can put NULLs into the tuple.
@@ -418,11 +418,11 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f, std::initia
         }
     }
 
-    if (f->source) {
+    if (md->source) {
         Box* globals_for_name = globals;
         if (!globals_for_name) {
-            assert(f->source->scoping->areGlobalsFromModule());
-            globals_for_name = f->source->parent_module;
+            assert(md->source->scoping->areGlobalsFromModule());
+            globals_for_name = md->source->parent_module;
         }
 
         static BoxedString* name_str = internStringImmortal("__name__");
@@ -433,25 +433,25 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* f, std::initia
         }
         // It's ok for modname to be NULL
 
-        this->doc = f->source->getDocString();
+        this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
         this->doc = None;
     }
 }
 
-BoxedFunction::BoxedFunction(FunctionMetadata* f) : BoxedFunction(f, {}) {
+BoxedFunction::BoxedFunction(FunctionMetadata* md) : BoxedFunction(md, {}) {
 }
 
-BoxedFunction::BoxedFunction(FunctionMetadata* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
+BoxedFunction::BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure,
                              Box* globals, bool can_change_defaults)
-    : BoxedFunctionBase(f, defaults, closure, globals, can_change_defaults) {
+    : BoxedFunctionBase(md, defaults, closure, globals, can_change_defaults) {
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
     // some builtin functions that are BoxedFunctions but really ought to be a type that
     // we don't have yet.
-    if (f->source) {
-        this->name = static_cast<BoxedString*>(f->source->getName());
+    if (md->source) {
+        this->name = static_cast<BoxedString*>(md->source->getName());
     }
 }
 
@@ -478,20 +478,20 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
 
     v->visit(&f->defaults);
 
-    if (f->f && f->f->source && f->f->source->parent_module)
-        v->visit(&f->f->source->parent_module);
+    if (f->md && f->md->source && f->md->source->parent_module)
+        v->visit(&f->md->source->parent_module);
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, const char* doc)
-    : BoxedBuiltinFunctionOrMethod(f, name, {}) {
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md, const char* name, const char* doc)
+    : BoxedBuiltinFunctionOrMethod(md, name, {}) {
 
     this->doc = doc ? boxString(doc) : None;
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name,
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md, const char* name,
                                                            std::initializer_list<Box*> defaults, BoxedClosure* closure,
                                                            const char* doc)
-    : BoxedFunctionBase(f, defaults, closure) {
+    : BoxedFunctionBase(md, defaults, closure) {
 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
@@ -599,19 +599,19 @@ void BoxedModule::gcHandler(GCVisitor* v, Box* b) {
 
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
-extern "C" Box* createFunctionFromMetadata(FunctionMetadata* f, BoxedClosure* closure, Box* globals,
+extern "C" Box* createFunctionFromMetadata(FunctionMetadata* md, BoxedClosure* closure, Box* globals,
                                            std::initializer_list<Box*> defaults) noexcept {
-    STAT_TIMER(t0, "us_timer_boxclfunction", 10);
+    STAT_TIMER(t0, "us_timer_createfunctionfrommetadata", 10);
 
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure, globals, /* can_change_defaults = */ true);
+    return new BoxedFunction(md, defaults, closure, globals, /* can_change_defaults = */ true);
 }
 
 extern "C" FunctionMetadata* getFunctionMetadata(Box* b) {
     assert(isSubclass(b->cls, function_cls) || isSubclass(b->cls, builtin_function_or_method_cls));
-    return static_cast<BoxedFunction*>(b)->f;
+    return static_cast<BoxedFunction*>(b)->md;
 }
 
 static PyObject* cpython_type_call(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
@@ -1737,12 +1737,12 @@ static void functionSetCode(Box* self, Box* v, void*) {
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     BoxedCode* code = static_cast<BoxedCode*>(v);
 
-    RELEASE_ASSERT(func->f->source && code->f->source, "__code__ can only be set on python functions");
+    RELEASE_ASSERT(func->md->source && code->f->source, "__code__ can only be set on python functions");
 
-    RELEASE_ASSERT(!func->f->internal_callable.get<CXX>() && !func->f->internal_callable.get<CAPI>(),
+    RELEASE_ASSERT(!func->md->internal_callable.get<CXX>() && !func->md->internal_callable.get<CAPI>(),
                    "this could cause invalidation issues");
 
-    func->f = code->f;
+    func->md = code->f;
     func->dependent_ics.invalidateAll();
 }
 
@@ -1761,14 +1761,14 @@ static Box* functionGlobals(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (func->globals) {
-        assert(!func->f->source || !func->f->source->scoping->areGlobalsFromModule());
+        assert(!func->md->source || !func->md->source->scoping->areGlobalsFromModule());
         return func->globals;
     }
-    assert(func->f->source);
-    assert(func->f->source->scoping->areGlobalsFromModule());
+    assert(func->md->source);
+    assert(func->md->source->scoping->areGlobalsFromModule());
 
     static BoxedString* dict_str = internStringImmortal("__dict__");
-    return getattr(func->f->source->parent_module, dict_str);
+    return getattr(func->md->source->parent_module, dict_str);
 }
 
 static void functionSetDefaults(Box* b, Box* v, void*) {

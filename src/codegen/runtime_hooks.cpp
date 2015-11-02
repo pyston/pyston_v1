@@ -122,7 +122,7 @@ static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, 
 void initGlobalFuncs(GlobalState& g) {
     g.llvm_opaque_type = llvm::StructType::create(g.context, "opaque");
 
-    g.llvm_clfunction_type_ptr = lookupFunction("createFunctionFromMetadata")->arg_begin()->getType();
+    g.llvm_functionmetadata_type_ptr = lookupFunction("createFunctionFromMetadata")->arg_begin()->getType();
     g.llvm_module_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedModule")->getPointerTo();
     assert(g.llvm_module_type_ptr);
     g.llvm_bool_type_ptr = lookupFunction("boxBool")->getReturnType();

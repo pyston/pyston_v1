@@ -97,8 +97,9 @@ void generatorEntry(BoxedGenerator* g) {
             BoxedFunctionBase* func = g->function;
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
-            callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->f, nullptr, func->f->numReceivedArgs(), func->closure,
-                                                            g, func->globals, g->arg1, g->arg2, g->arg3, args);
+            callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
+                                                            func->closure, g, func->globals, g->arg1, g->arg2, g->arg3,
+                                                            args);
         } catch (ExcInfo e) {
             // unhandled exception: propagate the exception to the caller
             g->exception = e;
@@ -354,7 +355,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #endif
 {
 
-    int numArgs = function->f->numReceivedArgs();
+    int numArgs = function->md->numReceivedArgs();
     if (numArgs > 3) {
         numArgs -= 3;
         this->args = new (numArgs) GCdArray();
@@ -428,7 +429,7 @@ void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
     BoxedGenerator* g = (BoxedGenerator*)b;
 
     v->visit(&g->function);
-    int num_args = g->function->f->numReceivedArgs();
+    int num_args = g->function->md->numReceivedArgs();
     if (num_args >= 1)
         v->visit(&g->arg1);
     if (num_args >= 2)
@@ -467,7 +468,7 @@ Box* generatorName(Box* _self, void* context) {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return self->function->f->source->getName();
+    return self->function->md->source->getName();
 }
 
 void generatorDestructor(Box* b) {

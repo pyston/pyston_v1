@@ -1278,10 +1278,10 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_lfu{ UNKNOWN, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    FunctionMetadata* cl = new FunctionMetadata(3, false, false);
-    cl->addVersion(float_func, UNKNOWN, v_lfu);
-    cl->addVersion(long_func, UNKNOWN, v_uuu);
-    long_cls->giveAttr(name, new BoxedFunction(cl, { None }));
+    FunctionMetadata* md = new FunctionMetadata(3, false, false);
+    md->addVersion(float_func, UNKNOWN, v_lfu);
+    md->addVersion(long_func, UNKNOWN, v_uuu);
+    long_cls->giveAttr(name, new BoxedFunction(md, { None }));
 }
 
 extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {

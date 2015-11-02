@@ -44,18 +44,18 @@ Box* BoxedCode::filename(Box* b, void*) {
 Box* BoxedCode::firstlineno(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
-    FunctionMetadata* cl = code->f;
+    FunctionMetadata* md = code->f;
 
-    if (!cl->source) {
+    if (!md->source) {
         // I don't think it really matters what we return here;
         // in CPython, builtin functions don't have code objects.
         return boxInt(-1);
     }
 
-    if (cl->source->ast->lineno == (uint32_t)-1)
+    if (md->source->ast->lineno == (uint32_t)-1)
         return boxInt(-1);
 
-    return boxInt(cl->source->ast->lineno);
+    return boxInt(md->source->ast->lineno);
 }
 
 Box* BoxedCode::argcount(Box* b, void*) {
@@ -97,10 +97,10 @@ Box* BoxedCode::flags(Box* b, void*) {
 }
 
 Box* codeForFunction(BoxedFunction* f) {
-    return f->f->getCode();
+    return f->md->getCode();
 }
 
-FunctionMetadata* clfunctionFromCode(Box* code) {
+FunctionMetadata* metadataFromCode(Box* code) {
     assert(code->cls == code_cls);
     return static_cast<BoxedCode*>(code)->f;
 }
