@@ -648,12 +648,15 @@ void setupSys() {
     sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
     sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
 
-    sys_module->giveAttr("exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0),
-                                                                      "exc_info", exc_info_doc));
-    sys_module->giveAttr("exc_clear", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcClear, NONE, 0),
-                                                                       "exc_clear", exc_clear_doc));
-    sys_module->giveAttr("exit", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExit, NONE, 1, false, false),
-                                                                  "exit", { None }, NULL, exit_doc));
+    sys_module->giveAttr("exc_info",
+                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExcInfo, BOXED_TUPLE, 0),
+                                                          "exc_info", exc_info_doc));
+    sys_module->giveAttr("exc_clear",
+                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExcClear, NONE, 0),
+                                                          "exc_clear", exc_clear_doc));
+    sys_module->giveAttr(
+        "exit", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExit, NONE, 1, false, false),
+                                                 "exit", { None }, NULL, exit_doc));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
@@ -663,19 +666,20 @@ void setupSys() {
 
     sys_module->giveAttr("executable", boxString(Py_GetProgramFullPath()));
 
-    sys_module->giveAttr("_getframe",
-                         new BoxedFunction(boxRTFunction((void*)sysGetFrame, UNKNOWN, 1, false, false), { NULL }));
-    sys_module->giveAttr("getdefaultencoding",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetDefaultEncoding, STR, 0),
-                                                          "getdefaultencoding", getdefaultencoding_doc));
+    sys_module->giveAttr(
+        "_getframe",
+        new BoxedFunction(FunctionMetadata::create((void*)sysGetFrame, UNKNOWN, 1, false, false), { NULL }));
+    sys_module->giveAttr("getdefaultencoding", new BoxedBuiltinFunctionOrMethod(
+                                                   FunctionMetadata::create((void*)sysGetDefaultEncoding, STR, 0),
+                                                   "getdefaultencoding", getdefaultencoding_doc));
 
-    sys_module->giveAttr("getfilesystemencoding",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetFilesystemEncoding, STR, 0),
-                                                          "getfilesystemencoding", getfilesystemencoding_doc));
+    sys_module->giveAttr("getfilesystemencoding", new BoxedBuiltinFunctionOrMethod(
+                                                      FunctionMetadata::create((void*)sysGetFilesystemEncoding, STR, 0),
+                                                      "getfilesystemencoding", getfilesystemencoding_doc));
 
-    sys_module->giveAttr("getrecursionlimit",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetRecursionLimit, UNKNOWN, 0),
-                                                          "getrecursionlimit", getrecursionlimit_doc));
+    sys_module->giveAttr("getrecursionlimit", new BoxedBuiltinFunctionOrMethod(
+                                                  FunctionMetadata::create((void*)sysGetRecursionLimit, UNKNOWN, 0),
+                                                  "getrecursionlimit", getrecursionlimit_doc));
 
     sys_module->giveAttr("meta_path", new BoxedList());
     sys_module->giveAttr("path_hooks", new BoxedList());
@@ -702,8 +706,8 @@ void setupSys() {
 
     sys_flags_cls = new (0)
         BoxedClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false, "flags");
-    sys_flags_cls->giveAttr("__new__",
-                            new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
+    sys_flags_cls->giveAttr(
+        "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
 #define ADD(name)                                                                                                      \
     sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))

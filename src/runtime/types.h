@@ -161,9 +161,9 @@ extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 
 extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
-                              std::initializer_list<Box*> defaults) noexcept;
-extern "C" CLFunction* unboxCLFunction(Box* b);
+extern "C" Box* createFunctionFromMetadata(FunctionMetadata* f, BoxedClosure* closure, Box* globals,
+                                           std::initializer_list<Box*> defaults) noexcept;
+extern "C" FunctionMetadata* getFunctionMetadata(Box* b);
 extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
@@ -804,7 +804,7 @@ class BoxedFunctionBase : public Box {
 public:
     Box** in_weakreflist;
 
-    CLFunction* f;
+    FunctionMetadata* f;
 
     // TODO these should really go in BoxedFunction but it's annoying because they don't get
     // initializd until after BoxedFunctionBase's constructor is run which means they could have
@@ -823,8 +823,8 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(CLFunction* f);
-    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunctionBase(FunctionMetadata* f);
+    BoxedFunctionBase(FunctionMetadata* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
     ParamReceiveSpec getParamspec() {
@@ -836,8 +836,8 @@ class BoxedFunction : public BoxedFunctionBase {
 public:
     HCAttrs attrs;
 
-    BoxedFunction(CLFunction* f);
-    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(FunctionMetadata* f);
+    BoxedFunction(FunctionMetadata* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
@@ -847,8 +847,8 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
+    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, const char* doc = NULL);
+    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, std::initializer_list<Box*> defaults,
                                  BoxedClosure* closure = NULL, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
@@ -1132,8 +1132,8 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
-Box* codeForCLFunction(CLFunction*);
-CLFunction* clfunctionFromCode(Box* code);
+Box* codeForFunctionMetadata(FunctionMetadata*);
+FunctionMetadata* clfunctionFromCode(Box* code);
 
 Box* getFrame(int depth);
 

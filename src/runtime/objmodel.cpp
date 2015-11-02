@@ -3198,7 +3198,7 @@ static inline RewriterVar* getArg(int idx, _CallRewriteArgsBase* rewrite_args) {
 }
 
 static StatCounter slowpath_pickversion("slowpath_pickversion");
-static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
+static CompiledFunction* pickVersion(FunctionMetadata* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
                                      Box* oarg3, Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -3251,7 +3251,7 @@ static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_ou
     return NULL;
 }
 
-static llvm::StringRef getFunctionName(CLFunction* f) {
+static llvm::StringRef getFunctionName(FunctionMetadata* f) {
     if (f->source)
         return f->source->getName()->s();
     else if (f->versions.size()) {
@@ -3796,7 +3796,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 #endif
     slowpath_callfunc.log();
 
-    CLFunction* f = func->f;
+    FunctionMetadata* f = func->f;
     ParamReceiveSpec paramspec = func->getParamspec();
 
     if (rewrite_args) {
@@ -3983,7 +3983,7 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
 // only supports calling functions with at most 6 since it can currently only pass arguments
 // in registers.
-static Box* astInterpretHelper(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelper(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                Box** _args) {
     Box* arg1 = _args[0];
     Box* arg2 = _args[1];
@@ -3993,7 +3993,7 @@ static Box* astInterpretHelper(CLFunction* f, BoxedClosure* closure, BoxedGenera
     return astInterpretFunction(f, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-static Box* astInterpretHelperCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelperCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                    Box** _args) noexcept {
     try {
         return astInterpretHelper(f, closure, generator, globals, _args);
@@ -4003,8 +4003,8 @@ static Box* astInterpretHelperCapi(CLFunction* f, BoxedClosure* closure, BoxedGe
     }
 }
 
-static Box* astInterpretHelper2ArgsCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
-                                        Box* arg1, Box* arg2) noexcept {
+static Box* astInterpretHelper2ArgsCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator,
+                                        Box* globals, Box* arg1, Box* arg2) noexcept {
     try {
         return astInterpretFunction(f, closure, generator, globals, arg1, arg2, NULL, NULL);
     } catch (ExcInfo e) {
@@ -4026,7 +4026,7 @@ static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
@@ -4168,16 +4168,16 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 }
 
 // force instantiation:
-template Box* callCLFunc<CAPI, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                            BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                            Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                           BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                           Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CAPI, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                                BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                                Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                               BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                               Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 

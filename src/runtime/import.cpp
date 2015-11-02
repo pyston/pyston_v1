@@ -1001,43 +1001,47 @@ void setupImport() {
 
     null_importer_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NullImporter");
     null_importer_cls->giveAttr(
-        "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, false, false), { None }));
-    null_importer_cls->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(
-                                                   boxRTFunction((void*)nullImporterFindModule, NONE, 2, false, false),
-                                                   "find_module", { None }, NULL, find_module_doc));
+        "__init__",
+        new BoxedFunction(FunctionMetadata::create((void*)nullImporterInit, NONE, 2, false, false), { None }));
+    null_importer_cls->giveAttr(
+        "find_module",
+        new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)nullImporterFindModule, NONE, 2, false, false),
+                                         "find_module", { None }, NULL, find_module_doc));
     null_importer_cls->freeze();
     imp_module->giveAttr("NullImporter", null_importer_cls);
 
-    CLFunction* find_module_func
-        = boxRTFunction((void*)impFindModule, UNKNOWN, 2, false, false, ParamNames({ "name", "path" }, "", ""));
+    FunctionMetadata* find_module_func = FunctionMetadata::create((void*)impFindModule, UNKNOWN, 2, false, false,
+                                                                  ParamNames({ "name", "path" }, "", ""));
     imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None },
                                                                          NULL, find_module_doc));
 
-    CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
-                                                 ParamNames({ "name", "file", "pathname", "description" }, "", ""));
+    FunctionMetadata* load_module_func = FunctionMetadata::create(
+        (void*)impLoadModule, UNKNOWN, 4, ParamNames({ "name", "file", "pathname", "description" }, "", ""));
     imp_module->giveAttr("load_module",
                          new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module", load_module_doc));
-    imp_module->giveAttr("load_source",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impLoadSource, UNKNOWN, 3, false, false),
-                                                          "load_source", { NULL }));
+    imp_module->giveAttr("load_source", new BoxedBuiltinFunctionOrMethod(
+                                            FunctionMetadata::create((void*)impLoadSource, UNKNOWN, 3, false, false),
+                                            "load_source", { NULL }));
 
-    CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, false, false,
-                                                  ParamNames({ "name", "pathname", "file" }, "", ""));
+    FunctionMetadata* load_dynamic_func = FunctionMetadata::create((void*)impLoadDynamic, UNKNOWN, 3, false, false,
+                                                                   ParamNames({ "name", "pathname", "file" }, "", ""));
     imp_module->giveAttr("load_dynamic", new BoxedBuiltinFunctionOrMethod(load_dynamic_func, "load_dynamic", { None }));
 
     imp_module->giveAttr("get_suffixes",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impGetSuffixes, UNKNOWN, 0),
+                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)impGetSuffixes, UNKNOWN, 0),
                                                           "get_suffixes", get_suffixes_doc));
-    imp_module->giveAttr("acquire_lock", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impAcquireLock, NONE, 0),
-                                                                          "acquire_lock", acquire_lock_doc));
-    imp_module->giveAttr("release_lock", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impReleaseLock, NONE, 0),
-                                                                          "release_lock", release_lock_doc));
+    imp_module->giveAttr("acquire_lock",
+                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)impAcquireLock, NONE, 0),
+                                                          "acquire_lock", acquire_lock_doc));
+    imp_module->giveAttr("release_lock",
+                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)impReleaseLock, NONE, 0),
+                                                          "release_lock", release_lock_doc));
 
-    imp_module->giveAttr("new_module",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impNewModule, MODULE, 1), "new_module"));
-    imp_module->giveAttr(
-        "is_builtin", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impIsBuiltin, BOXED_INT, 1), "is_builtin"));
-    imp_module->giveAttr(
-        "is_frozen", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impIsFrozen, BOXED_BOOL, 1), "is_frozen"));
+    imp_module->giveAttr("new_module", new BoxedBuiltinFunctionOrMethod(
+                                           FunctionMetadata::create((void*)impNewModule, MODULE, 1), "new_module"));
+    imp_module->giveAttr("is_builtin", new BoxedBuiltinFunctionOrMethod(
+                                           FunctionMetadata::create((void*)impIsBuiltin, BOXED_INT, 1), "is_builtin"));
+    imp_module->giveAttr("is_frozen", new BoxedBuiltinFunctionOrMethod(
+                                          FunctionMetadata::create((void*)impIsFrozen, BOXED_BOOL, 1), "is_frozen"));
 }
 }

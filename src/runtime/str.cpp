@@ -2798,11 +2798,12 @@ void setupStr() {
 
     str_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
                                           sizeof(BoxedStringIterator), false, "striterator");
-    str_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
-    str_iterator_cls->giveAttr("__iter__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::iter, UNKNOWN, 1)));
-    str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
+    str_iterator_cls->giveAttr(
+        "__hasnext__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
+    str_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::iter, UNKNOWN, 1)));
+    str_iterator_cls->giveAttr("next",
+                               new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
     str_iterator_cls->tp_iternext = BoxedStringIterator::next_capi;
@@ -2811,83 +2812,90 @@ void setupStr() {
     str_cls->tp_as_buffer = &string_as_buffer;
     str_cls->tp_print = string_print;
 
-    str_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)string_getnewargs, UNKNOWN, 1,
-                                                                        ParamNames::empty(), CAPI)));
+    str_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)string_getnewargs, UNKNOWN, 1,
+                                                                                   ParamNames::empty(), CAPI)));
 
-    str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
-    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)str_str, STR, 1)));
-    str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
-    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, UNKNOWN, 1)));
-    str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
+    str_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)strLen, BOXED_INT, 1)));
+    str_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)str_str, STR, 1)));
+    str_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)strRepr, STR, 1)));
+    str_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)strHash, UNKNOWN, 1)));
+    str_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)strNonzero, BOXED_BOOL, 1)));
 
-    str_cls->giveAttr("isalnum", new BoxedFunction(boxRTFunction((void*)strIsAlnum, BOXED_BOOL, 1)));
-    str_cls->giveAttr("isalpha", new BoxedFunction(boxRTFunction((void*)strIsAlpha, BOXED_BOOL, 1)));
-    str_cls->giveAttr("isdigit", new BoxedFunction(boxRTFunction((void*)strIsDigit, BOXED_BOOL, 1)));
-    str_cls->giveAttr("islower", new BoxedFunction(boxRTFunction((void*)strIsLower, BOXED_BOOL, 1)));
-    str_cls->giveAttr("isspace", new BoxedFunction(boxRTFunction((void*)strIsSpace, BOXED_BOOL, 1)));
-    str_cls->giveAttr("istitle", new BoxedFunction(boxRTFunction((void*)strIsTitle, BOXED_BOOL, 1)));
-    str_cls->giveAttr("isupper", new BoxedFunction(boxRTFunction((void*)strIsUpper, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isalnum", new BoxedFunction(FunctionMetadata::create((void*)strIsAlnum, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isalpha", new BoxedFunction(FunctionMetadata::create((void*)strIsAlpha, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isdigit", new BoxedFunction(FunctionMetadata::create((void*)strIsDigit, BOXED_BOOL, 1)));
+    str_cls->giveAttr("islower", new BoxedFunction(FunctionMetadata::create((void*)strIsLower, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isspace", new BoxedFunction(FunctionMetadata::create((void*)strIsSpace, BOXED_BOOL, 1)));
+    str_cls->giveAttr("istitle", new BoxedFunction(FunctionMetadata::create((void*)strIsTitle, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isupper", new BoxedFunction(FunctionMetadata::create((void*)strIsUpper, BOXED_BOOL, 1)));
 
-    str_cls->giveAttr("decode", new BoxedFunction(boxRTFunction((void*)strDecode, UNKNOWN, 3, false, false), { 0, 0 }));
-    str_cls->giveAttr("encode", new BoxedFunction(boxRTFunction((void*)strEncode, UNKNOWN, 3, false, false), { 0, 0 }));
+    str_cls->giveAttr(
+        "decode", new BoxedFunction(FunctionMetadata::create((void*)strDecode, UNKNOWN, 3, false, false), { 0, 0 }));
+    str_cls->giveAttr(
+        "encode", new BoxedFunction(FunctionMetadata::create((void*)strEncode, UNKNOWN, 3, false, false), { 0, 0 }));
 
-    str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
-    str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));
-    str_cls->giveAttr("upper", new BoxedFunction(boxRTFunction((void*)strUpper, STR, 1)));
+    str_cls->giveAttr("lower", new BoxedFunction(FunctionMetadata::create((void*)strLower, STR, 1)));
+    str_cls->giveAttr("swapcase", new BoxedFunction(FunctionMetadata::create((void*)strSwapcase, STR, 1)));
+    str_cls->giveAttr("upper", new BoxedFunction(FunctionMetadata::create((void*)strUpper, STR, 1)));
 
-    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, UNKNOWN, 2, false, false), { None }));
-    str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, UNKNOWN, 2, false, false), { None }));
-    str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, UNKNOWN, 2, false, false), { None }));
+    str_cls->giveAttr("strip",
+                      new BoxedFunction(FunctionMetadata::create((void*)strStrip, UNKNOWN, 2, false, false), { None }));
+    str_cls->giveAttr(
+        "lstrip", new BoxedFunction(FunctionMetadata::create((void*)strLStrip, UNKNOWN, 2, false, false), { None }));
+    str_cls->giveAttr(
+        "rstrip", new BoxedFunction(FunctionMetadata::create((void*)strRStrip, UNKNOWN, 2, false, false), { None }));
 
-    str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
-    str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));
+    str_cls->giveAttr("capitalize", new BoxedFunction(FunctionMetadata::create((void*)strCapitalize, STR, 1)));
+    str_cls->giveAttr("title", new BoxedFunction(FunctionMetadata::create((void*)strTitle, STR, 1)));
 
     str_cls->giveAttr("translate",
-                      new BoxedFunction(boxRTFunction((void*)strTranslate, STR, 3, false, false), { NULL }));
+                      new BoxedFunction(FunctionMetadata::create((void*)strTranslate, STR, 3, false, false), { NULL }));
 
-    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
+    str_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)strContains, BOXED_BOOL, 2)));
 
-    str_cls->giveAttr("startswith",
-                      new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 4, 0, 0), { NULL, NULL }));
-    str_cls->giveAttr("endswith",
-                      new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 0, 0), { NULL, NULL }));
+    str_cls->giveAttr(
+        "startswith",
+        new BoxedFunction(FunctionMetadata::create((void*)strStartswith, BOXED_BOOL, 4, 0, 0), { NULL, NULL }));
+    str_cls->giveAttr("endswith", new BoxedFunction(FunctionMetadata::create((void*)strEndswith, BOXED_BOOL, 4, 0, 0),
+                                                    { NULL, NULL }));
 
-    str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
-    str_cls->giveAttr("rpartition", new BoxedFunction(boxRTFunction((void*)strRpartition, UNKNOWN, 2)));
+    str_cls->giveAttr("partition", new BoxedFunction(FunctionMetadata::create((void*)strPartition, UNKNOWN, 2)));
+    str_cls->giveAttr("rpartition", new BoxedFunction(FunctionMetadata::create((void*)strRpartition, UNKNOWN, 2)));
 
-    str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, true, true)));
+    str_cls->giveAttr("format", new BoxedFunction(FunctionMetadata::create((void*)strFormat, UNKNOWN, 1, true, true)));
 
-    str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
-    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, UNKNOWN, 2)));
-    str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
+    str_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)strAdd, UNKNOWN, 2)));
+    str_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)strMod, UNKNOWN, 2)));
+    str_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
     // TODO not sure if this is right in all cases:
-    str_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
+    str_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
 
     str_cls->tp_richcompare = str_richcompare;
 
     BoxedString* spaceChar = characters[' ' & UCHAR_MAX];
     assert(spaceChar);
-    str_cls->giveAttr("ljust",
-                      new BoxedFunction(boxRTFunction((void*)strLjust, UNKNOWN, 3, false, false), { spaceChar }));
-    str_cls->giveAttr("rjust",
-                      new BoxedFunction(boxRTFunction((void*)strRjust, UNKNOWN, 3, false, false), { spaceChar }));
-    str_cls->giveAttr("center",
-                      new BoxedFunction(boxRTFunction((void*)strCenter, UNKNOWN, 3, false, false), { spaceChar }));
+    str_cls->giveAttr(
+        "ljust", new BoxedFunction(FunctionMetadata::create((void*)strLjust, UNKNOWN, 3, false, false), { spaceChar }));
+    str_cls->giveAttr(
+        "rjust", new BoxedFunction(FunctionMetadata::create((void*)strRjust, UNKNOWN, 3, false, false), { spaceChar }));
+    str_cls->giveAttr("center", new BoxedFunction(FunctionMetadata::create((void*)strCenter, UNKNOWN, 3, false, false),
+                                                  { spaceChar }));
 
-    auto str_getitem = boxRTFunction((void*)strGetitem<CXX>, STR, 2, ParamNames::empty(), CXX);
-    addRTFunction(str_getitem, (void*)strGetitem<CAPI>, STR, CAPI);
+    auto str_getitem = FunctionMetadata::create((void*)strGetitem<CXX>, STR, 2, ParamNames::empty(), CXX);
+    str_getitem->addVersion((void*)strGetitem<CAPI>, STR, CAPI);
     str_cls->giveAttr("__getitem__", new BoxedFunction(str_getitem));
 
-    str_cls->giveAttr("__getslice__", new BoxedFunction(boxRTFunction((void*)strGetslice, STR, 3)));
+    str_cls->giveAttr("__getslice__", new BoxedFunction(FunctionMetadata::create((void*)strGetslice, STR, 3)));
 
-    str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
+    str_cls->giveAttr("__iter__",
+                      new BoxedFunction(FunctionMetadata::create((void*)strIter, typeFromClass(str_iterator_cls), 1)));
 
     for (auto& md : string_methods) {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
     }
 
-    str_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, false, false), { EmptyString }));
+    str_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)strNew, UNKNOWN, 2, false, false),
+                                                   { EmptyString }));
 
     add_operators(str_cls);
     str_cls->freeze();
@@ -2903,7 +2911,8 @@ void setupStr() {
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));
-    basestring_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)basestringNew, UNKNOWN, 1, true, true)));
+    basestring_cls->giveAttr("__new__",
+                             new BoxedFunction(FunctionMetadata::create((void*)basestringNew, UNKNOWN, 1, true, true)));
     basestring_cls->freeze();
 }
 

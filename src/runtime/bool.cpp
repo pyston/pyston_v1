@@ -90,15 +90,16 @@ void setupBool() {
     static PyNumberMethods bool_as_number;
     bool_cls->tp_as_number = &bool_as_number;
 
-    bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
-    bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
-    bool_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)boolHash, BOXED_INT, 1)));
+    bool_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)boolNonzero, BOXED_BOOL, 1)));
+    bool_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)boolRepr, STR, 1)));
+    bool_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)boolHash, BOXED_INT, 1)));
 
-    bool_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, false, false), { None }));
+    bool_cls->giveAttr("__new__",
+                       new BoxedFunction(FunctionMetadata::create((void*)boolNew, UNKNOWN, 2, false, false), { None }));
 
-    bool_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)boolAnd, BOXED_BOOL, 2)));
-    bool_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)boolOr, BOXED_BOOL, 2)));
-    bool_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)boolXor, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)boolAnd, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)boolOr, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)boolXor, BOXED_BOOL, 2)));
 
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;

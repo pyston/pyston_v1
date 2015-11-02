@@ -390,11 +390,11 @@ done:
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* complex_func, void* float_func,
                      void* int_func, void* boxed_func) {
-    CLFunction* cl = createRTFunction(2, false, false);
-    addRTFunction(cl, complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
-    addRTFunction(cl, float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
-    addRTFunction(cl, int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
-    addRTFunction(cl, boxed_func, UNKNOWN, { BOXED_COMPLEX, UNKNOWN });
+    FunctionMetadata* cl = new FunctionMetadata(2, false, false);
+    cl->addVersion(complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
+    cl->addVersion(float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
+    cl->addVersion(int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
+    cl->addVersion(boxed_func, UNKNOWN, { BOXED_COMPLEX, UNKNOWN });
     complex_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
@@ -1229,9 +1229,9 @@ void setupComplex() {
     static PyNumberMethods complex_as_number;
     complex_cls->tp_as_number = &complex_as_number;
 
-    auto complex_new = boxRTFunction((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
-                                     ParamNames({ "", "real", "imag" }, "", ""), CXX);
-    addRTFunction(complex_new, (void*)complexNew<CAPI>, UNKNOWN, CAPI);
+    auto complex_new = FunctionMetadata::create((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
+                                                ParamNames({ "", "real", "imag" }, "", ""), CXX);
+    complex_new->addVersion((void*)complexNew<CAPI>, UNKNOWN, CAPI);
     complex_cls->giveAttr("__new__", new BoxedFunction(complex_new, { NULL, NULL }));
 
     _addFunc("__add__", BOXED_COMPLEX, (void*)complexAddComplex, (void*)complexAddFloat, (void*)complexAddInt,
@@ -1250,31 +1250,37 @@ void setupComplex() {
     _addFunc("__div__", BOXED_COMPLEX, (void*)complexDivComplex, (void*)complexDivFloat, (void*)complexDivInt,
              (void*)complexDiv);
 
-    complex_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)complexRSub, UNKNOWN, 2)));
-    complex_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)complexRDiv, UNKNOWN, 2)));
-    complex_cls->giveAttr("__pow__",
-                          new BoxedFunction(boxRTFunction((void*)complexPow, UNKNOWN, 3, false, false), { None }));
-    complex_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)complexMod, UNKNOWN, 2)));
-    complex_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)complexDivmod, BOXED_TUPLE, 2)));
-    complex_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)complexFloordiv, UNKNOWN, 2)));
+    complex_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)complexRSub, UNKNOWN, 2)));
+    complex_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)complexRDiv, UNKNOWN, 2)));
+    complex_cls->giveAttr(
+        "__pow__", new BoxedFunction(FunctionMetadata::create((void*)complexPow, UNKNOWN, 3, false, false), { None }));
+    complex_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)complexMod, UNKNOWN, 2)));
+    complex_cls->giveAttr("__divmod__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexDivmod, BOXED_TUPLE, 2)));
+    complex_cls->giveAttr("__floordiv__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexFloordiv, UNKNOWN, 2)));
 
-    complex_cls->giveAttr("__truediv__", new BoxedFunction(boxRTFunction((void*)complexDivComplex, BOXED_COMPLEX, 2)));
-    complex_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)complexConjugate, BOXED_COMPLEX, 1)));
-    complex_cls->giveAttr("__coerce__", new BoxedFunction(boxRTFunction((void*)complexCoerce, UNKNOWN, 2)));
-    complex_cls->giveAttr("__abs__", new BoxedFunction(boxRTFunction((void*)complexAbs, BOXED_FLOAT, 1)));
-    complex_cls->giveAttr("__getnewargs__", new BoxedFunction(boxRTFunction((void*)complexGetnewargs, BOXED_TUPLE, 1)));
-    complex_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)complexNonzero, BOXED_BOOL, 1)));
-    complex_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)complexEq, UNKNOWN, 2)));
-    complex_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)complexNe, UNKNOWN, 2)));
-    complex_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)complexLe, UNKNOWN, 2)));
-    complex_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)complexLt, UNKNOWN, 2)));
-    complex_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)complexGe, UNKNOWN, 2)));
-    complex_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)complexGt, UNKNOWN, 2)));
-    complex_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)complexNeg, BOXED_COMPLEX, 1)));
-    complex_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)complexPos, BOXED_COMPLEX, 1)));
-    complex_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)complexHash, BOXED_INT, 1)));
-    complex_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)complexStr, STR, 1)));
-    complex_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)complexRepr, STR, 1)));
+    complex_cls->giveAttr("__truediv__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexDivComplex, BOXED_COMPLEX, 2)));
+    complex_cls->giveAttr("conjugate",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexConjugate, BOXED_COMPLEX, 1)));
+    complex_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)complexCoerce, UNKNOWN, 2)));
+    complex_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)complexAbs, BOXED_FLOAT, 1)));
+    complex_cls->giveAttr("__getnewargs__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexGetnewargs, BOXED_TUPLE, 1)));
+    complex_cls->giveAttr("__nonzero__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexNonzero, BOXED_BOOL, 1)));
+    complex_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)complexEq, UNKNOWN, 2)));
+    complex_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)complexNe, UNKNOWN, 2)));
+    complex_cls->giveAttr("__le__", new BoxedFunction(FunctionMetadata::create((void*)complexLe, UNKNOWN, 2)));
+    complex_cls->giveAttr("__lt__", new BoxedFunction(FunctionMetadata::create((void*)complexLt, UNKNOWN, 2)));
+    complex_cls->giveAttr("__ge__", new BoxedFunction(FunctionMetadata::create((void*)complexGe, UNKNOWN, 2)));
+    complex_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)complexGt, UNKNOWN, 2)));
+    complex_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)complexNeg, BOXED_COMPLEX, 1)));
+    complex_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)complexPos, BOXED_COMPLEX, 1)));
+    complex_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)complexHash, BOXED_INT, 1)));
+    complex_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)complexStr, STR, 1)));
+    complex_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",
                           new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, real)));
     complex_cls->giveAttr("imag",

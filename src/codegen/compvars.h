@@ -441,7 +441,7 @@ UnboxedSlice extractSlice(CompilerVariable* slice);
 #if 0
 CompilerVariable* makeUnicode(IREmitter& emitter, llvm::StringRef);
 #endif
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure, llvm::Value* globals,
+CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata*, CompilerVariable* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);

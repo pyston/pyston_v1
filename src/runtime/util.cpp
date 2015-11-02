@@ -256,7 +256,7 @@ extern "C" void dumpEx(void* p, int levels) {
         if (isSubclass(b->cls, function_cls)) {
             BoxedFunction* f = static_cast<BoxedFunction*>(b);
 
-            CLFunction* cl = f->f;
+            FunctionMetadata* cl = f->f;
             if (cl->source) {
                 printf("User-defined function '%s'\n", cl->source->getName()->c_str());
                 printf("Defined at %s:%d\n", cl->source->getFn()->c_str(), cl->source->body[0]->lineno);

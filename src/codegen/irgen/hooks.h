@@ -22,7 +22,7 @@
 namespace pyston {
 
 struct CompiledFunction;
-class CLFunction;
+class FunctionMetadata;
 class OSRExit;
 class Box;
 class BoxedDict;

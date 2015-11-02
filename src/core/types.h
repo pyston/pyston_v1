@@ -145,7 +145,7 @@ class PhiAnalysis;
 class LivenessAnalysis;
 class ScopingAnalysis;
 
-class CLFunction;
+class FunctionMetadata;
 class OSREntryDescriptor;
 
 // Pyston's internal calling convention is to pass around arguments in as unprocessed a form as possible,
@@ -295,16 +295,16 @@ class ICInfo;
 class LocationMap;
 class JitCodeBlock;
 
-// A specific compilation of a CLFunction.  Usually these will be created by the LLVM JIT, which will take a CLFunction
+// A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a FunctionMetadata
 // and some compilation settings, and produce a CompiledFunction
-// CompiledFunctions can also be created from raw function pointers, using boxRTFunction.
-// A single CLFunction can have multiple CompiledFunctions associated with it, if they have different settings.
+// CompiledFunctions can also be created from raw function pointers, using FunctionMetadata::create.
+// A single FunctionMetadata can have multiple CompiledFunctions associated with it, if they have different settings.
 // Typically, this will happen due to specialization on the argument types (ie we will generate a separate versions
 // of a function that are faster but only apply to specific argument types).
 struct CompiledFunction {
 private:
 public:
-    CLFunction* clfunc;
+    FunctionMetadata* clfunc;
     llvm::Function* func; // the llvm IR object
 
     // Some compilation settings:
@@ -415,13 +415,19 @@ typedef std::vector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
 
 // A BoxedCode is our implementation of the Python "code" object (such as function.func_code).
-// It is implemented as a wrapper around a CLFunction.
+// It is implemented as a wrapper around a FunctionMetadata.
 class BoxedCode;
 
-class CLFunction {
+// FunctionMetadata corresponds to metadata about a function definition.  If the same 'def foo():' block gets
+// executed multiple times, there will only be a single FunctionMetadata, even though multiple function objects
+// will get created from it.
+// FunctionMetadata objects can also be created to correspond to C/C++ runtime functions, via FunctionMetadata::create.
+//
+// FunctionMetadata objects also keep track of any machine code that we have available for this function.
+class FunctionMetadata {
 private:
-    // The Python-level "code" object corresponding to this CLFunction.  We store it in the CLFunction
-    // so that multiple attempts to translate from CLFunction->BoxedCode will always return the same
+    // The Python-level "code" object corresponding to this FunctionMetadata.  We store it in the FunctionMetadata
+    // so that multiple attempts to translate from FunctionMetadata->BoxedCode will always return the same
     // BoxedCode object.
     // Callers should use getCode()
     BoxedCode* code_obj;
@@ -454,37 +460,54 @@ public:
                                         Box**, const std::vector<BoxedString*>*> InternalCallable;
     InternalCallable internal_callable;
 
-    CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source);
-    CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names);
-    ~CLFunction();
+    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source);
+    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
+                     const ParamNames& param_names = ParamNames::empty());
+    ~FunctionMetadata();
 
     int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
 
     BoxedCode* getCode();
-
-    void addVersion(CompiledFunction* compiled);
 
     bool isGenerator() const {
         if (source)
             return source->is_generator;
         return false;
     }
+
+    // These functions add new compiled "versions" (or, instantiations) of this FunctionMetadata.  The first
+    // form takes a CompiledFunction* directly, and the second forms (meant for use by the C++ runtime) take
+    // some raw parameters and will create the CompiledFunction behind the scenes.
+    void addVersion(CompiledFunction* compiled);
+    void addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);
+    void addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
+                    ExceptionStyle exception_style = CXX);
+
+    // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
+    // once to it.
+    static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
+                                    bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
+                                    ExceptionStyle exception_style = CXX) {
+        assert(!param_names.takes_param_names || nargs == param_names.args.size());
+        assert(takes_varargs || param_names.vararg.str() == "");
+        assert(takes_kwargs || param_names.kwarg.str() == "");
+
+        FunctionMetadata* fmd = new FunctionMetadata(nargs, takes_varargs, takes_kwargs, param_names);
+        fmd->addVersion(f, rtn_type, exception_style);
+        return fmd;
+    }
+
+    static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs,
+                                    const ParamNames& param_names = ParamNames::empty(),
+                                    ExceptionStyle exception_style = CXX) {
+        return create(f, rtn_type, nargs, false, false, param_names, exception_style);
+    }
 };
 
-CLFunction* createRTFunction(int num_args, bool takes_varargs, bool takes_kwargs,
-                             const ParamNames& param_names = ParamNames::empty());
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs, bool takes_kwargs,
-                          const ParamNames& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX);
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
-                          const ParamNames& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, ExceptionStyle exception_style = CXX);
-CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
+CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry, bool force_exception_style = false,
                                   ExceptionStyle forced_exception_style = CXX);
 EffortLevel initialEffort();

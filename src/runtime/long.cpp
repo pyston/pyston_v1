@@ -1278,9 +1278,9 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_lfu{ UNKNOWN, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    CLFunction* cl = createRTFunction(3, false, false);
-    addRTFunction(cl, float_func, UNKNOWN, v_lfu);
-    addRTFunction(cl, long_func, UNKNOWN, v_uuu);
+    FunctionMetadata* cl = new FunctionMetadata(3, false, false);
+    cl->addVersion(float_func, UNKNOWN, v_lfu);
+    cl->addVersion(long_func, UNKNOWN, v_uuu);
     long_cls->giveAttr(name, new BoxedFunction(cl, { None }));
 }
 
@@ -1513,69 +1513,69 @@ void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
-    auto long_new
-        = boxRTFunction((void*)longNew<CXX>, UNKNOWN, 3, false, false, ParamNames({ "", "x", "base" }, "", ""), CXX);
-    addRTFunction(long_new, (void*)longNew<CAPI>, UNKNOWN, CAPI);
+    auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,
+                                             ParamNames({ "", "x", "base" }, "", ""), CXX);
+    long_new->addVersion((void*)longNew<CAPI>, UNKNOWN, CAPI);
     long_cls->giveAttr("__new__", new BoxedFunction(long_new, { boxInt(0), NULL }));
 
-    long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
+    long_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));
 
-    long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)longRdiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)longFloorDiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__rfloordiv__", new BoxedFunction(boxRTFunction((void*)longRfloorDiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__truediv__", new BoxedFunction(boxRTFunction((void*)longTrueDiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__rtruediv__", new BoxedFunction(boxRTFunction((void*)longRTrueDiv, UNKNOWN, 2)));
-    long_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)longMod, UNKNOWN, 2)));
-    long_cls->giveAttr("__rmod__", new BoxedFunction(boxRTFunction((void*)longRMod, UNKNOWN, 2)));
+    long_cls->giveAttr("__div__", new BoxedFunction(FunctionMetadata::create((void*)longDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)longRdiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__floordiv__", new BoxedFunction(FunctionMetadata::create((void*)longFloorDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__rfloordiv__", new BoxedFunction(FunctionMetadata::create((void*)longRfloorDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__truediv__", new BoxedFunction(FunctionMetadata::create((void*)longTrueDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)longRTrueDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)longMod, UNKNOWN, 2)));
+    long_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)longRMod, UNKNOWN, 2)));
 
-    long_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)longDivmod, UNKNOWN, 2)));
+    long_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)longDivmod, UNKNOWN, 2)));
 
-    long_cls->giveAttr("__sub__", new BoxedFunction(boxRTFunction((void*)longSub, UNKNOWN, 2)));
-    long_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)longRsub, UNKNOWN, 2)));
+    long_cls->giveAttr("__sub__", new BoxedFunction(FunctionMetadata::create((void*)longSub, UNKNOWN, 2)));
+    long_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)longRsub, UNKNOWN, 2)));
 
-    long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
+    long_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr(internStringMortal("__add__")));
-    long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
+    long_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr(internStringMortal("__and__")));
-    long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
+    long_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)longOr, UNKNOWN, 2)));
     long_cls->giveAttr("__ror__", long_cls->getattr(internStringMortal("__or__")));
-    long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
+    long_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)longXor, UNKNOWN, 2)));
     long_cls->giveAttr("__rxor__", long_cls->getattr(internStringMortal("__xor__")));
 
     // Note: CPython implements long comparisons using tp_compare
     long_cls->tp_richcompare = long_richcompare;
 
-    long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
-    long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
+    long_cls->giveAttr("__lshift__", new BoxedFunction(FunctionMetadata::create((void*)longLshift, UNKNOWN, 2)));
+    long_cls->giveAttr("__rshift__", new BoxedFunction(FunctionMetadata::create((void*)longRshift, UNKNOWN, 2)));
 
-    long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
-    long_cls->giveAttr("__float__", new BoxedFunction(boxRTFunction((void*)longFloat, UNKNOWN, 1)));
-    long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
-    long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
-    long_cls->giveAttr("__bin__", new BoxedFunction(boxRTFunction((void*)longBin, STR, 1)));
-    long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
-    long_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)longOct, STR, 1)));
+    long_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)longInt, UNKNOWN, 1)));
+    long_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)longFloat, UNKNOWN, 1)));
+    long_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)longRepr, STR, 1)));
+    long_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__bin__", new BoxedFunction(FunctionMetadata::create((void*)longBin, STR, 1)));
+    long_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)longHex, STR, 1)));
+    long_cls->giveAttr("__oct__", new BoxedFunction(FunctionMetadata::create((void*)longOct, STR, 1)));
 
-    long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
-    long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
-    long_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)longPos, UNKNOWN, 1)));
-    long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
-    long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
+    long_cls->giveAttr("__invert__", new BoxedFunction(FunctionMetadata::create((void*)longInvert, UNKNOWN, 1)));
+    long_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)longNeg, UNKNOWN, 1)));
+    long_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)longPos, UNKNOWN, 1)));
+    long_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)longNonzero, BOXED_BOOL, 1)));
+    long_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)longHash, BOXED_INT, 1)));
 
-    long_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)longTrunc, UNKNOWN, 1)));
-    long_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)longIndex, LONG, 1)));
+    long_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)longTrunc, UNKNOWN, 1)));
+    long_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)longIndex, LONG, 1)));
 
-    long_cls->giveAttr("bit_length", new BoxedFunction(boxRTFunction((void*)longBitLength, LONG, 1)));
+    long_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)longBitLength, LONG, 1)));
     long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
-    long_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)longLong, UNKNOWN, 1)));
+    long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)longLong, UNKNOWN, 1)));
     long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
 
-    long_cls->giveAttr("__getnewargs__",
-                       new BoxedFunction(boxRTFunction((void*)long_getnewargs, UNKNOWN, 1, ParamNames::empty(), CAPI)));
+    long_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)long_getnewargs, UNKNOWN, 1,
+                                                                                    ParamNames::empty(), CAPI)));
 
     add_operators(long_cls);
     long_cls->freeze();

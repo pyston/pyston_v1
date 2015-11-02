@@ -278,7 +278,7 @@ struct PythonFrameId {
 class PythonFrameIteratorImpl {
 public:
     PythonFrameId id;
-    CLFunction* cl; // always exists
+    FunctionMetadata* cl; // always exists
 
     // These only exist if id.type==COMPILED:
     CompiledFunction* cf;
@@ -289,7 +289,7 @@ public:
 
     PythonFrameIteratorImpl() : regs_valid(0) {}
 
-    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CLFunction* cl,
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, FunctionMetadata* cl,
                             CompiledFunction* cf)
         : id(PythonFrameId(type, ip, bp)), cl(cl), cf(cf), regs_valid(0) {
         assert(cl);
@@ -301,7 +301,7 @@ public:
         return cf;
     }
 
-    CLFunction* getCL() const {
+    FunctionMetadata* getCL() const {
         assert(cl);
         return cl;
     }
@@ -461,7 +461,7 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
-    CLFunction* cl = cf ? cf->clfunc : NULL;
+    FunctionMetadata* cl = cf ? cf->clfunc : NULL;
     bool jitted = cf != NULL;
     bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
     if (interpreted)
@@ -797,7 +797,7 @@ void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
     return;
 }
 
-CLFunction* getTopPythonFunction() {
+FunctionMetadata* getTopPythonFunction() {
     auto rtn = getTopPythonFrame();
     if (!rtn)
         return NULL;
@@ -816,7 +816,7 @@ Box* getGlobalsDict() {
 }
 
 BoxedModule* getCurrentModule() {
-    CLFunction* clfunc = getTopPythonFunction();
+    FunctionMetadata* clfunc = getTopPythonFunction();
     if (!clfunc)
         return NULL;
     return clfunc->source->parent_module;
@@ -941,7 +941,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     BoxedClosure* closure;
     FrameInfo* frame_info;
 
-    CLFunction* clfunc = impl->getCL();
+    FunctionMetadata* clfunc = impl->getCL();
     ScopeInfo* scope_info = clfunc->source->getScopeInfo();
 
     if (scope_info->areLocalsFromModule()) {
@@ -1088,7 +1088,7 @@ CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
 }
 
-CLFunction* PythonFrameIterator::getCL() {
+FunctionMetadata* PythonFrameIterator::getCL() {
     return impl->getCL();
 }
 

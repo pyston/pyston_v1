@@ -44,7 +44,7 @@ Box* BoxedCode::filename(Box* b, void*) {
 Box* BoxedCode::firstlineno(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
-    CLFunction* cl = code->f;
+    FunctionMetadata* cl = code->f;
 
     if (!cl->source) {
         // I don't think it really matters what we return here;
@@ -100,7 +100,7 @@ Box* codeForFunction(BoxedFunction* f) {
     return f->f->getCode();
 }
 
-CLFunction* clfunctionFromCode(Box* code) {
+FunctionMetadata* clfunctionFromCode(Box* code) {
     assert(code->cls == code_cls);
     return static_cast<BoxedCode*>(code)->f;
 }

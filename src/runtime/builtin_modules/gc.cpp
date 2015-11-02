@@ -61,13 +61,14 @@ PyDoc_STRVAR(gc_collect_doc, "collect() -> n\n"
 void setupGC() {
     BoxedModule* gc_module = createModule(boxString("gc"));
 
-    gc_module->giveAttr("collect", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)gcCollect, NONE, 0), "collect",
-                                                                    gc_collect_doc));
-    gc_module->giveAttr("isenabled", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0),
-                                                                      "isenabled", gc_isenabled_doc));
-    gc_module->giveAttr(
-        "disable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)disable, NONE, 0), "disable", gc_disable_doc));
-    gc_module->giveAttr(
-        "enable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)enable, NONE, 0), "enable", gc_enable_doc));
+    gc_module->giveAttr("collect", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)gcCollect, NONE, 0),
+                                                                    "collect", gc_collect_doc));
+    gc_module->giveAttr("isenabled",
+                        new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)isEnabled, BOXED_BOOL, 0),
+                                                         "isenabled", gc_isenabled_doc));
+    gc_module->giveAttr("disable", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)disable, NONE, 0),
+                                                                    "disable", gc_disable_doc));
+    gc_module->giveAttr("enable", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)enable, NONE, 0),
+                                                                   "enable", gc_enable_doc));
 }
 }

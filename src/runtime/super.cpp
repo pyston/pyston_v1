@@ -200,11 +200,12 @@ void setupSuper() {
     super_cls
         = BoxedClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false, "super");
 
-    // super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
-    super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
+    // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,
+    // UNKNOWN, 2)));
+    super_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)superRepr, STR, 1)));
 
-    super_cls->giveAttr("__init__",
-                        new BoxedFunction(boxRTFunction((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
+    super_cls->giveAttr(
+        "__init__", new BoxedFunction(FunctionMetadata::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
 
     super_cls->giveAttr("__thisclass__",
                         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, type)));

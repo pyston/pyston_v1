@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(CLFunction* clfunc, Box** vregs);
+    ASTInterpreter(FunctionMetadata* clfunc, Box** vregs);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -138,7 +138,7 @@ private:
     CFGBlock* next_block, *current_block;
     AST_stmt* current_inst;
 
-    CLFunction* clfunc;
+    FunctionMetadata* clfunc;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
     PhiAnalysis* phis;
@@ -172,7 +172,7 @@ public:
         return globals;
     }
 
-    CLFunction* getCL() { return clfunc; }
+    FunctionMetadata* getCL() { return clfunc; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return passed_closure; }
     Box** getVRegs() { return vregs; }
@@ -227,7 +227,7 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
 }
 
-ASTInterpreter::ASTInterpreter(CLFunction* clfunc, Box** vregs)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* clfunc, Box** vregs)
     : current_block(0),
       current_inst(0),
       clfunc(clfunc),
@@ -987,7 +987,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
 }
 
 Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-    CLFunction* cl = wrapFunction(node, args, body, source_info);
+    FunctionMetadata* cl = wrapFunction(node, args, body, source_info);
 
     std::vector<Box*, StlCompatAllocator<Box*>> defaults;
 
@@ -1060,11 +1060,11 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             closure_var = jit->imm(0ul);
         if (!passed_globals_var)
             passed_globals_var = jit->imm(0ul);
-        rtn.var = jit->call(false, (void*)boxCLFunction, jit->imm(cl), closure_var, passed_globals_var, defaults_var,
-                            jit->imm(args->defaults.size()));
+        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(cl), closure_var, passed_globals_var,
+                            defaults_var, jit->imm(args->defaults.size()));
     }
 
-    rtn.o = boxCLFunction(cl, closure, passed_globals, u.il);
+    rtn.o = createFunctionFromMetadata(cl, closure, passed_globals, u.il);
 
     return rtn;
 }
@@ -1111,12 +1111,13 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
             closure = created_closure;
         assert(closure);
     }
-    CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
+    FunctionMetadata* cl = wrapFunction(node, nullptr, node->body, source_info);
 
     Box* passed_globals = NULL;
     if (!getCL()->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
-    Box* attrDict = runtimeCall(boxCLFunction(cl, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
+    Box* attrDict
+        = runtimeCall(createFunctionFromMetadata(cl, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
 
     Box* classobj = createUserClass(node->name.getBox(), basesTuple, attrDict);
 
@@ -1698,7 +1699,7 @@ extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start
     return ASTInterpreter::executeInner(interpreter, start_block, start_at);
 }
 
-static int calculateNumVRegs(CLFunction* clfunc) {
+static int calculateNumVRegs(FunctionMetadata* clfunc) {
     SourceInfo* source_info = clfunc->source.get();
 
     CFG* cfg = source_info->cfg;
@@ -1720,7 +1721,7 @@ static int calculateNumVRegs(CLFunction* clfunc) {
     return cfg->sym_vreg_map.size();
 }
 
-Box* astInterpretFunction(CLFunction* clfunc, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
+Box* astInterpretFunction(FunctionMetadata* clfunc, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
@@ -1813,7 +1814,7 @@ Box* astInterpretFunction(CLFunction* clfunc, Box* closure, Box* generator, Box*
     return v ? v : None;
 }
 
-Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals) {
+Box* astInterpretFunctionEval(FunctionMetadata* clfunc, Box* globals, Box* boxedLocals) {
     ++clfunc->times_interpreted;
 
     Box** vregs = NULL;
@@ -1835,10 +1836,10 @@ Box* astInterpretFunctionEval(CLFunction* clfunc, Box* globals, Box* boxedLocals
     return v ? v : None;
 }
 
-static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) __attribute__((noinline));
-static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) {
+static Box* astInterpretDeoptInner(FunctionMetadata* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt,
+                                   Box* expr_val, FrameStackState frame_state) __attribute__((noinline));
+static Box* astInterpretDeoptInner(FunctionMetadata* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt,
+                                   Box* expr_val, FrameStackState frame_state) {
     assert(clfunc);
     assert(enclosing_stmt);
     assert(frame_state.locals);
@@ -1931,7 +1932,7 @@ static Box* astInterpretDeoptInner(CLFunction* clfunc, AST_expr* after_expr, AST
     return v ? v : None;
 }
 
-Box* astInterpretDeopt(CLFunction* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+Box* astInterpretDeopt(FunctionMetadata* clfunc, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state) {
     return astInterpretDeoptInner(clfunc, after_expr, enclosing_stmt, expr_val, frame_state);
 }
@@ -1961,7 +1962,7 @@ Box* getGlobalsForInterpretedFrame(void* frame_ptr) {
     return interpreter->getGlobals();
 }
 
-CLFunction* getCLForInterpretedFrame(void* frame_ptr) {
+FunctionMetadata* getCLForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getCL();

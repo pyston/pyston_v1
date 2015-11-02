@@ -23,9 +23,9 @@ namespace pyston {
 
 class BoxedCode : public Box {
 public:
-    CLFunction* f;
+    FunctionMetadata* f;
 
-    BoxedCode(CLFunction* f) : f(f) {}
+    BoxedCode(FunctionMetadata* f) : f(f) {}
 
     DEFAULT_CLASS(code_cls);
 

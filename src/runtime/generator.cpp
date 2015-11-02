@@ -482,21 +482,22 @@ void setupGenerator() {
                              sizeof(BoxedGenerator), false, "generator");
     generator_cls->tp_dealloc = generatorDestructor;
     generator_cls->has_safe_tp_dealloc = true;
-    generator_cls->giveAttr("__iter__",
-                            new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
+    generator_cls->giveAttr(
+        "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
-    generator_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)generatorClose, UNKNOWN, 1)));
+    generator_cls->giveAttr("close", new BoxedFunction(FunctionMetadata::create((void*)generatorClose, UNKNOWN, 1)));
 
-    auto generator_next = boxRTFunction((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
-    addRTFunction(generator_next, (void*)generatorNext<CAPI>, UNKNOWN, CAPI);
+    auto generator_next = FunctionMetadata::create((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
+    generator_next->addVersion((void*)generatorNext<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("next", new BoxedFunction(generator_next));
 
-    CLFunction* hasnext = boxRTFunction((void*)generatorHasnextUnboxed, BOOL, 1);
-    addRTFunction(hasnext, (void*)generatorHasnext, BOXED_BOOL);
+    FunctionMetadata* hasnext = FunctionMetadata::create((void*)generatorHasnextUnboxed, BOOL, 1);
+    hasnext->addVersion((void*)generatorHasnext, BOXED_BOOL);
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend<CXX>, UNKNOWN, 2)));
-    auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
+    generator_cls->giveAttr("send", new BoxedFunction(FunctionMetadata::create((void*)generatorSend<CXX>, UNKNOWN, 2)));
+    auto gthrow
+        = new BoxedFunction(FunctionMetadata::create((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
     generator_cls->giveAttr("throw", gthrow);
 
     generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
