@@ -181,6 +181,10 @@ void ensureCAPIExceptionSet();
 struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
 
+// Finalizer-related
+void default_free(void*);
+void dealloc_null(Box* box);
+
 // In Pyston, this is the same type as CPython's PyTypeObject (they are interchangeable, but we
 // use BoxedClass in Pyston wherever possible as a convention).
 class BoxedClass : public BoxVar {

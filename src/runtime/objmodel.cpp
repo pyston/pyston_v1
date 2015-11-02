@@ -337,10 +337,6 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-void dealloc_null(Box* box) {
-    assert(box->cls->tp_del == NULL);
-}
-
 // Analoguous to CPython's implementation of subtype_dealloc, but having a GC
 // saves us from complications involving "trashcan macros".
 //
@@ -376,12 +372,6 @@ static void subtype_dealloc(Box* self) {
         RELEASE_ASSERT(!type->tp_del, "having both a tp_del and tp_dealloc not supported");
         base->tp_dealloc(self);
     }
-}
-
-// We don't need CPython's version of tp_free since we have GC.
-// We still need to set tp_free to something and not a NULL pointer,
-// because C extensions might still call tp_free from tp_dealloc.
-void default_free(void*) {
 }
 
 bool BoxedClass::hasNonDefaultTpDealloc() {

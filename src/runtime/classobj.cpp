@@ -18,6 +18,7 @@
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
+#include "codegen/unwinding.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"

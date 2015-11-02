@@ -3498,6 +3498,16 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     return unicode;
 }
 
+// We don't need CPython's version of tp_free since we have GC.
+// We still need to set tp_free to something and not a NULL pointer,
+// because C extensions might still call tp_free from tp_dealloc.
+void default_free(void*) {
+}
+
+void dealloc_null(Box* box) {
+    assert(box->cls->tp_del == NULL);
+}
+
 // Normally we don't call the Python tp_ slots that are present to support
 // CPython's reference-counted garbage collection.
 static void setTypeGCProxy(BoxedClass* cls) {
