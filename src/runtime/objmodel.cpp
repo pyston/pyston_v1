@@ -138,7 +138,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
         deopt_state.frame_state.frame_info->exc.value = NULL;
     }
 
-    return astInterpretDeopt(deopt_state.cf->clfunc, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
+    return astInterpretDeopt(deopt_state.cf->md, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
 extern "C" bool softspace(Box* b, bool newval) {
@@ -337,10 +337,6 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-void dealloc_null(Box* box) {
-    assert(box->cls->tp_del == NULL);
-}
-
 // Analoguous to CPython's implementation of subtype_dealloc, but having a GC
 // saves us from complications involving "trashcan macros".
 //
@@ -376,12 +372,6 @@ static void subtype_dealloc(Box* self) {
         RELEASE_ASSERT(!type->tp_del, "having both a tp_del and tp_dealloc not supported");
         base->tp_dealloc(self);
     }
-}
-
-// We don't need CPython's version of tp_free since we have GC.
-// We still need to set tp_free to something and not a NULL pointer,
-// because C extensions might still call tp_free from tp_dealloc.
-void default_free(void*) {
 }
 
 bool BoxedClass::hasNonDefaultTpDealloc() {
@@ -3208,7 +3198,7 @@ static inline RewriterVar* getArg(int idx, _CallRewriteArgsBase* rewrite_args) {
 }
 
 static StatCounter slowpath_pickversion("slowpath_pickversion");
-static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
+static CompiledFunction* pickVersion(FunctionMetadata* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
                                      Box* oarg3, Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -3261,7 +3251,7 @@ static CompiledFunction* pickVersion(CLFunction* f, ExceptionStyle S, int num_ou
     return NULL;
 }
 
-static llvm::StringRef getFunctionName(CLFunction* f) {
+static llvm::StringRef getFunctionName(FunctionMetadata* f) {
     if (f->source)
         return f->source->getName()->s();
     else if (f->versions.size()) {
@@ -3806,7 +3796,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 #endif
     slowpath_callfunc.log();
 
-    CLFunction* f = func->f;
+    FunctionMetadata* md = func->md;
     ParamReceiveSpec paramspec = func->getParamspec();
 
     if (rewrite_args) {
@@ -3837,8 +3827,8 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 
     try {
-        auto func_name_cb = [f]() { return getFunctionName(f).data(); };
-        rearrangeArgumentsInternal<rewritable>(paramspec, &f->param_names, func_name_cb,
+        auto func_name_cb = [md]() { return getFunctionName(md).data(); };
+        rearrangeArgumentsInternal<rewritable>(paramspec, &md->param_names, func_name_cb,
                                                paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
                                                rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names);
     } catch (ExcInfo e) {
@@ -3873,7 +3863,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 // from a rewrite.
 #if 0
         char buf[80];
-        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", f->isGenerator(),
+        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", md->isGenerator(),
                  argspec.num_args, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs, paramspec.num_args,
                  paramspec.num_defaults, paramspec.takes_varargs, paramspec.takes_kwargs);
         uint64_t* counter = Stats::getStatCounter(buf);
@@ -3924,7 +3914,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // special handling for generators:
     // the call to function containing a yield should just create a new generator object.
     Box* res;
-    if (f->isGenerator()) {
+    if (md->isGenerator()) {
         // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
         // rewrite up to the call to it:
         res = createGenerator(func, arg1, arg2, arg3, oargs);
@@ -3940,7 +3930,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             rewrite_args->out_success = true;
         }
     } else {
-        res = callCLFunc<S, rewritable>(f, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
+        res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
                                         arg3, oargs);
     }
 
@@ -3966,8 +3956,7 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
         }
     }
 
-    assert((globals == NULL)
-           == (!chosen_cf->clfunc->source || chosen_cf->clfunc->source->scoping->areGlobalsFromModule()));
+    assert((globals == NULL) == (!chosen_cf->md->source || chosen_cf->md->source->scoping->areGlobalsFromModule()));
 
     Box* maybe_args[3];
     int nmaybe_args = 0;
@@ -3993,7 +3982,7 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
 // only supports calling functions with at most 6 since it can currently only pass arguments
 // in registers.
-static Box* astInterpretHelper(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelper(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                Box** _args) {
     Box* arg1 = _args[0];
     Box* arg2 = _args[1];
@@ -4003,7 +3992,7 @@ static Box* astInterpretHelper(CLFunction* f, BoxedClosure* closure, BoxedGenera
     return astInterpretFunction(f, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-static Box* astInterpretHelperCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelperCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                    Box** _args) noexcept {
     try {
         return astInterpretHelper(f, closure, generator, globals, _args);
@@ -4013,8 +4002,8 @@ static Box* astInterpretHelperCapi(CLFunction* f, BoxedClosure* closure, BoxedGe
     }
 }
 
-static Box* astInterpretHelper2ArgsCapi(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
-                                        Box* arg1, Box* arg2) noexcept {
+static Box* astInterpretHelper2ArgsCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator,
+                                        Box* globals, Box* arg1, Box* arg2) noexcept {
     try {
         return astInterpretFunction(f, closure, generator, globals, arg1, arg2, NULL, NULL);
     } catch (ExcInfo e) {
@@ -4036,7 +4025,7 @@ static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
@@ -4044,17 +4033,17 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         rewrite_args = NULL;
     }
 
-    CompiledFunction* chosen_cf = pickVersion(f, S, num_output_args, oarg1, oarg2, oarg3, oargs);
+    CompiledFunction* chosen_cf = pickVersion(md, S, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
         if (rewrite_args) {
             RewriterVar::SmallVector arg_vec;
 
-            rewrite_args->rewriter->addDependenceOn(f->dependent_interp_callsites);
+            rewrite_args->rewriter->addDependenceOn(md->dependent_interp_callsites);
 
             // TODO this kind of embedded reference needs to be tracked by the GC somehow?
             // Or maybe it's ok, since we've guarded on the function object?
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)f, Location::forArg(0)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)md, Location::forArg(0)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(1)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(2)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(3)));
@@ -4095,13 +4084,13 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
         if (S == CAPI) {
             try {
-                return astInterpretFunction(f, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
+                return astInterpretFunction(md, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 return NULL;
             }
         } else {
-            return astInterpretFunction(f, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
+            return astInterpretFunction(md, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
         }
     }
 
@@ -4157,7 +4146,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     // we duplicate the call to callChosenCf here so we can
     // distinguish lexically between calls that target jitted python
     // code and calls that target to builtins.
-    if (f->source) {
+    if (md->source) {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         r = callChosenCF<S>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
     } else {
@@ -4178,16 +4167,16 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 }
 
 // force instantiation:
-template Box* callCLFunc<CAPI, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                            BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                            Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                           BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                           Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CAPI, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                                BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                                Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, NOT_REWRITABLE>(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
                                               BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                               Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
@@ -4319,7 +4308,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
-        auto callable = f->f->internal_callable.get<S>();
+        auto callable = f->md->internal_callable.get<S>();
         if (callable == NULL) {
             callable = callFunc<S>;
         }

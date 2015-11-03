@@ -38,7 +38,8 @@ namespace pyston {
 
 DS_DEFINE_RWLOCK(codegen_rwlock);
 
-CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source)
+FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
+                                   std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),
       num_args(num_args),
       takes_varargs(takes_varargs),
@@ -50,7 +51,7 @@ CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, std:
       internal_callable(NULL, NULL) {
 }
 
-CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
+FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
     : code_obj(NULL),
       num_args(num_args),
       takes_varargs(takes_varargs),
@@ -62,21 +63,21 @@ CLFunction::CLFunction(int num_args, bool takes_varargs, bool takes_kwargs, cons
       internal_callable(NULL, NULL) {
 }
 
-BoxedCode* CLFunction::getCode() {
+BoxedCode* FunctionMetadata::getCode() {
     if (!code_obj) {
         code_obj = new BoxedCode(this);
-        // CLFunctions don't currently participate in GC.  They actually never get freed currently.
+        // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
         gc::registerPermanentRoot(code_obj);
     }
     return code_obj;
 }
 
-void CLFunction::addVersion(CompiledFunction* compiled) {
+void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
-    assert(compiled->clfunc == NULL);
+    assert(compiled->md == NULL);
     assert(compiled->code);
-    compiled->clfunc = this;
+    compiled->md = this;
 
     if (compiled->entry_descriptor == NULL) {
         bool could_have_speculations = (source.get() != NULL);

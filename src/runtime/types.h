@@ -161,9 +161,9 @@ extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 
 extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, Box* globals,
-                              std::initializer_list<Box*> defaults) noexcept;
-extern "C" CLFunction* unboxCLFunction(Box* b);
+extern "C" Box* createFunctionFromMetadata(FunctionMetadata* f, BoxedClosure* closure, Box* globals,
+                                           std::initializer_list<Box*> defaults) noexcept;
+extern "C" FunctionMetadata* getFunctionMetadata(Box* b);
 extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
@@ -180,6 +180,10 @@ void throwCAPIException() __attribute__((noreturn));
 void ensureCAPIExceptionSet();
 struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
+
+// Finalizer-related
+void default_free(void*);
+void dealloc_null(Box* box);
 
 // In Pyston, this is the same type as CPython's PyTypeObject (they are interchangeable, but we
 // use BoxedClass in Pyston wherever possible as a convention).
@@ -307,6 +311,10 @@ protected:
     friend void setupThread();
 };
 
+// Corresponds to PyHeapTypeObject.  Very similar to BoxedClass, but allocates some extra space for
+// structures that otherwise might get allocated statically.  For instance, tp_as_number for builtin
+// types will usually point to a `static PyNumberMethods` object, but for a heap-allocated class it
+// will point to `this->as_number`.
 class BoxedHeapClass : public BoxedClass {
 public:
     PyNumberMethods as_number;
@@ -336,6 +344,7 @@ private:
     friend void setupThread();
 };
 
+// Assert that our data structures have the same layout as the C API ones with which they need to be interchangeable.
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
 static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "");
 
@@ -675,7 +684,7 @@ public:
     // CPython declares ob_item (their version of elts) to have 1 element.  We want to
     // copy that behavior so that the sizes of the objects match, but we want to also
     // have a zero-length array in there since we have some extra compiler warnings turned
-    // on.  _elts[1] will throw an error, but elts[1] will not.
+    // on:  _elts[1] will throw an error, but elts[1] will not.
     union {
         Box* elts[0];
         Box* _elts[1];
@@ -687,6 +696,7 @@ static_assert(offsetof(BoxedTuple, elts) == offsetof(PyTupleObject, ob_item), ""
 
 extern BoxedString* characters[UCHAR_MAX + 1];
 
+// C++ functor objects that implement Python semantics.
 struct PyHasher {
     size_t operator()(Box* b) const {
         if (b->cls == str_cls) {
@@ -719,8 +729,11 @@ struct PyLt {
 
 // llvm::DenseMap doesn't store the original hash values, choosing to instead
 // check for equality more often.  This is probably a good tradeoff when the keys
-// are pointers and comparison is cheap, but we want to make sure that keys with
-// different hash values don't get compared.
+// are pointers and comparison is cheap, but when the equality function is user-defined
+// it can be much faster to avoid Python function invocations by doing some integer
+// comparisons.
+// This also has a user-visible behavior difference of how many times the hash function
+// and equality functions get called.
 struct BoxAndHash {
     Box* value;
     size_t hash;
@@ -791,7 +804,7 @@ class BoxedFunctionBase : public Box {
 public:
     Box** in_weakreflist;
 
-    CLFunction* f;
+    FunctionMetadata* md;
 
     // TODO these should really go in BoxedFunction but it's annoying because they don't get
     // initializd until after BoxedFunctionBase's constructor is run which means they could have
@@ -810,12 +823,12 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(CLFunction* f);
-    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunctionBase(FunctionMetadata* md);
+    BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
     ParamReceiveSpec getParamspec() {
-        return ParamReceiveSpec(f->num_args, defaults ? defaults->size() : 0, f->takes_varargs, f->takes_kwargs);
+        return ParamReceiveSpec(md->num_args, defaults ? defaults->size() : 0, md->takes_varargs, md->takes_kwargs);
     }
 };
 
@@ -823,8 +836,8 @@ class BoxedFunction : public BoxedFunctionBase {
 public:
     HCAttrs attrs;
 
-    BoxedFunction(CLFunction* f);
-    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(FunctionMetadata* md);
+    BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
@@ -834,8 +847,8 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
+    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, const char* doc = NULL);
+    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, std::initializer_list<Box*> defaults,
                                  BoxedClosure* closure = NULL, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
@@ -1119,8 +1132,8 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
-Box* codeForCLFunction(CLFunction*);
-CLFunction* clfunctionFromCode(Box* code);
+Box* codeForFunctionMetadata(FunctionMetadata*);
+FunctionMetadata* metadataFromCode(Box* code);
 
 Box* getFrame(int depth);
 

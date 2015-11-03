@@ -256,20 +256,20 @@ extern "C" void dumpEx(void* p, int levels) {
         if (isSubclass(b->cls, function_cls)) {
             BoxedFunction* f = static_cast<BoxedFunction*>(b);
 
-            CLFunction* cl = f->f;
-            if (cl->source) {
-                printf("User-defined function '%s'\n", cl->source->getName()->c_str());
-                printf("Defined at %s:%d\n", cl->source->getFn()->c_str(), cl->source->body[0]->lineno);
+            FunctionMetadata* md = f->md;
+            if (md->source) {
+                printf("User-defined function '%s'\n", md->source->getName()->c_str());
+                printf("Defined at %s:%d\n", md->source->getFn()->c_str(), md->source->body[0]->lineno);
 
-                if (cl->source->cfg && levels > 0) {
-                    cl->source->cfg->print();
+                if (md->source->cfg && levels > 0) {
+                    md->source->cfg->print();
                 }
             } else {
                 printf("A builtin function\n");
             }
 
-            printf("Has %ld function versions\n", cl->versions.size());
-            for (CompiledFunction* cf : cl->versions) {
+            printf("Has %ld function versions\n", md->versions.size());
+            for (CompiledFunction* cf : md->versions) {
                 bool got_name;
                 if (cf->exception_style == CXX)
                     printf("CXX style: ");

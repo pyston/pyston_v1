@@ -1853,26 +1853,29 @@ void setupFile() {
     file_cls->tp_dealloc = fileDestructor;
     file_cls->has_safe_tp_dealloc = true;
 
-    file_cls->giveAttr("read", new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, false, false), { boxInt(-1) }));
+    file_cls->giveAttr(
+        "read", new BoxedFunction(FunctionMetadata::create((void*)fileRead, STR, 2, false, false), { boxInt(-1) }));
 
-    CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1);
+    FunctionMetadata* readline = FunctionMetadata::create((void*)fileReadline1, STR, 1);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
 
-    file_cls->giveAttr("flush", new BoxedFunction(boxRTFunction((void*)fileFlush, NONE, 1)));
-    file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2)));
-    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, UNKNOWN, 1)));
-    file_cls->giveAttr("fileno", new BoxedFunction(boxRTFunction((void*)fileFileno, BOXED_INT, 1)));
+    file_cls->giveAttr("flush", new BoxedFunction(FunctionMetadata::create((void*)fileFlush, NONE, 1)));
+    file_cls->giveAttr("write", new BoxedFunction(FunctionMetadata::create((void*)fileWrite, NONE, 2)));
+    file_cls->giveAttr("close", new BoxedFunction(FunctionMetadata::create((void*)fileClose, UNKNOWN, 1)));
+    file_cls->giveAttr("fileno", new BoxedFunction(FunctionMetadata::create((void*)fileFileno, BOXED_INT, 1)));
 
-    file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, STR, 1)));
+    file_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)fileRepr, STR, 1)));
 
-    file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
-    file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
+    file_cls->giveAttr("__enter__",
+                       new BoxedFunction(FunctionMetadata::create((void*)fileEnter, typeFromClass(file_cls), 1)));
+    file_cls->giveAttr("__exit__", new BoxedFunction(FunctionMetadata::create((void*)fileExit, UNKNOWN, 4)));
 
     file_cls->giveAttr("__iter__", file_cls->getattr(internStringMortal("__enter__")));
-    file_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)fileIterHasNext, BOXED_BOOL, 1)));
-    file_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)fileIterNext, STR, 1)));
+    file_cls->giveAttr("__hasnext__",
+                       new BoxedFunction(FunctionMetadata::create((void*)fileIterHasNext, BOXED_BOOL, 1)));
+    file_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)fileIterNext, STR, 1)));
 
-    file_cls->giveAttr("tell", new BoxedFunction(boxRTFunction((void*)fileTell, UNKNOWN, 1)));
+    file_cls->giveAttr("tell", new BoxedFunction(FunctionMetadata::create((void*)fileTell, UNKNOWN, 1)));
     file_cls->giveAttr("softspace",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace), false));
     file_cls->giveAttr("name",
@@ -1880,7 +1883,7 @@ void setupFile() {
     file_cls->giveAttr("mode",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
 
-    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, false, false),
+    file_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)fileNew, UNKNOWN, 4, false, false),
                                                     { boxString("r"), boxInt(-1) }));
 
     for (auto& md : file_methods) {

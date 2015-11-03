@@ -58,7 +58,7 @@ extern "C" void caughtCapiException(AST_stmt* current_stmt, void* source_info);
 extern "C" void reraiseCapiExcAsCxx() __attribute__((noreturn));
 
 
-CLFunction* getTopPythonFunction();
+FunctionMetadata* getTopPythonFunction();
 
 // debugging/stat helper, returns python filename:linenumber, or "unknown:-1" if it fails
 std::string getCurrentPythonLine();
@@ -76,7 +76,7 @@ private:
 
 public:
     CompiledFunction* getCF();
-    CLFunction* getCL();
+    FunctionMetadata* getMD();
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
     AST_stmt* getCurrentStatement();

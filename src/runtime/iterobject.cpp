@@ -212,9 +212,10 @@ void setupIter() {
     seqiter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter), false,
                                      "iterator");
 
-    seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
-    seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
-    seqiter_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)seqiterIter, UNKNOWN, 1)));
+    seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
+    seqiter_cls->giveAttr("__hasnext__",
+                          new BoxedFunction(FunctionMetadata::create((void*)seqiterHasnext, BOXED_BOOL, 1)));
+    seqiter_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)seqiterIter, UNKNOWN, 1)));
 
     seqiter_cls->freeze();
     seqiter_cls->tpp_hasnext = seqiterHasnextUnboxed;
@@ -224,9 +225,10 @@ void setupIter() {
     seqreviter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter),
                                         false, "reversed");
 
-    seqreviter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
-    seqreviter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqreviterHasnext, BOXED_BOOL, 1)));
-    seqreviter_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)seqiterIter, UNKNOWN, 1)));
+    seqreviter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
+    seqreviter_cls->giveAttr("__hasnext__",
+                             new BoxedFunction(FunctionMetadata::create((void*)seqreviterHasnext, BOXED_BOOL, 1)));
+    seqreviter_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)seqiterIter, UNKNOWN, 1)));
 
     seqreviter_cls->freeze();
     seqreviter_cls->tp_iter = PyObject_SelfIter;
@@ -235,9 +237,9 @@ void setupIter() {
     iterwrapper_cls = BoxedClass::create(type_cls, object_cls, &BoxedIterWrapper::gcHandler, 0, 0,
                                          sizeof(BoxedIterWrapper), false, "iterwrapper");
 
-    iterwrapper_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)iterwrapperNext, UNKNOWN, 1)));
+    iterwrapper_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)iterwrapperNext, UNKNOWN, 1)));
     iterwrapper_cls->giveAttr("__hasnext__",
-                              new BoxedFunction(boxRTFunction((void*)iterwrapperHasnext, BOXED_BOOL, 1)));
+                              new BoxedFunction(FunctionMetadata::create((void*)iterwrapperHasnext, BOXED_BOOL, 1)));
 
     iterwrapper_cls->freeze();
     iterwrapper_cls->tpp_hasnext = iterwrapperHasnextUnboxed;

@@ -29,7 +29,7 @@ class AST_Jump;
 class Box;
 class BoxedClosure;
 class BoxedDict;
-struct CLFunction;
+struct FunctionMetadata;
 struct LineInfo;
 
 extern const void* interpreter_instr_addr;
@@ -70,15 +70,15 @@ struct Value {
     Value(Box* o, RewriterVar* var) : o(o), var(var) {}
 };
 
-Box* astInterpretFunction(CLFunction* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2, Box* arg3,
-                          Box** args);
-Box* astInterpretFunctionEval(CLFunction* cf, Box* globals, Box* boxedLocals);
-Box* astInterpretDeopt(CLFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+Box* astInterpretFunction(FunctionMetadata* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
+                          Box* arg3, Box** args);
+Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLocals);
+Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state);
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 Box* getGlobalsForInterpretedFrame(void* frame_ptr);
-CLFunction* getCLForInterpretedFrame(void* frame_ptr);
+FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);

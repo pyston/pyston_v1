@@ -42,16 +42,10 @@ void _printStacktrace();
 
 extern "C" Box* deopt(AST_expr* expr, Box* value);
 
-// Finalizer-related
-void default_free(void*);
-void dealloc_null(Box* box);
-
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__))
 __attribute__((format(printf, 2, 3)));
 void raiseExcHelper(BoxedClass*, Box* arg) __attribute__((__noreturn__));
-
-BoxedModule* getCurrentModule();
 
 // TODO sort this
 extern "C" bool softspace(Box* b, bool newval);
@@ -199,7 +193,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI);
 

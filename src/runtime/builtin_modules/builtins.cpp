@@ -1120,9 +1120,10 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     cls->giveAttr("__module__", boxString("exceptions"));
 
     if (base == object_cls) {
-        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew, UNKNOWN, 1, true, true)));
-        cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
-        cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
+        cls->giveAttr("__new__",
+                      new BoxedFunction(FunctionMetadata::create((void*)exceptionNew, UNKNOWN, 1, true, true)));
+        cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)exceptionStr, STR, 1)));
+        cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)exceptionRepr, STR, 1)));
     }
 
     cls->freeze();
@@ -1850,7 +1851,7 @@ void setupBuiltins() {
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
     ellipsis_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
-    ellipsis_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)ellipsisRepr, STR, 1)));
+    ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);
@@ -1860,11 +1861,13 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__debug__", False);
 
-    builtins_module->giveAttr("print", new BoxedBuiltinFunctionOrMethod(
-                                           boxRTFunction((void*)print, NONE, 0, true, true), "print", print_doc));
+    builtins_module->giveAttr(
+        "print", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)print, NONE, 0, true, true), "print",
+                                                  print_doc));
 
     notimplemented_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
-    notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
+    notimplemented_cls->giveAttr("__repr__",
+                                 new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
     gc::registerPermanentRoot(NotImplemented);
@@ -1872,100 +1875,103 @@ void setupBuiltins() {
     builtins_module->giveAttr("NotImplemented", NotImplemented);
 
     builtins_module->giveAttr(
-        "all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1), "all", all_doc));
+        "all", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)all, BOXED_BOOL, 1), "all", all_doc));
     builtins_module->giveAttr(
-        "any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1), "any", any_doc));
+        "any", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)any, BOXED_BOOL, 1), "any", any_doc));
 
-    builtins_module->giveAttr(
-        "apply", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinApply, UNKNOWN, 3, false, false), "apply",
-                                                  { NULL }, NULL, apply_doc));
+    builtins_module->giveAttr("apply", new BoxedBuiltinFunctionOrMethod(
+                                           FunctionMetadata::create((void*)builtinApply, UNKNOWN, 3, false, false),
+                                           "apply", { NULL }, NULL, apply_doc));
 
-    repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1), "repr", repr_doc);
+    repr_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)repr, UNKNOWN, 1), "repr", repr_doc);
     builtins_module->giveAttr("repr", repr_obj);
 
-    auto len_func = boxRTFunction((void*)len, UNKNOWN, 1);
+    auto len_func = FunctionMetadata::create((void*)len, UNKNOWN, 1);
     len_func->internal_callable.cxx_val = lenCallInternal;
     len_obj = new BoxedBuiltinFunctionOrMethod(len_func, "len", len_doc);
     builtins_module->giveAttr("len", len_obj);
 
-    hash_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hash, UNKNOWN, 1), "hash", hash_doc);
+    hash_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)hash, UNKNOWN, 1), "hash", hash_doc);
     builtins_module->giveAttr("hash", hash_obj);
-    abs_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)abs_, UNKNOWN, 1), "abs", abs_doc);
+    abs_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)abs_, UNKNOWN, 1), "abs", abs_doc);
     builtins_module->giveAttr("abs", abs_obj);
     builtins_module->giveAttr(
-        "bin", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)binFunc, UNKNOWN, 1), "bin", bin_doc));
+        "bin", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)binFunc, UNKNOWN, 1), "bin", bin_doc));
     builtins_module->giveAttr(
-        "hex", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hexFunc, UNKNOWN, 1), "hex", hex_doc));
+        "hex", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)hexFunc, UNKNOWN, 1), "hex", hex_doc));
     builtins_module->giveAttr(
-        "oct", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)octFunc, UNKNOWN, 1), "oct", oct_doc));
+        "oct", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)octFunc, UNKNOWN, 1), "oct", oct_doc));
 
-    min_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)min, UNKNOWN, 1, true, true), "min", { None }, NULL,
-                                               min_doc);
+    min_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)min, UNKNOWN, 1, true, true), "min",
+                                               { None }, NULL, min_doc);
     builtins_module->giveAttr("min", min_obj);
 
-    max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, true, true), "max", { None }, NULL,
-                                               max_doc);
+    max_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)max, UNKNOWN, 1, true, true), "max",
+                                               { None }, NULL, max_doc);
     builtins_module->giveAttr("max", max_obj);
 
-    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)next, UNKNOWN, 2, false,
-                                                                                     false, ParamNames::empty(), CAPI),
-                                                                       "next", { NULL }, NULL, next_doc));
+    builtins_module->giveAttr(
+        "next", new BoxedBuiltinFunctionOrMethod(
+                    FunctionMetadata::create((void*)next, UNKNOWN, 2, false, false, ParamNames::empty(), CAPI), "next",
+                    { NULL }, NULL, next_doc));
 
-    builtins_module->giveAttr("sum",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sum, UNKNOWN, 2, false, false),
-                                                               "sum", { boxInt(0) }, NULL, sum_doc));
+    builtins_module->giveAttr(
+        "sum", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sum, UNKNOWN, 2, false, false), "sum",
+                                                { boxInt(0) }, NULL, sum_doc));
 
-    id_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)id, BOXED_INT, 1), "id", id_doc);
+    id_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)id, BOXED_INT, 1), "id", id_doc);
     builtins_module->giveAttr("id", id_obj);
-    chr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)chr, STR, 1), "chr", chr_doc);
+    chr_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)chr, STR, 1), "chr", chr_doc);
     builtins_module->giveAttr("chr", chr_obj);
-    builtins_module->giveAttr(
-        "unichr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)unichr, UNKNOWN, 1), "unichr", unichr_doc));
-    ord_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)ord, BOXED_INT, 1), "ord", ord_doc);
+    builtins_module->giveAttr("unichr", new BoxedBuiltinFunctionOrMethod(
+                                            FunctionMetadata::create((void*)unichr, UNKNOWN, 1), "unichr", unichr_doc));
+    ord_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)ord, BOXED_INT, 1), "ord", ord_doc);
     builtins_module->giveAttr("ord", ord_obj);
-    trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0), "trap");
+    trap_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)trap, UNKNOWN, 0), "trap");
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr(
-        "dump", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 2), "dump", { boxInt(0) }));
-    builtins_module->giveAttr(
-        "dumpAddr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
+    builtins_module->giveAttr("dump", new BoxedBuiltinFunctionOrMethod(
+                                          FunctionMetadata::create((void*)pydump, UNKNOWN, 2), "dump", { boxInt(0) }));
+    builtins_module->giveAttr("dumpAddr", new BoxedBuiltinFunctionOrMethod(
+                                              FunctionMetadata::create((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
 
-    builtins_module->giveAttr("delattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)delattrFunc, NONE, 2),
-                                                                          "delattr", delattr_doc));
+    builtins_module->giveAttr("delattr",
+                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)delattrFunc, NONE, 2),
+                                                               "delattr", delattr_doc));
 
-    auto getattr_func = createRTFunction(3, true, true, ParamNames::empty());
+    auto getattr_func = new FunctionMetadata(3, true, true, ParamNames::empty());
     getattr_func->internal_callable.capi_val = &getattrFuncInternal<CAPI>;
     getattr_func->internal_callable.cxx_val = &getattrFuncInternal<CXX>;
     builtins_module->giveAttr("getattr",
                               new BoxedBuiltinFunctionOrMethod(getattr_func, "getattr", { NULL }, NULL, getattr_doc));
 
     builtins_module->giveAttr(
-        "setattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, false, false),
-                                                    "setattr", setattr_doc));
+        "setattr", new BoxedBuiltinFunctionOrMethod(
+                       FunctionMetadata::create((void*)setattrFunc, UNKNOWN, 3, false, false), "setattr", setattr_doc));
 
-    auto hasattr_func = createRTFunction(2, false, false);
+    auto hasattr_func = new FunctionMetadata(2, false, false);
     hasattr_func->internal_callable.capi_val = &hasattrFuncInternal<CAPI>;
     hasattr_func->internal_callable.cxx_val = &hasattrFuncInternal<CXX>;
     builtins_module->giveAttr("hasattr", new BoxedBuiltinFunctionOrMethod(hasattr_func, "hasattr", hasattr_doc));
 
-    builtins_module->giveAttr("pow",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)powFunc, UNKNOWN, 3, false, false),
-                                                               "pow", { None }, NULL, pow_doc));
+    builtins_module->giveAttr(
+        "pow", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)powFunc, UNKNOWN, 3, false, false),
+                                                "pow", { None }, NULL, pow_doc));
 
-    Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2),
-                                                           "isinstance", isinstance_doc);
+    Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(
+        FunctionMetadata::create((void*)isinstance_func, BOXED_BOOL, 2), "isinstance", isinstance_doc);
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2),
-                                                           "issubclass", issubclass_doc);
+    Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(
+        FunctionMetadata::create((void*)issubclass_func, BOXED_BOOL, 2), "issubclass", issubclass_doc);
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
-    Box* intern_obj
-        = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)intern_func, UNKNOWN, 1), "intern", intern_doc);
+    Box* intern_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)intern_func, UNKNOWN, 1),
+                                                       "intern", intern_doc);
     builtins_module->giveAttr("intern", intern_obj);
 
-    CLFunction* import_func = boxRTFunction((void*)bltinImport, UNKNOWN, 5, false, false,
-                                            ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
+    FunctionMetadata* import_func
+        = FunctionMetadata::create((void*)bltinImport, UNKNOWN, 5, false, false,
+                                   ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
     builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                                              { None, None, None, new BoxedInt(-1) },
                                                                              NULL, import_doc));
@@ -1973,84 +1979,91 @@ void setupBuiltins() {
     enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
                                        false, "enumerate");
     enumerate_cls->giveAttr(
-        "__new__",
-        new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false), { boxInt(0) }));
-    enumerate_cls->giveAttr(
-        "__iter__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, BOXED_TUPLE, 1)));
+        "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false),
+                                     { boxInt(0) }));
+    enumerate_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::iter,
+                                                                                   typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr("next",
+                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::next, BOXED_TUPLE, 1)));
     enumerate_cls->giveAttr("__hasnext__",
-                            new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1)));
+                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1)));
     enumerate_cls->freeze();
     enumerate_cls->tp_iter = PyObject_SelfIter;
     builtins_module->giveAttr("enumerate", enumerate_cls);
 
 
-    CLFunction* sorted_func = createRTFunction(4, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
-    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
+    FunctionMetadata* sorted_func
+        = new FunctionMetadata(4, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
+    sorted_func->addVersion((void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
     builtins_module->giveAttr(
         "sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, "sorted", { None, None, False }, NULL, sorted_doc));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
 
-    range_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)range, LIST, 3, false, false), "range",
+    range_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)range, LIST, 3, false, false), "range",
                                                  { NULL, NULL }, NULL, range_doc);
     builtins_module->giveAttr("range", range_obj);
 
-    auto* round_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinRound, BOXED_FLOAT, 2, false, false),
-                                                       "round", { boxInt(0) }, NULL, round_doc);
+    auto* round_obj
+        = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinRound, BOXED_FLOAT, 2, false, false),
+                                           "round", { boxInt(0) }, NULL, round_doc);
     builtins_module->giveAttr("round", round_obj);
 
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    open_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)open, typeFromClass(file_cls), 3, false, false,
-                                                              ParamNames({ "name", "mode", "buffering" }, "", "")),
-                                                "open", { boxString("r"), boxInt(-1) }, NULL, open_doc);
+    open_obj = new BoxedBuiltinFunctionOrMethod(
+        FunctionMetadata::create((void*)open, typeFromClass(file_cls), 3, false, false,
+                                 ParamNames({ "name", "mode", "buffering" }, "", "")),
+        "open", { boxString("r"), boxInt(-1) }, NULL, open_doc);
     builtins_module->giveAttr("open", open_obj);
 
-    builtins_module->giveAttr("globals",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)globals, UNKNOWN, 0, false, false),
-                                                               "globals", globals_doc));
     builtins_module->giveAttr(
-        "locals",
-        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)locals, UNKNOWN, 0, false, false), "locals", locals_doc));
+        "globals", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)globals, UNKNOWN, 0, false, false),
+                                                    "globals", globals_doc));
+    builtins_module->giveAttr(
+        "locals", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)locals, UNKNOWN, 0, false, false),
+                                                   "locals", locals_doc));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinIter, UNKNOWN, 2, false, false), "iter",
-                                                 { NULL }, NULL, iter_doc));
-    builtins_module->giveAttr("reversed", new BoxedBuiltinFunctionOrMethod(
-                                              boxRTFunction((void*)getreversed, UNKNOWN, 1, false, false), "reversed"));
+        "iter", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinIter, UNKNOWN, 2, false, false),
+                                                 "iter", { NULL }, NULL, iter_doc));
+    builtins_module->giveAttr("reversed",
+                              new BoxedBuiltinFunctionOrMethod(
+                                  FunctionMetadata::create((void*)getreversed, UNKNOWN, 1, false, false), "reversed"));
     builtins_module->giveAttr(
-        "coerce", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)coerceFunc, UNKNOWN, 2, false, false), "coerce",
-                                                   coerce_doc));
-    builtins_module->giveAttr(
-        "divmod", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2), "divmod", divmod_doc));
+        "coerce", new BoxedBuiltinFunctionOrMethod(
+                      FunctionMetadata::create((void*)coerceFunc, UNKNOWN, 2, false, false), "coerce", coerce_doc));
+    builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(
+                                            FunctionMetadata::create((void*)divmod, UNKNOWN, 2), "divmod", divmod_doc));
 
-    builtins_module->giveAttr("execfile",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 3, false, false),
-                                                               "execfile", { NULL, NULL }, NULL, execfile_doc));
+    builtins_module->giveAttr("execfile", new BoxedBuiltinFunctionOrMethod(
+                                              FunctionMetadata::create((void*)execfile, UNKNOWN, 3, false, false),
+                                              "execfile", { NULL, NULL }, NULL, execfile_doc));
 
-    CLFunction* compile_func = createRTFunction(
+    FunctionMetadata* compile_func = new FunctionMetadata(
         5, false, false, ParamNames({ "source", "filename", "mode", "flags", "dont_inherit" }, "", ""));
-    addRTFunction(compile_func, (void*)compile, UNKNOWN, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
+    compile_func->addVersion((void*)compile, UNKNOWN, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
     builtins_module->giveAttr("compile", new BoxedBuiltinFunctionOrMethod(compile_func, "compile",
                                                                           { boxInt(0), boxInt(0) }, NULL, compile_doc));
 
+    builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(
+                                         FunctionMetadata::create((void*)map, LIST, 1, true, false), "map", map_doc));
     builtins_module->giveAttr(
-        "map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map, LIST, 1, true, false), "map", map_doc));
-    builtins_module->giveAttr("reduce",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)reduce, UNKNOWN, 3, false, false),
-                                                               "reduce", { NULL }, NULL, reduce_doc));
+        "reduce", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)reduce, UNKNOWN, 3, false, false),
+                                                   "reduce", { NULL }, NULL, reduce_doc));
     builtins_module->giveAttr(
-        "filter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, UNKNOWN, 2), "filter", filter_doc));
+        "filter",
+        new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)filter2, UNKNOWN, 2), "filter", filter_doc));
+    builtins_module->giveAttr("zip", new BoxedBuiltinFunctionOrMethod(
+                                         FunctionMetadata::create((void*)zip, LIST, 0, true, false), "zip", zip_doc));
     builtins_module->giveAttr(
-        "zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip, LIST, 0, true, false), "zip", zip_doc));
-    builtins_module->giveAttr("dir", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dir, LIST, 1, false, false),
-                                                                      "dir", { NULL }, NULL, dir_doc));
-    builtins_module->giveAttr("vars",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)vars, UNKNOWN, 1, false, false),
-                                                               "vars", { NULL }, NULL, vars_doc));
+        "dir", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)dir, LIST, 1, false, false), "dir",
+                                                { NULL }, NULL, dir_doc));
+    builtins_module->giveAttr(
+        "vars", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)vars, UNKNOWN, 1, false, false),
+                                                 "vars", { NULL }, NULL, vars_doc));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("bytes", str_cls);
@@ -2086,21 +2099,23 @@ void setupBuiltins() {
     PyType_Ready(&PyBuffer_Type);
     builtins_module->giveAttr("buffer", &PyBuffer_Type);
 
-    builtins_module->giveAttr("eval",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 3, false, false),
-                                                               "eval", { NULL, NULL }, NULL, eval_doc));
-    builtins_module->giveAttr("callable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1),
-                                                                           "callable", callable_doc));
-
-    builtins_module->giveAttr("raw_input",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)rawInput, UNKNOWN, 1, false, false),
-                                                               "raw_input", { NULL }, NULL, raw_input_doc));
-    builtins_module->giveAttr("input",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, false, false),
-                                                               "input", { NULL }, NULL, input_doc));
     builtins_module->giveAttr(
-        "cmp", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp", cmp_doc));
-    builtins_module->giveAttr("format", new BoxedBuiltinFunctionOrMethod(
-                                            boxRTFunction((void*)builtinFormat, UNKNOWN, 2), "format", format_doc));
+        "eval", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)eval, UNKNOWN, 3, false, false),
+                                                 "eval", { NULL, NULL }, NULL, eval_doc));
+    builtins_module->giveAttr("callable",
+                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)callable, UNKNOWN, 1),
+                                                               "callable", callable_doc));
+
+    builtins_module->giveAttr("raw_input", new BoxedBuiltinFunctionOrMethod(
+                                               FunctionMetadata::create((void*)rawInput, UNKNOWN, 1, false, false),
+                                               "raw_input", { NULL }, NULL, raw_input_doc));
+    builtins_module->giveAttr(
+        "input", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)input, UNKNOWN, 1, false, false),
+                                                  "input", { NULL }, NULL, input_doc));
+    builtins_module->giveAttr("cmp", new BoxedBuiltinFunctionOrMethod(
+                                         FunctionMetadata::create((void*)builtinCmp, UNKNOWN, 2), "cmp", cmp_doc));
+    builtins_module->giveAttr(
+        "format", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinFormat, UNKNOWN, 2), "format",
+                                                   format_doc));
 }
 }

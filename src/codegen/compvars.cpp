@@ -810,9 +810,9 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
     return boolFromI1(emitter, rtn_val);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, llvm::Value* globals,
+CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, CompilerVariable* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults) {
-    // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
+    // Unlike the FunctionMetadata*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
     llvm::Value* closure_v;
@@ -844,8 +844,9 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
     // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
     // emitter.createCall().
     llvm::Value* boxed = emitter.getBuilder()->CreateCall(
-        g.funcs.boxCLFunction, std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_clfunction_type_ptr), closure_v,
-                                                          globals, scratch, getConstantInt(defaults.size(), g.i64) });
+        g.funcs.createFunctionFromMetadata,
+        std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure_v, globals,
+                                   scratch, getConstantInt(defaults.size(), g.i64) });
 
     if (convertedClosure)
         convertedClosure->decvref(emitter);
@@ -914,12 +915,12 @@ public:
 
     static CompilerType* fromRT(BoxedFunction* rtfunc, bool stripfirst) {
         std::vector<Sig*> sigs;
-        CLFunction* clf = rtfunc->f;
+        FunctionMetadata* md = rtfunc->md;
 
         assert(!rtfunc->can_change_defaults);
 
-        for (int i = 0; i < clf->versions.size(); i++) {
-            CompiledFunction* cf = clf->versions[i];
+        for (int i = 0; i < md->versions.size(); i++) {
+            CompiledFunction* cf = md->versions[i];
 
             FunctionSpecialization* fspec = cf->spec;
 
@@ -1864,14 +1865,14 @@ public:
         // but I don't think we should be running into that case.
         RELEASE_ASSERT(!rtattr_func->can_change_defaults, "could handle this but unexpected");
 
-        CLFunction* cl = rtattr_func->f;
-        assert(cl);
+        FunctionMetadata* md = rtattr_func->md;
+        assert(md);
 
         ParamReceiveSpec paramspec = rtattr_func->getParamspec();
-        if (cl->takes_varargs || paramspec.takes_kwargs)
+        if (md->takes_varargs || paramspec.takes_kwargs)
             return NULL;
 
-        RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
+        RELEASE_ASSERT(paramspec.num_args == md->numReceivedArgs(), "");
         RELEASE_ASSERT(args.size() + 1 >= paramspec.num_args - paramspec.num_defaults
                            && args.size() + 1 <= paramspec.num_args,
                        "%d", info.unw_info.current_stmt->lineno);
@@ -1880,9 +1881,9 @@ public:
         CompiledFunction* best_exception_mismatch = NULL;
         bool found = false;
         // TODO have to find the right version.. similar to resolveclfunc?
-        for (int i = 0; i < cl->versions.size(); i++) {
-            cf = cl->versions[i];
-            assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
+        for (int i = 0; i < md->versions.size(); i++) {
+            cf = md->versions[i];
+            assert(cf->spec->arg_types.size() == md->numReceivedArgs());
 
             bool fits = true;
             for (int j = 0; j < args.size(); j++) {
@@ -1914,7 +1915,7 @@ public:
         RELEASE_ASSERT(cf->code, "");
 
         std::vector<llvm::Type*> arg_types;
-        RELEASE_ASSERT(paramspec.num_args == cl->numReceivedArgs(), "");
+        RELEASE_ASSERT(paramspec.num_args == md->numReceivedArgs(), "");
         for (int i = 0; i < paramspec.num_args; i++) {
             // TODO support passing unboxed values as arguments
             assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);

@@ -138,6 +138,7 @@ void demoteGL();
 
 
 
+// Helper macro for creating a RAII wrapper around two functions.
 #define MAKE_REGION(name, start, end)                                                                                  \
     class name {                                                                                                       \
     public:                                                                                                            \

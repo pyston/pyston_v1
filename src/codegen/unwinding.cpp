@@ -278,7 +278,7 @@ struct PythonFrameId {
 class PythonFrameIteratorImpl {
 public:
     PythonFrameId id;
-    CLFunction* cl; // always exists
+    FunctionMetadata* md; // always exists
 
     // These only exist if id.type==COMPILED:
     CompiledFunction* cf;
@@ -289,10 +289,10 @@ public:
 
     PythonFrameIteratorImpl() : regs_valid(0) {}
 
-    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CLFunction* cl,
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, FunctionMetadata* md,
                             CompiledFunction* cf)
-        : id(PythonFrameId(type, ip, bp)), cl(cl), cf(cf), regs_valid(0) {
-        assert(cl);
+        : id(PythonFrameId(type, ip, bp)), md(md), cf(cf), regs_valid(0) {
+        assert(md);
         assert((type == PythonFrameId::COMPILED) == (cf != NULL));
     }
 
@@ -301,9 +301,9 @@ public:
         return cf;
     }
 
-    CLFunction* getCL() const {
-        assert(cl);
-        return cl;
+    FunctionMetadata* getMD() const {
+        assert(md);
+        return md;
     }
 
     uint64_t readLocation(const StackMap::Record::Location& loc) {
@@ -366,8 +366,8 @@ public:
     Box* getGlobals() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
-            if (cf->clfunc->source->scoping->areGlobalsFromModule())
-                return cf->clfunc->source->parent_module;
+            if (cf->md->source->scoping->areGlobalsFromModule())
+                return cf->md->source->parent_module;
             auto locations = findLocations(PASSED_GLOBALS_NAME);
             assert(locations.size() == 1);
             Box* r = (Box*)readLocation(locations[0]);
@@ -461,16 +461,16 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
-    CLFunction* cl = cf ? cf->clfunc : NULL;
+    FunctionMetadata* md = cf ? cf->md : NULL;
     bool jitted = cf != NULL;
     bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
     if (interpreted)
-        cl = getCLForInterpretedFrame((void*)bp);
+        md = getMDForInterpretedFrame((void*)bp);
 
     if (!jitted && !interpreted)
         return false;
 
-    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cl, cf);
+    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, md, cf);
     if (jitted) {
         // Try getting all the callee-save registers, and save the ones we were able to get.
         // Some of them may be inaccessible, I think because they weren't defined by that
@@ -493,10 +493,10 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
 
 static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
     AST_stmt* current_stmt = frame_it->getCurrentStatement();
-    auto* cl = frame_it->getCL();
-    assert(cl);
+    auto* md = frame_it->getMD();
+    assert(md);
 
-    auto source = cl->source.get();
+    auto source = md->source.get();
 
     return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->getFn(), source->getName());
 }
@@ -564,7 +564,7 @@ public:
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
         if (found_frame) {
-            frame_iter.getCL()->propagated_cxx_exceptions++;
+            frame_iter.getMD()->propagated_cxx_exceptions++;
 
             if (exceptionAtLineCheck()) {
                 // TODO: shouldn't fetch this multiple times?
@@ -797,11 +797,11 @@ void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
     return;
 }
 
-CLFunction* getTopPythonFunction() {
+FunctionMetadata* getTopPythonFunction() {
     auto rtn = getTopPythonFrame();
     if (!rtn)
         return NULL;
-    return getTopPythonFrame()->getCL();
+    return getTopPythonFrame()->getMD();
 }
 
 Box* getGlobals() {
@@ -816,10 +816,10 @@ Box* getGlobalsDict() {
 }
 
 BoxedModule* getCurrentModule() {
-    CLFunction* clfunc = getTopPythonFunction();
-    if (!clfunc)
+    FunctionMetadata* md = getTopPythonFunction();
+    if (!md)
         return NULL;
-    return clfunc->source->parent_module;
+    return md->source->parent_module;
 }
 
 PythonFrameIterator getPythonFrame(int depth) {
@@ -941,14 +941,14 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     BoxedClosure* closure;
     FrameInfo* frame_info;
 
-    CLFunction* clfunc = impl->getCL();
-    ScopeInfo* scope_info = clfunc->source->getScopeInfo();
+    FunctionMetadata* md = impl->getMD();
+    ScopeInfo* scope_info = md->source->getScopeInfo();
 
     if (scope_info->areLocalsFromModule()) {
         // TODO we should cache this in frame_info->locals or something so that locals()
         // (and globals() too) will always return the same dict
-        RELEASE_ASSERT(clfunc->source->scoping->areGlobalsFromModule(), "");
-        return clfunc->source->parent_module->getAttrWrapper();
+        RELEASE_ASSERT(md->source->scoping->areGlobalsFromModule(), "");
+        return md->source->parent_module->getAttrWrapper();
     }
 
     if (impl->getId().type == PythonFrameId::COMPILED) {
@@ -1088,8 +1088,8 @@ CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
 }
 
-CLFunction* PythonFrameIterator::getCL() {
-    return impl->getCL();
+FunctionMetadata* PythonFrameIterator::getMD() {
+    return impl->getMD();
 }
 
 Box* PythonFrameIterator::getGlobalsDict() {
@@ -1142,8 +1142,8 @@ std::string getCurrentPythonLine() {
     if (frame_iter.get()) {
         std::ostringstream stream;
 
-        auto* clfunc = frame_iter->getCL();
-        auto source = clfunc->source.get();
+        auto* md = frame_iter->getMD();
+        auto source = md->source.get();
 
         auto current_stmt = frame_iter->getCurrentStatement();
 

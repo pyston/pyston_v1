@@ -57,9 +57,9 @@ extern const std::string PASSED_GLOBALS_NAME;
 // TODO this probably shouldn't be here
 class IRGenState {
 private:
-    // Note: due to some not-yet-fixed behavior, cf->clfunc is NULL will only get set to point
-    // to clfunc at the end of irgen.
-    CLFunction* clfunc;
+    // Note: due to some not-yet-fixed behavior, cf->md is NULL will only get set to point
+    // to md at the end of irgen.
+    FunctionMetadata* md;
     CompiledFunction* cf;
     SourceInfo* source_info;
     std::unique_ptr<PhiAnalysis> phis;
@@ -75,12 +75,12 @@ private:
     int scratch_size;
 
 public:
-    IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
+    IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
     ~IRGenState();
 
     CompiledFunction* getCurFunction() { return cf; }
-    CLFunction* getCL() { return clfunc; }
+    FunctionMetadata* getMD() { return md; }
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 
@@ -170,7 +170,7 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
-CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
+FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
 }
 

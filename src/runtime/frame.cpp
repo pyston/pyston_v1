@@ -130,11 +130,11 @@ public:
     static Box* boxFrame(PythonFrameIterator it) {
         FrameInfo* fi = it.getFrameInfo();
         if (fi->frame_obj == NULL) {
-            auto cl = it.getCL();
+            auto md = it.getMD();
             Box* globals = it.getGlobalsDict();
             BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
             f->_globals = globals;
-            f->_code = (Box*)cl->getCode();
+            f->_code = (Box*)md->getCode();
         }
 
         return fi->frame_obj;

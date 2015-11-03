@@ -26,8 +26,10 @@
 
 namespace pyston {
 
+// Set this to 1 to disable all stats-related operations.  Shouldn't usually be necessary.
 #define DISABLE_STATS 0
 
+// Enable certain expensive stat collections:
 #define STAT_ALLOCATIONS (0 && !DISABLE_STATS)
 #define STAT_ALLOCATION_TYPES (0 && !DISABLE_STATS)
 #define STAT_CALLATTR_DESCR_ABORTS (0 && !DISABLE_STATS)
@@ -53,6 +55,8 @@ namespace pyston {
 #define STAT_TIMER_NAME(id) _st##id
 
 #if !DISABLE_STATS
+// The class that stores and manages stats collection.  For normal stats collections purposes,
+// you shouldn't have to use this class, and will usually want to use StatCounter instead.
 struct Stats {
 private:
     static std::unordered_map<uint64_t*, std::string>* names;
@@ -75,6 +79,22 @@ public:
     static void endOfInit();
 };
 
+// A helper class for efficient stats collections.  Typical usage:
+//
+//     static StatCounter my_stat_counter("my_informative_stat_name");
+//     void myFunction() {
+//         my_stat_counter.log();
+//     }
+//
+// The current convention for stat names is underscore_case, such as `num_cxa_throw`,
+// though at some point we'd like to move to a period-delimited convention.
+// (Run `./pyston -s` to see the list of current stats we log.)
+// For single stats, usually `num_foo` is a decent name.  If there are many stats in a
+// single category, you can drop the `num_`.
+// If a stat name is a prefix of another, the event it is counting should be a superset.
+// For instance, `ic_rewrites` counts a superset of the events that `ic_rewrites_aborted`
+// counts, which itself is a superset of the events that `ic_rewrites_aborted_assemblyfail`
+// counts.
 struct StatCounter {
 private:
     uint64_t* counter;
@@ -85,6 +105,11 @@ public:
     void log(uint64_t count = 1) { *counter += count; }
 };
 
+// Similar to StatCounter, but should be allocated as:
+//
+//     static thread_local StatPerThreadCounter my_stat_counter("cool_stat_name");
+//
+// This will automatically add the thread id to the stat name.
 struct StatPerThreadCounter {
 private:
     uint64_t* counter = 0;
@@ -117,6 +142,9 @@ struct StatPerThreadCounter {
 #endif
 
 #if STAT_TIMERS
+
+// StatTimers are for a specific type of profiling investigation.  Until we make this more usable,
+// there probably shouldn't be more changes or uses of this class.
 class StatTimer {
 private:
     static __thread StatTimer* stack;
@@ -226,6 +254,8 @@ public:
 
     static void assertActive() { ASSERT(stack && !stack->isPaused(), ""); }
 };
+
+// Helper class around a StatTimer
 class ScopedStatTimer {
 private:
     StatTimer timer;
@@ -237,6 +267,7 @@ public:
     }
     ~ScopedStatTimer() { timer.popNonTopLevel(); }
 };
+
 #else
 struct StatTimer {
     StatTimer(uint64_t*) {}

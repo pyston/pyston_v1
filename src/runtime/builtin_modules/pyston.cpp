@@ -67,13 +67,13 @@ static Box* dumpStats(Box* includeZeros) {
 void setupPyston() {
     pyston_module = createModule(boxString("__pyston__"));
 
-    pyston_module->giveAttr("setOption",
-                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setOption, UNKNOWN, 2), "setOption"));
+    pyston_module->giveAttr("setOption", new BoxedBuiltinFunctionOrMethod(
+                                             FunctionMetadata::create((void*)setOption, UNKNOWN, 2), "setOption"));
 
-    pyston_module->giveAttr("clearStats",
-                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)clearStats, NONE, 0), "clearStats"));
-    pyston_module->giveAttr("dumpStats",
-                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 1, false, false),
-                                                             "dumpStats", { False }));
+    pyston_module->giveAttr("clearStats", new BoxedBuiltinFunctionOrMethod(
+                                              FunctionMetadata::create((void*)clearStats, NONE, 0), "clearStats"));
+    pyston_module->giveAttr(
+        "dumpStats", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)dumpStats, NONE, 1, false, false),
+                                                      "dumpStats", { False }));
 }
 }

@@ -197,7 +197,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
-CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
+CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry_descriptor, bool force_exception_style,
                                   ExceptionStyle forced_exception_style) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_compileFunction");
@@ -310,7 +310,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
-    CLFunction* clfunc;
+    FunctionMetadata* md;
 
     { // scope for limiting the locked region:
         LOCK_REGION(codegen_rwlock.asWrite());
@@ -332,30 +332,30 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         if (!bm->hasattr(builtins_str))
             bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
 
-        clfunc = new CLFunction(0, false, false, std::move(si));
+        md = new FunctionMetadata(0, false, false, std::move(si));
     }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
-    Box* r = astInterpretFunction(clfunc, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == None);
 }
 
-Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
-    RELEASE_ASSERT(!cl->source->scoping->areGlobalsFromModule(), "");
+Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
+    RELEASE_ASSERT(!md->source->scoping->areGlobalsFromModule(), "");
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    Box* doc_string = cl->source->getDocString();
+    Box* doc_string = md->source->getDocString();
     if (doc_string != None) {
         static BoxedString* doc_box = internStringImmortal("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 
-    return astInterpretFunctionEval(cl, globals, boxedLocals);
+    return astInterpretFunctionEval(md, globals, boxedLocals);
 }
 
-static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, BoxedString* fn,
-                                        PyCompilerFlags* flags) {
+static FunctionMetadata* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, BoxedString* fn,
+                                              PyCompilerFlags* flags) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     Timer _t("for evalOrExec()");
@@ -375,9 +375,9 @@ static CLFunction* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body
 
     std::unique_ptr<SourceInfo> si(
         new SourceInfo(getCurrentModule(), scoping, future_flags, source, std::move(body), fn));
-    CLFunction* cl_f = new CLFunction(0, false, false, std::move(si));
 
-    return cl_f;
+    FunctionMetadata* md = new FunctionMetadata(0, false, false, std::move(si));
+    return md;
 }
 
 static AST_Module* parseExec(llvm::StringRef source, FutureFlags future_flags, bool interactive = false) {
@@ -393,7 +393,7 @@ static AST_Module* parseExec(llvm::StringRef source, FutureFlags future_flags, b
     return parsedModule;
 }
 
-static CLFunction* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
+static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
 }
 
@@ -420,7 +420,7 @@ static AST_Expression* parseEval(llvm::StringRef source, FutureFlags future_flag
     return parsedExpr;
 }
 
-static CLFunction* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
+static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
     // We need body (list of statements) to compile.
     // Obtain this by simply making a single statement which contains the expression.
     AST_Return* stmt = new AST_Return();
@@ -477,7 +477,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     if (dont_inherit) {
         future_flags = arg_future_flags;
     } else {
-        CLFunction* caller_cl = getTopPythonFunction();
+        FunctionMetadata* caller_cl = getTopPythonFunction();
         assert(caller_cl != NULL);
         assert(caller_cl->source != NULL);
         FutureFlags caller_future_flags = caller_cl->source->future_flags;
@@ -512,21 +512,21 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     PyCompilerFlags pcf;
     pcf.cf_flags = future_flags;
 
-    CLFunction* cl;
+    FunctionMetadata* md;
     if (type_str->s() == "exec" || type_str->s() == "single") {
         // TODO: CPython parses execs as Modules
         if (parsed->type != AST_TYPE::Module)
             raiseExcHelper(TypeError, "expected Module node, got %s", boxAst(parsed)->cls->tp_name);
-        cl = compileExec(static_cast<AST_Module*>(parsed), filename_str, &pcf);
+        md = compileExec(static_cast<AST_Module*>(parsed), filename_str, &pcf);
     } else if (type_str->s() == "eval") {
         if (parsed->type != AST_TYPE::Expression)
             raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
-        cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str, &pcf);
+        md = compileEval(static_cast<AST_Expression*>(parsed), filename_str, &pcf);
     } else {
         raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
     }
 
-    return (Box*)cl->getCode();
+    return (Box*)md->getCode();
 }
 
 static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
@@ -582,26 +582,26 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
         // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
     }
 
-    CLFunction* cl;
+    FunctionMetadata* md;
     if (boxedCode->cls == str_cls) {
-        CLFunction* caller_cl = getTopPythonFunction();
+        FunctionMetadata* caller_cl = getTopPythonFunction();
         assert(caller_cl != NULL);
         assert(caller_cl->source != NULL);
 
         AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
         static BoxedString* string_string = internStringImmortal("<string>");
-        cl = compileEval(parsed, string_string, flags);
+        md = compileEval(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
-        cl = clfunctionFromCode(boxedCode);
+        md = metadataFromCode(boxedCode);
     } else {
         abort();
     }
 
-    return evalOrExec(cl, globals, locals);
+    return evalOrExec(md, globals, locals);
 }
 
 Box* eval(Box* boxedCode, Box* globals, Box* locals) {
-    CLFunction* caller_cl = getTopPythonFunction();
+    FunctionMetadata* caller_cl = getTopPythonFunction();
     assert(caller_cl != NULL);
     assert(caller_cl->source != NULL);
     FutureFlags caller_future_flags = caller_cl->source->future_flags;
@@ -640,17 +640,17 @@ Box* execfile(Box* _fn, Box* globals, Box* locals) {
     AST_Module* parsed = caching_parse_file(fn->s().data(), /* future_flags = */ 0);
     assert(parsed);
 
-    CLFunction* caller_cl = getTopPythonFunction();
+    FunctionMetadata* caller_cl = getTopPythonFunction();
     assert(caller_cl != NULL);
     assert(caller_cl->source != NULL);
     FutureFlags caller_future_flags = caller_cl->source->future_flags;
     PyCompilerFlags pcf;
     pcf.cf_flags = caller_future_flags;
 
-    CLFunction* cl = compileForEvalOrExec(parsed, parsed->body, fn, &pcf);
-    assert(cl);
+    FunctionMetadata* md = compileForEvalOrExec(parsed, parsed->body, fn, &pcf);
+    assert(md);
 
-    return evalOrExec(cl, globals, locals);
+    return evalOrExec(md, globals, locals);
 }
 
 Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
@@ -675,23 +675,23 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
         // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
     }
 
-    CLFunction* cl;
+    FunctionMetadata* md;
     if (boxedCode->cls == str_cls) {
-        CLFunction* caller_cl = getTopPythonFunction();
+        FunctionMetadata* caller_cl = getTopPythonFunction();
         assert(caller_cl != NULL);
         assert(caller_cl->source != NULL);
 
         auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
         static BoxedString* string_string = internStringImmortal("<string>");
-        cl = compileExec(parsed, string_string, flags);
+        md = compileExec(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
-        cl = clfunctionFromCode(boxedCode);
+        md = metadataFromCode(boxedCode);
     } else {
         abort();
     }
-    assert(cl);
+    assert(md);
 
-    return evalOrExec(cl, globals, locals);
+    return evalOrExec(md, globals, locals);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
@@ -733,14 +733,14 @@ void CompiledFunction::speculationFailed() {
     if (this->times_speculation_failed == 4) {
         // printf("Killing %p because it failed too many speculations\n", this);
 
-        CLFunction* cl = this->clfunc;
-        assert(cl);
-        assert(this != cl->always_use_version);
+        FunctionMetadata* md = this->md;
+        assert(md);
+        assert(this != md->always_use_version);
 
         bool found = false;
-        for (int i = 0; i < clfunc->versions.size(); i++) {
-            if (clfunc->versions[i] == this) {
-                clfunc->versions.erase(clfunc->versions.begin() + i);
+        for (int i = 0; i < md->versions.size(); i++) {
+            if (md->versions[i] == this) {
+                md->versions.erase(md->versions.begin() + i);
                 this->dependent_callsites.invalidateAll();
                 found = true;
                 break;
@@ -748,9 +748,9 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            for (auto it = clfunc->osr_versions.begin(); it != clfunc->osr_versions.end(); ++it) {
+            for (auto it = md->osr_versions.begin(); it != md->osr_versions.end(); ++it) {
                 if (it->second == this) {
-                    clfunc->osr_versions.erase(it);
+                    md->osr_versions.erase(it);
                     this->dependent_callsites.invalidateAll();
                     found = true;
                     break;
@@ -759,8 +759,8 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            for (int i = 0; i < clfunc->versions.size(); i++) {
-                printf("%p\n", clfunc->versions[i]);
+            for (int i = 0; i < md->versions.size(); i++) {
+                printf("%p\n", md->versions[i]);
             }
         }
         RELEASE_ASSERT(found, "");
@@ -770,13 +770,13 @@ void CompiledFunction::speculationFailed() {
 std::unordered_set<CompiledFunction*> all_compiled_functions;
 CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
-    : clfunc(NULL),
+    : md(NULL),
       func(func),
+      effort(effort),
+      exception_style(exception_style),
       spec(spec),
       entry_descriptor(entry_descriptor),
       code(code),
-      effort(effort),
-      exception_style(exception_style),
       times_called(0),
       times_speculation_failed(0),
       location_map(nullptr) {
@@ -812,29 +812,29 @@ ConcreteCompilerType* CompiledFunction::getReturnType() {
 }
 
 /// Reoptimizes the given function version at the new effort level.
-/// The cf must be an active version in its parents CLFunction; the given
+/// The cf must be an active version in its parents FunctionMetadata; the given
 /// version will be replaced by the new version, which will be returned.
 static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
-    assert(cf->clfunc->versions.size());
+    assert(cf->md->versions.size());
 
     assert(cf);
     assert(cf->entry_descriptor == NULL && "We can't reopt an osr-entry compile!");
     assert(cf->spec);
 
-    CLFunction* clfunc = cf->clfunc;
-    assert(clfunc);
+    FunctionMetadata* md = cf->md;
+    assert(md);
 
     assert(new_effort > cf->effort);
 
-    FunctionList& versions = clfunc->versions;
+    FunctionList& versions = md->versions;
     for (int i = 0; i < versions.size(); i++) {
         if (versions[i] == cf) {
             versions.erase(versions.begin() + i);
 
             // this pushes the new CompiledVersion to the back of the version list
-            CompiledFunction* new_cf = compileFunction(clfunc, cf->spec, new_effort, NULL, true, cf->exception_style);
+            CompiledFunction* new_cf = compileFunction(md, cf->spec, new_effort, NULL, true, cf->exception_style);
 
             cf->dependent_callsites.invalidateAll();
 
@@ -860,13 +860,13 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
 
     // if (VERBOSITY("irgen") >= 1) printf("In compilePartialFunc, handling %p\n", exit);
 
-    CLFunction* clfunc = exit->entry->clfunc;
-    assert(clfunc);
-    CompiledFunction*& new_cf = clfunc->osr_versions[exit->entry];
+    FunctionMetadata* md = exit->entry->md;
+    assert(md);
+    CompiledFunction*& new_cf = md->osr_versions[exit->entry];
     if (new_cf == NULL) {
         EffortLevel new_effort = EffortLevel::MAXIMAL;
         CompiledFunction* compiled
-            = compileFunction(clfunc, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
+            = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
         assert(compiled == new_cf);
 
         stat_osr_compiles.log();
@@ -889,7 +889,7 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
     stat_reopt.log();
 
     assert(cf->effort < EffortLevel::MAXIMAL);
-    assert(cf->clfunc->versions.size());
+    assert(cf->md->versions.size());
 
     EffortLevel new_effort = EffortLevel::MAXIMAL;
 
@@ -904,34 +904,9 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     return (char*)new_cf->code;
 }
 
-CLFunction* createRTFunction(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names) {
-    return new CLFunction(num_args, takes_varargs, takes_kwargs, param_names);
-}
-
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names,
-                          ExceptionStyle exception_style) {
-    assert(!param_names.takes_param_names || num_args == param_names.args.size());
-    assert(param_names.vararg.str() == "");
-    assert(param_names.kwarg.str() == "");
-
-    return boxRTFunction(f, rtn_type, num_args, false, false, param_names, exception_style);
-}
-
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, bool takes_varargs, bool takes_kwargs,
-                          const ParamNames& param_names, ExceptionStyle exception_style) {
-    assert(!param_names.takes_param_names || num_args == param_names.args.size());
-    assert(takes_varargs || param_names.vararg.str() == "");
-    assert(takes_kwargs || param_names.kwarg.str() == "");
-
-    CLFunction* cl_f = createRTFunction(num_args, takes_varargs, takes_kwargs, param_names);
-
-    addRTFunction(cl_f, f, rtn_type, exception_style);
-    return cl_f;
-}
-
-void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style) {
-    std::vector<ConcreteCompilerType*> arg_types(cl_f->numReceivedArgs(), UNKNOWN);
-    return addRTFunction(cl_f, f, rtn_type, arg_types, exception_style);
+void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style) {
+    std::vector<ConcreteCompilerType*> arg_types(numReceivedArgs(), UNKNOWN);
+    return FunctionMetadata::addVersion(f, rtn_type, arg_types, exception_style);
 }
 
 static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
@@ -939,15 +914,15 @@ static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
     return type;
 }
 
-void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, ExceptionStyle exception_style) {
-    assert(arg_types.size() == cl_f->numReceivedArgs());
+void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
+                                  const std::vector<ConcreteCompilerType*>& arg_types, ExceptionStyle exception_style) {
+    assert(arg_types.size() == numReceivedArgs());
 #ifndef NDEBUG
     for (ConcreteCompilerType* t : arg_types)
         assert(t);
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-    cl_f->addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
+    addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
 }
 }

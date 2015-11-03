@@ -44,10 +44,10 @@ extern "C" void dumpLLVM(void* _v) {
     v->dump();
 }
 
-IRGenState::IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* source_info,
+IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info,
                        std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info)
-    : clfunc(clfunc),
+    : md(md),
       cf(cf),
       source_info(source_info),
       phis(std::move(phis)),
@@ -60,7 +60,7 @@ IRGenState::IRGenState(CLFunction* clfunc, CompiledFunction* cf, SourceInfo* sou
       globals(NULL),
       scratch_size(0) {
     assert(cf->func);
-    assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
+    assert(!cf->md); // in this case don't need to pass in sourceinfo
 }
 
 IRGenState::~IRGenState() {
@@ -1390,7 +1390,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        CLFunction* cl = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
+        FunctionMetadata* md = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
 
         // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
@@ -1409,7 +1409,7 @@ private:
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
         assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, irstate->getGlobalsIfCustom(), {});
+        CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1436,7 +1436,7 @@ private:
 
     CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args,
                                       const std::vector<AST_stmt*>& body) {
-        CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
+        FunctionMetadata* md = wrapFunction(node, args, body, irstate->getSourceInfo());
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -1460,7 +1460,7 @@ private:
             takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
         }
 
-        bool is_generator = cl->source->is_generator;
+        bool is_generator = md->source->is_generator;
 
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
@@ -1472,7 +1472,7 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, irstate->getGlobalsIfCustom(), defaults);
+        CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -2125,7 +2125,7 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCL(), osr_key, irstate->getExceptionStyle());
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getMD(), osr_key, irstate->getExceptionStyle());
         OSRExit* exit = new OSRExit(entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedRelocatablePtr(exit, g.i8->getPointerTo()));
@@ -2950,20 +2950,21 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
 }
 
-CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
+FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
     // Different compilations of the parent scope of a functiondef should lead
-    // to the same CLFunction* being used:
-    static std::unordered_map<AST*, CLFunction*> made;
+    // to the same FunctionMetadata* being used:
+    static std::unordered_map<AST*, FunctionMetadata*> made;
 
-    CLFunction*& cl = made[node];
-    if (cl == NULL) {
+    FunctionMetadata*& md = made[node];
+    if (md == NULL) {
         std::unique_ptr<SourceInfo> si(
             new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->getFn()));
         if (args)
-            cl = new CLFunction(args->args.size(), args->vararg.s().size(), args->kwarg.s().size(), std::move(si));
+            md = new FunctionMetadata(args->args.size(), args->vararg.s().size(), args->kwarg.s().size(),
+                                      std::move(si));
         else
-            cl = new CLFunction(0, false, false, std::move(si));
+            md = new FunctionMetadata(0, false, false, std::move(si));
     }
-    return cl;
+    return md;
 }
 }

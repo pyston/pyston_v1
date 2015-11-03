@@ -706,21 +706,22 @@ extern "C" PyObject* PyDescr_NewMethod(PyTypeObject* type, PyMethodDef* method) 
 }
 
 void setupDescr() {
-    member_descriptor_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
+    member_descriptor_cls->giveAttr("__get__",
+                                    new BoxedFunction(FunctionMetadata::create((void*)memberGet, UNKNOWN, 3)));
     member_descriptor_cls->freeze();
 
     property_cls->instances_are_nonzero = true;
 
-    property_cls->giveAttr("__init__",
-                           new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, false, false,
-                                                           ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
-                                             { NULL, NULL, NULL, NULL }));
-    property_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3)));
-    property_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3)));
-    property_cls->giveAttr("__delete__", new BoxedFunction(boxRTFunction((void*)propertyDel, UNKNOWN, 2)));
-    property_cls->giveAttr("getter", new BoxedFunction(boxRTFunction((void*)propertyGetter, UNKNOWN, 2)));
-    property_cls->giveAttr("setter", new BoxedFunction(boxRTFunction((void*)propertySetter, UNKNOWN, 2)));
-    property_cls->giveAttr("deleter", new BoxedFunction(boxRTFunction((void*)propertyDeleter, UNKNOWN, 2)));
+    property_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create(
+                                                             (void*)propertyInit, UNKNOWN, 5, false, false,
+                                                             ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
+                                                         { NULL, NULL, NULL, NULL }));
+    property_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)propertyGet, UNKNOWN, 3)));
+    property_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)propertySet, UNKNOWN, 3)));
+    property_cls->giveAttr("__delete__", new BoxedFunction(FunctionMetadata::create((void*)propertyDel, UNKNOWN, 2)));
+    property_cls->giveAttr("getter", new BoxedFunction(FunctionMetadata::create((void*)propertyGetter, UNKNOWN, 2)));
+    property_cls->giveAttr("setter", new BoxedFunction(FunctionMetadata::create((void*)propertySetter, UNKNOWN, 2)));
+    property_cls->giveAttr("deleter", new BoxedFunction(FunctionMetadata::create((void*)propertyDeleter, UNKNOWN, 2)));
     property_cls->giveAttr("fget",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_get)));
     property_cls->giveAttr("fset",
@@ -731,50 +732,55 @@ void setupDescr() {
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_doc)));
     property_cls->freeze();
 
-    staticmethod_cls->giveAttr("__init__",
-                               new BoxedFunction(boxRTFunction((void*)staticmethodInit, UNKNOWN, 5, false, false),
-                                                 { None, None, None, None }));
     staticmethod_cls->giveAttr(
-        "__get__", new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, false, false), { None }));
+        "__init__", new BoxedFunction(FunctionMetadata::create((void*)staticmethodInit, UNKNOWN, 5, false, false),
+                                      { None, None, None, None }));
+    staticmethod_cls->giveAttr(
+        "__get__",
+        new BoxedFunction(FunctionMetadata::create((void*)staticmethodGet, UNKNOWN, 3, false, false), { None }));
     staticmethod_cls->freeze();
 
 
     classmethod_cls->giveAttr(
-        "__init__",
-        new BoxedFunction(boxRTFunction((void*)classmethodInit, UNKNOWN, 5, false, false), { None, None, None, None }));
+        "__init__", new BoxedFunction(FunctionMetadata::create((void*)classmethodInit, UNKNOWN, 5, false, false),
+                                      { None, None, None, None }));
     classmethod_cls->giveAttr(
-        "__get__", new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, false, false), { None }));
+        "__get__",
+        new BoxedFunction(FunctionMetadata::create((void*)classmethodGet, UNKNOWN, 3, false, false), { None }));
     classmethod_cls->freeze();
 
-    method_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::descr_get, UNKNOWN, 3,
-                                                                    ParamNames::empty(), CAPI)));
-    CLFunction* method_call_cl = boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, true, true);
+    method_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)BoxedMethodDescriptor::descr_get,
+                                                                               UNKNOWN, 3, ParamNames::empty(), CAPI)));
+    FunctionMetadata* method_call_cl
+        = FunctionMetadata::create((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, true, true);
     method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
     method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
     method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
-    method_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)methodRepr, UNKNOWN, 1)));
+    method_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)methodRepr, UNKNOWN, 1)));
     method_cls->freeze();
 
-    wrapperdescr_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__, UNKNOWN, 2, true, true)));
+    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(FunctionMetadata::create(
+                                               (void*)BoxedWrapperDescriptor::__call__, UNKNOWN, 2, true, true)));
     wrapperdescr_cls->giveAttr("__doc__",
                                new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperdescrGetDoc, NULL, NULL));
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
     wrapperdescr_cls->tpp_call.capi_val = BoxedWrapperDescriptor::tppCall<CAPI>;
     wrapperdescr_cls->tpp_call.cxx_val = BoxedWrapperDescriptor::tppCall<CXX>;
     add_operators(wrapperdescr_cls);
-    wrapperdescr_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperDescrRepr, UNKNOWN, 1)));
+    wrapperdescr_cls->giveAttr("__repr__",
+                               new BoxedFunction(FunctionMetadata::create((void*)wrapperDescrRepr, UNKNOWN, 1)));
     wrapperdescr_cls->freeze();
     assert(wrapperdescr_cls->tp_descr_get == BoxedWrapperDescriptor::descr_get);
 
-    wrapperobject_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, true, true)));
+    wrapperobject_cls->giveAttr("__call__", new BoxedFunction(FunctionMetadata::create(
+                                                (void*)BoxedWrapperObject::__call__, UNKNOWN, 1, true, true)));
     wrapperobject_cls->tpp_call.capi_val = BoxedWrapperObject::tppCall<CAPI>;
     wrapperobject_cls->tpp_call.cxx_val = BoxedWrapperObject::tppCall<CXX>;
     wrapperobject_cls->giveAttr("__doc__",
                                 new (pyston_getset_cls) BoxedGetsetDescriptor(wrapperobjectGetDoc, NULL, NULL));
-    wrapperobject_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)wrapperObjectRepr, UNKNOWN, 1)));
+    wrapperobject_cls->giveAttr("__repr__",
+                                new BoxedFunction(FunctionMetadata::create((void*)wrapperObjectRepr, UNKNOWN, 1)));
     wrapperobject_cls->freeze();
 }
 
