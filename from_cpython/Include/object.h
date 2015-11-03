@@ -79,15 +79,14 @@ whose size is determined when the object is allocated.
 #endif
 
 /* PyObject_HEAD defines the initial segment of every PyObject. */
-// Pyston change: removed ob_refcnt
 #define PyObject_HEAD                   \
     _PyObject_HEAD_EXTRA                \
+    Py_ssize_t ob_refcnt;               \
     struct _typeobject *ob_type;
 
-// Pyston change: removed '1', the initial refcount
 #define PyObject_HEAD_INIT(type)        \
     _PyObject_EXTRA_INIT                \
-    type,
+    1, type,
 
 #define PyVarObject_HEAD_INIT(type, size)       \
     PyObject_HEAD_INIT(type) size,
@@ -131,7 +130,8 @@ typedef pyston::BoxVar PyVarObject;
 #define Py_TYPE(ob)             ((ob)->cls)
 #endif
 
-// Pyston change: removed Py_REFCNT, moved Py_TYPE to above
+// Pyston change: moved Py_TYPE to above
+#define Py_REFCNT(ob)           (((PyObject*)(ob))->ob_refcnt)
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
 
 /*
@@ -814,16 +814,10 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
 /* Without Py_TRACE_REFS, there's little enough to do that we expand code
  * inline.
  */
-/* Pyston change: we don't have a refcount
 #define _Py_NewReference(op) (                          \
     _Py_INC_TPALLOCS(op) _Py_COUNT_ALLOCS_COMMA         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA               \
     Py_REFCNT(op) = 1)
-*/
-#define _Py_NewReference(op) (                          \
-    _Py_INC_TPALLOCS(op) _Py_COUNT_ALLOCS_COMMA         \
-    _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA               \
-    (void)(op))
 
 #define _Py_ForgetReference(op) _Py_INC_TPFREES(op)
 
@@ -832,9 +826,18 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
     (*Py_TYPE(op)->tp_dealloc)((PyObject *)(op)))
 #endif /* !Py_TRACE_REFS */
 
+#define Py_INCREF(op) (                         \
+    _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
+    ((PyObject*)(op))->ob_refcnt++)
 
-#define Py_INCREF(op) ((void)(op))
-#define Py_DECREF(op) __asm volatile("" : : "X"(op))
+#define Py_DECREF(op)                                   \
+    do {                                                \
+        if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
+        --((PyObject*)(op))->ob_refcnt != 0)            \
+            _Py_CHECK_REFCNT(op)                        \
+        else                                            \
+        _Py_Dealloc((PyObject *)(op));                  \
+    } while (0)
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementatons.
@@ -880,9 +883,8 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
     } while (0)
 
 /* Macros to use in case the object pointer may be NULL: */
-// Pyston change: made these noops as well
-#define Py_XINCREF(op) ((void)(op))
-#define Py_XDECREF(op) __asm volatile("" : : "X"(op))
+#define Py_XINCREF(op) do { if ((op) == NULL) ; else Py_INCREF(op); } while (0)
+#define Py_XDECREF(op) do { if ((op) == NULL) ; else Py_DECREF(op); } while (0)
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
