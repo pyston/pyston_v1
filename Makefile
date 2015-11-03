@@ -474,8 +474,8 @@ Makefile.local:
 	which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local
 
 llvm_up:
-	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
-	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ./clang_patches
+	$(CPYTHON) $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
+	$(CPYTHON) $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ./clang_patches
 
 ## TOOLS:
 
