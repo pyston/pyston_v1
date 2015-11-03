@@ -1070,4 +1070,42 @@ extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexce
     Py_DECREF(res);
     return ok;
 }
+
+#ifdef Py_REF_DEBUG
+extern "C" {
+Py_ssize_t _Py_RefTotal;
+}
+
+extern "C" Py_ssize_t _Py_GetRefTotal(void) noexcept {
+    PyObject* o;
+    Py_ssize_t total = _Py_RefTotal;
+    /* ignore the references to the dummy object of the dicts and sets
+     *        because they are not reliable and not useful (now that the
+     *               hash table code is well-tested) */
+
+    // Pyston change: not sure what these are
+#if 0
+    o = _PyDict_Dummy();
+    if (o != NULL)
+        total -= o->ob_refcnt;
+    o = _PySet_Dummy();
+    if (o != NULL)
+        total -= o->ob_refcnt;
+#endif
+    return total;
+}
+#endif /* Py_REF_DEBUG */
+
+#ifdef Py_REF_DEBUG
+/* Log a fatal error; doesn't return. */
+extern "C" void _Py_NegativeRefcount(const char* fname, int lineno, PyObject* op) noexcept {
+    char buf[300];
+
+    PyOS_snprintf(buf, sizeof(buf), "%s:%i object at %p has negative ref count "
+                                    "%" PY_FORMAT_SIZE_T "d",
+                  fname, lineno, op, op->ob_refcnt);
+    Py_FatalError(buf);
+}
+
+#endif /* Py_REF_DEBUG */
 }

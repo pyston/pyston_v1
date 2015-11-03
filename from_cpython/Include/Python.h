@@ -18,7 +18,11 @@
 // Cython depends on having this define set:
 #define Py_PYTHON_H
 
-#define PYSTON_VERSION "0.3"
+#define PYSTON_VERSION "0.5"
+
+#ifndef NDEBUG
+#define Py_REF_DEBUG
+#endif
 
 // These include orders come from CPython:
 #include "patchlevel.h"

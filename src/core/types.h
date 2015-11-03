@@ -624,6 +624,8 @@ public:
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
+    Py_ssize_t ob_refcnt;
+
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
 
