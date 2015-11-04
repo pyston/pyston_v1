@@ -3609,6 +3609,39 @@ static Box* getsetDelete(Box* self, Box* obj) {
     }
 }
 
+void Box::clearAttrs() {
+    if (cls->instancesHaveHCAttrs()) {
+        HCAttrs* attrs = getHCAttrsPtr();
+        HiddenClass* hcls = attrs->hcls;
+
+        if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
+            Box* d = attrs->attr_list->attrs[0];
+            PyDict_Clear(d);
+            return;
+        }
+
+        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+
+        for (int i = 0; i < hcls->attributeArraySize(); i++) {
+            Py_DECREF(attrs->attr_list->attrs[i]);
+        }
+        new ((void*)attrs) HCAttrs(root_hcls);
+        return;
+    }
+
+    if (cls->instancesHaveDictAttrs()) {
+        BoxedDict* d = getDict();
+        PyDict_Clear(d);
+        return;
+    }
+}
+
+#ifndef Py_REF_DEBUG
+#define PRINT_TOTAL_REFS()
+#else /* Py_REF_DEBUG */
+#define PRINT_TOTAL_REFS() fprintf(stderr, "[%" PY_FORMAT_SIZE_T "d refs]\n", _Py_GetRefTotal())
+#endif
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
 
@@ -3665,6 +3698,18 @@ void setupRuntime() {
     str_cls->giveAttr("__base__", basestring_cls);
     none_cls->giveAttr("__base__", object_cls);
     object_cls->giveAttr("__base__", None);
+
+    auto classes = {type_cls, object_cls, none_cls, str_cls, basestring_cls};
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : {None})
+        Py_DECREF(b);
+    for (auto b : classes)
+        Py_DECREF(b);
+    // XXX
+    PRINT_TOTAL_REFS();
+    exit(0);
 
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
@@ -4187,12 +4232,6 @@ static void call_sys_exitfunc(void) {
     if (Py_FlushLine())
         PyErr_Clear();
 }
-
-#ifndef Py_REF_DEBUG
-#define PRINT_TOTAL_REFS()
-#else /* Py_REF_DEBUG */
-#define PRINT_TOTAL_REFS() fprintf(stderr, "[%" PY_FORMAT_SIZE_T "d refs]\n", _Py_GetRefTotal())
-#endif
 
 extern "C" void Py_Finalize() noexcept {
     // In the future this will have to wait for non-daemon

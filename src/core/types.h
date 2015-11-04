@@ -647,6 +647,9 @@ public:
         this->setattr(attr, val, NULL);
     }
 
+    // for debugging mostly:
+    void clearAttrs();
+
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
     template <Rewritable rewritable = REWRITABLE>

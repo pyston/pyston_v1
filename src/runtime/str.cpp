@@ -395,9 +395,19 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
         num_interned_strings.log();
         entry = (BoxedString*)PyGC_AddRoot(s);
 
+        Py_INCREF(s);
+
         // CPython returns mortal but in our current implementation they are inmortal
         s->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
+}
+
+extern "C" void _Py_ReleaseInternedStrings() noexcept {
+    //printf("%ld interned strings\n", interned_strings.size());
+    for (const auto& p : interned_strings) {
+        Py_DECREF(p.second);
+    }
+    interned_strings.clear();
 }
 
 extern "C" int _PyString_CheckInterned(PyObject* p) noexcept {
