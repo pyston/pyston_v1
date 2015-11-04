@@ -665,9 +665,11 @@ CMAKE_SHAREDMODS := sharedmods ext_pyston
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
+	$(NINJA) -C $(CMAKE_DIR_DBG) libjemalloc
 	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG)/pyston $@
 pyston_release: $(CMAKE_SETUP_RELEASE)
+	$(NINJA) -C $(CMAKE_DIR_DBG) libjemalloc
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston $@
 
