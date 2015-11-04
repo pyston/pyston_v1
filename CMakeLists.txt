@@ -356,10 +356,16 @@ else()
   add_custom_target(docs COMMAND ${CMAKE_COMMAND} -E echo "Can't create docs, doxygen not installed \(try sudo apt-get install doxygen grpahviz on Ubuntu and then rerun cmake\)" VERBATIM)
 endif()
 
-set(CMAKE_EXECUTABLE_FORMAT "ELF")
-install(TARGETS pyston DESTINATION ".")
+add_subdirectory(plugins/refcount_checker EXCLUDE_FROM_ALL)
+
+
+# CPack config.  I think this needs to come after any other code, since it will
+# look at whatever install targets have already been set up.
 
 set(CPACK_GENERATOR "TGZ")
+
+set(CMAKE_EXECUTABLE_FORMAT "ELF") # Otherwise cmake thinks this is a cross-compile
+install(TARGETS pyston DESTINATION ".")
 
 set(CPACK_PACKAGE_VERSION_MAJOR "0")
 set(CPACK_PACKAGE_VERSION_MINOR "4")
@@ -377,6 +383,7 @@ install(FILES test/lib/virtualenv/virtualenv_support/pip-6.0.8-py2.py3-none-any.
 install(FILES test/lib/virtualenv/virtualenv_support/setuptools-12.0.5-py2.py3-none-any.whl DESTINATION virtualenv/virtualenv_support)
 
 include(CPack)
+
 
 # last file added (need to change this if we add a file that is added via a glob):
 # from_cpython/Lib/test/test_zipimport.py
