@@ -3699,19 +3699,6 @@ void setupRuntime() {
     none_cls->giveAttr("__base__", object_cls);
     object_cls->giveAttr("__base__", None);
 
-    auto classes = {type_cls, object_cls, none_cls, str_cls, basestring_cls};
-    _Py_ReleaseInternedStrings();
-    for (auto b : classes)
-        b->clearAttrs();
-    for (auto b : {None})
-        Py_DECREF(b);
-    for (auto b : classes)
-        Py_DECREF(b);
-    // XXX
-    PRINT_TOTAL_REFS();
-    exit(0);
-
-
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0)
@@ -3746,6 +3733,22 @@ void setupRuntime() {
                    sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
+
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : { (Box*)None, (Box*)EmptyTuple })
+        Py_DECREF(b);
+    for (auto b : classes) {
+        if (b->tp_mro) {
+            Py_DECREF(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    // XXX
+    PRINT_TOTAL_REFS();
+    exit(0);
+
 
 
     module_cls = new (0) BoxedClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,

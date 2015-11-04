@@ -534,13 +534,16 @@ public:
             return EmptyTuple;
         }
         BoxedTuple* rtn = new (nelts) BoxedTuple();
-        for (int i = 0; i < nelts; i++)
+        for (int i = 0; i < nelts; i++) {
             assert(gc::isValidGCObject(elts[i]));
+            Py_INCREF(elts[i]);
+        }
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
     static BoxedTuple* create1(Box* elt0) {
         BoxedTuple* rtn = new (1) BoxedTuple();
+        Py_INCREF(elt0);
         rtn->elts[0] = elt0;
         for (int i = 0; i < rtn->size(); i++)
             assert(gc::isValidGCObject(rtn->elts[i]));
@@ -548,6 +551,8 @@ public:
     }
     static BoxedTuple* create2(Box* elt0, Box* elt1) {
         BoxedTuple* rtn = new (2) BoxedTuple();
+        Py_INCREF(elt0);
+        Py_INCREF(elt1);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         for (int i = 0; i < rtn->size(); i++)
@@ -556,6 +561,9 @@ public:
     }
     static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
         BoxedTuple* rtn = new (3) BoxedTuple();
+        Py_INCREF(elt0);
+        Py_INCREF(elt1);
+        Py_INCREF(elt2);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -565,6 +573,10 @@ public:
     }
     static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
         BoxedTuple* rtn = new (4) BoxedTuple();
+        Py_INCREF(elt0);
+        Py_INCREF(elt1);
+        Py_INCREF(elt2);
+        Py_INCREF(elt3);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -575,6 +587,11 @@ public:
     }
     static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
         BoxedTuple* rtn = new (5) BoxedTuple();
+        Py_INCREF(elt0);
+        Py_INCREF(elt1);
+        Py_INCREF(elt2);
+        Py_INCREF(elt3);
+        Py_INCREF(elt4);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -586,6 +603,12 @@ public:
     }
     static BoxedTuple* create6(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4, Box* elt5) {
         BoxedTuple* rtn = new (6) BoxedTuple();
+        Py_INCREF(elt0);
+        Py_INCREF(elt1);
+        Py_INCREF(elt2);
+        Py_INCREF(elt3);
+        Py_INCREF(elt4);
+        Py_INCREF(elt5);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
@@ -619,6 +642,9 @@ public:
             rtn = new (nelts) BoxedTuple();
         else
             rtn = new (cls, nelts) BoxedTuple();
+        for (int i = 0; i < nelts; i++) {
+            Py_INCREF(elts[i]);
+        }
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
@@ -673,6 +699,7 @@ private:
         // by the time we make it here elts[] is big enough to contain members
         Box** p = &elts[0];
         for (auto b : members) {
+            Py_INCREF(b);
             *p++ = b;
             assert(gc::isValidGCObject(b));
         }

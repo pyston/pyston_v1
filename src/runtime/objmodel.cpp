@@ -398,6 +398,7 @@ void BoxedClass::freeze() {
     is_constant = true;
 }
 
+std::vector<BoxedClass*> classes;
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined, const char* name)
     : attrs(HiddenClass::makeSingleton()),
@@ -409,6 +410,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
       has___class__(false),
       has_instancecheck(false),
       tpp_call(NULL, NULL) {
+
+    classes.push_back(this);
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));

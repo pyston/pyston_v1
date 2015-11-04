@@ -600,6 +600,8 @@ public:
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 
+extern std::vector<BoxedClass*> classes;
+
 class BoxedDict;
 class BoxedString;
 
@@ -640,6 +642,8 @@ public:
     void setDict(BoxedDict* d);
 
 
+    // These functions won't consume any references.
+    // ie they will incref val
     void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
     void giveAttr(BoxedString* attr, Box* val) {
