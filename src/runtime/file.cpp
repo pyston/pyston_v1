@@ -287,6 +287,16 @@ BoxedFile::BoxedFile(FILE* f, std::string fname, const char* fmode, int (*close)
       f_bufptr(0),
       f_setbuf(0),
       unlocked_count(0) {
+    static BoxedString* not_yet_string = internStringImmortal("<uninitialized file>");
+    Py_INCREF(not_yet_string);
+    this->f_name = not_yet_string;
+    Py_INCREF(not_yet_string);
+    this->f_mode = not_yet_string;
+    Py_INCREF(None);
+    this->f_encoding = None;
+    Py_INCREF(None);
+    this->f_errors = None;
+
     Box* r = fill_file_fields(this, f, boxString(fname), fmode, close);
     checkAndThrowCAPIException();
     assert(r == this);
@@ -1062,6 +1072,7 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m, Box** args) {
 
     auto file = new BoxedFile(f, fn->s(), PyString_AsString(m));
     PyFile_SetBufSize(file, buffering->n);
+
     return file;
 }
 

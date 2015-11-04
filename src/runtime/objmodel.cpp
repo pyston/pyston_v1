@@ -773,6 +773,9 @@ template Box* Box::getattr<REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 
 void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
+    assert(!rewrite_args); // need to emit incref
+    Py_INCREF(new_attr);
+
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
     HiddenClass* hcls = attrs->hcls;

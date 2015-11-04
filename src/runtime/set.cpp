@@ -508,13 +508,13 @@ static Box* setIssubset(BoxedSet* self, Box* container) {
 
     BoxedSet* rhs = static_cast<BoxedSet*>(container);
     if (self->s.size() > rhs->s.size())
-        return False;
+        Py_RETURN_FALSE;
 
     for (auto e : self->s) {
         if (rhs->s.find(e) == rhs->s.end())
-            return False;
+            Py_RETURN_FALSE;
     }
-    return True;
+    Py_RETURN_TRUE;
 }
 
 static Box* setIssuperset(BoxedSet* self, Box* container) {
@@ -532,9 +532,9 @@ static Box* setIsdisjoint(BoxedSet* self, Box* container) {
 
     for (auto e : container->pyElements()) {
         if (self->s.find(e) != self->s.end())
-            return False;
+            Py_RETURN_FALSE;
     }
-    return True;
+    Py_RETURN_TRUE;
 }
 
 static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
@@ -590,10 +590,10 @@ Box* setPop(BoxedSet* self) {
 Box* setEq(BoxedSet* self, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
     if (!PyAnySet_Check(rhs))
-        return False;
+        Py_RETURN_FALSE;
 
     if (self->s.size() != rhs->s.size())
-        return False;
+        Py_RETURN_FALSE;
 
     return setIssubset(self, rhs);
 }
@@ -618,7 +618,7 @@ Box* setLt(BoxedSet* self, BoxedSet* rhs) {
         raiseExcHelper(TypeError, "can only compare to a set");
 
     if (self->s.size() >= rhs->s.size())
-        return False;
+        Py_RETURN_FALSE;
 
     return setIssubset(self, rhs);
 }
@@ -637,7 +637,7 @@ Box* setGt(BoxedSet* self, BoxedSet* rhs) {
         raiseExcHelper(TypeError, "can only compare to a set");
 
     if (self->s.size() <= rhs->s.size())
-        return False;
+        Py_RETURN_FALSE;
 
     return setIssuperset(self, rhs);
 }

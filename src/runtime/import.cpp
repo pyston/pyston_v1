@@ -960,7 +960,7 @@ Box* impIsBuiltin(Box* _name) {
 Box* impIsFrozen(Box* name) {
     if (!PyString_Check(name))
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(name));
-    return False;
+    Py_RETURN_FALSE;
 }
 
 PyDoc_STRVAR(find_module_doc, "find_module(name, [path]) -> (file, filename, (suffix, mode, type))\n\

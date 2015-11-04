@@ -1632,7 +1632,7 @@ extern "C" Box* none_repr(Box* v) noexcept {
 }
 
 extern "C" Box* noneNonzero(Box* v) {
-    return False;
+    Py_RETURN_FALSE;
 }
 
 extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod* v) {
@@ -1794,7 +1794,7 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
 }
 
 static Box* functionNonzero(BoxedFunction* self) {
-    return True;
+    Py_RETURN_TRUE;
 }
 
 extern "C" {
@@ -3313,6 +3313,7 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
 
     Py_TYPE(op) = tp;
     op->ob_size = size;
+    _Py_NewReference(op);
 
     gc::registerPythonObject(op);
 
@@ -3329,6 +3330,7 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     assert(gc::isValidGCObject(tp));
 
     Py_TYPE(op) = tp;
+    _Py_NewReference(op);
 
     gc::registerPythonObject(op);
 

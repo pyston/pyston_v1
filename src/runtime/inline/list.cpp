@@ -40,7 +40,7 @@ Box* listiterHasnext(Box* s) {
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!self->l) {
-        return False;
+        Py_RETURN_FALSE;
     }
 
     bool ans = (self->pos < self->l->size);

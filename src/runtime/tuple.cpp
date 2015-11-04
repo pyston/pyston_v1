@@ -61,6 +61,7 @@ Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
         raiseExcHelper(IndexError, "tuple index out of range");
 
     Box* rtn = self->elts[n];
+    Py_INCREF(rtn);
     return rtn;
 }
 
@@ -269,9 +270,9 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
             throwCAPIException();
 
         if (r)
-            return True;
+            Py_RETURN_TRUE;
     }
-    return False;
+    Py_RETURN_FALSE;
 }
 
 Box* tupleIndex(BoxedTuple* self, Box* elt, Box* startBox, Box** args) {
@@ -409,8 +410,10 @@ extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
 extern "C" PyObject* PyTuple_New(Py_ssize_t size) noexcept {
     RELEASE_ASSERT(size >= 0, "");
 
-    if (size == 0)
+    if (size == 0) {
+        Py_INCREF(EmptyTuple);
         return EmptyTuple;
+    }
     return BoxedTuple::create(size);
 }
 

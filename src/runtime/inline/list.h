@@ -52,6 +52,7 @@ extern "C" inline void listAppendInternal(Box* s, Box* v) {
     self->ensure(1);
 
     assert(self->size < self->capacity);
+    Py_INCREF(v);
     self->elts->elts[self->size] = v;
     self->size++;
 }

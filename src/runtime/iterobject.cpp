@@ -45,7 +45,7 @@ static Box* seqiterHasnext_capi(Box* s) noexcept {
     BoxedSeqIter* self = static_cast<BoxedSeqIter*>(s);
 
     if (!self->b) {
-        return False;
+        Py_RETURN_FALSE;
     }
 
     Box* next = PySequence_GetItem(self->b, self->idx);
@@ -53,14 +53,14 @@ static Box* seqiterHasnext_capi(Box* s) noexcept {
         if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
             PyErr_Clear();
             self->b = NULL;
-            return False;
+            Py_RETURN_FALSE;
         }
         return NULL;
     }
 
     self->idx++;
     self->next = next;
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* seqiterHasnext(Box* s) {
@@ -79,20 +79,20 @@ Box* seqreviterHasnext_capi(Box* s) noexcept {
     BoxedSeqIter* self = static_cast<BoxedSeqIter*>(s);
 
     if (self->idx == -1 || !self->b)
-        return False;
+        Py_RETURN_FALSE;
 
     Box* next = PySequence_GetItem(self->b, self->idx);
     if (!next) {
         if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
             PyErr_Clear();
             self->b = NULL;
-            return False;
+            Py_RETURN_FALSE;
         }
         return NULL;
     }
     self->idx--;
     self->next = next;
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* seqreviterHasnext(Box* s) {

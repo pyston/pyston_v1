@@ -750,6 +750,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         Box* rtn = static_cast<Box*>(mem);                                                                             \
                                                                                                                        \
         rtn->cls = default_cls;                                                                                        \
+        _Py_NewReference(rtn);                                                                                         \
         return rtn;                                                                                                    \
         /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
     }
@@ -809,6 +810,7 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
                                                                                                                        \
         BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
         rtn->cls = default_cls;                                                                                        \
+        _Py_NewReference(rtn);                                                                                         \
         rtn->ob_size = nitems;                                                                                         \
         return rtn;                                                                                                    \
     }

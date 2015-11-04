@@ -176,9 +176,9 @@ public:
 
         if (PyThread_acquire_lock(self->lock_lock, 0)) {
             PyThread_release_lock(self->lock_lock);
-            return False;
+            Py_RETURN_FALSE;
         }
-        return True;
+        Py_RETURN_TRUE;
     }
 };
 

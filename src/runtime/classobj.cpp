@@ -666,7 +666,7 @@ Box* instanceNonzero(Box* _inst) {
     if (nonzero_func) {
         return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
-        return True;
+        Py_RETURN_TRUE;
     }
 }
 

@@ -1704,14 +1704,14 @@ Box* strIsAlpha(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isalpha(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsDigit(BoxedString* self) {
@@ -1719,14 +1719,14 @@ Box* strIsDigit(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isdigit(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsAlnum(BoxedString* self) {
@@ -1734,14 +1734,14 @@ Box* strIsAlnum(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isalnum(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsLower(BoxedString* self) {
@@ -1751,13 +1751,13 @@ Box* strIsLower(BoxedString* self) {
     bool lowered = false;
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (std::isspace(c) || std::isdigit(c)) {
             continue;
         } else if (!std::islower(c)) {
-            return False;
+            Py_RETURN_FALSE;
         } else {
             lowered = true;
         }
@@ -1772,12 +1772,12 @@ Box* strIsUpper(BoxedString* self) {
     llvm::StringRef str(self->s());
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     bool cased = false;
     for (const auto& c : str) {
         if (std::islower(c))
-            return False;
+            Py_RETURN_FALSE;
         else if (!cased && isupper(c))
             cased = true;
     }
@@ -1790,14 +1790,14 @@ Box* strIsSpace(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isspace(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsTitle(BoxedString* self) {
@@ -1806,7 +1806,7 @@ Box* strIsTitle(BoxedString* self) {
     llvm::StringRef str(self->s());
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
     if (str.size() == 1)
         return boxBool(std::isupper(str[0]));
 
@@ -1815,14 +1815,14 @@ Box* strIsTitle(BoxedString* self) {
     for (const auto& c : str) {
         if (std::isupper(c)) {
             if (!start_of_word) {
-                return False;
+                Py_RETURN_FALSE;
             }
 
             start_of_word = false;
             cased = true;
         } else if (std::islower(c)) {
             if (start_of_word) {
-                return False;
+                Py_RETURN_FALSE;
             }
 
             start_of_word = false;
@@ -2131,9 +2131,9 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strStartswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                return True;
+                Py_RETURN_TRUE;
         }
-        return False;
+        Py_RETURN_FALSE;
     }
 
     if (isSubclass(elt->cls, unicode_cls)) {
@@ -2163,9 +2163,9 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     Py_ssize_t compare_len = iend - istart;
     if (compare_len < 0)
-        return False;
+        Py_RETURN_FALSE;
     if (sub->size() > compare_len)
-        return False;
+        Py_RETURN_FALSE;
     return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);
 }
 
@@ -2202,9 +2202,9 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strEndswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                return True;
+                Py_RETURN_TRUE;
         }
-        return False;
+        Py_RETURN_FALSE;
     }
 
     if (!PyString_Check(elt))
@@ -2226,9 +2226,9 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     Py_ssize_t compare_len = iend - istart;
     if (compare_len < 0)
-        return False;
+        Py_RETURN_FALSE;
     if (sub->size() > compare_len)
-        return False;
+        Py_RETURN_FALSE;
     // XXX: this line is the only difference between startswith and endswith:
     istart += compare_len - sub->size();
     return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);

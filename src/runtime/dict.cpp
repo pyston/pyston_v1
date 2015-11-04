@@ -588,17 +588,17 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
     BoxedDict* rhs = static_cast<BoxedDict*>(_rhs);
 
     if (self->d.size() != rhs->d.size())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& p : self->d) {
         auto it = rhs->d.find(p.first);
         if (it == rhs->d.end())
-            return False;
+            Py_RETURN_FALSE;
         if (!PyEq()(p.second, it->second))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* dictNe(BoxedDict* self, Box* _rhs) {
@@ -606,8 +606,8 @@ Box* dictNe(BoxedDict* self, Box* _rhs) {
     if (eq == NotImplemented)
         return eq;
     if (eq == True)
-        return False;
-    return True;
+        Py_RETURN_FALSE;
+    Py_RETURN_TRUE;
 }
 
 

@@ -617,7 +617,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
 
 static Box* hasattrFuncHelper(Box* return_val) noexcept {
     if (return_val)
-        return True;
+        Py_RETURN_TRUE;
 
     if (PyErr_Occurred()) {
         if (!PyErr_ExceptionMatches(PyExc_Exception))
@@ -625,7 +625,7 @@ static Box* hasattrFuncHelper(Box* return_val) noexcept {
 
         PyErr_Clear();
     }
-    return False;
+    Py_RETURN_FALSE;
 }
 
 template <ExceptionStyle S>
@@ -1636,12 +1636,12 @@ Return the absolute value of the argument.");
 PyDoc_STRVAR(all_doc, "all(iterable) -> bool\n\
 \n\
 Return True if bool(x) is True for all values x in the iterable.\n\
-If the iterable is empty, return True.");
+If the iterable is empty, Py_RETURN_TRUE.");
 
 PyDoc_STRVAR(any_doc, "any(iterable) -> bool\n\
 \n\
 Return True if bool(x) is True for any x in the iterable.\n\
-If the iterable is empty, return False.");
+If the iterable is empty, Py_RETURN_FALSE.");
 
 PyDoc_STRVAR(apply_doc, "apply(object[, args[, kwargs]]) -> value\n\
 \n\

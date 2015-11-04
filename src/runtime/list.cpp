@@ -756,6 +756,8 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
         memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
         self->size = s1 + s2;
+
+        Py_INCREF(self);
         return self;
     }
 
@@ -772,6 +774,8 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
         memcpy(self->elts->elts + s1, rhs->elts, sizeof(self->elts->elts[0]) * s2);
         self->size = s1 + s2;
+
+        Py_INCREF(self);
         return self;
     }
 
@@ -780,6 +784,7 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
     for (auto* b : _rhs->pyElements())
         listAppendInternal(self, b);
 
+    Py_INCREF(self);
     return self;
 }
 
@@ -1120,9 +1125,9 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 
     if (lsz != rsz) {
         if (op_type == AST_TYPE::Eq)
-            return False;
+            Py_RETURN_FALSE;
         if (op_type == AST_TYPE::NotEq)
-            return True;
+            Py_RETURN_TRUE;
     }
 
     int n = std::min(lsz, rsz);

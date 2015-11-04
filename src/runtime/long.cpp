@@ -1376,8 +1376,8 @@ Box* longNonzero(BoxedLong* self) {
                        getTypeName(self));
 
     if (mpz_sgn(self->n) == 0)
-        return False;
-    return True;
+        Py_RETURN_FALSE;
+    Py_RETURN_TRUE;
 }
 
 bool longNonzeroUnboxed(BoxedLong* self) {

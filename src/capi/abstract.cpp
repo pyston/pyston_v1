@@ -2387,6 +2387,7 @@ extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
     if (PyInt_Check(o) || PyLong_Check(o)) {
+        Py_INCREF(o);
         return o;
     }
 

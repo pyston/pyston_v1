@@ -129,11 +129,14 @@ extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *t
 
 extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));
 extern "C" inline Box* boxBool(bool b) {
-    return b ? True : False;
+    if (b)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
 }
 extern "C" inline Box* boxBoolNegated(bool b) __attribute__((visibility("default")));
 extern "C" inline Box* boxBoolNegated(bool b) {
-    return b ? False : True;
+    return boxBool(!b);
 }
 extern "C" Box* boxInt(i64) __attribute__((visibility("default")));
 extern "C" i64 unboxInt(Box*);
@@ -424,6 +427,7 @@ public:
         BoxVar* rtn = static_cast<BoxVar*>(mem);
         rtn->cls = str_cls;
         rtn->ob_size = nitems;
+        _Py_NewReference(rtn);
         return rtn;
     }
 
@@ -516,15 +520,19 @@ static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated)
 class BoxedTuple : public BoxVar {
 public:
     static BoxedTuple* create(int64_t size) {
-        if (size == 0)
+        if (size == 0) {
+            Py_INCREF(EmptyTuple);
             return EmptyTuple;
+        }
         BoxedTuple* rtn = new (size) BoxedTuple();
         memset(rtn->elts, 0, size * sizeof(Box*)); // TODO not all callers want this (but some do)
         return rtn;
     }
     static BoxedTuple* create(int64_t nelts, Box** elts) {
-        if (nelts == 0)
+        if (nelts == 0) {
+            Py_INCREF(EmptyTuple);
             return EmptyTuple;
+        }
         BoxedTuple* rtn = new (nelts) BoxedTuple();
         for (int i = 0; i < nelts; i++)
             assert(gc::isValidGCObject(elts[i]));
@@ -652,6 +660,7 @@ public:
         BoxVar* rtn = static_cast<BoxVar*>(mem);
         rtn->cls = tuple_cls;
         rtn->ob_size = nitems;
+        _Py_NewReference(rtn);
         return rtn;
     }
 
@@ -996,6 +1005,7 @@ public:
             = static_cast<BoxedClosure*>(gc_alloc(sizeof(BoxedClosure) + nelts * sizeof(Box*), gc::GCKind::PYTHON));
         rtn->nelts = nelts;
         rtn->cls = closure_cls;
+        _Py_NewReference(rtn);
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }
@@ -1128,9 +1138,13 @@ Box* getFrame(int depth);
 
 inline BoxedString* boxString(llvm::StringRef s) {
     if (s.size() <= 1) {
+        BoxedString* r;
         if (s.size() == 0)
-            return EmptyString;
-        return characters[s.data()[0] & UCHAR_MAX];
+            r = EmptyString;
+        else
+            r = characters[s.data()[0] & UCHAR_MAX];
+        Py_INCREF(r);
+        return r;
     }
     return new (s.size()) BoxedString(s);
 }
@@ -1139,7 +1153,9 @@ inline BoxedString* boxString(llvm::StringRef s) {
 extern BoxedInt* interned_ints[NUM_INTERNED_INTS];
 extern "C" inline Box* boxInt(int64_t n) {
     if (0 <= n && n < NUM_INTERNED_INTS) {
-        return interned_ints[n];
+        auto r = interned_ints[n];
+        Py_INCREF(r);
+        return r;
     }
     return new BoxedInt(n);
 }
