@@ -975,7 +975,4 @@ void setupSet() {
     set_cls->tp_iter = (decltype(set_cls->tp_iter))setIter;
     frozenset_cls->tp_iter = (decltype(frozenset_cls->tp_iter))setIter;
 }
-
-void teardownSet() {
-}
 }

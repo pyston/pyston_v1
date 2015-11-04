@@ -28,6 +28,7 @@
 #include "capi/typeobject.h"
 #include "capi/types.h"
 #include "codegen/ast_interpreter.h"
+#include "codegen/entry.h"
 #include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -91,8 +92,6 @@ extern "C" void initstrop();
 namespace pyston {
 
 void setupGC();
-
-bool IN_SHUTDOWN = false;
 
 std::vector<BoxedClass*> exception_types;
 
@@ -4166,65 +4165,142 @@ BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
     return module;
 }
 
-void teardownRuntime() {
-    // Things start to become very precarious after this point, as the basic classes stop to work.
-    // TODO it's probably a waste of time to tear these down in non-debugging mode
-    IN_SHUTDOWN = true;
+static void call_sys_exitfunc(void) {
+    PyObject* exitfunc = PySys_GetObject("exitfunc");
 
-    if (VERBOSITY("runtime") >= 1)
-        printf("In teardownRuntime\n");
+    if (exitfunc) {
+        PyObject* res;
+        Py_INCREF(exitfunc);
+        PySys_SetObject("exitfunc", (PyObject*)NULL);
+        res = PyEval_CallObject(exitfunc, (PyObject*)NULL);
+        if (res == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_SystemExit)) {
+                PySys_WriteStderr("Error in sys.exitfunc:\n");
+            }
+            PyErr_Print();
+        }
+        Py_DECREF(exitfunc);
+    }
 
-    teardownCAPI();
+    if (Py_FlushLine())
+        PyErr_Clear();
+}
 
-    teardownList();
-    teardownInt();
-    teardownFloat();
-    teardownComplex();
-    teardownStr();
-    teardownBool();
-    teardownDict();
-    teardownSet();
-    teardownTuple();
-    teardownFile();
-    teardownDescr();
+#ifndef Py_REF_DEBUG
+#define PRINT_TOTAL_REFS()
+#else /* Py_REF_DEBUG */
+#define PRINT_TOTAL_REFS() fprintf(stderr, "[%" PY_FORMAT_SIZE_T "d refs]\n", _Py_GetRefTotal())
+#endif
 
-    /*
-    // clear all the attributes on the base classes before freeing the classes themselves,
-    // since we will run into problem if we free a class but there is an object somewhere
-    // else that refers to it.
-    clearAttrs(bool_cls);
-    clearAttrs(int_cls);
-    clearAttrs(float_cls);
-    clearAttrs(none_cls);
-    clearAttrs(function_cls);
-    clearAttrs(instancemethod_cls);
-    clearAttrs(str_cls);
-    clearAttrs(list_cls);
-    clearAttrs(slice_cls);
-    clearAttrs(type_cls);
-    clearAttrs(module_cls);
-    clearAttrs(dict_cls);
-    clearAttrs(tuple_cls);
-    clearAttrs(file_cls);
+extern "C" void Py_Finalize() noexcept {
+    // In the future this will have to wait for non-daemon
+    // threads to finish
 
-    decref(bool_cls);
-    decref(int_cls);
-    decref(float_cls);
-    decref(function_cls);
-    decref(instancemethod_cls);
-    decref(str_cls);
-    decref(list_cls);
-    decref(slice_cls);
-    decref(module_cls);
-    decref(dict_cls);
-    decref(tuple_cls);
-    decref(file_cls);
+    // wait_for_thread_shutdown();
 
-    ASSERT(None->nrefs == 1, "%ld", None->nrefs);
-    decref(None);
+    call_sys_exitfunc();
+    // initialized = 0;
 
-    decref(none_cls);
-    decref(type_cls);
-    */
+    // PyOS_FiniInterrupts();
+
+    PyType_ClearCache();
+
+// PyGC_Collect());
+
+// PyImport_Cleanup();
+// _PyImport_Fini();
+
+// _PyExc_Fini();
+
+// _PyGILState_Fini();
+
+// TODO it's probably a waste of time to tear these down in non-debugging mode
+/*
+// clear all the attributes on the base classes before freeing the classes themselves,
+// since we will run into problem if we free a class but there is an object somewhere
+// else that refers to it.
+clearAttrs(bool_cls);
+clearAttrs(int_cls);
+clearAttrs(float_cls);
+clearAttrs(none_cls);
+clearAttrs(function_cls);
+clearAttrs(instancemethod_cls);
+clearAttrs(str_cls);
+clearAttrs(list_cls);
+clearAttrs(slice_cls);
+clearAttrs(type_cls);
+clearAttrs(module_cls);
+clearAttrs(dict_cls);
+clearAttrs(tuple_cls);
+clearAttrs(file_cls);
+
+decref(bool_cls);
+decref(int_cls);
+decref(float_cls);
+decref(function_cls);
+decref(instancemethod_cls);
+decref(str_cls);
+decref(list_cls);
+decref(slice_cls);
+decref(module_cls);
+decref(dict_cls);
+decref(tuple_cls);
+decref(file_cls);
+
+ASSERT(None->nrefs == 1, "%ld", None->nrefs);
+decref(None);
+
+decref(none_cls);
+decref(type_cls);
+*/
+
+#if 0
+    /* Delete current thread */
+    PyThreadState_Swap(NULL);
+    PyInterpreterState_Delete(interp);
+
+    /* Sundry finalizers */
+    PyMethod_Fini();
+    PyFrame_Fini();
+    PyCFunction_Fini();
+    PyTuple_Fini();
+    PyList_Fini();
+    PySet_Fini();
+    PyString_Fini();
+    PyByteArray_Fini();
+    PyInt_Fini();
+    PyFloat_Fini();
+    PyDict_Fini();
+
+#ifdef Py_USING_UNICODE
+    /* Cleanup Unicode implementation */
+    _PyUnicode_Fini();
+#endif
+
+    /* XXX Still allocated:
+     * - various static ad-hoc pointers to interned strings
+     * - int and float free list blocks
+     * - whatever various modules and libraries allocate
+     * */
+
+    PyGrammar_RemoveAccelerators(&_PyParser_Grammar);
+
+#ifdef Py_TRACE_REFS
+    /* Display addresses (& refcnts) of all objects still alive.
+     * * An address can be used to find the repr of the object, printed
+     * * above by _Py_PrintReferences.
+     * */
+    if (Py_GETENV("PYTHONDUMPREFS"))
+        _Py_PrintReferenceAddresses(stderr);
+#endif /* Py_TRACE_REFS */
+#ifdef PYMALLOC_DEBUG
+    if (Py_GETENV("PYTHONMALLOCSTATS"))
+        _PyObject_DebugMallocStats();
+#endif
+#endif
+
+    teardownCodegen();
+
+    PRINT_TOTAL_REFS();
 }
 }

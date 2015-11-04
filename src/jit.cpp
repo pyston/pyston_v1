@@ -296,7 +296,7 @@ static int RunMainFromImporter(const char* filename) {
     return -1;
 }
 
-static int main(int argc, char** argv) {
+static int main(int argc, char** argv) noexcept {
     argv0 = argv[0];
 
     Timer _t("for jit startup");
@@ -384,8 +384,8 @@ static int main(int argc, char** argv) {
         }
 
         {
-            Timer _t("for initCodegen");
-            initCodegen();
+            Timer _t("for Py_Initialize");
+            Py_Initialize();
         }
 
         // Arguments left over after option parsing are of the form:
@@ -526,9 +526,9 @@ static int main(int argc, char** argv) {
         // Note: we will purposefully not release the GIL on exiting.
         threading::promoteGL();
 
-        _t.split("joinRuntime");
+        _t.split("Py_Finalize");
 
-        joinRuntime();
+        Py_Finalize();
         _t.split("finishing up");
 
 #if STAT_TIMERS

@@ -909,7 +909,4 @@ void setupDict() {
                                              (void*)dictViewItemsIter, typeFromClass(dict_iterator_cls), 1)));
     dict_items_cls->freeze();
 }
-
-void teardownDict() {
-}
 }

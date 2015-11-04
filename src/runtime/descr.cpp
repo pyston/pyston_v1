@@ -783,7 +783,4 @@ void setupDescr() {
                                 new BoxedFunction(FunctionMetadata::create((void*)wrapperObjectRepr, UNKNOWN, 1)));
     wrapperobject_cls->freeze();
 }
-
-void teardownDescr() {
-}
 }

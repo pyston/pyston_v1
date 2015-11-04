@@ -382,12 +382,12 @@ static void handle_sigint(int signum) {
     // TODO: this should set a flag saying a KeyboardInterrupt is pending.
     // For now, just call abort(), so that we get a traceback at least.
     fprintf(stderr, "SIGINT!\n");
-    joinRuntime();
+    Py_Finalize();
     Stats::dump(false);
     abort();
 }
 
-void initCodegen() {
+extern "C" void Py_Initialize() noexcept {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
@@ -529,6 +529,9 @@ void initCodegen() {
 }
 
 void teardownCodegen() {
+    if (PROFILE)
+        g.func_addr_registry.dumpPerfMap();
+
     for (int i = 0; i < g.jit_listeners.size(); i++) {
         g.engine->UnregisterJITEventListener(g.jit_listeners[i]);
         delete g.jit_listeners[i];
@@ -540,18 +543,5 @@ void teardownCodegen() {
 void printAllIR() {
     assert(0 && "unimplemented");
     fprintf(stderr, "==============\n");
-}
-
-int joinRuntime() {
-    // In the future this will have to wait for non-daemon
-    // threads to finish
-
-    if (PROFILE)
-        g.func_addr_registry.dumpPerfMap();
-
-    teardownRuntime();
-    teardownCodegen();
-
-    return 0;
 }
 }

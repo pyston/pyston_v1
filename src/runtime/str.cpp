@@ -2915,7 +2915,4 @@ void setupStr() {
                              new BoxedFunction(FunctionMetadata::create((void*)basestringNew, UNKNOWN, 1, true, true)));
     basestring_cls->freeze();
 }
-
-void teardownStr() {
-}
 }

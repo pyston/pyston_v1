@@ -2008,7 +2008,4 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 }
-
-void teardownCAPI() {
-}
 }

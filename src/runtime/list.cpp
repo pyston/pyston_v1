@@ -1397,10 +1397,4 @@ void setupList() {
     list_reverse_iterator_cls->tp_iternext = listreviter_next;
     list_reverse_iterator_cls->tp_iter = PyObject_SelfIter;
 }
-
-void teardownList() {
-    // TODO do clearattrs?
-    // decref(list_iterator_cls);
-    // decref(list_reverse_iterator_cls);
-}
 }

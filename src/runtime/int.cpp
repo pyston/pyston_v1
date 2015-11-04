@@ -1225,7 +1225,4 @@ void setupInt() {
 
     int_cls->tp_repr = (reprfunc)int_to_decimal_string;
 }
-
-void teardownInt() {
-}
 }

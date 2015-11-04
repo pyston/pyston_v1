@@ -718,9 +718,4 @@ void setupTuple() {
     tuple_iterator_cls->tp_iternext = tupleiter_next;
     tuple_iterator_cls->tp_iter = PyObject_SelfIter;
 }
-
-void teardownTuple() {
-    // TODO do clearattrs?
-    // decref(tuple_iterator_cls);
-}
 }

@@ -104,7 +104,4 @@ void setupBool() {
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;
 }
-
-void teardownBool() {
-}
 }

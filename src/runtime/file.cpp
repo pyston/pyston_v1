@@ -1897,7 +1897,4 @@ void setupFile() {
 
     file_cls->freeze();
 }
-
-void teardownFile() {
-}
 }

@@ -22,7 +22,6 @@
 namespace pyston {
 
 void setupSet();
-void teardownSet();
 
 extern "C" Box* createSet();
 

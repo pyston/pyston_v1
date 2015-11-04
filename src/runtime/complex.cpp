@@ -1295,7 +1295,4 @@ void setupComplex() {
     complex_cls->tp_as_number->nb_negative = (unaryfunc)complex_neg;
     complex_cls->tp_richcompare = complex_richcompare;
 }
-
-void teardownComplex() {
-}
 }

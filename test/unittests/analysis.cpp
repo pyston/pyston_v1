@@ -20,7 +20,7 @@ using namespace pyston;
 class AnalysisTest : public ::testing::Test {
 protected:
     static void SetUpTestCase() {
-        initCodegen();
+        Py_Initialize();
     }
 };
 

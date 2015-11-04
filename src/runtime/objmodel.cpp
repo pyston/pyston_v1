@@ -957,6 +957,21 @@ struct method_cache_entry {
 static struct method_cache_entry method_cache[1 << MCACHE_SIZE_EXP];
 static unsigned int next_version_tag = 0;
 
+extern "C" unsigned int PyType_ClearCache() noexcept {
+    Py_ssize_t i;
+    unsigned int cur_version_tag = next_version_tag - 1;
+
+    for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
+        method_cache[i].version = 0;
+        Py_CLEAR(method_cache[i].name);
+        method_cache[i].value = NULL;
+    }
+    next_version_tag = 0;
+    /* mark all version tags as invalid */
+    PyType_Modified(&PyBaseObject_Type);
+    return cur_version_tag;
+}
+
 int assign_version_tag(PyTypeObject* type) noexcept {
     /* Ensure that the tp_version_tag is valid and set
        Py_TPFLAGS_VALID_VERSION_TAG.  To respect the invariant, this
