@@ -3,6 +3,7 @@
 # - is faster
 # - actually works
 
+from __future__ import print_function
 import os
 import subprocess
 import sys
@@ -15,10 +16,10 @@ def find_rev(svn_id, fetch_if_necessary=True):
     while True:
         s = p.stdout.readline()
 
-        if s.startswith("commit"):
+        if s.startswith(b"commit"):
             commit = s.strip().split()[1]
-        elif s.startswith("    git-svn-id:"):
-            rid = int(s.split()[1].split('@')[1])
+        elif s.startswith(b"    git-svn-id:"):
+            rid = int(s.split()[1].split(b'@')[1])
             if rid <= svn_rev:
                 break
             isfirst = False
@@ -30,16 +31,16 @@ def find_rev(svn_id, fetch_if_necessary=True):
 
     if isfirst:
         if fetch_if_necessary:
-            print "Need to fetch the repo"
+            print("Need to fetch the repo")
             subprocess.check_call(["git", "fetch"], cwd=repo)
-            print "Trying again"
+            print("Trying again")
             return find_rev(svn_id, False)
         else:
-            print "This is the newest one??"
+            print("This is the newest one??")
     else:
-        print "Don't need to fetch"
+        print("Don't need to fetch")
 
-    print "Commit to go to is:", commit, rid
+    print("Commit to go to is:", commit, rid)
     return commit, rid
 
 if __name__ == "__main__":
@@ -51,7 +52,7 @@ if __name__ == "__main__":
 
     p = subprocess.Popen(["git", "show", "--format=short"], cwd=repo, stdout=subprocess.PIPE)
     cur_commit = p.stdout.readline().strip().split()[1]
-    print "Currently:", cur_commit
+    print("Currently:", cur_commit)
     p.kill()
     # TODO: can't do this optimization now that we have patches to apply;
     # maybe could try to determine that the patches are the same?
@@ -62,8 +63,8 @@ if __name__ == "__main__":
     exitcode = subprocess.call(["git", "diff", "--exit-code"], cwd=repo, stdout=open("/dev/null"))
     diffs = (exitcode != 0)
     if diffs:
-        print >>sys.stderr, "Error: the llvm directory has modifications that would be lost!"
-        print >>sys.stderr, "Please stash or revert them before running this script."
+        print("Error: the llvm directory has modifications that would be lost!", file=sys.stderr)
+        print("Please stash or revert them before running this script.", file=sys.stderr)
         sys.exit(1)
 
     subprocess.check_call(["git", "diff", "--dirstat", commit], cwd=repo)
@@ -96,7 +97,7 @@ if __name__ == "__main__":
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)
 
         if code != 0:
-            print "Running 'git am --abort'..."
+            print("Running 'git am --abort'...")
             subprocess.check_call(["git", "am", "--abort"], cwd=repo)
             sys.exit(1)
 
