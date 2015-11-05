@@ -402,6 +402,10 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             v = interpreter.visit_stmt(s);
         }
     }
+
+    BoxedFrame* frame = interpreter.getFrameInfo()->frame_obj;
+    if (frame)
+        deinitFrame(frame);
     return v.o;
 }
 
@@ -1877,6 +1881,8 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
     }
 
     interpreter.setFrameInfo(frame_state.frame_info);
+    if (frame_state.frame_info && frame_state.frame_info->frame_obj)
+        updateFrameForDeopt(frame_state.frame_info->frame_obj);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;
@@ -1973,12 +1979,15 @@ FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     return interpreter->getFrameInfo();
 }
 
+Box** getVRegsForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
+    assert(interpreter);
+    return interpreter->getVRegs();
+}
+
 BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visible) {
     BoxedDict* rtn = new BoxedDict();
-    for (auto& l : cfg->sym_vreg_map) {
-        if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
-            continue;
-
+    for (auto& l : only_user_visible ? cfg->sym_vreg_map_user : cfg->sym_vreg_map) {
         Box* val = vregs[l.second];
         if (val) {
             assert(gc::isValidGCObject(val));

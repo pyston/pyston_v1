@@ -113,7 +113,7 @@ Box* sysGetFrame(Box* val) {
         depth = static_cast<BoxedInt*>(val)->n;
     }
 
-    Box* frame = getFrame(depth);
+    Box* frame = getFrame(depth, false);
     if (!frame) {
         raiseExcHelper(ValueError, "call stack is not deep enough");
     }

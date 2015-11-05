@@ -52,7 +52,7 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 void logException(ExcInfo* exc_info);
 void startReraise();
 bool exceptionAtLineCheck();
-void exceptionAtLine(LineInfo line_info, Box** traceback);
+void exceptionAtLine(LineInfo line_info, Box** traceback, Box* frame);
 void caughtCxxException(LineInfo line_info, ExcInfo* exc_info);
 extern "C" void caughtCapiException(AST_stmt* current_stmt, void* source_info);
 extern "C" void reraiseCapiExcAsCxx() __attribute__((noreturn));
@@ -82,6 +82,8 @@ public:
     AST_stmt* getCurrentStatement();
     Box* fastLocalsToBoxedLocals();
     Box* getGlobalsDict();
+
+    Box* copyVRegs();
 
     // Gets the "current version" of this frame: if the frame has executed since
     // the iterator was obtained, the methods may return old values. This returns

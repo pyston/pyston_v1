@@ -108,10 +108,6 @@ static InternedString mangleName(InternedString id, llvm::StringRef private_name
     return rtn;
 }
 
-static bool isCompilerCreatedName(llvm::StringRef name) {
-    return name[0] == '!' || name[0] == '#';
-}
-
 class ModuleScopeInfo : public ScopeInfo {
 public:
     ScopeInfo* getParent() override { return NULL; }
@@ -121,7 +117,7 @@ public:
     bool passesThroughClosure() override { return false; }
 
     VarScopeType getScopeTypeOfName(InternedString name) override {
-        if (isCompilerCreatedName(name))
+        if (name.isCompilerCreatedName())
             return VarScopeType::FAST;
         else
             return VarScopeType::GLOBAL;
@@ -185,7 +181,7 @@ public:
     bool passesThroughClosure() override { return false; }
 
     VarScopeType getScopeTypeOfName(InternedString name) override {
-        if (isCompilerCreatedName(name))
+        if (name.isCompilerCreatedName())
             return VarScopeType::FAST;
         else if (forced_globals.find(name) != forced_globals.end())
             return VarScopeType::GLOBAL;
@@ -341,7 +337,7 @@ public:
     bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
 
     VarScopeType getScopeTypeOfName(InternedString name) override {
-        if (isCompilerCreatedName(name))
+        if (name.isCompilerCreatedName())
             return VarScopeType::FAST;
 
         if (usage->forced_globals.count(name) > 0)

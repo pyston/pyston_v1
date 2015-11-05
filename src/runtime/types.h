@@ -23,6 +23,7 @@
 #include "structmember.h"
 
 #include "codegen/irgen/future.h"
+#include "codegen/unwinding.h"
 #include "core/contiguous_map.h"
 #include "core/from_llvm/DenseMap.h"
 #include "core/threading.h"
@@ -1135,7 +1136,10 @@ Box* codeForFunction(BoxedFunction*);
 Box* codeForFunctionMetadata(FunctionMetadata*);
 FunctionMetadata* metadataFromCode(Box* code);
 
-Box* getFrame(int depth);
+Box* getFrame(PythonFrameIterator it, bool exits);
+Box* getFrame(int depth, bool exits);
+void updateFrameForDeopt(BoxedFrame* frame);
+extern "C" void deinitFrame(BoxedFrame* frame);
 
 inline BoxedString* boxString(llvm::StringRef s) {
     if (s.size() <= 1) {
