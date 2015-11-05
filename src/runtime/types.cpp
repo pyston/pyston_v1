@@ -3636,6 +3636,29 @@ void Box::clearAttrs() {
     }
 }
 
+static void tupledealloc(PyTupleObject* op) noexcept {
+    Py_ssize_t i;
+    Py_ssize_t len = Py_SIZE(op);
+    PyObject_GC_UnTrack(op);
+    Py_TRASHCAN_SAFE_BEGIN(op) if (len > 0) {
+        i = len;
+        while (--i >= 0)
+            Py_XDECREF(op->ob_item[i]);
+#if PyTuple_MAXSAVESIZE > 0
+        if (len < PyTuple_MAXSAVESIZE && numfree[len] < PyTuple_MAXFREELIST && Py_TYPE(op) == &PyTuple_Type) {
+            op->ob_item[0] = (PyObject*)free_list[len];
+            numfree[len]++;
+            free_list[len] = op;
+            goto done; /* return */
+        }
+#endif
+    }
+    op->ob_type->tp_free((PyObject*)op);
+done:
+    Py_TRASHCAN_SAFE_END(op)
+}
+
+
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
 #else /* Py_REF_DEBUG */
@@ -3703,6 +3726,7 @@ void setupRuntime() {
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0)
         BoxedClass(object_cls, &BoxedTuple::gcHandler, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple");
+    tuple_cls->tp_dealloc = (destructor)tupledealloc;
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
