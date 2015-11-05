@@ -3734,6 +3734,7 @@ void setupRuntime() {
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
+    // XXX
     _Py_ReleaseInternedStrings();
     for (auto b : classes)
         b->clearAttrs();
@@ -3745,9 +3746,9 @@ void setupRuntime() {
         }
         Py_DECREF(b);
     }
-    // XXX
     PRINT_TOTAL_REFS();
     exit(0);
+    // XXX
 
 
 
