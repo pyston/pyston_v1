@@ -38,7 +38,7 @@ std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
 
 extern "C" {
 __thread PyThreadState cur_thread_state
-    = { 0, 1, NULL, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
+    = { 0, 1, NULL, NULL, NULL, NULL, 0, NULL }; // not sure if we need to explicitly request zero-initialization
 }
 
 PthreadFastMutex threading_lock;
@@ -142,6 +142,8 @@ public:
             v->visit(&pub_state->curexc_traceback);
         if (pub_state->dict)
             v->visit(&pub_state->dict);
+        if (pub_state->trash_delete_later)
+            v->visit(&pub_state->trash_delete_later);
 
         for (auto& stack_info : previous_stacks) {
             v->visit(&stack_info.next_generator);

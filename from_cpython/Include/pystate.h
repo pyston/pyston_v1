@@ -120,6 +120,9 @@ typedef struct _ts {
 
     PyObject *dict;  /* Stores per-thread state */
 
+    int trash_delete_nesting;
+    PyObject *trash_delete_later;
+
     // Pyston note: additions in here need to be mirrored in ThreadStateInternal::accept
 } PyThreadState;
 
