@@ -32,8 +32,8 @@ sudo yum install git make cmake clang gcc gcc-c++ ccache ninja-build xz-devel au
 ```
 git clone https://github.com/dropbox/pyston.git ~/pyston
 
-git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
-git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
+git clone git@github.com:llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
+git clone git@github.com:llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
 
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
