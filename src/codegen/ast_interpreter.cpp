@@ -1786,7 +1786,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     }
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1817,7 +1817,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     ++md->times_interpreted;
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1848,7 +1848,7 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
     SourceInfo* source_info = md->source.get();
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1973,15 +1973,13 @@ FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     return interpreter->getFrameInfo();
 }
 
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
-    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
-    assert(interpreter);
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visible) {
     BoxedDict* rtn = new BoxedDict();
-    for (auto& l : interpreter->getSymVRegMap()) {
+    for (auto& l : cfg->sym_vreg_map) {
         if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
             continue;
 
-        Box* val = interpreter->getVRegs()[l.second];
+        Box* val = vregs[l.second];
         if (val) {
             assert(gc::isValidGCObject(val));
             rtn->d[l.first.getBox()] = val;
@@ -1989,6 +1987,12 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     }
 
     return rtn;
+}
+
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
+    assert(interpreter);
+    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg, only_user_visible);
 }
 
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {

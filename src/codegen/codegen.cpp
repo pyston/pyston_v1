@@ -30,6 +30,7 @@
 #include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
 #include "core/ast.h"
+#include "core/cfg.h"
 #include "core/util.h"
 #include "runtime/code.h"
 #include "runtime/types.h"
@@ -70,6 +71,28 @@ BoxedCode* FunctionMetadata::getCode() {
         gc::registerPermanentRoot(code_obj);
     }
     return code_obj;
+}
+
+int FunctionMetadata::calculateNumVRegs() {
+    SourceInfo* source_info = source.get();
+
+    CFG* cfg = source_info->cfg;
+
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    if (!cfg)
+        cfg = source_info->cfg = computeCFG(source_info, source_info->body);
+
+    if (!cfg->hasVregsAssigned()) {
+        ScopeInfo* scope_info = source->getScopeInfo();
+        cfg->assignVRegs(param_names, scope_info);
+    }
+    return cfg->sym_vreg_map.size();
 }
 
 void FunctionMetadata::addVersion(CompiledFunction* compiled) {
