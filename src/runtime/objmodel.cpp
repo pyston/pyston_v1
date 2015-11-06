@@ -486,8 +486,10 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(tp_basicsize >= base->tp_basicsize);
     }
 
-    if (base && cls && str_cls)
+    if (base && cls && str_cls) {
+        Py_INCREF(base);
         giveAttr("__base__", base);
+    }
 
     if (attrs_offset) {
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
@@ -818,6 +820,13 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
         rewrite_args->out_success = true;
     }
     attrs->attr_list->attrs[numattrs] = new_attr;
+}
+
+void Box::giveAttr(BoxedString* attr, Box* val) {
+    assert(!this->hasattr(attr));
+    this->setattr(attr, val, NULL);
+    Py_DECREF(val);
+    Py_DECREF(attr);
 }
 
 void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args) {

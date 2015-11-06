@@ -373,6 +373,7 @@ BoxedString* internStringImmortal(llvm::StringRef s) {
         // CPython returns mortal but in our current implementation they are inmortal
         entry->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
+    Py_INCREF(entry);
     return entry;
 }
 

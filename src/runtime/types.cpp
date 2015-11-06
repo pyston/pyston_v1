@@ -382,11 +382,13 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
         assert(md->source->scoping->areGlobalsFromModule());
         Box* globals_for_name = md->source->parent_module;
 
+        assert(0 && "check the refcounting here");
         static BoxedString* name_str = internStringImmortal("__name__");
         this->modname = globals_for_name->getattr(name_str);
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
+        Py_INCREF(None);
         this->doc = None;
     }
 }
@@ -424,6 +426,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
             globals_for_name = md->source->parent_module;
         }
 
+        assert(0 && "check the refcounting here");
         static BoxedString* name_str = internStringImmortal("__name__");
         if (globals_for_name->cls == module_cls) {
             this->modname = globals_for_name->getattr(name_str);
@@ -435,6 +438,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
+        Py_INCREF(None);
         this->doc = None;
     }
 }
@@ -503,6 +507,13 @@ static void functionDtor(Box* b) {
     BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
     self->dependent_ics.invalidateAll();
     self->dependent_ics.~ICInvalidator();
+
+    Py_DECREF(self->doc);
+    Py_DECREF(self->modname);
+    Py_XDECREF(self->name);
+    Py_XDECREF(self->closure);
+    Py_XDECREF(self->globals);
+    Py_XDECREF(self->defaults);
 }
 
 std::string BoxedModule::name() {
@@ -3716,10 +3727,15 @@ void setupRuntime() {
     gc::enableGC();
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
+    Py_INCREF(object_cls);
     type_cls->giveAttr("__base__", object_cls);
+    Py_INCREF(object_cls);
     basestring_cls->giveAttr("__base__", object_cls);
+    Py_INCREF(basestring_cls);
     str_cls->giveAttr("__base__", basestring_cls);
+    Py_INCREF(object_cls);
     none_cls->giveAttr("__base__", object_cls);
+    Py_INCREF(None);
     object_cls->giveAttr("__base__", None);
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,

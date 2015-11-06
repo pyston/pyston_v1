@@ -642,14 +642,10 @@ public:
     void setDict(BoxedDict* d);
 
 
-    // These functions won't consume any references.
-    // ie they will incref val
     void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    // giveAttr consumes a reference to val and attr
     void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
-    void giveAttr(BoxedString* attr, Box* val) {
-        assert(!this->hasattr(attr));
-        this->setattr(attr, val, NULL);
-    }
+    void giveAttr(BoxedString* attr, Box* val);
 
     // for debugging mostly:
     void clearAttrs();
