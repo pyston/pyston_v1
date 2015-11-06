@@ -83,6 +83,7 @@ struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);
 
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visible);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
 
 // Executes the equivalent of CPython's PRINT_EXPR opcode (call sys.displayhook)

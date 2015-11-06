@@ -1702,14 +1702,6 @@ static int calculateNumVRegs(FunctionMetadata* md) {
     SourceInfo* source_info = md->source.get();
 
     CFG* cfg = source_info->cfg;
-
-    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
-    // it can go, due to the fact that it can throw an exception.
-    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
-    // delete the partially-constructed memory which we don't currently handle.  It can't go into
-    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
-    // (For instance, throwing the exception will try to fetch the current statement, but we determine
-    // that by looking at the cfg.)
     if (!cfg)
         cfg = source_info->cfg = computeCFG(source_info, source_info->body);
 
@@ -1786,7 +1778,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     }
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1817,7 +1809,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     ++md->times_interpreted;
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1848,7 +1840,7 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
     SourceInfo* source_info = md->source.get();
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1973,15 +1965,13 @@ FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     return interpreter->getFrameInfo();
 }
 
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
-    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
-    assert(interpreter);
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visible) {
     BoxedDict* rtn = new BoxedDict();
-    for (auto& l : interpreter->getSymVRegMap()) {
+    for (auto& l : cfg->sym_vreg_map) {
         if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
             continue;
 
-        Box* val = interpreter->getVRegs()[l.second];
+        Box* val = vregs[l.second];
         if (val) {
             assert(gc::isValidGCObject(val));
             rtn->d[l.first.getBox()] = val;
@@ -1989,6 +1979,12 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     }
 
     return rtn;
+}
+
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
+    assert(interpreter);
+    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg, only_user_visible);
 }
 
 BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
