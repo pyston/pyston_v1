@@ -15,7 +15,9 @@
 #include "runtime/long.h"
 
 #include <cmath>
+#include <float.h>
 #include <gmp.h>
+#include <mpfr.h>
 #include <sstream>
 
 #include "llvm/Support/raw_ostream.h"
@@ -212,17 +214,18 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
 
     BoxedLong* rtn = new BoxedLong();
     int r = 0;
-    if (str[strlen(str) - 1] == 'L' || str[strlen(str) - 1] == 'l') {
+    if ((str[strlen(str) - 1] == 'L' || str[strlen(str) - 1] == 'l') && base < 22) {
         std::string without_l(str, strlen(str) - 1);
         r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
     } else {
+        // if base great than 22, 'l' or 'L' should count as a digit.
         r = mpz_init_set_str(rtn->n, str, base);
     }
 
     if (pend)
         *pend = const_cast<char*>(str) + strlen(str);
     if (r != 0) {
-        PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: %s", base, str);
+        PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base, str);
         return NULL;
     }
 
@@ -347,15 +350,17 @@ extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
 extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
+    mpfr_t result;
+    mpfr_init(result);
+    mpfr_init_set_z(result, l->n, MPFR_RNDN);
 
-    double result = mpz_get_d(l->n);
-
-    if (std::isinf(result)) {
+    double result_f = mpfr_get_d(result, MPFR_RNDN);
+    if (isinf(result_f)) {
         PyErr_SetString(PyExc_OverflowError, "long int too large to convert to float");
         return -1;
     }
 
-    return result;
+    return result_f;
 }
 
 /* Convert the long to a string object with given base,
@@ -463,7 +468,10 @@ extern "C" PyObject* PyLong_FromSize_t(size_t ival) noexcept {
 #undef IS_LITTLE_ENDIAN
 
 extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedLong* v = (BoxedLong*)a;
+    double result = mpz_get_d_2exp(e, v->n);
+    static_assert(sizeof(Py_ssize_t) == 8, "need to add overflow checking");
+    return result;
 }
 
 /* Create a new long (or int) object from a C pointer */
@@ -698,11 +706,11 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
         if (s->size() != strlen(s->data())) {
             Box* srepr = PyObject_Repr(val);
             if (S == CAPI) {
-                PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: %s", base,
+                PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base,
                              PyString_AS_STRING(srepr));
                 return NULL;
             } else {
-                raiseExcHelper(ValueError, "invalid literal for long() with base %d: %s", base,
+                raiseExcHelper(ValueError, "invalid literal for long() with base %d: '%s'", base,
                                PyString_AS_STRING(srepr));
             }
         }
@@ -780,8 +788,8 @@ Box* longFloat(BoxedLong* v) {
 
     double result = PyLong_AsDouble(v);
 
-    if (result == -1)
-        checkAndThrowCAPIException();
+    if (result == -1.0 && PyErr_Occurred())
+        throwCAPIException();
 
     return new BoxedFloat(result);
 }
@@ -1241,18 +1249,32 @@ Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
         raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    // We only support args which fit into an int for now...
-    int overflow = 0;
-    long lhs = PyLong_AsLongAndOverflow(v1, &overflow);
-    if (overflow)
+    BoxedLong* v2;
+    if (PyInt_Check(_v2) || PyLong_Check(_v2)) {
+        v2 = (BoxedLong*)PyNumber_Long(_v2);
+        if (!v2) {
+            throwCAPIException();
+        }
+    } else {
         return NotImplemented;
-    long rhs = PyLong_AsLongAndOverflow(_v2, &overflow);
-    if (overflow)
-        return NotImplemented;
+    }
 
-    if (rhs == 0)
+    if (mpz_sgn(v2->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
-    return boxFloat(lhs / (double)rhs);
+    }
+
+    mpfr_t lhs_f, rhs_f, result;
+    mpfr_init(result);
+    mpfr_init_set_z(lhs_f, v1->n, MPFR_RNDN);
+    mpfr_init_set_z(rhs_f, v2->n, MPFR_RNDZ);
+    mpfr_div(result, lhs_f, rhs_f, MPFR_RNDN);
+
+    double result_f = mpfr_get_d(result, MPFR_RNDN);
+
+    if (isinf(result_f)) {
+        raiseExcHelper(OverflowError, "integer division result too large for a float");
+    }
+    return boxFloat(result_f);
 }
 
 Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
@@ -1260,18 +1282,27 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
         raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    // We only support args which fit into an int for now...
-    int overflow = 0;
-    long lhs = PyLong_AsLongAndOverflow(_v2, &overflow);
-    if (overflow)
+    BoxedLong* v2;
+    if (PyInt_Check(_v2) || PyLong_Check(_v2)) {
+        v2 = (BoxedLong*)PyNumber_Long(_v2);
+    } else {
         return NotImplemented;
-    long rhs = PyLong_AsLongAndOverflow(v1, &overflow);
-    if (overflow)
-        return NotImplemented;
-
-    if (rhs == 0)
+    }
+    if (mpz_sgn(v2->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
-    return boxFloat(lhs / (double)rhs);
+    }
+
+    mpfr_t lhs_f, rhs_f, result;
+    mpfr_init(result);
+    mpfr_init_set_z(lhs_f, v2->n, MPFR_RNDN);
+    mpfr_init_set_z(rhs_f, v1->n, MPFR_RNDZ);
+    mpfr_div(result, lhs_f, rhs_f, MPFR_RNDN);
+
+    double result_f = mpfr_get_d(result, MPFR_RNDZ);
+    if (isinf(result_f)) {
+        raiseExcHelper(OverflowError, "integer division result too large for a float");
+    }
+    return boxFloat(result_f);
 }
 
 static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* long_func) {
@@ -1393,14 +1424,17 @@ Box* longHash(BoxedLong* self) {
     if (mpz_fits_slong_p(self->n))
         return boxInt(mpz_get_si(self->n));
 
-    // Not sure if this is a good hash function or not;
-    // simple, but only includes top bits:
-    union {
-        uint64_t n;
-        double d;
-    };
-    d = mpz_get_d(self->n);
-    return boxInt(n);
+    // CPython use the absolute value of self mod ULONG_MAX.
+    unsigned long remainder = mpz_tdiv_ui(self->n, ULONG_MAX);
+    if (remainder == 0)
+        remainder = -1; // CPython compatibility -- ULONG_MAX mod ULONG_MAX is ULONG_MAX to them.
+
+    remainder *= mpz_sgn(self->n);
+
+    if (remainder == -1)
+        remainder = -2;
+
+    return boxInt(remainder);
 }
 
 extern "C" Box* longTrunc(BoxedLong* self) {
