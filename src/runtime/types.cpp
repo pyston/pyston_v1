@@ -3678,6 +3678,7 @@ done:
 
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
+    std::vector<Box*> constants;
 
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
@@ -3711,6 +3712,7 @@ void setupRuntime() {
 
     none_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(Box), false, "NoneType");
     None = new (none_cls) Box();
+    constants.push_back(None);
     assert(None->cls);
     gc::registerPermanentRoot(None);
 
@@ -3742,11 +3744,13 @@ void setupRuntime() {
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0)
         BoxedClass(object_cls, &BoxedTuple::gcHandler, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple");
+
     tuple_cls->tp_dealloc = (destructor)tupledealloc;
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
+    constants.push_back(EmptyTuple);
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new (0) BoxedClass(object_cls, &BoxedList::gcHandler, 0, 0, sizeof(BoxedList), false, "list");
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
@@ -3774,24 +3778,6 @@ void setupRuntime() {
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
-    // XXX
-    _Py_ReleaseInternedStrings();
-    for (auto b : classes)
-        b->clearAttrs();
-    for (auto b : { (Box*)None, (Box*)EmptyTuple })
-        Py_DECREF(b);
-    for (auto b : classes) {
-        if (b->tp_mro) {
-            Py_DECREF(b->tp_mro);
-        }
-        Py_DECREF(b);
-    }
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-
-
-
     module_cls = new (0) BoxedClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,
                                     sizeof(BoxedModule), false, "module");
     member_descriptor_cls = new (0)
@@ -3806,6 +3792,7 @@ void setupRuntime() {
                                           sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor");
 
     EmptyString = new (0) BoxedString("");
+    constants.push_back(EmptyString);
     // Call InternInPlace rather than InternFromString since that will
     // probably try to return EmptyString
     PyString_InternInPlace((Box**)&EmptyString);
@@ -3814,6 +3801,7 @@ void setupRuntime() {
         BoxedString* s = new (1) BoxedString(llvm::StringRef(&c, 1));
         PyString_InternInPlace((Box**)&s);
         characters[i] = s;
+        constants.push_back(s);
     }
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
@@ -3856,12 +3844,37 @@ void setupRuntime() {
 
     True = new BoxedBool(true);
     False = new BoxedBool(false);
+    constants.push_back(True);
+    constants.push_back(False);
 
     gc::registerPermanentRoot(True);
     gc::registerPermanentRoot(False);
 
     // Need to initialize interned_ints early:
     setupInt();
+    for (auto b : interned_ints)
+        constants.push_back(b);
+
+    // XXX
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : constants)
+        Py_DECREF(b);
+    for (auto b : classes) {
+        if (b->tp_mro) {
+            Py_DECREF(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    PRINT_TOTAL_REFS();
+    exit(0);
+    // XXX
+
+
+
+
+
     // sys is the first module that needs to be set up, due to modules
     // being tracked in sys.modules:
     setupSys();
