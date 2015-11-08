@@ -45,6 +45,8 @@ extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_replace(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
+extern "C" PyObject* _formatter_parser(PyStringObject* self) noexcept;
+extern "C" PyObject* _formatter_field_name_split(PyStringObject* self) noexcept;
 
 // from cpython's stringobject.c:
 #define LEFTSTRIP 0
@@ -2784,6 +2786,8 @@ static PyMethodDef string_methods[] = {
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
     { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
+    { "_formatter_parser", (PyCFunction)_formatter_parser, METH_NOARGS, NULL },
+    { "_formatter_field_name_split", (PyCFunction)_formatter_field_name_split, METH_NOARGS, NULL },
 };
 
 void setupStr() {
