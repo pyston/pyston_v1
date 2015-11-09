@@ -287,7 +287,7 @@ BoxedFile::BoxedFile(FILE* f, std::string fname, const char* fmode, int (*close)
       f_bufptr(0),
       f_setbuf(0),
       unlocked_count(0) {
-    static BoxedString* not_yet_string = internStringImmortal("<uninitialized file>");
+    static BoxedString* not_yet_string = getStaticString("<uninitialized file>");
     Py_INCREF(not_yet_string);
     this->f_name = not_yet_string;
     Py_INCREF(not_yet_string);
@@ -297,7 +297,9 @@ BoxedFile::BoxedFile(FILE* f, std::string fname, const char* fmode, int (*close)
     Py_INCREF(None);
     this->f_errors = None;
 
-    Box* r = fill_file_fields(this, f, boxString(fname), fmode, close);
+    Box* fname_s = boxString(fname);
+    Box* r = fill_file_fields(this, f, fname_s, fmode, close);
+    Py_DECREF(fname_s);
     checkAndThrowCAPIException();
     assert(r == this);
 }
@@ -1838,13 +1840,19 @@ static PyGetSetDef file_getsetlist[] = {
     { "closed", (getter)get_closed, NULL, "True if the file is closed", NULL },
 };
 
-void fileDestructor(Box* b) {
+void file_dealloc(Box* b) noexcept {
     assert(isSubclass(b->cls, file_cls));
-    BoxedFile* self = static_cast<BoxedFile*>(b);
+    BoxedFile* f = static_cast<BoxedFile*>(b);
 
-    if (self->f_fp && self->f_close)
-        self->f_close(self->f_fp);
-    self->f_fp = NULL;
+    if (f->f_fp && f->f_close)
+        f->f_close(f->f_fp);
+    f->f_fp = NULL;
+
+    Py_DECREF(f->f_name);
+    Py_DECREF(f->f_mode);
+    Py_DECREF(f->f_encoding);
+    Py_DECREF(f->f_errors);
+    PyMem_Free(f->f_setbuf);
 }
 
 void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
@@ -1861,7 +1869,6 @@ void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
 }
 
 void setupFile() {
-    file_cls->tp_dealloc = fileDestructor;
     file_cls->has_safe_tp_dealloc = true;
 
     file_cls->giveAttr(
@@ -1881,7 +1888,7 @@ void setupFile() {
                        new BoxedFunction(FunctionMetadata::create((void*)fileEnter, typeFromClass(file_cls), 1)));
     file_cls->giveAttr("__exit__", new BoxedFunction(FunctionMetadata::create((void*)fileExit, UNKNOWN, 4)));
 
-    file_cls->giveAttr("__iter__", file_cls->getattr(internStringMortal("__enter__")));
+    file_cls->giveAttr("__iter__", file_cls->getattr(getStaticString("__enter__")));
     file_cls->giveAttr("__hasnext__",
                        new BoxedFunction(FunctionMetadata::create((void*)fileIterHasNext, BOXED_BOOL, 1)));
     file_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)fileIterNext, STR, 1)));

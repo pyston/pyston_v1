@@ -230,10 +230,11 @@ public:
     BoxedSysFlags() {
         auto zero = boxInt(0);
         assert(zero);
-        division_warning = zero;
-        bytes_warning = zero;
-        no_user_site = zero;
-        optimize = zero;
+        division_warning = incref(zero);
+        bytes_warning = incref(zero);
+        no_user_site = incref(zero);
+        optimize = incref(zero);
+        Py_DECREF(zero);
     }
 
     DEFAULT_CLASS(sys_flags_cls);
@@ -251,6 +252,13 @@ public:
 
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
         raiseExcHelper(TypeError, "cannot create 'sys.flags' instances");
+    }
+
+    static void dealloc(BoxedSysFlags* self) {
+        Py_DECREF(self->division_warning);
+        Py_DECREF(self->bytes_warning);
+        Py_DECREF(self->no_user_site);
+        Py_DECREF(self->optimize);
     }
 };
 
@@ -627,26 +635,34 @@ Return the current value of the recursion limit, the maximum depth\n\
 of the Python interpreter stack.  This limit prevents infinite\n\
 recursion from causing an overflow of the C stack and crashing Python.");
 
+static int _check_and_flush(FILE* stream) {
+    int prev_fail = ferror(stream);
+    return fflush(stream) || prev_fail ? EOF : 0;
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
+    constants.push_back(sys_modules_dict);
     gc::registerPermanentRoot(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
     sys_module = createModule(boxString("sys"));
+    constants.push_back(sys_module);
 
-    sys_module->giveAttr("modules", sys_modules_dict);
+    sys_module->giveAttrBorrowed("modules", sys_modules_dict);
 
     BoxedList* sys_path = new BoxedList();
-    sys_module->giveAttr("path", sys_path);
+    constants.push_back(sys_path);
+    sys_module->giveAttrBorrowed("path", sys_path);
 
     sys_module->giveAttr("argv", new BoxedList());
 
-    sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
-    sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
-    sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
-    sys_module->giveAttr("__stdout__", sys_module->getattr(internStringMortal("stdout")));
-    sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
-    sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
+    sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w", NULL));
+    sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r", _check_and_flush));
+    sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w", _check_and_flush));
+    sys_module->giveAttrBorrowed("__stdout__", sys_module->getattr(autoDecref(internStringMortal("stdout"))));
+    sys_module->giveAttrBorrowed("__stdin__", sys_module->getattr(autoDecref(internStringMortal("stdin"))));
+    sys_module->giveAttrBorrowed("__stderr__", sys_module->getattr(autoDecref(internStringMortal("stderr"))));
 
     sys_module->giveAttr("exc_info",
                          new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExcInfo, BOXED_TUPLE, 0),
@@ -659,7 +675,7 @@ void setupSys() {
                                                  "exit", { None }, NULL, exit_doc));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
-    sys_module->giveAttr("py3kwarning", False);
+    sys_module->giveAttrBorrowed("py3kwarning", False);
     sys_module->giveAttr("byteorder", boxString(isLittleEndian() ? "little" : "big"));
 
     sys_module->giveAttr("platform", boxString(Py_GetPlatform()));
@@ -686,7 +702,7 @@ void setupSys() {
     sys_module->giveAttr("path_importer_cache", new BoxedDict());
 
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
-    sys_module->giveAttr("dont_write_bytecode", True);
+    sys_module->giveAttrBorrowed("dont_write_bytecode", True);
 
     sys_module->giveAttr("prefix", boxString(Py_GetPrefix()));
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));
@@ -700,7 +716,8 @@ void setupSys() {
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
-    sys_module->giveAttr("subversion", BoxedTuple::create({ boxString("Pyston"), boxString(""), boxString("") }));
+    sys_module->giveAttr("subversion", BoxedTuple::create({ autoDecref(boxString("Pyston")), autoDecref(boxString("")),
+                                                            autoDecref(boxString("")) }));
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
@@ -708,6 +725,7 @@ void setupSys() {
         BoxedClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false, "flags");
     sys_flags_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
+    sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
 #define ADD(name)                                                                                                      \
     sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))
@@ -728,7 +746,7 @@ void setupSys() {
         sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
     }
 
-    sys_module->giveAttr("__displayhook__", sys_module->getattr(internStringMortal("displayhook")));
+    sys_module->giveAttrBorrowed("__displayhook__", sys_module->getattr(autoDecref(internStringMortal("displayhook"))));
     sys_module->giveAttr("flags", new BoxedSysFlags());
 }
 

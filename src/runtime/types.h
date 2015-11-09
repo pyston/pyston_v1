@@ -176,6 +176,7 @@ void setCAPIException(const ExcInfo& e);
 // Finalizer-related
 void default_free(void*);
 void dealloc_null(Box* box);
+void file_dealloc(Box*) noexcept;
 
 // In Pyston, this is the same type as CPython's PyTypeObject (they are interchangeable, but we
 // use BoxedClass in Pyston wherever possible as a convention).
@@ -351,6 +352,33 @@ static_assert(offsetof(pyston::BoxedHeapClass, as_mapping) == offsetof(PyHeapTyp
 static_assert(offsetof(pyston::BoxedHeapClass, as_sequence) == offsetof(PyHeapTypeObject, as_sequence), "");
 static_assert(offsetof(pyston::BoxedHeapClass, as_buffer) == offsetof(PyHeapTypeObject, as_buffer), "");
 static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
+
+template <typename B, bool Nullable = false> struct DecrefHandle {
+private:
+    B* b;
+
+public:
+    DecrefHandle(B* b) : b(b) {}
+    ~DecrefHandle() {
+        if (Nullable)
+            Py_XDECREF(b);
+        else
+            Py_DECREF(b);
+    }
+    operator B*() { return b; }
+};
+template <typename B, bool Nullable = false> DecrefHandle<B, Nullable> autoDecref(B* b) {
+    return DecrefHandle<B, Nullable>(b);
+}
+
+template <typename B> B* incref(B* b) {
+    Py_INCREF(b);
+    return b;
+}
+template <typename B> B* xincref(B* b) {
+    Py_XINCREF(b);
+    return b;
+}
 
 class BoxedInt : public Box {
 public:
@@ -1198,11 +1226,25 @@ inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
     return args[idx - 3];
 }
 
-inline BoxedString* getStringConstant(llvm::StringRef s) {
+inline BoxedString* getStaticString(llvm::StringRef s) {
     BoxedString* r = internStringImmortal(s);
     constants.push_back(r);
     return r;
 }
+
+inline Box* Box::getattrString(const char* attr) {
+    // XXX need to auto-decref
+    BoxedString* s = internStringMortal(attr);
+    try {
+        Box* r =  getattr<NOT_REWRITABLE>(s, NULL);
+        Py_DECREF(s);
+        return r;
+    } catch (ExcInfo e) {
+        Py_DECREF(s);
+        throw e;
+    }
 }
+
+} // namespace pyston
 
 #endif

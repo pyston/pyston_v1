@@ -439,8 +439,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
-        Py_INCREF(None);
-        this->doc = None;
+        this->doc = incref(None);
     }
 }
 
@@ -455,6 +454,7 @@ BoxedFunction::BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> d
     // some builtin functions that are BoxedFunctions but really ought to be a type that
     // we don't have yet.
     if (md->source) {
+        assert(!this->name);
         this->name = static_cast<BoxedString*>(md->source->getName());
     }
 }
@@ -489,6 +489,7 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md, const char* name, const char* doc)
     : BoxedBuiltinFunctionOrMethod(md, name, {}) {
 
+    Py_DECREF(this->doc);
     this->doc = doc ? boxString(doc) : None;
 }
 
@@ -498,8 +499,10 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md,
     : BoxedFunctionBase(md, defaults, closure) {
 
     assert(name);
+    assert(!this->name);
     this->name = static_cast<BoxedString*>(boxString(name));
-    this->doc = doc ? boxString(doc) : None;
+    Py_DECREF(this->doc);
+    this->doc = doc ? boxString(doc) : incref(None);
 }
 
 static void functionDtor(Box* b) {
@@ -3763,6 +3766,7 @@ void setupRuntime() {
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, "file");
+    file_cls->tp_dealloc = file_dealloc;
     int_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false, "int");
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new (0) BoxedClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, "bool");
@@ -3856,12 +3860,20 @@ void setupRuntime() {
     for (auto b : interned_ints)
         constants.push_back(b);
 
+
+
+    // sys is the first module that needs to be set up, due to modules
+    // being tracked in sys.modules:
+    setupSys();
+
     // XXX
     _Py_ReleaseInternedStrings();
     for (auto b : classes)
         b->clearAttrs();
-    for (auto b : constants)
+    for (auto b : constants) {
+        b->clearAttrs();
         Py_DECREF(b);
+    }
     for (auto b : classes) {
         if (b->tp_mro) {
             Py_DECREF(b->tp_mro);
@@ -3872,13 +3884,6 @@ void setupRuntime() {
     exit(0);
     // XXX
 
-
-
-
-
-    // sys is the first module that needs to be set up, due to modules
-    // being tracked in sys.modules:
-    setupSys();
     // Weakrefs are used for tp_subclasses:
     init_weakref();
 

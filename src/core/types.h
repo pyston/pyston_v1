@@ -647,6 +647,13 @@ public:
     void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
     // giveAttr consumes a reference to val and attr
     void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
+    // giveAttrBorrowed consumes a reference only to attr (but it only has the const char* variant
+    // which creates the reference).  should probably switch the names to stay consistent; most functions
+    // don't steal references.
+    void giveAttrBorrowed(const char* attr, Box* val) {
+        Py_INCREF(val);
+        giveAttr(internStringMortal(attr), val);
+    }
     void giveAttr(BoxedString* attr, Box* val);
 
     // for debugging mostly:
@@ -657,6 +664,8 @@ public:
     template <Rewritable rewritable = REWRITABLE>
     Box* getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args);
     Box* getattr(BoxedString* attr) { return getattr<NOT_REWRITABLE>(attr, NULL); }
+    Box* getattrString(const char* attr);
+
     bool hasattr(BoxedString* attr) { return getattr(attr) != NULL; }
     void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 

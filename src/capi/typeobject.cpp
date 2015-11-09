@@ -1769,7 +1769,7 @@ static void init_slotdefs() noexcept {
         return;
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
-        slotdefs[i].name_strobj = getStringConstant(slotdefs[i].name.data());
+        slotdefs[i].name_strobj = getStaticString(slotdefs[i].name.data());
 
         if (i > 0) {
             if (!slotdefs[i].name.size())
@@ -1860,13 +1860,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             // there was only one:
             assert((p + 1)->offset > p->offset);
 
-            static BoxedString* class_str = getStringConstant("__class__");
+            static BoxedString* class_str = getStaticString("__class__");
             if (p->name_strobj == class_str) {
                 if (descr == object_cls->getattr(class_str))
                     descr = NULL;
             }
 
-            static BoxedString* getattribute_str = getStringConstant("__getattribute__");
+            static BoxedString* getattribute_str = getStaticString("__getattribute__");
             if (p->name_strobj == getattribute_str) {
                 if (descr && descr->cls == wrapperdescr_cls
                     && ((BoxedWrapperDescriptor*)descr)->wrapped == PyObject_GenericGetAttr)
