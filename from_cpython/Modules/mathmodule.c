@@ -1281,7 +1281,9 @@ loghelper(PyObject* arg, double (*func)(double), char *funcname)
         Py_ssize_t e;
 
         /* Negative or zero inputs give a ValueError. */
-        if (Py_SIZE(arg) <= 0) {
+        // Pyston change: use _PyLong_Sign instead of Py_SIZE to check
+        // the sign of long object.
+        if (_PyLong_Sign(arg) <= 0) {
             PyErr_SetString(PyExc_ValueError,
                             "math domain error");
             return NULL;

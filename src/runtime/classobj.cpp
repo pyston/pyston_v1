@@ -1528,8 +1528,13 @@ Box* instanceLong(Box* _inst) {
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     static BoxedString* long_str = internStringImmortal("__long__");
-    Box* long_func = _instanceGetattribute(inst, long_str, true);
-    return runtimeCall(long_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (PyObject_HasAttr((PyObject*)inst, long_str)) {
+        Box* long_func = _instanceGetattribute(inst, long_str, true);
+        return runtimeCall(long_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    }
+
+    Box* res = instanceInt(inst);
+    return res;
 }
 
 Box* instanceFloat(Box* _inst) {

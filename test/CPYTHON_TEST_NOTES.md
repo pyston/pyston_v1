@@ -101,7 +101,6 @@ test_file_eintr         not sure
 test_fileio             [unknown]
 test_file               wontfix: we don't destruct file objects when the test wants
 test_fork1              [unknown]
-test_fractions          [unknown]
 test_frozen             [unknown]
 test_ftplib             [unknown]
 test_funcattrs          we don't allow changing numing of function defaults
@@ -141,7 +140,6 @@ test__locale            No module named _locale
 test_locale             [unknown]
 test_longexp            [unknown]
 test_long_future        [unknown]
-test_long               sys.long_info
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that
 test_mailbox            [unknown]
@@ -187,7 +185,6 @@ test_runpy              [unknown]
 test_sax                [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
-test_set                lots of set issues
 test_shelve             [unknown]
 test_shlex              [unknown]
 test_signal             [unknown]
