@@ -200,7 +200,6 @@ test_sort               argument specification issue in listSort?
 test_sqlite             [unknown]
 test_ssl                [unknown]
 test_startfile          [unknown]
-test_string             infinite loops in test_replace
 test_str                memory leak?
 test_strtod             [unknown]
 test_structmembers      [unknown]
