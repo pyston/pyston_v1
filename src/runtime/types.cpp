@@ -3866,6 +3866,9 @@ void setupRuntime() {
     // being tracked in sys.modules:
     setupSys();
 
+    // Weakrefs are used for tp_subclasses:
+    init_weakref();
+
     // XXX
     _Py_ReleaseInternedStrings();
     for (auto b : classes)
@@ -3883,9 +3886,6 @@ void setupRuntime() {
     PRINT_TOTAL_REFS();
     exit(0);
     // XXX
-
-    // Weakrefs are used for tp_subclasses:
-    init_weakref();
 
     add_operators(object_cls);
 

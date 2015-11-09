@@ -819,7 +819,7 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
 
-    static BoxedString* get_str = internStringImmortal("__get__");
+    static BoxedString* get_str = getStaticString("__get__");
     get = typeLookup(tp, get_str);
     if (get == NULL) {
         /* Avoid further slowdowns */
@@ -914,7 +914,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
          __getattr__, even when the attribute is present. So we use
          _PyType_Lookup and create the method only when needed, with
          call_attribute. */
-    static BoxedString* _getattr_str = internStringImmortal("__getattr__");
+    static BoxedString* _getattr_str = getStaticString("__getattr__");
 
     // Don't need to do this in the rewritten version; if a __getattr__ later gets removed:
     // - if we ever get to the "call __getattr__" portion of the rewrite, the guards will
@@ -944,7 +944,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
          __getattr__, even when self has the default __getattribute__
          method. So we use _PyType_Lookup and create the method only when
          needed, with call_attribute. */
-    static BoxedString* _getattribute_str = internStringImmortal("__getattribute__");
+    static BoxedString* _getattribute_str = getStaticString("__getattribute__");
 
     RewriterVar* r_getattribute = NULL;
     if (rewrite_args) {
@@ -1129,7 +1129,7 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
 
     try {
         // TODO: runtime ICs?
-        static BoxedString* _new_str = internStringImmortal("__new__");
+        static BoxedString* _new_str = getStaticString("__new__");
         Box* new_attr = typeLookup(self, _new_str);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
@@ -1142,7 +1142,7 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
 }
 
 static PyObject* slot_tp_del(PyObject* self) noexcept {
-    static BoxedString* del_str = internStringImmortal("__del__");
+    static BoxedString* del_str = getStaticString("__del__");
     try {
         // TODO: runtime ICs?
         Box* del_attr = typeLookup(self->cls, del_str);
@@ -2073,7 +2073,7 @@ static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_ne
                                                  { 0, 0, 0, 0 } };
 
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
-    static BoxedString* new_str = internStringImmortal("__new__");
+    static BoxedString* new_str = getStaticString("__new__");
     if (type->getattr(new_str))
         return;
 
@@ -3399,7 +3399,7 @@ extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
 }
 
 extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
-    static BoxedString* dict_str = internStringImmortal("__dict__");
+    static BoxedString* dict_str = getStaticString("__dict__");
     assert(!cls->hasattr(dict_str));
     cls->giveAttr(dict_str, dict_descr);
 }
@@ -3478,12 +3478,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         return -1;
     }
 
-    static BoxedString* doc_str = internStringImmortal("__doc__");
+    static BoxedString* doc_str = getStaticString("__doc__");
     if (!cls->hasattr(doc_str)) {
         if (cls->tp_doc) {
-            cls->giveAttr(doc_str, boxString(cls->tp_doc));
+            cls->giveAttr(incref(doc_str), boxString(cls->tp_doc));
         } else {
-            cls->giveAttr(doc_str, None);
+            cls->giveAttr(incref(doc_str), incref(None));
         }
     }
 
