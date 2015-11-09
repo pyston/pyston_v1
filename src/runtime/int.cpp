@@ -1172,8 +1172,6 @@ void setupInt() {
 
     int_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)int_getnewargs, UNKNOWN, 1,
                                                                                    ParamNames::empty(), CAPI)));
-    return;
-
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);
     _addFuncIntUnknown("__or__", BOXED_INT, (void*)intOrInt, (void*)intOr);

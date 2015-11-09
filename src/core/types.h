@@ -295,6 +295,8 @@ class ICInfo;
 class LocationMap;
 class JitCodeBlock;
 
+extern std::vector<Box*> constants;
+
 // A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a FunctionMetadata
 // and some compilation settings, and produce a CompiledFunction
 // CompiledFunctions can also be created from raw function pointers, using FunctionMetadata::create.

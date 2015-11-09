@@ -1769,7 +1769,7 @@ static void init_slotdefs() noexcept {
         return;
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
-        slotdefs[i].name_strobj = internStringImmortal(slotdefs[i].name.data());
+        slotdefs[i].name_strobj = getStringConstant(slotdefs[i].name.data());
 
         if (i > 0) {
             if (!slotdefs[i].name.size())
@@ -1860,13 +1860,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             // there was only one:
             assert((p + 1)->offset > p->offset);
 
-            static BoxedString* class_str = internStringImmortal("__class__");
+            static BoxedString* class_str = getStringConstant("__class__");
             if (p->name_strobj == class_str) {
                 if (descr == object_cls->getattr(class_str))
                     descr = NULL;
             }
 
-            static BoxedString* getattribute_str = internStringImmortal("__getattribute__");
+            static BoxedString* getattribute_str = getStringConstant("__getattribute__");
             if (p->name_strobj == getattribute_str) {
                 if (descr && descr->cls == wrapperdescr_cls
                     && ((BoxedWrapperDescriptor*)descr)->wrapped == PyObject_GenericGetAttr)
@@ -2095,9 +2095,11 @@ void add_operators(BoxedClass* cls) noexcept {
             continue;
 
         if (*ptr == PyObject_HashNotImplemented) {
-            cls->giveAttr(p.name_strobj, None);
+            cls->setattr(p.name_strobj, None, NULL);
         } else {
-            cls->giveAttr(p.name_strobj, new BoxedWrapperDescriptor(&p, cls, *ptr));
+            auto descr = new BoxedWrapperDescriptor(&p, cls, *ptr);
+            cls->setattr(p.name_strobj, descr, NULL);
+            Py_DECREF(descr);
         }
     }
 

@@ -1197,6 +1197,12 @@ inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
         return arg3;
     return args[idx - 3];
 }
+
+inline BoxedString* getStringConstant(llvm::StringRef s) {
+    BoxedString* r = internStringImmortal(s);
+    constants.push_back(r);
+    return r;
+}
 }
 
 #endif

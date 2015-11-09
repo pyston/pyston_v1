@@ -414,6 +414,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
         int i = 0;
         for (auto e : defaults) {
             assert(!e || gc::isValidGCObject(e));
+            Py_XINCREF(e);
             this->defaults->elts[i] = e;
             ++i;
         }
@@ -3676,10 +3677,10 @@ done:
 #define PRINT_TOTAL_REFS() fprintf(stderr, "[%" PY_FORMAT_SIZE_T "d refs]\n", _Py_GetRefTotal())
 #endif
 
+std::vector<Box*> constants;
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
-    std::vector<Box*> constants;
-
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
     HiddenClass::dict_backed = HiddenClass::makeDictBacked();
