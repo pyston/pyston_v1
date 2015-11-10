@@ -1,8 +1,5 @@
 """Extract, format and print information about Python stack traces."""
 
-# This module has been heavily modified for Pyston, since we don't provide the
-# same traceback objects as CPython.
-
 import linecache
 import sys
 import types
@@ -59,20 +56,7 @@ def print_tb(tb, limit=None, file=None):
     if limit is None:
         if hasattr(sys, 'tracebacklimit'):
             limit = sys.tracebacklimit
-
     n = 0
-    # Pyston change:
-    for (filename, name, lineno) in tb.getLines():
-        if limit and n >= limit:
-            break
-
-        _print(file,
-               '  File "%s", line %d, in %s' % (filename, lineno, name))
-        linecache.checkcache(filename)
-        line = linecache.getline(filename, lineno, None)
-        if line: _print(file, '    ' + line.strip())
-        n = n+1
-    """
     while tb is not None and (limit is None or n < limit):
         f = tb.tb_frame
         lineno = tb.tb_lineno
@@ -86,7 +70,6 @@ def print_tb(tb, limit=None, file=None):
         if line: _print(file, '    ' + line.strip())
         tb = tb.tb_next
         n = n+1
-    """
 
 def format_tb(tb, limit = None):
     """A shorthand for 'format_list(extract_tb(tb, limit))'."""
@@ -108,18 +91,6 @@ def extract_tb(tb, limit = None):
             limit = sys.tracebacklimit
     list = []
     n = 0
-    # Pyston change:
-    for (filename, name, lineno) in tb.getLines():
-        if limit and n >= limit:
-            break
-
-        linecache.checkcache(filename)
-        line = linecache.getline(filename, lineno, None)
-        if line: line = line.strip()
-        else: line = None
-        list.append((filename, lineno, name, line))
-        n = n+1
-    """
     while tb is not None and (limit is None or n < limit):
         f = tb.tb_frame
         lineno = tb.tb_lineno
@@ -133,7 +104,6 @@ def extract_tb(tb, limit = None):
         list.append((filename, lineno, name, line))
         tb = tb.tb_next
         n = n+1
-    """
     return list
 
 
@@ -293,28 +263,19 @@ def print_stack(f=None, limit=None, file=None):
     arguments have the same meaning as for print_exception().
     """
     if f is None:
-        # Pyston change:
-        """
         try:
             raise ZeroDivisionError
         except ZeroDivisionError:
             f = sys.exc_info()[2].tb_frame.f_back
-        """
-        f = sys._getframe(1)
     print_list(extract_stack(f, limit), file)
 
 def format_stack(f=None, limit=None):
     """Shorthand for 'format_list(extract_stack(f, limit))'."""
-
     if f is None:
-        # Pyston change:
-        """
         try:
             raise ZeroDivisionError
         except ZeroDivisionError:
             f = sys.exc_info()[2].tb_frame.f_back
-        """
-        f = sys._getframe(1)
     return format_list(extract_stack(f, limit))
 
 def extract_stack(f=None, limit = None):
@@ -326,16 +287,11 @@ def extract_stack(f=None, limit = None):
     line number, function name, text), and the entries are in order
     from oldest to newest stack frame.
     """
-
     if f is None:
-        # Pyston change:
-        """
         try:
             raise ZeroDivisionError
         except ZeroDivisionError:
             f = sys.exc_info()[2].tb_frame.f_back
-        """
-        f = sys._getframe(1)
     if limit is None:
         if hasattr(sys, 'tracebacklimit'):
             limit = sys.tracebacklimit
@@ -361,6 +317,4 @@ def tb_lineno(tb):
 
     Obsolete in 2.3.
     """
-
-    raise NotImplementedError("This function is currently not implemented in Pyston")
     return tb.tb_lineno
