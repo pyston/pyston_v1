@@ -458,3 +458,28 @@ typedef PY_LONG_LONG            Py_intptr_t;
         else if (errno == ERANGE)                                       \
             errno = 0;                                                  \
     } while(0)
+
+/* If we can't guarantee 53-bit precision, don't use the code
+   in Python/dtoa.c, but fall back to standard code.  This
+   means that repr of a float will be long (17 sig digits).
+
+   Realistically, there are two things that could go wrong:
+
+   (1) doubles aren't IEEE 754 doubles, or
+   (2) we're on x86 with the rounding precision set to 64-bits
+       (extended precision), and we don't know how to change
+       the rounding precision.
+ */
+
+#if !defined(DOUBLE_IS_LITTLE_ENDIAN_IEEE754) && \
+    !defined(DOUBLE_IS_BIG_ENDIAN_IEEE754) && \
+    !defined(DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754)
+#define PY_NO_SHORT_FLOAT_REPR
+#endif
+
+/* double rounding is symptomatic of use of extended precision on x86.  If
+   we're seeing double rounding, and we don't have any mechanism available for
+   changing the FPU rounding precision, then don't use Python/dtoa.c. */
+#if defined(X87_DOUBLE_ROUNDING) && !defined(HAVE_PY_SET_53BIT_PRECISION)
+#define PY_NO_SHORT_FLOAT_REPR
+#endif
