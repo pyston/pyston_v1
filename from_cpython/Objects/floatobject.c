@@ -1120,8 +1120,6 @@ float_long(PyObject *v)
 #error "C doubles do not appear to be IEEE 754 binary64 format"
 #endif
 
-// pyston change: comment this out
-#if 0
 PyObject *
 _Py_double_round(double x, int ndigits) {
 
@@ -1258,7 +1256,6 @@ _Py_double_round(double x, int ndigits) {
     _Py_dg_freedtoa(buf);
     return result;
 }
-#endif
 
 #undef FIVE_POW_LIMIT
 

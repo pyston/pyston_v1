@@ -721,6 +721,14 @@ void setupSys() {
 #ifdef Py_USING_UNICODE
     SET_SYS_FROM_STRING("maxunicode", PyInt_FromLong(PyUnicode_GetMax()));
 #endif
+
+/* float repr style: 0.03 (short) vs 0.029999999999999999 (legacy) */
+#ifndef PY_NO_SHORT_FLOAT_REPR
+    SET_SYS_FROM_STRING("float_repr_style", PyString_FromString("short"));
+#else
+    SET_SYS_FROM_STRING("float_repr_style", PyString_FromString("legacy"));
+#endif
+
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
