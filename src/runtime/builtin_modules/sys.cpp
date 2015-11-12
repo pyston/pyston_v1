@@ -646,7 +646,10 @@ void setupSys() {
     gc::registerPermanentRoot(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
-    sys_module = createModule(boxString("sys"));
+    sys_module = createModule(autoDecref(boxString("sys")));
+
+    // sys_module is what holds on to all of the other modules:
+    Py_INCREF(sys_module);
     constants.push_back(sys_module);
 
     sys_module->giveAttrBorrowed("modules", sys_modules_dict);

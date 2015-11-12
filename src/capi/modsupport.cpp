@@ -417,13 +417,13 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
         }
     }
 
-    BoxedModule* module = createModule(boxString(name), NULL, doc);
+    BoxedModule* module = createModule(autoDecref(boxString(name)), NULL, doc);
 
     // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);
 
     while (methods && methods->ml_name) {
-        module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods, passthrough, boxString(name)));
+        module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods, passthrough, autoDecref(boxString(name))));
 
         methods++;
     }

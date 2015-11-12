@@ -834,7 +834,7 @@ class BoxedClass;
 // TODO these shouldn't be here
 void setupRuntime();
 Box* createAndRunModule(BoxedString* name, const std::string& fn);
-BoxedModule* createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL);
+BoxedModule* createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL) noexcept;
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this

@@ -2238,14 +2238,14 @@ Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
     if (attrs->hcls->attributeArraySize() == 0) {
         attrs->hcls = HiddenClass::makeSingleton();
 
-        self->giveAttr("__name__", name);
-        self->giveAttr("__doc__", doc);
+        self->giveAttrBorrowed("__name__", name);
+        self->giveAttrBorrowed("__doc__", doc);
     } else {
-        self->setattr(internStringMortal("__name__"), name, NULL);
-        self->setattr(internStringMortal("__doc__"), doc, NULL);
+        self->setattr(autoDecref(internStringMortal("__name__")), name, NULL);
+        self->setattr(autoDecref(internStringMortal("__doc__")), doc, NULL);
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 Box* moduleRepr(BoxedModule* m) {
@@ -3673,6 +3673,11 @@ done:
     Py_TRASHCAN_SAFE_END(op)
 }
 
+void BoxedModule::dealloc(Box* b) noexcept {
+    BoxedModule* self = static_cast<BoxedModule*>(b);
+    self->clearAttrs();
+}
+
 
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
@@ -3764,6 +3769,7 @@ void setupRuntime() {
         BoxedClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false, "attrwrapper");
     dict_cls = new (0) BoxedClass(object_cls, &BoxedDict::gcHandler, 0, 0, sizeof(BoxedDict), false, "dict");
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
+    dict_cls->tp_dealloc = BoxedDict::dealloc;
     file_cls = new (0) BoxedClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, "file");
     file_cls->tp_dealloc = file_dealloc;
@@ -3785,6 +3791,7 @@ void setupRuntime() {
 
     module_cls = new (0) BoxedClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,
                                     sizeof(BoxedModule), false, "module");
+    module_cls->tp_dealloc = BoxedModule::dealloc;
     member_descriptor_cls = new (0)
         BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor");
     capifunc_cls = new (0)
@@ -4252,7 +4259,7 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
+BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
@@ -4265,13 +4272,16 @@ BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
     }
 
     BoxedModule* module = new BoxedModule();
-    moduleInit(module, name, boxString(doc ? doc : ""));
+    autoDecref(moduleInit(module, name, autoDecref(boxString(doc ? doc : ""))));
+
     if (fn)
         module->giveAttr("__file__", boxString(fn));
 
-    d->d[name] = module;
+    Py_XDECREF(existing);
+    d->d[incref(name)] = module;
+
     if (name->s() == "__main__")
-        module->giveAttr("__builtins__", builtins_module);
+        module->giveAttrBorrowed("__builtins__", builtins_module);
     return module;
 }
 

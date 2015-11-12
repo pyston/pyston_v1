@@ -7,6 +7,10 @@ extern "C" {
 #endif
 
 
+// Pyston addition: refcounting annotations:
+#define BORROWED(T) T
+#define STOLEN(T) T
+
 /* Object and type object interface */
 
 /*

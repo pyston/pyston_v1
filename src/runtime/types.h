@@ -924,6 +924,7 @@ public:
     Box* getLongConstant(llvm::StringRef s);
 
     static void gcHandler(GCVisitor* v, Box* self);
+    static void dealloc(Box* b) noexcept;
 
 private:
     ContiguousMap<llvm::StringRef, BoxedString*, llvm::StringMap<int>> str_constants;

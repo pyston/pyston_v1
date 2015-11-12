@@ -785,6 +785,10 @@ static Box* dict_repr(PyObject* self) noexcept {
 
 void BoxedDict::dealloc(Box* b) noexcept {
     assert(PyDict_Check(b));
+    for (auto p : *static_cast<BoxedDict*>(b)) {
+        Py_DECREF(p.first);
+        Py_DECREF(p.second);
+    }
     static_cast<BoxedDict*>(b)->d.freeAllMemory();
 }
 
@@ -807,7 +811,6 @@ void setupDict() {
     dict_iterator_cls->instances_are_nonzero = dict_keys_cls->instances_are_nonzero
         = dict_values_cls->instances_are_nonzero = dict_items_cls->instances_are_nonzero = true;
 
-    dict_cls->tp_dealloc = &BoxedDict::dealloc;
     dict_cls->has_safe_tp_dealloc = true;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
