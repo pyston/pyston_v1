@@ -3693,14 +3693,14 @@ void BoxedList::dealloc(Box* b) noexcept {
         while (--i >= 0) {
             Py_XDECREF(op->elts->elts[i]);
         }
-        PyMem_FREE(op->elts);
+        //PyMem_FREE(op->elts);
     }
 #if 0
     if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
         free_list[numfree++] = op;
     else
 #endif
-        Py_TYPE(op)->tp_free((PyObject *)op);
+    Py_TYPE(op)->tp_free((PyObject*)op);
     Py_TRASHCAN_SAFE_END(op)
 }
 

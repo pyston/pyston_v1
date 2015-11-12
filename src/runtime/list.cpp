@@ -756,6 +756,9 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
         memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
         self->size = s1 + s2;
+        for (int i = 0; i < s2; i++) {
+            Py_INCREF(self->elts->elts[i + s1]);
+        }
 
         Py_INCREF(self);
         return self;
@@ -774,6 +777,9 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
         memcpy(self->elts->elts + s1, rhs->elts, sizeof(self->elts->elts[0]) * s2);
         self->size = s1 + s2;
+        for (int i = 0; i < s2; i++) {
+            Py_INCREF(self->elts->elts[i + s1]);
+        }
 
         Py_INCREF(self);
         return self;
@@ -1099,14 +1105,10 @@ extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     try {
         BoxedList* l = new BoxedList();
         if (size) {
-            // This function is supposed to return a list of `size` NULL elements.
-            // That will probably trip an assert somewhere if we try to create that (ex
-            // I think the GC will expect them to be real objects so they can be relocated),
-            // so put None in instead
             l->ensure(size);
 
             for (Py_ssize_t i = 0; i < size; i++) {
-                l->elts->elts[i] = None;
+                l->elts->elts[i] = NULL;
             }
             l->size = size;
         }
@@ -1222,7 +1224,9 @@ extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
     assert(PyList_Check(l));
 
     try {
-        return listIAdd(l, b);
+        Box* r = listIAdd(l, b);
+        Py_DECREF(r);
+        Py_RETURN_NONE;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
