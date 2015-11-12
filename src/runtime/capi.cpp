@@ -1939,34 +1939,6 @@ extern "C" int PyErr_WarnExplicit(PyObject* category, const char* text, const ch
 #undef PyObject_GC_Del
 #undef _PyObject_GC_Malloc
 
-extern "C" PyObject* _PyObject_GC_Malloc(size_t basicsize) noexcept {
-    Box* r = ((PyObject*)PyObject_MALLOC(basicsize));
-    RELEASE_ASSERT(gc::isValidGCMemory(r), "");
-    return r;
-}
-
-#undef _PyObject_GC_New
-extern "C" PyObject* _PyObject_GC_New(PyTypeObject* tp) noexcept {
-    PyObject* op = _PyObject_GC_Malloc(_PyObject_SIZE(tp));
-    if (op != NULL)
-        op = PyObject_INIT(op, tp);
-    RELEASE_ASSERT(gc::isValidGCObject(op), "");
-    return op;
-}
-
-extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject* tp, Py_ssize_t nitems) noexcept {
-    const size_t size = _PyObject_VAR_SIZE(tp, nitems);
-    PyVarObject* op = (PyVarObject*)_PyObject_GC_Malloc(size);
-    if (op != NULL)
-        op = PyObject_INIT_VAR(op, tp, nitems);
-    RELEASE_ASSERT(gc::isValidGCObject(op), "");
-    return op;
-}
-
-extern "C" void PyObject_GC_Del(void* op) noexcept {
-    PyObject_FREE(op);
-}
-
 #ifdef HAVE_GCC_ASM_FOR_X87
 
 /* inline assembly for getting and setting the 387 FPU control word on

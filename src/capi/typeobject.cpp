@@ -3409,7 +3409,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
     classes.push_back(cls);
-    _Py_INC_REFTOTAL;
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES

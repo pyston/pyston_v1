@@ -742,6 +742,8 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 static void
 debug_instance(char *msg, PyInstanceObject *inst)
 {
+    Py_FatalError("unimplemented");
+#if 0
     char *cname;
     /* simple version of instance_repr */
     PyObject *classname = inst->in_class->cl_name;
@@ -751,6 +753,7 @@ debug_instance(char *msg, PyInstanceObject *inst)
         cname = "?";
     PySys_WriteStderr("gc: %.100s <%.100s instance at %p>\n",
                       msg, cname, inst);
+#endif
 }
 
 static void
@@ -838,7 +841,8 @@ static void
 clear_freelists(void)
 {
     (void)PyMethod_ClearFreeList();
-    (void)PyFrame_ClearFreeList();
+    Py_FatalError("unimplemented");
+    //(void)PyFrame_ClearFreeList();
     (void)PyCFunction_ClearFreeList();
     (void)PyTuple_ClearFreeList();
 #ifdef Py_USING_UNICODE

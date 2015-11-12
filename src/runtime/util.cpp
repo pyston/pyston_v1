@@ -121,6 +121,10 @@ extern "C" bool hasnext(Box* o) {
     return o->cls->tpp_hasnext(o);
 }
 
+extern "C" void _PyObject_Dump(Box* b) noexcept {
+    dump(b);
+}
+
 extern "C" void dump(void* p) {
     dumpEx(p, 0);
 }
