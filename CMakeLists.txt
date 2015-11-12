@@ -377,4 +377,4 @@ install(FILES test/lib/virtualenv/virtualenv_support/setuptools-12.0.5-py2.py3-n
 include(CPack)
 
 # last file added (need to change this if we add a file that is added via a glob):
-# from_cpython/Lib/test/test_zipimport.py
+# from_cpython/Include/genobject.h

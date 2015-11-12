@@ -44,6 +44,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     fcntlmodule.c
     fileio.c
     future_builtins.c
+    gcmodule.c
     getpath.c
     iobase.c
     itertoolsmodule.c

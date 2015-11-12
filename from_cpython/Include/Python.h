@@ -82,6 +82,7 @@
 #include "traceback.h"
 #include "sliceobject.h"
 #include "iterobject.h"
+#include "genobject.h"
 #include "descrobject.h"
 #include "warnings.h"
 #include "weakrefobject.h"

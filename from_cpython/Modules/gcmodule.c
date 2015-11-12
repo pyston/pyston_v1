@@ -19,7 +19,7 @@
 */
 
 #include "Python.h"
-#include "frameobject.h"        /* for PyFrame_ClearFreeList */
+//#include "frameobject.h"        /* for PyFrame_ClearFreeList */
 
 /* Get an object's GC head */
 #define AS_GC(o) ((PyGC_Head *)(o)-1)
