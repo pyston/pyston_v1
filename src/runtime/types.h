@@ -539,6 +539,7 @@ public:
     DEFAULT_CLASS_SIMPLE(list_cls);
 
     static void gcHandler(GCVisitor* v, Box* b);
+    static void dealloc(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
 static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");

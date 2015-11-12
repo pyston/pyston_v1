@@ -3678,13 +3678,62 @@ void BoxedModule::dealloc(Box* b) noexcept {
     self->clearAttrs();
 }
 
+void BoxedList::dealloc(Box* b) noexcept {
+    BoxedList* op = static_cast<BoxedList*>(b);
+
+    Py_ssize_t i;
+    PyObject_GC_UnTrack(op);
+    Py_TRASHCAN_SAFE_BEGIN(op)
+    if (op->elts != NULL) {
+        /* Do it backwards, for Christian Tismer.
+           There's a simple test case where somehow this reduces
+           thrashing when a *very* large list is created and
+           immediately deleted. */
+        i = Py_SIZE(op);
+        while (--i >= 0) {
+            Py_XDECREF(op->elts->elts[i]);
+        }
+        PyMem_FREE(op->elts);
+    }
+#if 0
+    if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
+        free_list[numfree++] = op;
+    else
+#endif
+        Py_TYPE(op)->tp_free((PyObject *)op);
+    Py_TRASHCAN_SAFE_END(op)
+}
+
 void BoxedClass::dealloc(Box* b) noexcept {
-    BoxedClass* self = static_cast<BoxedClass*>(b);
+    BoxedClass* type = static_cast<BoxedClass*>(b);
 
-    self->clearAttrs();
-    Py_XDECREF(self->tp_dict);
+    type->clearAttrs();
 
-    // XXX: need to import cpython's type_dealloc
+    Py_XDECREF(type->tp_dict);
+    Py_XDECREF(type->tp_bases);
+    Py_XDECREF(type->tp_subclasses);
+    //Py_XDECREF(type->tp_mro); // XXX was done manually
+
+#if 0
+    /* Assert this is a heap-allocated type object */
+    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+    _PyObject_GC_UNTRACK(type);
+    PyObject_ClearWeakRefs((PyObject *)type);
+    BoxedHeapClass* et = (BoxedHeapClass *)type;
+    Py_XDECREF(type->tp_base);
+    Py_XDECREF(type->tp_dict);
+    Py_XDECREF(type->tp_bases);
+    Py_XDECREF(type->tp_mro);
+    Py_XDECREF(type->tp_cache);
+    Py_XDECREF(type->tp_subclasses);
+    /* A type's tp_doc is heap allocated, unlike the tp_doc slots
+     * of most other objects.  It's okay to cast it to char *.
+     */
+    PyObject_Free((char *)type->tp_doc);
+    Py_XDECREF(et->ht_name);
+    Py_XDECREF(et->ht_slots);
+    Py_TYPE(type)->tp_free((PyObject *)type);
+#endif
 }
 
 
@@ -3773,6 +3822,7 @@ void setupRuntime() {
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new (0) BoxedClass(object_cls, &BoxedList::gcHandler, 0, 0, sizeof(BoxedList), false, "list");
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
+    list_cls->tp_dealloc = BoxedList::dealloc;
     pyston_getset_cls = new (0)
         BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor");
     attrwrapper_cls = new (0)
