@@ -39,8 +39,8 @@ PyAPI_DATA(PyTypeObject*) generator_cls;
 #define PyGen_Check(op) PyObject_TypeCheck(op, &PyGen_Type)
 #define PyGen_CheckExact(op) (Py_TYPE(op) == &PyGen_Type)
 
-PyAPI_FUNC(PyObject *) PyGen_New(struct _frame *);
-PyAPI_FUNC(int) PyGen_NeedsFinalizing(PyGenObject *);
+PyAPI_FUNC(PyObject *) PyGen_New(struct _frame *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyGen_NeedsFinalizing(PyGenObject *) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

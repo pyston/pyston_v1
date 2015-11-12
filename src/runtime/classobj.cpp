@@ -1636,6 +1636,10 @@ extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
     return ((BoxedInstanceMethod*)im)->im_class;
 }
 
+extern "C" int PyMethod_ClearFreeList(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 void setupClassobj() {
     classobj_cls = BoxedClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
                                       offsetof(BoxedClassobj, weakreflist), sizeof(BoxedClassobj), false, "classobj");

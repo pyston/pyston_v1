@@ -141,6 +141,8 @@ bool hasOrderedFinalizer(BoxedClass* cls) {
 }
 
 void finalize(Box* b) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     GCAllocation* al = GCAllocation::fromUserData(b);
     assert(!hasFinalized(al));
     setFinalized(al);
@@ -164,6 +166,8 @@ static StatCounter gc_safe_destructors("gc_safe_destructor_calls");
 
 __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>* weakly_referenced,
                                             std::vector<BoxedClass*>* classes_to_free) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
 #endif
@@ -216,6 +220,8 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
 }
 
 void Heap::destructContents(GCAllocation* al) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     _doFree(al, NULL, NULL);
 }
 
@@ -492,6 +498,8 @@ void SmallArena::forEachReference(std::function<void(GCAllocation*, size_t)> f) 
 }
 
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     assertConsistent();
 
     thread_caches.forEachValue([this, &weakly_referenced, &classes_to_free](ThreadBlockCache* cache) {
@@ -559,6 +567,8 @@ void SmallArena::getStatistics(HeapStatistics* stats) {
 
 SmallArena::Block** SmallArena::_freeChain(Block** head, std::vector<Box*>& weakly_referenced,
                                            std::vector<BoxedClass*>& classes_to_free) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     while (Block* b = *head) {
         int num_objects = b->numObjects();
         int first_obj = b->minObjIndex();
@@ -782,6 +792,8 @@ GCAllocation* LargeArena::realloc(GCAllocation* al, size_t bytes) {
 }
 
 void LargeArena::free(GCAllocation* al) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     _freeLargeObj(LargeObj::fromAllocation(al));
 }
 
@@ -828,6 +840,8 @@ void LargeArena::cleanupAfterCollection() {
 }
 
 void LargeArena::freeUnmarked(std::vector<Box*>& weakly_referenced, std::vector<BoxedClass*>& classes_to_free) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     sweepList(head, weakly_referenced, classes_to_free, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
@@ -938,6 +952,8 @@ retry:
 }
 
 void LargeArena::_freeLargeObj(LargeObj* obj) {
+    RELEASE_ASSERT(0, "shouldn't do any gcs");
+
     removeFromLL(obj);
 
     size_t size = obj->size;

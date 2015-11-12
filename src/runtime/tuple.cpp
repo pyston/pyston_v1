@@ -654,6 +654,32 @@ static Box* tuple_getnewargs(Box* _self) noexcept {
     return Py_BuildValue("(N)", tupleslice(v, 0, Py_SIZE(v)));
 }
 
+extern "C" void
+_PyTuple_MaybeUntrack(PyObject *op) noexcept
+{
+    PyTupleObject *t;
+    Py_ssize_t i, n;
+
+    if (!PyTuple_CheckExact(op) || !_PyObject_GC_IS_TRACKED(op))
+        return;
+    t = (PyTupleObject *) op;
+    n = Py_SIZE(t);
+    for (i = 0; i < n; i++) {
+        PyObject *elt = PyTuple_GET_ITEM(t, i);
+        /* Tuple with NULL elements aren't
+           fully constructed, don't untrack
+           them yet. */
+        if (!elt ||
+            _PyObject_GC_MAY_BE_TRACKED(elt))
+            return;
+    }
+#ifdef SHOW_TRACK_COUNT
+    count_tracked--;
+    count_untracked++;
+#endif
+    _PyObject_GC_UNTRACK(op);
+}
+
 void setupTuple() {
     static PySequenceMethods tuple_as_sequence;
     tuple_cls->tp_as_sequence = &tuple_as_sequence;
