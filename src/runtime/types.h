@@ -293,6 +293,8 @@ public:
 
     DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
 
+    static void dealloc(Box* self) noexcept;
+
 protected:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class

@@ -3408,6 +3408,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
     gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
+    classes.push_back(cls);
+    _Py_INC_REFTOTAL;
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
@@ -3440,7 +3442,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         base = cls->tp_base = object_cls;
     if (!cls->cls)
         cls->cls = cls->tp_base->cls;
-    cls->giveAttr("__base__", base);
+    cls->giveAttrBorrowed("__base__", base);
 
     assert(cls->tp_dict == NULL);
     cls->tp_dict = cls->getAttrWrapper();

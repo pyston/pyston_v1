@@ -3678,6 +3678,15 @@ void BoxedModule::dealloc(Box* b) noexcept {
     self->clearAttrs();
 }
 
+void BoxedClass::dealloc(Box* b) noexcept {
+    BoxedClass* self = static_cast<BoxedClass*>(b);
+
+    self->clearAttrs();
+    Py_XDECREF(self->tp_dict);
+
+    // XXX: need to import cpython's type_dealloc
+}
+
 
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
@@ -3707,6 +3716,7 @@ void setupRuntime() {
     type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
+    type_cls->tp_dealloc = BoxedClass::dealloc;
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
     // XXX silly that we have to set this again
