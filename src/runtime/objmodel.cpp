@@ -439,7 +439,7 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
         tp_alloc = tp_base->tp_alloc;
     } else {
         assert(this == object_cls);
-        tp_alloc = PystonType_GenericAlloc;
+        tp_alloc = PyType_GenericAlloc;
     }
 
     if (cls == NULL) {
@@ -5989,10 +5989,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 
     fixup_slot_dispatchers(made);
 
-    if (base->tp_alloc == &PystonType_GenericAlloc)
-        made->tp_alloc = PystonType_GenericAlloc;
-    else
-        made->tp_alloc = PyType_GenericAlloc;
+    made->tp_alloc = PyType_GenericAlloc;
 
     // On some occasions, Python-implemented classes inherit from C-implement classes. For
     // example, KeyedRef inherits from weakref, and needs to have it's finalizer called

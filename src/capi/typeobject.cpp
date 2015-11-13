@@ -3473,9 +3473,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
             cls->tp_as_buffer = base->tp_as_buffer;
     }
 
-    if (cls->tp_alloc == &PystonType_GenericAlloc)
-        cls->tp_alloc = &PyType_GenericAlloc;
-
     cls->is_user_defined = true;
 
 

@@ -538,7 +538,7 @@ class PythonUnwindSession : public Box {
     Timer t;
 
 public:
-    DEFAULT_CLASS_SIMPLE(unwind_session_cls);
+    DEFAULT_CLASS_SIMPLE(unwind_session_cls, true);
 
     PythonUnwindSession() : exc_info(NULL, NULL, NULL), t(/*min_usec=*/10000) {}
 

@@ -133,8 +133,22 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    if (true) {
-        printf("Python object\n");
+    if ((((intptr_t)p) & 0x7) == 0) {
+        uint8_t lowbyte = *reinterpret_cast<uint8_t*>(p);
+        if (lowbyte == 0xcb) {
+            printf("Uninitialized memory\n");
+            return;
+        }
+        if (lowbyte == 0xdb) {
+            printf("Freed memory\n");
+            return;
+        }
+        if (lowbyte == 0xcb) {
+            printf("Forbidden (redzone) memory\n");
+            return;
+        }
+
+        printf("Guessing that it's a Python object\n");
         Box* b = (Box*)p;
 
         printf("Class: %s", getFullTypeName(b).c_str());

@@ -95,62 +95,6 @@ void setupGC();
 
 std::vector<BoxedClass*> exception_types;
 
-// Analogue of PyType_GenericAlloc (default tp_alloc), but should only be used for Pyston classes!
-extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
-    assert(cls);
-
-    // See PyType_GenericAlloc for note about the +1 here:
-    const size_t size = _PyObject_VAR_SIZE(cls, nitems + 1);
-
-#ifndef NDEBUG
-#if 0
-    assert(cls->tp_bases);
-    // TODO this should iterate over all subclasses
-    for (auto e : cls->tp_bases->pyElements()) {
-        assert(e->cls == type_cls); // what about old style classes?
-        assert(static_cast<BoxedClass*>(e)->is_pyston_class);
-    }
-#endif
-    if (!cls->tp_mro) {
-        // wrapperdescr_cls is the last class to be set up during bootstrapping:
-        ASSERT(!wrapperdescr_cls, "looks like we need to set up the mro for %s manually", cls->tp_name);
-    } else {
-        assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
-        assert(cls->tp_mro->cls == tuple_cls);
-        for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
-            // old-style classes are always pyston classes:
-            if (b->cls == classobj_cls)
-                continue;
-            assert(PyType_Check(b));
-            ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
-                   static_cast<BoxedClass*>(b)->tp_name);
-        }
-    }
-#endif
-
-    void* mem;
-    if (PyType_IS_GC(cls))
-        mem = _PyObject_GC_Malloc(size);
-    else
-        mem = PyObject_MALLOC(size);
-    RELEASE_ASSERT(mem, "");
-
-    // Not sure if we can get away with not initializing this memory.
-    // I think there are small optimizations we can do, like not initializing cls (always
-    // the first 8 bytes) since it will get written by PyObject_Init.
-    memset(mem, '\0', size);
-
-    Box* rtn = static_cast<Box*>(mem);
-
-    if (cls->tp_itemsize != 0)
-        static_cast<BoxVar*>(rtn)->ob_size = nitems;
-
-    PyObject_INIT(rtn, cls);
-    assert(rtn->cls);
-
-    return rtn;
-}
-
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
     const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
@@ -3558,11 +3502,16 @@ void setupRuntime() {
     file_cls->tp_dealloc = file_dealloc;
     int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int");
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
+    int_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool");
+    bool_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex");
+    complex_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long");
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
+    long_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float");
+    float_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     function_cls = new (0)
         BoxedClass(object_cls, offsetof(BoxedFunction, attrs),
                    offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false, "function");

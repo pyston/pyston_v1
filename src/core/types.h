@@ -672,9 +672,6 @@ public:
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
-// Our default for tp_alloc:
-extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
-
 // These are some macros for tying the C++ type hiercharchy to the Pyston type hiercharchy.
 // Classes that inherit from Box have a special operator new() that takes a class object (as
 // a BoxedClass*) since the class is necessary for object allocation.
@@ -726,33 +723,46 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 // In the simple cases, we can inline the fast paths of the following methods and improve allocation speed quite a bit:
 // - Box::operator new
 // - cls->tp_alloc
-// - PystonType_GenericAlloc
+// - PyType_GenericAlloc
 // - PyObject_Init
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
 // asserts in the 1-arg operator new function:
-#define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
+#define DEFAULT_CLASS_SIMPLE(default_cls, is_gc)                                                                       \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
         ALLOC_STATS(default_cls);                                                                                      \
-        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                          \
         assert(default_cls->tp_itemsize == 0);                                                                         \
         assert(default_cls->tp_basicsize == size);                                                                     \
         assert(default_cls->is_pyston_class);                                                                          \
         assert(default_cls->attrs_offset == 0);                                                                        \
+        assert(is_gc == PyType_IS_GC(default_cls));                                                                    \
+        bool is_heaptype = false;                                                                                      \
+        assert(is_heaptype == (bool)(default_cls->tp_flags & Py_TPFLAGS_HEAPTYPE));                                    \
                                                                                                                        \
         /* Don't allocate classes through this -- we need to keep track of all class objects. */                       \
         assert(default_cls != type_cls);                                                                               \
                                                                                                                        \
         /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
-        void* mem = PyObject_MALLOC(size);                                                                \
+        void* mem;                                                                                                     \
+        if (is_gc)                                                                                                     \
+            mem = _PyObject_GC_Malloc(size);                                                                           \
+        else                                                                                                           \
+            mem = PyObject_MALLOC(size);                                                                               \
         assert(mem);                                                                                                   \
                                                                                                                        \
         Box* rtn = static_cast<Box*>(mem);                                                                             \
                                                                                                                        \
-        rtn->cls = default_cls;                                                                                        \
-        _Py_NewReference(rtn);                                                                                         \
+        if (is_heaptype)                                                                                               \
+            Py_INCREF(default_cls);                                                                                    \
+                                                                                                                       \
+        PyObject_INIT(rtn, default_cls);                                                                               \
+                                                                                                                       \
+        if (is_gc)                                                                                                     \
+            _PyObject_GC_TRACK(rtn);                                                                                   \
+                                                                                                                       \
         return rtn;                                                                                                    \
         /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
     }
@@ -801,7 +811,7 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
         ALLOC_STATS_VAR(default_cls)                                                                                   \
-        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                      \
         assert(default_cls->tp_itemsize == itemsize);                                                                  \
         assert(default_cls->tp_basicsize == size);                                                                     \
         assert(default_cls->is_pyston_class);                                                                          \

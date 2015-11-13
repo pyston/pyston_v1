@@ -379,7 +379,7 @@ public:
 
     BoxedInt(int64_t n) __attribute__((visibility("default"))) : n(n) {}
 
-    DEFAULT_CLASS_SIMPLE(int_cls);
+    DEFAULT_CLASS_SIMPLE(int_cls, false);
 };
 
 class BoxedFloat : public Box {
@@ -388,7 +388,7 @@ public:
 
     BoxedFloat(double d) __attribute__((visibility("default"))) : d(d) {}
 
-    DEFAULT_CLASS_SIMPLE(float_cls);
+    DEFAULT_CLASS_SIMPLE(float_cls, false);
 };
 static_assert(sizeof(BoxedFloat) == sizeof(PyFloatObject), "");
 static_assert(offsetof(BoxedFloat, d) == offsetof(PyFloatObject, ob_fval), "");
@@ -400,14 +400,14 @@ public:
 
     BoxedComplex(double r, double i) __attribute__((visibility("default"))) : real(r), imag(i) {}
 
-    DEFAULT_CLASS_SIMPLE(complex_cls);
+    DEFAULT_CLASS_SIMPLE(complex_cls, false);
 };
 
 class BoxedBool : public BoxedInt {
 public:
     BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(b ? 1 : 0) {}
 
-    DEFAULT_CLASS_SIMPLE(bool_cls);
+    DEFAULT_CLASS_SIMPLE(bool_cls, false);
 };
 
 class BoxedString : public BoxVar {
@@ -436,7 +436,7 @@ public:
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
         ALLOC_STATS_VAR(str_cls)
 
-        assert(str_cls->tp_alloc == PystonType_GenericAlloc);
+        assert(str_cls->tp_alloc == PyType_GenericAlloc);
         assert(str_cls->tp_itemsize == 1);
         assert(str_cls->tp_basicsize == offsetof(BoxedString, s_data) + 1);
         assert(str_cls->is_pyston_class);
@@ -491,7 +491,7 @@ public:
     BoxedInstanceMethod(Box* obj, Box* func, Box* im_class) __attribute__((visibility("default")))
     : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
 
-    DEFAULT_CLASS_SIMPLE(instancemethod_cls);
+    DEFAULT_CLASS_SIMPLE(instancemethod_cls, true);
 };
 
 class GCdArray {
@@ -525,7 +525,7 @@ public:
     void shrink();
     static const int INITIAL_CAPACITY;
 
-    DEFAULT_CLASS_SIMPLE(list_cls);
+    DEFAULT_CLASS_SIMPLE(list_cls, true);
 
     static void dealloc(Box* self) noexcept;
 };
@@ -678,19 +678,15 @@ public:
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
         ALLOC_STATS_VAR(tuple_cls)
 
-        assert(tuple_cls->tp_alloc == PystonType_GenericAlloc);
+        assert(tuple_cls->tp_alloc == PyType_GenericAlloc);
         assert(tuple_cls->tp_itemsize == sizeof(Box*));
         assert(tuple_cls->tp_basicsize == offsetof(BoxedTuple, elts));
         assert(tuple_cls->is_pyston_class);
         assert(tuple_cls->attrs_offset == 0);
 
-        void* mem = PyObject_MALLOC(offsetof(BoxedTuple, elts) + nitems * sizeof(Box*));
-        assert(mem);
+        BoxVar* rtn = static_cast<BoxVar*>(PyObject_GC_NewVar(BoxedTuple, &PyTuple_Type, nitems));
+        assert(rtn);
 
-        BoxVar* rtn = static_cast<BoxVar*>(mem);
-        rtn->cls = tuple_cls;
-        rtn->ob_size = nitems;
-        _Py_NewReference(rtn);
         return rtn;
     }
 
@@ -792,7 +788,7 @@ public:
 
     BoxedDict() __attribute__((visibility("default"))) {}
 
-    DEFAULT_CLASS_SIMPLE(dict_cls);
+    DEFAULT_CLASS_SIMPLE(dict_cls, true);
 
     Box* getOrNull(Box* k) {
         const auto& p = d.find(BoxAndHash(k));
@@ -918,7 +914,7 @@ public:
     Box* start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
 
-    DEFAULT_CLASS_SIMPLE(slice_cls);
+    DEFAULT_CLASS_SIMPLE(slice_cls, true);
 };
 static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
 static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
@@ -957,7 +953,7 @@ public:
     BoxedMemberDescriptor(PyMemberDef* member)
         : type((MemberType)member->type), offset(member->offset), readonly(member->flags & READONLY) {}
 
-    DEFAULT_CLASS_SIMPLE(member_descriptor_cls);
+    DEFAULT_CLASS_SIMPLE(member_descriptor_cls, true);
 };
 
 class BoxedGetsetDescriptor : public Box {
@@ -983,7 +979,7 @@ public:
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 
-    DEFAULT_CLASS_SIMPLE(property_cls);
+    DEFAULT_CLASS_SIMPLE(property_cls, true);
 };
 
 class BoxedStaticmethod : public Box {
@@ -992,7 +988,7 @@ public:
 
     BoxedStaticmethod(Box* callable) : sm_callable(callable){};
 
-    DEFAULT_CLASS_SIMPLE(staticmethod_cls);
+    DEFAULT_CLASS_SIMPLE(staticmethod_cls, true);
 };
 
 class BoxedClassmethod : public Box {
@@ -1001,7 +997,7 @@ public:
 
     BoxedClassmethod(Box* callable) : cm_callable(callable){};
 
-    DEFAULT_CLASS_SIMPLE(classmethod_cls);
+    DEFAULT_CLASS_SIMPLE(classmethod_cls, true);
 };
 
 // TODO is there any particular reason to make this a Box, i.e. a python-level object?
@@ -1122,9 +1118,6 @@ BoxedDict* attrwrapperToDict(Box* b);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);
-
-// Our default for tp_alloc:
-extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 
 #define fatalOrError(exception, message)                                                                               \
     do {                                                                                                               \
