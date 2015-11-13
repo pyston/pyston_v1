@@ -438,7 +438,7 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
         assert(tp_base->tp_alloc);
         tp_alloc = tp_base->tp_alloc;
     } else {
-        assert(object_cls == NULL);
+        assert(this == object_cls);
         tp_alloc = PystonType_GenericAlloc;
     }
 
@@ -468,7 +468,7 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
     tp_free = default_free;
 
     if (!base) {
-        assert(object_cls == nullptr);
+        assert(this == object_cls);
         // we're constructing 'object'
         // Will have to add __base__ = None later
     } else {

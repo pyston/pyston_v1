@@ -3480,11 +3480,15 @@ void setupRuntime() {
 
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
-    void* mem = PyObject_MALLOC(sizeof(BoxedClass));
-    object_cls = ::new (mem) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
-    mem = PyObject_MALLOC(sizeof(BoxedClass));
-    type_cls = ::new (mem) BoxedClass(object_cls, offsetof(BoxedClass, attrs),
+    object_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
+    PyObject_INIT(object_cls, NULL);
+    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
+
+    type_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
+    PyObject_INIT(type_cls, type_cls);
+    ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs),
                                       offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, "type");
+
     type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);

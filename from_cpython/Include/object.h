@@ -26,7 +26,6 @@ An object has a 'reference count' that is increased or decreased when a
 pointer to the object is copied or deleted; when the reference count
 reaches zero there are no references to the object left and it can be
 removed from the heap.
-[not true in Pyston]
 
 An object has a 'type' that determines what it represents and what kind
 of data it contains.  An object's type is fixed when it is created.
@@ -43,7 +42,6 @@ after allocation.  (These restrictions are made so a reference to an
 object can be simply a pointer -- moving an object would require
 updating all the pointers, and changing an object's size would require
 moving it if there was another object right next to it.)
-[This may not always be true in Pyston]
 
 Objects are always accessed through pointers of the type 'PyObject *'.
 The type 'PyObject' is a structure that only contains the reference count
