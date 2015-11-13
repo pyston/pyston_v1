@@ -88,10 +88,9 @@ extern "C" void init_ssl();
 extern "C" void init_sqlite3();
 extern "C" void PyMarshal_Init();
 extern "C" void initstrop();
+extern "C" void initgc();
 
 namespace pyston {
-
-void setupGC();
 
 std::vector<BoxedClass*> exception_types;
 
@@ -3425,11 +3424,10 @@ void setupRuntime() {
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
     object_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
-    PyObject_INIT(object_cls, NULL);
-    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
-
     type_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
+    PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
+    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs),
                                       offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, "type");
 
@@ -3437,8 +3435,7 @@ void setupRuntime() {
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
     type_cls->tp_dealloc = BoxedClass::dealloc;
-    PyObject_Init(object_cls, type_cls);
-    PyObject_Init(type_cls, type_cls);
+
     // XXX silly that we have to set this again
     new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
     new (&type_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
@@ -3923,7 +3920,7 @@ void setupRuntime() {
     setupBuiltins();
     _PyExc_Init();
     setupThread();
-    setupGC();
+    initgc();
     setupImport();
     setupPyston();
     setupAST();
