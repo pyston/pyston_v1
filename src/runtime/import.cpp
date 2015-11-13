@@ -384,14 +384,14 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
 static Box* importSub(const std::string& name, BoxedString* full_name, Box* parent_module) {
     BoxedDict* sys_modules = getSysModulesDict();
     if (sys_modules->d.find(full_name) != sys_modules->d.end()) {
-        return sys_modules->d[full_name];
+        return incref(sys_modules->d[full_name]);
     }
 
     BoxedList* path_list;
     if (parent_module == NULL || parent_module == None) {
         path_list = NULL;
     } else {
-        static BoxedString* path_str = internStringImmortal("__path__");
+        static BoxedString* path_str = getStaticString("__path__");
         path_list = static_cast<BoxedList*>(getattrInternal<ExceptionStyle::CXX>(parent_module, path_str));
         if (path_list == NULL || path_list->cls != list_cls) {
             return None;
@@ -472,10 +472,10 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
     std::string subname(local_name.substr(0, len));
     buf += subname;
 
-    result = importSub(subname, boxString(buf), mod);
+    result = importSub(subname, autoDecref(boxString(buf)), mod);
     if (result == None && altmod != mod) {
         /* Here, altmod must be None and mod must not be None */
-        result = importSub(subname, boxString(subname), altmod);
+        result = importSub(subname, autoDecref(boxString(subname)), altmod);
         if (result != NULL && result != None) {
             markMiss(buf);
 
@@ -566,7 +566,7 @@ extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* glob
 }
 
 static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive) {
-    static BoxedString* path_str = internStringImmortal("__path__");
+    static BoxedString* path_str = getStaticString("__path__");
     Box* pathlist = NULL;
     try {
         pathlist = getattrInternal<ExceptionStyle::CXX>(module, path_str);
@@ -579,6 +579,9 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
         // If it's not a package, then there's no sub-importing to do
         return;
     }
+    Py_DECREF(pathlist);
+
+    RELEASE_ASSERT(0, "check the refcounting here");
 
     for (Box* _s : fromlist->pyElements()) {
         RELEASE_ASSERT(PyString_Check(_s), "");
@@ -614,8 +617,8 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     try {
         // TODO: check if this has the same behaviour as the cpython implementation
         BoxedList* silly_list = new BoxedList();
-        listAppendInternal(silly_list, boxString("__doc__"));
-        return import(0, silly_list, ((BoxedString*)module_name)->s());
+        listAppendInternal(silly_list, autoDecref(boxString("__doc__")));
+        return import(0, autoDecref(silly_list), ((BoxedString*)module_name)->s());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -623,7 +626,7 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
 }
 
 extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
-    return PyImport_Import(boxString(name));
+    return PyImport_Import(autoDecref(boxString(name)));
 }
 
 extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {

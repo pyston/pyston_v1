@@ -661,7 +661,7 @@ public:
     void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
-    Box* getAttrWrapper();
+    BORROWED(Box*) getAttrWrapper();
 
     Box* reprIC();
     BoxedString* reprICAsString();

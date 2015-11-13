@@ -2965,8 +2965,7 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
              * didn't define tp_free, and the base uses the
              * default non-gc tp_free.
              */
-            // Pyston change: don't do this:
-            // type->tp_free = PyObject_GC_Del;
+            type->tp_free = PyObject_GC_Del;
         }
         /* else they didn't agree about gc, and there isn't something
          * obvious to be done -- the type is on its own.
@@ -3379,7 +3378,7 @@ extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
 extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
     static BoxedString* dict_str = getStaticString("__dict__");
     assert(!cls->hasattr(dict_str));
-    cls->giveAttr(dict_str, dict_descr);
+    cls->giveAttr(incref(dict_str), incref(dict_descr));
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
@@ -3422,7 +3421,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->giveAttrBorrowed("__base__", base);
 
     assert(cls->tp_dict == NULL);
-    cls->tp_dict = cls->getAttrWrapper();
+    cls->tp_dict = incref(cls->getAttrWrapper());
 
     assert(cls->tp_name);
 

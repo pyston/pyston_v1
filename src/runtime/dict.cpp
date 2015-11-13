@@ -313,7 +313,7 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
         abort();
     }
 
-    return PyDict_SetItem(mp, key_s, item);
+    return PyDict_SetItem(mp, autoDecref(key_s), item);
 }
 
 extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {

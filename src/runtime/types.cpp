@@ -2498,11 +2498,13 @@ Box* Box::getAttrWrapper() {
             auto new_hcls = hcls->getAttrwrapperChild();
             appendNewHCAttr(aw, NULL);
             attrs->hcls = new_hcls;
+            Py_DECREF(aw);
             return aw;
         } else {
             assert(hcls->type == HiddenClass::SINGLETON);
             appendNewHCAttr(aw, NULL);
             hcls->appendAttrwrapper();
+            Py_DECREF(aw);
             return aw;
         }
     }
@@ -3223,12 +3225,6 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     return unicode;
 }
 
-// We don't need CPython's version of tp_free since we have GC.
-// We still need to set tp_free to something and not a NULL pointer,
-// because C extensions might still call tp_free from tp_dealloc.
-void default_free(void*) {
-}
-
 void dealloc_null(Box* box) {
     assert(box->cls->tp_del == NULL);
 }
@@ -3423,6 +3419,10 @@ void BoxedClass::dealloc(Box* b) noexcept {
 #endif
 }
 
+static void object_dealloc(PyObject* self) {
+    Py_TYPE(self)->tp_free(self);
+}
+
 
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
@@ -3448,15 +3448,14 @@ void setupRuntime() {
     type_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
-    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
+    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del);
     object_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs),
-                                      offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, "type");
+    ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs), offsetof(BoxedClass, tp_weaklist),
+                                sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del);
 
     type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
-    type_cls->tp_dealloc = BoxedClass::dealloc;
 
     // XXX silly that we have to set this again
     new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());
@@ -3468,18 +3467,18 @@ void setupRuntime() {
     object_cls->tp_new = object_new;
     type_cls->tp_getattro = type_getattro;
 
-    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType");
+    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", NULL, NULL);
     None = new (none_cls) Box();
     constants.push_back(None);
     assert(None->cls);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring");
+    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", NULL, NULL);
 
     // We add 1 to the tp_basicsize of the BoxedString in order to hold the null byte at the end.
     // We use offsetof(BoxedString, s_data) as opposed to sizeof(BoxedString) so that we can
     // use the extra padding bytes at the end of the BoxedString.
-    str_cls = new (0) BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str");
+    str_cls = new (0) BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str", NULL, NULL);
     str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
     str_cls->tp_itemsize = sizeof(char);
 
@@ -3498,61 +3497,55 @@ void setupRuntime() {
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple");
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple", (destructor)tupledealloc, NULL);
 
-    tuple_cls->tp_dealloc = (destructor)tupledealloc;
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     constants.push_back(EmptyTuple);
-    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list");
+    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", BoxedList::dealloc, NULL);
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
-    list_cls->tp_dealloc = BoxedList::dealloc;
     pyston_getset_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor");
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor", NULL, NULL);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper");
-    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict");
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", NULL, NULL);
+    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", BoxedDict::dealloc, NULL);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    dict_cls->tp_dealloc = BoxedDict::dealloc;
     file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
-                                  sizeof(BoxedFile), false, "file");
-    file_cls->tp_dealloc = file_dealloc;
-    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int");
+                                  sizeof(BoxedFile), false, "file", file_dealloc, NULL);
+    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", NULL, NULL);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     int_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool");
+    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL);
     bool_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex");
+    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL);
     complex_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long");
+    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", NULL, NULL);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     long_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float");
+    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", NULL, NULL);
     float_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     function_cls = new (0)
         BoxedClass(object_cls, offsetof(BoxedFunction, attrs),
-                   offsetof(BoxedFunction, weakreflist), sizeof(BoxedFunction), false, "function");
+                   offsetof(BoxedFunction, weakreflist), sizeof(BoxedFunction), false, "function", functionDtor, NULL);
     builtin_function_or_method_cls = new (0)
         BoxedClass(object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist),
-                   sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
-    function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
+                   sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method", functionDtor, NULL);
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
     module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0,
-                                    sizeof(BoxedModule), false, "module");
-    module_cls->tp_dealloc = BoxedModule::dealloc;
+                                    sizeof(BoxedModule), false, "module", BoxedModule::dealloc, NULL);
     member_descriptor_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor");
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor", NULL, NULL);
     capifunc_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc");
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", NULL, NULL);
     method_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor),
-                                    false, "method_descriptor");
+                                    false, "method_descriptor", NULL, NULL);
     wrapperobject_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject),
-                                           false, "method-wrapper");
+                                           false, "method-wrapper", NULL, NULL);
     wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0,
-                                          sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor");
+                                          sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor", NULL, NULL);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);
@@ -3660,8 +3653,7 @@ void setupRuntime() {
 
     instancemethod_cls = BoxedClass::create(type_cls, object_cls, 0,
                                             offsetof(BoxedInstanceMethod, im_weakreflist), sizeof(BoxedInstanceMethod),
-                                            false, "instancemethod");
-    instancemethod_cls->tp_dealloc = BoxedInstanceMethod::dealloc;
+                                            false, "instancemethod", BoxedInstanceMethod::dealloc);
 
     slice_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice");

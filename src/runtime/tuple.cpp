@@ -382,7 +382,10 @@ extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) no
 
     BoxedTuple* t = static_cast<BoxedTuple*>(op);
     RELEASE_ASSERT(i >= 0 && i < t->size(), "");
+
+    auto olditem = t->elts[i];
     t->elts[i] = newitem;
+    Py_XDECREF(olditem);
     return 0;
 }
 
@@ -399,6 +402,7 @@ extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
 
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject* o = va_arg(vargs, PyObject*);
+        Py_INCREF(o);
         PyTuple_SetItem(result, i, o);
     }
     va_end(vargs);

@@ -712,8 +712,7 @@ void setupSys() {
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
-    sys_flags_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedSysFlags), false, "flags");
+    sys_flags_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSysFlags), false, "flags");
     sys_flags_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
     sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
@@ -730,7 +729,6 @@ void setupSys() {
 #ifdef Py_USING_UNICODE
     SET_SYS_FROM_STRING("maxunicode", PyInt_FromLong(PyUnicode_GetMax()));
 #endif
-    sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {

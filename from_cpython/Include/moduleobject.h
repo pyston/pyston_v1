@@ -17,7 +17,7 @@ PyAPI_DATA(PyTypeObject*) module_cls;
 #define PyModule_CheckExact(op) (Py_TYPE(op) == &PyModule_Type)
 
 PyAPI_FUNC(PyObject *) PyModule_New(const char *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyModule_GetDict(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyModule_GetDict(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char *) PyModule_GetName(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char *) PyModule_GetFilename(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _PyModule_Clear(PyObject *) PYSTON_NOEXCEPT;

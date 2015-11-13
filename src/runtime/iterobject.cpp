@@ -189,8 +189,7 @@ bool calliter_hasnext(Box* b) {
 
 
 void setupIter() {
-    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false,
-                                     "iterator");
+    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__",

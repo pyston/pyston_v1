@@ -68,7 +68,7 @@ void setupImport();
 void setupAST();
 void setupSysEnd();
 
-BoxedDict* getSysModulesDict();
+BORROWED(BoxedDict*) getSysModulesDict();
 BoxedList* getSysPath();
 extern "C" Box* getSysStdout();
 
@@ -173,7 +173,6 @@ struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
 
 // Finalizer-related
-void default_free(void*);
 void dealloc_null(Box* box);
 void file_dealloc(Box*) noexcept;
 
@@ -276,11 +275,12 @@ public:
     SlotOffset* slotOffsets() { return (BoxedClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
 
     // These should only be used for builtin types:
-    static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset,
-                              int weaklist_offset, int instance_size, bool is_user_defined, const char* name);
+    static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset, int weaklist_offset,
+                              int instance_size, bool is_user_defined, const char* name, destructor dealloc = NULL,
+                              freefunc free = NULL);
 
     BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
-               bool is_user_defined, const char* name);
+               bool is_user_defined, const char* name, destructor dealloc, freefunc free);
 
 
     DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
