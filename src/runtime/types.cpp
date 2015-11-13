@@ -3431,6 +3431,9 @@ void BoxedClass::dealloc(Box* b) noexcept {
 #endif
 
 std::vector<Box*> constants;
+extern "C" void PyGC_RegisterStaticConstant(Box* b) {
+    constants.push_back(b);
+}
 
 extern "C" void _PyUnicode_Fini(void);
 
@@ -3922,7 +3925,7 @@ void setupRuntime() {
     attrwrapperiter_cls->tp_iternext = AttrWrapperIter::next_capi;
 
     setupBuiltins();
-    //_PyExc_Init();
+    _PyExc_Init();
     //setupThread();
     //initgc();
     //setupImport();

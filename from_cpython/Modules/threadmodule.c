@@ -945,6 +945,7 @@ initthread(void)
     str_dict = PyString_InternFromString("__dict__");
     if (str_dict == NULL)
         return;
+    PyGC_RegisterStaticConstant(str_dict);
 
     /* Initialize the C thread library */
     //PyThread_init_thread(); // pyston change

@@ -206,7 +206,7 @@ void setupThread() {
     initthread();
     RELEASE_ASSERT(!PyErr_Occurred(), "");
 
-    Box* thread_module = getSysModulesDict()->getOrNull(boxString("thread"));
+    Box* thread_module = getSysModulesDict()->getOrNull(autoDecref(boxString("thread")));
     assert(thread_module);
 
     thread_module->giveAttr(
@@ -231,17 +231,17 @@ void setupThread() {
     thread_lock_cls->giveAttr("__module__", boxString("thread"));
     thread_lock_cls->giveAttr("acquire", new BoxedFunction(FunctionMetadata::create((void*)BoxedThreadLock::acquire,
                                                                                     BOXED_BOOL, 2, false, false),
-                                                           { boxInt(1) }));
+                                                           { autoDecref(boxInt(1)) }));
     thread_lock_cls->giveAttr("release",
                               new BoxedFunction(FunctionMetadata::create((void*)BoxedThreadLock::release, NONE, 1)));
-    thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr(internStringMortal("acquire")));
-    thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr(internStringMortal("release")));
-    thread_lock_cls->giveAttr("__enter__", thread_lock_cls->getattr(internStringMortal("acquire")));
+    thread_lock_cls->giveAttrBorrowed("acquire_lock", thread_lock_cls->getattr(getStaticString("acquire")));
+    thread_lock_cls->giveAttrBorrowed("release_lock", thread_lock_cls->getattr(getStaticString("release")));
+    thread_lock_cls->giveAttrBorrowed("__enter__", thread_lock_cls->getattr(getStaticString("acquire")));
     thread_lock_cls->giveAttr("__exit__",
                               new BoxedFunction(FunctionMetadata::create((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->giveAttr(
         "locked", new BoxedFunction(FunctionMetadata::create((void*)BoxedThreadLock::locked, BOXED_BOOL, 1)));
-    thread_lock_cls->giveAttr("locked_lock", thread_lock_cls->getattr(internStringMortal("locked")));
+    thread_lock_cls->giveAttrBorrowed("locked_lock", thread_lock_cls->getattr(getStaticString("locked")));
     thread_lock_cls->freeze();
 
     ThreadError = BoxedClass::create(type_cls, Exception, Exception->attrs_offset, Exception->tp_weaklistoffset,
@@ -249,6 +249,6 @@ void setupThread() {
     ThreadError->giveAttr("__module__", boxString("thread"));
     ThreadError->freeze();
 
-    thread_module->giveAttr("error", ThreadError);
+    thread_module->giveAttrBorrowed("error", ThreadError);
 }
 }

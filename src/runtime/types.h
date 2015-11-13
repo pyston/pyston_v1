@@ -796,7 +796,7 @@ public:
 
     DEFAULT_CLASS_SIMPLE(dict_cls, true);
 
-    Box* getOrNull(Box* k) {
+    BORROWED(Box*) getOrNull(Box* k) {
         const auto& p = d.find(BoxAndHash(k));
         if (p != d.end())
             return p->second;

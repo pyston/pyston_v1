@@ -123,6 +123,11 @@ PyAPI_FUNC(int) PyObject_DelHcAttrString(PyObject*, const char*) PYSTON_NOEXCEPT
 // Workaround: call this instead of setting tp_dict.
 PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 
+// Pyston addition: register an object as a "static constant".  Current purpose is that this will
+// get decref'd when the interpreter shuts down.
+// PyType_Ready calls this automatically.
+PyAPI_FUNC(void) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
+
 #include "codecs.h"
 #include "pyerrors.h"
 
