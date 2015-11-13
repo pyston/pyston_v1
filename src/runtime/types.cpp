@@ -373,7 +373,7 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md,
     : BoxedBuiltinFunctionOrMethod(md, name, {}) {
 
     Py_DECREF(this->doc);
-    this->doc = doc ? boxString(doc) : None;
+    this->doc = doc ? boxString(doc) : incref(None);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md, const char* name,
@@ -3781,40 +3781,19 @@ void setupRuntime() {
     setupClassobj();
     setupSuper();
     _PyUnicode_Init();
-
-    // XXX
-    PyType_ClearCache();
-    _Py_ReleaseInternedStrings();
-    _PyUnicode_Fini();
-    for (auto b : classes)
-        b->clearAttrs();
-    for (auto b : constants) {
-        b->clearAttrs();
-        Py_DECREF(b);
-    }
-    for (auto b : classes) {
-        if (b->tp_mro) {
-            Py_DECREF(b->tp_mro);
-        }
-        Py_DECREF(b);
-    }
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-
     setupDescr();
     setupTraceback();
     setupCode();
     setupFrame();
 
-    function_cls->giveAttr("__dict__", dict_descr);
+    function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
                                                                    offsetof(BoxedFunction, modname), false));
     function_cls->giveAttr(
         "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
-    function_cls->giveAttr("func_doc", function_cls->getattr(internStringMortal("__doc__")));
+    function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
     function_cls->giveAttr("__globals__", new (pyston_getset_cls) BoxedGetsetDescriptor(functionGlobals, NULL, NULL));
     function_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
@@ -3823,12 +3802,12 @@ void setupRuntime() {
                            new BoxedFunction(FunctionMetadata::create((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->giveAttr("func_code",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, functionSetCode, NULL));
-    function_cls->giveAttr("__code__", function_cls->getattr(internStringMortal("func_code")));
-    function_cls->giveAttr("func_name", function_cls->getattr(internStringMortal("__name__")));
+    function_cls->giveAttrBorrowed("__code__", function_cls->getattr(getStaticString("func_code")));
+    function_cls->giveAttrBorrowed("func_name", function_cls->getattr(getStaticString("__name__")));
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, functionSetDefaults, NULL));
-    function_cls->giveAttr("__defaults__", function_cls->getattr(internStringMortal("func_defaults")));
-    function_cls->giveAttr("func_globals", function_cls->getattr(internStringMortal("__globals__")));
+    function_cls->giveAttrBorrowed("__defaults__", function_cls->getattr(getStaticString("func_defaults")));
+    function_cls->giveAttrBorrowed("func_globals", function_cls->getattr(getStaticString("__globals__")));
     function_cls->freeze();
     function_cls->tp_descr_get = function_descr_get;
 
@@ -3861,10 +3840,10 @@ void setupRuntime() {
         "__call__", new BoxedFunction(FunctionMetadata::create((void*)instancemethodCall, UNKNOWN, 1, true, true)));
     instancemethod_cls->giveAttr(
         "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
-    instancemethod_cls->giveAttr("__func__", instancemethod_cls->getattr(internStringMortal("im_func")));
+    instancemethod_cls->giveAttrBorrowed("__func__", instancemethod_cls->getattr(getStaticString("im_func")));
     instancemethod_cls->giveAttr(
         "im_self", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, obj)));
-    instancemethod_cls->giveAttr("__self__", instancemethod_cls->getattr(internStringMortal("im_self")));
+    instancemethod_cls->giveAttrBorrowed("__self__", instancemethod_cls->getattr(getStaticString("im_self")));
     instancemethod_cls->freeze();
 
     instancemethod_cls->giveAttr("im_class", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
@@ -3943,12 +3922,32 @@ void setupRuntime() {
     attrwrapperiter_cls->tp_iternext = AttrWrapperIter::next_capi;
 
     setupBuiltins();
-    _PyExc_Init();
-    setupThread();
-    initgc();
-    setupImport();
-    setupPyston();
-    setupAST();
+    //_PyExc_Init();
+    //setupThread();
+    //initgc();
+    //setupImport();
+    //setupPyston();
+    //setupAST();
+
+    // XXX
+    PyType_ClearCache();
+    _Py_ReleaseInternedStrings();
+    _PyUnicode_Fini();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : constants) {
+        b->clearAttrs();
+        Py_DECREF(b);
+    }
+    for (auto b : classes) {
+        if (b->tp_mro) {
+            Py_DECREF(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    PRINT_TOTAL_REFS();
+    exit(0);
+    // XXX
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);

@@ -113,7 +113,7 @@ extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
 void setupCode() {
     code_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code");
 
-    code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
+    code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 
     code_cls->giveAttr("co_name", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::name, NULL, NULL));
     code_cls->giveAttr("co_filename", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::filename, NULL, NULL));

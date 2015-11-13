@@ -2654,6 +2654,7 @@ static int add_members(PyTypeObject* type, PyMemberDef* memb) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }
@@ -2670,6 +2671,7 @@ static int add_getset(PyTypeObject* type, PyGetSetDef* gsp) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }

@@ -272,7 +272,7 @@ void setupXrange() {
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 
     // TODO this is pretty hacky, but stuff the iterator cls into xrange to make sure it gets decref'd at the end
-    xrange_cls->giveAttr("__iterator_cls__", xrange_iterator_cls);
+    xrange_cls->giveAttrBorrowed("__iterator_cls__", xrange_iterator_cls);
 
     xrange_cls->freeze();
     xrange_cls->tp_iter = xrangeIter;
