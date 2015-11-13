@@ -77,15 +77,6 @@ public:
     // * = unsupported in Pyston
     // ** = getter supported, but setter unsupported
 
-    static void gchandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-
-        auto f = static_cast<BoxedFrame*>(b);
-
-        v->visit(&f->_code);
-        v->visit(&f->_globals);
-    }
-
     static void simpleDestructor(Box* b) {
         auto f = static_cast<BoxedFrame*>(b);
 
@@ -151,7 +142,7 @@ Box* getFrame(int depth) {
 
 void setupFrame() {
     frame_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false, "frame");
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedFrame), false, "frame");
     frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
     frame_cls->has_safe_tp_dealloc = true;
 

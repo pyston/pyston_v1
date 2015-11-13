@@ -1167,7 +1167,6 @@ void setupInt() {
 
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
-        gc::registerPermanentRoot(interned_ints[i]);
     }
 
     int_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)int_getnewargs, UNKNOWN, 1,

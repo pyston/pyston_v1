@@ -27,7 +27,6 @@
 #include "core/from_llvm/DenseMap.h"
 #include "core/threading.h"
 #include "core/types.h"
-#include "gc/gc_alloc.h"
 
 namespace pyston {
 
@@ -182,9 +181,6 @@ void file_dealloc(Box*) noexcept;
 // use BoxedClass in Pyston wherever possible as a convention).
 class BoxedClass : public BoxVar {
 public:
-    typedef void (*gcvisit_func)(GCVisitor*, Box*);
-
-public:
     PyTypeObject_BODY;
 
     HCAttrs attrs;
@@ -198,8 +194,6 @@ public:
     Box* callReprIC(Box* obj);
     Box* callIterIC(Box* obj);
     bool callNonzeroIC(Box* obj);
-
-    gcvisit_func gc_visit;
 
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Negative offset is from the end of the class (useful for variable-size objects with the attrs at the end)
@@ -278,16 +272,14 @@ public:
 
     void freeze();
 
-    static void gcHandler(GCVisitor* v, Box* b);
-
     typedef size_t SlotOffset;
     SlotOffset* slotOffsets() { return (BoxedClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
 
     // These should only be used for builtin types:
-    static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+    static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset,
                               int weaklist_offset, int instance_size, bool is_user_defined, const char* name);
 
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+    BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
                bool is_user_defined, const char* name);
 
 
@@ -323,7 +315,7 @@ public:
     size_t nslots() { return this->ob_size; }
 
     // These functions are the preferred way to construct new types:
-    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                   BoxedTuple* bases, size_t nslots);
 
@@ -331,7 +323,7 @@ private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
-    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+    BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
                    bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
@@ -346,7 +338,6 @@ static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "
 static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, ob_type), "");
 static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
 static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
-static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
 static_assert(offsetof(pyston::BoxedHeapClass, as_number) == offsetof(PyHeapTypeObject, as_number), "");
@@ -451,7 +442,7 @@ public:
         assert(str_cls->is_pyston_class);
         assert(str_cls->attrs_offset == 0);
 
-        void* mem = gc_alloc(sizeof(BoxedString) + 1 + nitems, gc::GCKind::PYTHON);
+        void* mem = PyObject_MALLOC(sizeof(BoxedString) + 1 + nitems);
         assert(mem);
 
         BoxVar* rtn = static_cast<BoxVar*>(mem);
@@ -501,8 +492,6 @@ public:
     : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
 
     DEFAULT_CLASS_SIMPLE(instancemethod_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class GCdArray {
@@ -511,13 +500,13 @@ public:
 
     void* operator new(size_t size, int capacity) {
         assert(size == sizeof(GCdArray));
-        return gc_alloc(capacity * sizeof(Box*) + size, gc::GCKind::UNTRACKED);
+        return PyMem_MALLOC(capacity * sizeof(Box*) + size);
     }
 
-    void operator delete(void* p) { gc::gc_free(p); }
+    void operator delete(void* p) { PyMem_FREE(p); }
 
     static GCdArray* realloc(GCdArray* array, int capacity) {
-        return (GCdArray*)gc::gc_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
+        return (GCdArray*)PyMem_REALLOC(array, capacity);
     }
 };
 
@@ -538,7 +527,6 @@ public:
 
     DEFAULT_CLASS_SIMPLE(list_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
     static void dealloc(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
@@ -566,7 +554,6 @@ public:
         }
         BoxedTuple* rtn = new (nelts) BoxedTuple();
         for (int i = 0; i < nelts; i++) {
-            assert(gc::isValidGCObject(elts[i]));
             Py_INCREF(elts[i]);
         }
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
@@ -576,8 +563,6 @@ public:
         BoxedTuple* rtn = new (1) BoxedTuple();
         Py_INCREF(elt0);
         rtn->elts[0] = elt0;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create2(Box* elt0, Box* elt1) {
@@ -586,8 +571,6 @@ public:
         Py_INCREF(elt1);
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
@@ -598,8 +581,6 @@ public:
         rtn->elts[0] = elt0;
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create4(Box* elt0, Box* elt1, Box* elt2, Box* elt3) {
@@ -612,8 +593,6 @@ public:
         rtn->elts[1] = elt1;
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create5(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4) {
@@ -628,8 +607,6 @@ public:
         rtn->elts[2] = elt2;
         rtn->elts[3] = elt3;
         rtn->elts[4] = elt4;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create6(Box* elt0, Box* elt1, Box* elt2, Box* elt3, Box* elt4, Box* elt5) {
@@ -646,15 +623,11 @@ public:
         rtn->elts[3] = elt3;
         rtn->elts[4] = elt4;
         rtn->elts[5] = elt5;
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
     static BoxedTuple* create(std::initializer_list<Box*> members) {
         auto rtn = new (members.size()) BoxedTuple(members);
 
-        for (int i = 0; i < rtn->size(); i++)
-            assert(gc::isValidGCObject(rtn->elts[i]));
         return rtn;
     }
 
@@ -711,7 +684,7 @@ public:
         assert(tuple_cls->is_pyston_class);
         assert(tuple_cls->attrs_offset == 0);
 
-        void* mem = gc_alloc(offsetof(BoxedTuple, elts) + nitems * sizeof(Box*), gc::GCKind::PYTHON);
+        void* mem = PyObject_MALLOC(offsetof(BoxedTuple, elts) + nitems * sizeof(Box*));
         assert(mem);
 
         BoxVar* rtn = static_cast<BoxVar*>(mem);
@@ -720,8 +693,6 @@ public:
         _Py_NewReference(rtn);
         return rtn;
     }
-
-    static void gcHandler(GCVisitor* v, Box* b);
 
 private:
     BoxedTuple() {}
@@ -732,7 +703,6 @@ private:
         for (auto b : members) {
             Py_INCREF(b);
             *p++ = b;
-            assert(gc::isValidGCObject(b));
         }
     }
 
@@ -851,7 +821,6 @@ public:
     iterator begin() { return iterator(d.begin()); }
     iterator end() { return iterator(d.end()); }
 
-    static void gcHandler(GCVisitor* v, Box* b);
     static void dealloc(Box* b) noexcept;
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
@@ -897,8 +866,6 @@ public:
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
@@ -926,7 +893,6 @@ public:
     Box* getPureImaginaryConstant(double d);
     Box* getLongConstant(llvm::StringRef s);
 
-    static void gcHandler(GCVisitor* v, Box* self);
     static void dealloc(Box* b) noexcept;
 
 private:
@@ -953,8 +919,6 @@ public:
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
 
     DEFAULT_CLASS_SIMPLE(slice_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
 static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
@@ -1020,8 +984,6 @@ public:
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 
     DEFAULT_CLASS_SIMPLE(property_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedStaticmethod : public Box {
@@ -1031,8 +993,6 @@ public:
     BoxedStaticmethod(Box* callable) : sm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedClassmethod : public Box {
@@ -1042,8 +1002,6 @@ public:
     BoxedClassmethod(Box* callable) : cm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 // TODO is there any particular reason to make this a Box, i.e. a python-level object?
@@ -1061,15 +1019,13 @@ public:
             = static_cast<BoxedClosure*>(gc_alloc(_PyObject_VAR_SIZE(closure_cls, nelts), gc::GCKind::PYTHON));
             */
         BoxedClosure* rtn
-            = static_cast<BoxedClosure*>(gc_alloc(sizeof(BoxedClosure) + nelts * sizeof(Box*), gc::GCKind::PYTHON));
+            = static_cast<BoxedClosure*>(PyObject_MALLOC(sizeof(BoxedClosure) + nelts * sizeof(Box*)));
         rtn->nelts = nelts;
         rtn->cls = closure_cls;
         _Py_NewReference(rtn);
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 class BoxedGenerator : public Box {
@@ -1097,8 +1053,6 @@ public:
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 struct wrapper_def {
@@ -1126,8 +1080,6 @@ public:
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-
-    static void gcHandler(GCVisitor* v, Box* _o);
 };
 
 class BoxedWrapperObject : public Box {
@@ -1143,7 +1095,6 @@ public:
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-    static void gcHandler(GCVisitor* v, Box* _o);
 };
 
 class BoxedMethodDescriptor : public Box {
@@ -1160,7 +1111,6 @@ public:
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-    static void gcHandler(GCVisitor* v, Box* _o);
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

@@ -29,7 +29,6 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/stringpool.h"
-#include "gc/gc.h"
 
 namespace llvm {
 class Function;
@@ -38,8 +37,6 @@ class Value;
 }
 
 namespace pyston {
-
-using gc::GCVisitor;
 
 // The "effort" which we will put into compiling a Python function.  This applies to the LLVM tier,
 // where it can affect things such as the amount of type analysis we do, whether or not to run expensive
@@ -364,8 +361,6 @@ public:
 
     // Call this when a speculation inside this version failed
     void speculationFailed();
-
-    static void visitAllCompiledFunctions(GCVisitor* visitor);
 };
 
 typedef int FutureFlags;
@@ -533,14 +528,12 @@ class BinopIC;
 
 class Box;
 
-class BoxIteratorImpl : public gc::GCAllocatedRuntime {
+class BoxIteratorImpl {
 public:
     virtual ~BoxIteratorImpl() = default;
     virtual void next() = 0;
     virtual Box* getValue() = 0;
     virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
-
-    virtual void gc_visit(GCVisitor* v) = 0;
 };
 
 class BoxIterator {
@@ -561,8 +554,6 @@ public:
 
     Box* operator*() const { return impl->getValue(); }
     Box* operator*() { return impl->getValue(); }
-
-    void gcHandler(GCVisitor* v) { v->visitPotential(impl); }
 };
 
 class HiddenClass;
@@ -678,8 +669,6 @@ public:
     Box* hasnextOrNullIC();
 
     friend class AttrWrapper;
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
@@ -755,10 +744,9 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
                                                                                                                        \
         /* Don't allocate classes through this -- we need to keep track of all class objects. */                       \
         assert(default_cls != type_cls);                                                                               \
-        assert(!gc::hasOrderedFinalizer(default_cls));                                                                 \
                                                                                                                        \
         /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
-        void* mem = gc_alloc(size, gc::GCKind::PYTHON);                                                                \
+        void* mem = PyObject_MALLOC(size);                                                                \
         assert(mem);                                                                                                   \
                                                                                                                        \
         Box* rtn = static_cast<Box*>(mem);                                                                             \
@@ -819,7 +807,7 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
         assert(default_cls->is_pyston_class);                                                                          \
         assert(default_cls->attrs_offset == 0);                                                                        \
                                                                                                                        \
-        void* mem = gc_alloc(size + nitems * itemsize, gc::GCKind::PYTHON);                                            \
+        void* mem = PyObject_MALLOC(size + nitems * itemsize);                                            \
         assert(mem);                                                                                                   \
                                                                                                                        \
         BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
@@ -900,8 +888,6 @@ struct FrameInfo {
     BoxedFrame* frame_obj;
 
     FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
-
-    void gcVisit(GCVisitor* visitor);
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:
@@ -967,11 +953,4 @@ int binarySearch(T needle, RandomAccessIterator start, RandomAccessIterator end,
     return -(l + 1);
 }
 }
-
-// We need to override these functions so that our GC can know about them.
-namespace std {
-template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept;
-template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p);
-}
-
 #endif

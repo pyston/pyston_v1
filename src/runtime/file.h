@@ -49,8 +49,6 @@ public:
         __attribute__((visibility("default")));
 
     DEFAULT_CLASS(file_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 }
 

@@ -153,8 +153,6 @@ void force() {
 
     FORCE(createModule);
 
-    FORCE(gc::sizes);
-
     FORCE(boxedLocalsSet);
     FORCE(boxedLocalsGet);
     FORCE(boxedLocalsDel);

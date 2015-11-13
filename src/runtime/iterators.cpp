@@ -43,7 +43,6 @@ public:
 
         Box* next = PyIter_Next(iterator);
         if (next) {
-            assert(gc::isValidGCObject(next));
             value = next;
         } else {
             checkAndThrowCAPIException();
@@ -61,13 +60,6 @@ public:
     static BoxIteratorGeneric* end() {
         static BoxIteratorGeneric _end(nullptr);
         return &_end;
-    }
-
-    void gc_visit(GCVisitor* v) override {
-        if (iterator)
-            v->visit(&iterator);
-        if (value)
-            v->visit(&value);
     }
 };
 
@@ -102,7 +94,6 @@ public:
 
     Box* getValue() override {
         Box* r = getValue(obj, index);
-        assert(gc::isValidGCObject(r));
         return r;
     }
 
@@ -114,11 +105,6 @@ public:
     static BoxIteratorIndex* end() {
         static BoxIteratorIndex _end(nullptr);
         return &_end;
-    }
-
-    void gc_visit(GCVisitor* v) override {
-        if (obj)
-            v->visit(&obj);
     }
 };
 }

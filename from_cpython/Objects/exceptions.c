@@ -2246,11 +2246,11 @@ _PyExc_Init(void)
     POST_INIT(UnicodeWarning)
     POST_INIT(BytesWarning)
 
-    PyExc_MemoryErrorInst = PyGC_AddRoot(BaseException_new(&_PyExc_MemoryError, NULL, NULL));
+    PyExc_MemoryErrorInst = BaseException_new(&_PyExc_MemoryError, NULL, NULL);
     if (!PyExc_MemoryErrorInst)
         Py_FatalError("Cannot pre-allocate MemoryError instance");
 
-    PyExc_RecursionErrorInst = PyGC_AddRoot(BaseException_new(&_PyExc_RuntimeError, NULL, NULL));
+    PyExc_RecursionErrorInst = BaseException_new(&_PyExc_RuntimeError, NULL, NULL);
     if (!PyExc_RecursionErrorInst)
         Py_FatalError("Cannot pre-allocate RuntimeError instance for "
                         "recursion errors");

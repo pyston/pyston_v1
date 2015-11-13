@@ -711,15 +711,12 @@ Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlag
     auto arg_tuple = getTupleFromArgsArray(&args[0], flags.argspec.totalPassed());
     Box* r = callattr(obj, attr, flags, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                       std::get<3>(arg_tuple), keyword_names);
-    assert(gc::isValidGCObject(r));
     return recordType(type_recorder, r);
 }
 
 Box* JitFragmentWriter::createDictHelper(uint64_t num, Box** keys, Box** values) {
     BoxedDict* dict = (BoxedDict*)createDict();
     for (uint64_t i = 0; i < num; ++i) {
-        assert(gc::isValidGCObject(keys[i]));
-        assert(gc::isValidGCObject(values[i]));
         dict->d[keys[i]] = values[i];
     }
     return dict;
@@ -729,7 +726,6 @@ Box* JitFragmentWriter::createListHelper(uint64_t num, Box** data) {
     BoxedList* list = (BoxedList*)createList();
     list->ensure(num);
     for (uint64_t i = 0; i < num; ++i) {
-        assert(gc::isValidGCObject(data[i]));
         listAppendInternal(list, data[i]);
     }
     return list;

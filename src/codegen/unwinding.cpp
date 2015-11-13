@@ -371,7 +371,6 @@ public:
             auto locations = findLocations(PASSED_GLOBALS_NAME);
             assert(locations.size() == 1);
             Box* r = (Box*)readLocation(locations[0]);
-            ASSERT(gc::isValidGCObject(r), "%p", r);
             return r;
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getGlobalsForInterpretedFrame((void*)id.bp);
@@ -574,26 +573,12 @@ public:
             }
         }
     }
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == unwind_session_cls);
-
-        PythonUnwindSession* o = static_cast<PythonUnwindSession*>(_o);
-
-        if (o->exc_info.type)
-            v->visit(&o->exc_info.type);
-        if (o->exc_info.value)
-            v->visit(&o->exc_info.value);
-        if (o->exc_info.traceback)
-            v->visit(&o->exc_info.traceback);
-    }
 };
 static __thread PythonUnwindSession* cur_unwind;
 
 static PythonUnwindSession* getUnwindSession() {
     if (!cur_unwind) {
         cur_unwind = new PythonUnwindSession();
-        pyston::gc::registerPermanentRoot(cur_unwind);
     }
     return cur_unwind;
 }
@@ -777,10 +762,6 @@ ExcInfo* getFrameExcInfo() {
         *copy_from_exc = ExcInfo(None, None, None);
     }
 
-    assert(gc::isValidGCObject(copy_from_exc->type));
-    assert(gc::isValidGCObject(copy_from_exc->value));
-    assert(gc::isValidGCObject(copy_from_exc->traceback));
-
     for (auto* ex : to_update) {
         *ex = *copy_from_exc;
     }
@@ -911,7 +892,6 @@ DeoptState getDeoptState() {
 
                     Box* v = e->type->deserializeFromFrame(vals);
                     // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                    ASSERT(gc::isValidGCObject(v), "%p", v);
                     d->d[boxString(p.first())] = v;
                 }
             }
@@ -1009,7 +989,6 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
 
                 Box* v = e->type->deserializeFromFrame(vals);
                 // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                assert(gc::isValidGCObject(v));
                 d->d[boxString(p.first())] = v;
             }
         }
@@ -1027,7 +1006,6 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
                 }
 
                 Box* v = e->type->deserializeFromFrame(vals);
-                assert(gc::isValidGCObject(v));
                 closure = static_cast<BoxedClosure*>(v);
             }
         }
@@ -1045,7 +1023,6 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     if (frame_info->boxedLocals == NULL) {
         frame_info->boxedLocals = new BoxedDict();
     }
-    assert(gc::isValidGCObject(frame_info->boxedLocals));
 
     // Add the locals from the closure
     // TODO in a ClassDef scope, we aren't supposed to add these
@@ -1252,7 +1229,7 @@ llvm::JITEventListener* makeTracebacksListener() {
 }
 
 void setupUnwinding() {
-    unwind_session_cls = BoxedClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
+    unwind_session_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                             sizeof(PythonUnwindSession), false, "unwind_session");
     unwind_session_cls->freeze();
 }

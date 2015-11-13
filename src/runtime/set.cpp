@@ -24,15 +24,6 @@ extern "C" Box* createSet() {
     return new BoxedSet();
 }
 
-void BoxedSet::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedSet* s = (BoxedSet*)b;
-    for (auto&& p : s->s) {
-        v->visit(&p.value);
-    }
-}
-
 namespace set {
 
 class BoxedSetIterator : public Box {
@@ -51,14 +42,6 @@ public:
         Box* rtn = it->value;
         ++it;
         return rtn;
-    }
-
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-
-        BoxedSetIterator* it = (BoxedSetIterator*)b;
-
-        v->visit(&it->s);
     }
 };
 
@@ -147,7 +130,8 @@ Box* frozensetNew(Box* _cls, Box* container, BoxedDict* kwargs) {
             return result;
         }
     }
-    static Box* emptyfrozenset = PyGC_AddRoot(new (frozenset_cls) BoxedSet());
+    static Box* emptyfrozenset = new (frozenset_cls) BoxedSet();
+    Py_INCREF(emptyfrozenset);
     return emptyfrozenset;
 }
 
@@ -829,7 +813,7 @@ void setupSet() {
     set_cls->tp_dealloc = frozenset_cls->tp_dealloc = BoxedSet::dealloc;
     set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
 
-    set_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedSetIterator::gcHandler, 0, 0,
+    set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                           sizeof(BoxedSetIterator), false, "setiterator");
     set_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
                                                (void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));

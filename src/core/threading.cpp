@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <err.h>
 #include <setjmp.h>
 #include <sys/syscall.h>
@@ -55,8 +56,6 @@ class ThreadStateInternal {
 private:
     bool saved;
     ucontext_t ucontext;
-
-    std::deque<gc::GCVisitable*> gc_objs_stacks;
 
 public:
     void* stack_start;
@@ -111,13 +110,6 @@ public:
 
     ucontext_t* getContext() { return &ucontext; }
 
-    void pushGCObject(gc::GCVisitable* obj) { gc_objs_stacks.push_back(obj); }
-
-    void popGCObject(gc::GCVisitable* obj) {
-        ASSERT(gc_objs_stacks.back() == obj, "push/pop of stack-bound object out of order");
-        gc_objs_stacks.pop_back();
-    }
-
     void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
         previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
         this->stack_start = new_stack_start;
@@ -131,33 +123,6 @@ public:
     }
 
     void assertNoGenerators() { assert(previous_stacks.size() == 0); }
-
-    void accept(gc::GCVisitor* v) {
-        auto pub_state = public_thread_state;
-        if (pub_state->curexc_type)
-            v->visit(&pub_state->curexc_type);
-        if (pub_state->curexc_value)
-            v->visit(&pub_state->curexc_value);
-        if (pub_state->curexc_traceback)
-            v->visit(&pub_state->curexc_traceback);
-        if (pub_state->dict)
-            v->visit(&pub_state->dict);
-        if (pub_state->trash_delete_later)
-            v->visit(&pub_state->trash_delete_later);
-
-        for (auto& stack_info : previous_stacks) {
-            v->visit(&stack_info.next_generator);
-#if STACK_GROWS_DOWN
-            v->visitPotentialRange((void**)stack_info.stack_limit, (void**)stack_info.stack_start);
-#else
-            v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
-#endif
-        }
-
-        for (auto& obj : gc_objs_stacks) {
-            obj->gc_visit(v);
-        }
-    }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 static __thread ThreadStateInternal* current_internal_thread_state = 0;
@@ -174,69 +139,13 @@ void popGenerator() {
     current_internal_thread_state->popGenerator();
 }
 
-void pushGCObject(gc::GCVisitable* obj) {
-    current_internal_thread_state->pushGCObject(obj);
-}
-
-void popGCObject(gc::GCVisitable* obj) {
-    current_internal_thread_state->popGCObject(obj);
-}
-
 // These are guarded by threading_lock
 static int signals_waiting(0);
-static gc::GCVisitor* cur_visitor = NULL;
-
-// This function should only be called with the threading_lock held:
-static void pushThreadState(ThreadStateInternal* thread_state, ucontext_t* context) {
-    assert(cur_visitor);
-    cur_visitor->visitPotentialRange((void**)context, (void**)(context + 1));
-
-#if STACK_GROWS_DOWN
-    void* stack_low = (void*)context->uc_mcontext.gregs[REG_RSP];
-    void* stack_high = thread_state->stack_start;
-#else
-    void* stack_low = thread_state->stack_start;
-    void* stack_high = (void*)context->uc_mcontext.gregs[REG_RSP];
-#endif
-
-    assert(stack_low < stack_high);
-    GC_TRACE_LOG("Visiting other thread's stack\n");
-    cur_visitor->visitPotentialRange((void**)stack_low, (void**)stack_high);
-
-    GC_TRACE_LOG("Visiting other thread's threadstate + generator stacks\n");
-    thread_state->accept(cur_visitor);
-}
 
 // This better not get inlined:
 void* getCurrentStackLimit() __attribute__((noinline));
 void* getCurrentStackLimit() {
     return __builtin_frame_address(0);
-}
-
-static void visitLocalStack(gc::GCVisitor* v) {
-    // force callee-save registers onto the stack:
-    jmp_buf registers __attribute__((aligned(sizeof(void*))));
-    setjmp(registers);
-    assert(sizeof(registers) % 8 == 0);
-    v->visitPotentialRange((void**)&registers, (void**)((&registers) + 1));
-
-    assert(current_internal_thread_state);
-#if STACK_GROWS_DOWN
-    void* stack_low = getCurrentStackLimit();
-    void* stack_high = current_internal_thread_state->stack_start;
-#else
-    void* stack_low = current_thread_state->stack_start;
-    void* stack_high = getCurrentStackLimit();
-#endif
-
-    assert(stack_low < stack_high);
-
-    GC_TRACE_LOG("Visiting current stack from %p to %p\n", stack_low, stack_high);
-
-    v->visitPotentialRange((void**)stack_low, (void**)stack_high);
-
-    GC_TRACE_LOG("Visiting current thread's threadstate + generator stacks\n");
-    current_internal_thread_state->accept(v);
 }
 
 static void registerThread(bool is_starting_thread) {
@@ -324,84 +233,6 @@ extern "C" void PyGILState_Release(PyGILState_STATE oldstate) noexcept {
 
 extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
     Py_FatalError("unimplemented");
-}
-
-
-void visitAllStacks(gc::GCVisitor* v) {
-    visitLocalStack(v);
-
-    // TODO need to prevent new threads from starting,
-    // though I suppose that will have been taken care of
-    // by the caller of this function.
-
-    LOCK_REGION(&threading_lock);
-
-    assert(cur_visitor == NULL);
-    cur_visitor = v;
-
-    while (true) {
-        // TODO shouldn't busy-wait:
-        if (num_starting_threads) {
-            threading_lock.unlock();
-            sleep(0);
-            threading_lock.lock();
-        } else {
-            break;
-        }
-    }
-
-    signals_waiting = (current_threads.size() - 1);
-
-    // Current strategy:
-    // Let the other threads decide whether they want to cooperate and save their state before we get here.
-    // If they did save their state (as indicated by current_threads[tid]->isValid), then we use that.
-    // Otherwise, we send them a signal and use the signal handler to look at their thread state.
-
-    pthread_t mytid = pthread_self();
-    for (auto& pair : current_threads) {
-        pthread_t tid = pair.first;
-
-        if (tid == mytid)
-            continue;
-
-        ThreadStateInternal* state = pair.second;
-        if (state->isValid()) {
-            pushThreadState(state, state->getContext());
-            signals_waiting--;
-            continue;
-        }
-
-        pthread_kill(tid, SIGUSR2);
-    }
-
-    // TODO shouldn't busy-wait:
-    while (signals_waiting) {
-        threading_lock.unlock();
-        // printf("Waiting for %d threads\n", signals_waiting);
-        sleep(0);
-        threading_lock.lock();
-    }
-
-    assert(num_starting_threads == 0);
-
-    cur_visitor = NULL;
-}
-
-static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
-    LOCK_REGION(&threading_lock);
-
-    ucontext_t* context = static_cast<ucontext_t*>(_context);
-
-    pthread_t tid = pthread_self();
-    if (VERBOSITY() >= 2) {
-        printf("in thread_context_dump, tid=%ld\n", tid);
-        printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
-        printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
-    }
-
-    assert(current_internal_thread_state == current_threads[tid]);
-    pushThreadState(current_threads[tid], context);
-    signals_waiting--;
 }
 
 struct ThreadStartArgs {
@@ -505,18 +336,6 @@ void registerMainThread() {
     assert(!current_internal_thread_state);
     current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
     current_threads[pthread_self()] = current_internal_thread_state;
-
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = _thread_context_dump;
-    struct sigaction oldact;
-
-    int code = sigaction(SIGUSR2, &act, &oldact);
-    if (code)
-        err(1, NULL);
-
-    assert(!PyErr_Occurred());
 }
 
 void finishMainThread() {

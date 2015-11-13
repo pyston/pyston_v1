@@ -36,8 +36,6 @@ public:
     BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {}
 
     DEFAULT_CLASS(seqiter_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 extern BoxedClass* iterwrapper_cls;
@@ -51,8 +49,6 @@ public:
     BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {}
 
     DEFAULT_CLASS(iterwrapper_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 bool calliter_hasnext(Box* b);

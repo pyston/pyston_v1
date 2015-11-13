@@ -26,8 +26,6 @@
 #include "core/common.h"
 #include "core/options.h"
 #include "core/types.h"
-#include "gc/gc.h"
-#include "gc/heap.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -142,12 +140,6 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     }
 
     llvm::sys::Memory::InvalidateInstructionCache(slot_start, ic->getSlotSize());
-}
-
-void ICSlotRewrite::gc_visit(GCVisitor* visitor) {
-    for (auto& dependency : dependencies) {
-        visitor->visitPotentialRedundant(dependency.first);
-    }
 }
 
 void ICSlotRewrite::addDependenceOn(ICInvalidator& invalidator) {
@@ -353,19 +345,6 @@ bool ICInfo::shouldAttempt() {
 
 bool ICInfo::isMegamorphic() {
     return times_rewritten >= IC_MEGAMORPHIC_THRESHOLD;
-}
-
-void ICInfo::visitGCReferences(gc::GCVisitor* v) {
-    for (auto&& p : ic_gc_references) {
-        v->visitNonRelocatable(p.first);
-    }
-#if MOVING_GC
-    for (const auto& p : ics_list) {
-        for (auto& slot : p->slots) {
-            v->visitNonRelocatableRange(&slot.gc_references[0], &slot.gc_references[slot.gc_references.size()]);
-        }
-    }
-#endif
 }
 
 static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;

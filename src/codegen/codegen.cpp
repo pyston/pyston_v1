@@ -67,7 +67,7 @@ BoxedCode* FunctionMetadata::getCode() {
     if (!code_obj) {
         code_obj = new BoxedCode(this);
         // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
-        gc::registerPermanentRoot(code_obj);
+        //gc::registerPermanentRoot(code_obj);
     }
     return code_obj;
 }
@@ -103,7 +103,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
       body(std::move(body)) {
     assert(fn->size());
     // TODO: we should track this reference correctly rather than making it a root
-    gc::registerPermanentRoot(fn, true);
+    //gc::registerPermanentRoot(fn, true);
     this->fn = fn;
 
     switch (ast->type) {

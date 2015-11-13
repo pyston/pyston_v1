@@ -23,16 +23,10 @@
 
 #include "core/common.h"
 #include "core/thread_utils.h"
-#include "gc/gc.h"
 
 namespace pyston {
 class Box;
 class BoxedGenerator;
-
-namespace gc {
-class GCVisitor;
-class GCVisitable;
-}
 
 #if ENABLE_SAMPLING_PROFILER
 extern int sigprof_pending;
@@ -51,19 +45,12 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 void registerMainThread();
 void finishMainThread();
 
-// Hook for the GC; will visit all the threads (including the current one), visiting their
-// stacks and thread-local PyThreadState objects
-void visitAllStacks(gc::GCVisitor* v);
-
 // Some hooks to keep track of the list of stacks that this thread has been using.
 // Every time we switch to a new generator, we need to pass a reference to the generator
 // itself (so we can access the registers it is saving), the location of the new stack, and
 // where we stopped executing on the old stack.
 void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit);
 void popGenerator();
-
-void pushGCObject(gc::GCVisitable* obj);
-void popGCObject(gc::GCVisitable* obj);
 
 #ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1
@@ -112,6 +99,8 @@ extern "C" inline void allowGLReadPreemption() {
     }
 #endif
 
+    RELEASE_ASSERT(0, "call pending finalizers?");
+#if 0
     // We need to call the finalizers on dead objects at some point. This is a safe place to do so.
     // This needs to be done before checking for other threads waiting on the GIL since there could
     // be only one thread doing a lot of work. Similarly for weakref callbacks.
@@ -121,6 +110,7 @@ extern "C" inline void allowGLReadPreemption() {
     if (!gc::pending_finalization_list.empty() || !gc::weakrefs_needing_callback_list.empty()) {
         gc::callPendingDestructionLogic();
     }
+#endif
 
     // Double-checked locking: first read with no ordering constraint:
     if (!threads_waiting_on_gil.load(std::memory_order_relaxed))

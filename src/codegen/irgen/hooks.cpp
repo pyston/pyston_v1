@@ -795,14 +795,6 @@ CompiledFunction::~CompiledFunction() {
 }
 #endif
 
-void CompiledFunction::visitAllCompiledFunctions(GCVisitor* visitor) {
-    for (CompiledFunction* cf : all_compiled_functions) {
-        for (const void* ptr : cf->pointers_in_code) {
-            visitor->visitNonRelocatable(const_cast<void*>(ptr));
-        }
-    }
-}
-
 ConcreteCompilerType* CompiledFunction::getReturnType() {
     assert(((bool)spec) ^ ((bool)entry_descriptor));
     if (spec)

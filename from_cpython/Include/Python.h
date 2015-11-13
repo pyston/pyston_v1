@@ -20,8 +20,11 @@
 
 #define PYSTON_VERSION "0.5"
 
+// XXX: testing
 #ifndef NDEBUG
 #define Py_REF_DEBUG
+#define WITH_PYMALLOC
+#define PYMALLOC_DEBUG
 #endif
 
 // These include orders come from CPython:
@@ -159,25 +162,6 @@ extern "C" {
 #endif
 
 PyObject* PyModule_GetDict(PyObject*) PYSTON_NOEXCEPT;
-
-// Pyston addition:
-// Our goal is to not make exception modules declare their static memory.  But until we can identify
-// that in an automated way, we have to modify extension modules to call this:
-PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
-// PyGC_AddRoot returns its argument, with the intention that you do something like
-//      static PyObject* obj = PyGC_AddRoot(foo());
-// rather than
-//      static PyObject* obj = foo();
-//      PyGC_AddRoot(obj);
-// to reduce any chances of compiler reorderings or a GC somehow happening between the assignment
-// to the static slot and the call to PyGC_AddRoot.
-//
-
-// Similarly, some extension modules have static non-type objects that our GC thinks are errors
-// since they are not in the heap, unless we root them. This function should be used purely as
-// a temporary patching mechanism - we want to have a better way of dealing with such objects
-// in the future (even if it's an invalid use of CPython APIs).
-PyObject* PyGC_AddNonHeapRoot(PyObject* obj, int size) PYSTON_NOEXCEPT;
 
 // Pyston change : expose these type objects
 extern PyTypeObject Pattern_Type;

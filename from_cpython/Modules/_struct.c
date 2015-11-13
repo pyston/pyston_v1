@@ -1816,7 +1816,7 @@ cache_struct(PyObject *fmt)
     PyObject * s_object;
 
     if (cache == NULL) {
-        cache = PyGC_AddRoot(PyDict_New());
+        cache = PyDict_New();
         if (cache == NULL)
             return NULL;
     }
@@ -2077,7 +2077,7 @@ init_struct(void)
 
     /* Add some symbolic constants to the module */
     if (StructError == NULL) {
-        StructError = PyGC_AddRoot(PyErr_NewException("struct.error", NULL, NULL));
+        StructError = PyErr_NewException("struct.error", NULL, NULL);
         if (StructError == NULL)
             return;
     }

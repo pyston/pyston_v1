@@ -28,8 +28,6 @@ public:
     BoxedTupleIterator(BoxedTuple* t);
 
     DEFAULT_CLASS(tuple_iterator_cls);
-
-    static void gcHandler(GCVisitor* v, Box* _o);
 };
 
 Box* tupleIter(Box* self) noexcept;

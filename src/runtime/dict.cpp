@@ -733,35 +733,6 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
-void BoxedDict::gcHandler(GCVisitor* v, Box* b) {
-    assert(PyDict_Check(b));
-
-    Box::gcHandler(v, b);
-
-    BoxedDict* d = (BoxedDict*)b;
-
-    for (auto p : *d) {
-        v->visit(&p.first);
-        v->visit(&p.second);
-    }
-}
-
-void BoxedDictIterator::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == dict_iterator_cls);
-    Box::gcHandler(v, b);
-
-    BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
-    v->visit(&it->d);
-}
-
-void BoxedDictView::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == dict_items_cls || b->cls == dict_values_cls || b->cls == dict_keys_cls);
-    Box::gcHandler(v, b);
-
-    BoxedDictView* view = static_cast<BoxedDictView*>(b);
-    v->visit(&view->d);
-}
-
 static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     assert(PyDict_Check(self));
     try {
@@ -824,14 +795,14 @@ void setupDict() {
     static PySequenceMethods dict_as_sequence;
     dict_cls->tp_as_sequence = &dict_as_sequence;
 
-    dict_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictIterator::gcHandler, 0, 0,
+    dict_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                            sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
 
-    dict_keys_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+    dict_keys_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
                                        false, "dict_keys");
-    dict_values_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+    dict_values_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
                                          false, "dict_values");
-    dict_items_cls = BoxedClass::create(type_cls, object_cls, &BoxedDictView::gcHandler, 0, 0, sizeof(BoxedDictView),
+    dict_items_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
                                         false, "dict_items");
 
     dict_iterator_cls->instances_are_nonzero = dict_keys_cls->instances_are_nonzero

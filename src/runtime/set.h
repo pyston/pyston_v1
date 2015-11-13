@@ -37,7 +37,6 @@ public:
 
     DEFAULT_CLASS(set_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
     static void dealloc(Box* b) noexcept;
 };
 }

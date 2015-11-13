@@ -131,26 +131,6 @@ Box* seqiterNext(Box* s) {
     return rtn;
 }
 
-void BoxedSeqIter::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == seqiter_cls || b->cls == seqreviter_cls);
-    Box::gcHandler(v, b);
-
-    BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
-    v->visit(&si->b);
-    if (si->next)
-        v->visit(&si->next);
-}
-
-void BoxedIterWrapper::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == iterwrapper_cls);
-    Box::gcHandler(v, b);
-
-    BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
-    v->visit(&iw->iter);
-    if (iw->next)
-        v->visit(&iw->next);
-}
-
 bool iterwrapperHasnextUnboxed(Box* s) {
     RELEASE_ASSERT(s->cls == iterwrapper_cls, "");
     BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
@@ -209,7 +189,7 @@ bool calliter_hasnext(Box* b) {
 
 
 void setupIter() {
-    seqiter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter), false,
+    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false,
                                      "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
@@ -222,7 +202,7 @@ void setupIter() {
     seqiter_cls->tp_iter = PyObject_SelfIter;
     seqiter_cls->tp_iternext = seqiter_next;
 
-    seqreviter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter),
+    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter),
                                         false, "reversed");
 
     seqreviter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
@@ -234,7 +214,7 @@ void setupIter() {
     seqreviter_cls->tp_iter = PyObject_SelfIter;
     seqreviter_cls->tp_iternext = seqiter_next;
 
-    iterwrapper_cls = BoxedClass::create(type_cls, object_cls, &BoxedIterWrapper::gcHandler, 0, 0,
+    iterwrapper_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                          sizeof(BoxedIterWrapper), false, "iterwrapper");
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)iterwrapperNext, UNKNOWN, 1)));

@@ -37,8 +37,6 @@ public:
     BoxedDictIterator(BoxedDict* d, IteratorType type);
 
     DEFAULT_CLASS(dict_iterator_cls);
-
-    static void gcHandler(GCVisitor* v, Box* self);
 };
 
 Box* dictGetitem(BoxedDict* self, Box* k);
@@ -57,8 +55,6 @@ class BoxedDictView : public Box {
 public:
     BoxedDict* d;
     BoxedDictView(BoxedDict* d);
-
-    static void gcHandler(GCVisitor* v, Box* self);
 };
 
 Box* dictViewKeysIter(Box* self);

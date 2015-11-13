@@ -398,13 +398,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #else
 #error "implement me"
 #endif
-
-        // we're registering memory that isn't in the gc heap here,
-        // which may sound wrong.  Generators, however, can represent
-        // a larger tax on system resources than just their GC
-        // allocation, so we try to encode that here as additional gc
-        // heap pressure.
-        gc::registerGCManagedBytes(INITIAL_STACK_SIZE);
     } else {
         generator_stack_reused.log();
 
@@ -421,47 +414,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     assert(((intptr_t)stack_begin & (~(intptr_t)(0xF))) == (intptr_t)stack_begin && "stack must be aligned");
 
     context = makeContext(stack_begin, (void (*)(intptr_t))generatorEntry);
-}
-
-void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedGenerator* g = (BoxedGenerator*)b;
-
-    v->visit(&g->function);
-    int num_args = g->function->md->numReceivedArgs();
-    if (num_args >= 1)
-        v->visit(&g->arg1);
-    if (num_args >= 2)
-        v->visit(&g->arg2);
-    if (num_args >= 3)
-        v->visit(&g->arg3);
-    if (g->args)
-        v->visit(&g->args);
-    if (num_args > 3)
-        v->visitPotentialRange(reinterpret_cast<void**>(&g->args->elts[0]),
-                               reinterpret_cast<void**>(&g->args->elts[num_args - 3]));
-    if (g->returnValue)
-        v->visit(&g->returnValue);
-    if (g->exception.type)
-        v->visit(&g->exception.type);
-    if (g->exception.value)
-        v->visit(&g->exception.value);
-    if (g->exception.traceback)
-        v->visit(&g->exception.traceback);
-
-    if (g->running) {
-        v->visitPotentialRange((void**)g->returnContext,
-                               ((void**)g->returnContext) + sizeof(*g->returnContext) / sizeof(void*));
-    } else {
-        // g->context is always set for a running generator, but we can trigger a GC while constructing
-        // a generator in which case we can see a NULL context
-        if (g->context) {
-#if STACK_GROWS_DOWN
-            v->visitPotentialRange((void**)g->context, (void**)g->stack_begin);
-#endif
-        }
-    }
 }
 
 Box* generatorName(Box* _self, void* context) {
@@ -500,7 +452,7 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 
 void setupGenerator() {
     generator_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedGenerator::gcHandler, 0, offsetof(BoxedGenerator, weakreflist),
+        = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
                              sizeof(BoxedGenerator), false, "generator");
     generator_cls->tp_dealloc = generatorDestructor;
     generator_cls->has_safe_tp_dealloc = true;

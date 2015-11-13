@@ -35,19 +35,6 @@ public:
     BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {}
 
     DEFAULT_CLASS(super_cls);
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == super_cls);
-        BoxedSuper* o = static_cast<BoxedSuper*>(_o);
-
-        Box::gcHandler(v, o);
-        if (o->type)
-            v->visit(&o->type);
-        if (o->obj)
-            v->visit(&o->obj);
-        if (o->obj_type)
-            v->visit(&o->obj_type);
-    }
 };
 
 static const char* class_str = "__class__";
@@ -198,7 +185,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 
 void setupSuper() {
     super_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false, "super");
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super");
 
     // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,
     // UNKNOWN, 2)));

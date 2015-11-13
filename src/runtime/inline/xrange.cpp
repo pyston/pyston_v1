@@ -130,13 +130,6 @@ public:
     static Box* xrangeIteratorNext(Box* s) __attribute__((visibility("default"))) {
         return boxInt(xrangeIteratorNextUnboxed(s));
     }
-
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-
-        BoxedXrangeIterator* it = (BoxedXrangeIterator*)b;
-        v->visit(const_cast<BoxedXrange**>(&it->xrange));
-    }
 };
 
 Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
@@ -243,8 +236,8 @@ Box* xrangeReduce(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange");
-    xrange_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedXrangeIterator::gcHandler, 0, 0,
+    xrange_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrange), false, "xrange");
+    xrange_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                              sizeof(BoxedXrangeIterator), false, "rangeiterator");
 
     static PySequenceMethods xrange_as_sequence;

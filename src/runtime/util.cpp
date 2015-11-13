@@ -133,43 +133,7 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    bool is_gc = gc::isValidGCMemory(p);
-    if (!is_gc) {
-        printf("non-gc memory\n");
-        return;
-    }
-
-    if (gc::isNonheapRoot(p)) {
-        printf("Non-heap GC object\n");
-
-        printf("Assuming it's a class object...\n");
-        PyTypeObject* type = (PyTypeObject*)(p);
-        printf("tp_name: %s\n", type->tp_name);
-        return;
-    }
-
-    gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
-    if (al->kind_id == gc::GCKind::UNTRACKED) {
-        printf("gc-untracked object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PRECISE) {
-        printf("pyston precise object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::RUNTIME) {
-        printf("pyston runtime object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::CONSERVATIVE) {
-        printf("conservatively-scanned object object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PYTHON) {
+    if (true) {
         printf("Python object\n");
         Box* b = (Box*)p;
 
@@ -303,7 +267,5 @@ extern "C" void dumpEx(void* p, int levels) {
 
         return;
     }
-
-    RELEASE_ASSERT(0, "%d", (int)al->kind_id);
 }
 }

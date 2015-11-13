@@ -27,7 +27,6 @@
 #include "codegen/codegen.h"
 #include "codegen/patchpoints.h"
 #include "core/common.h"
-#include "gc/gc.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -138,13 +137,6 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
 
     relocatable_syms[name] = addr;
 
-#if MOVING_GC
-    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
-    if (al) {
-        pointers_in_code->push_back(al->user_data);
-    }
-#endif
-
     llvm::Type* var_type = type->getPointerElementType();
     return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
 }
@@ -153,13 +145,6 @@ llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
     llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
     llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
-
-#if MOVING_GC
-    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
-    if (al) {
-        pointers_in_code->push_back(al->user_data);
-    }
-#endif
 
     return ptr_val;
 }

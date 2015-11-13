@@ -369,7 +369,7 @@ BoxedString* internStringImmortal(llvm::StringRef s) {
     auto& entry = interned_strings[s];
     if (!entry) {
         num_interned_strings.log();
-        entry = (BoxedString*)PyGC_AddRoot(boxString(s));
+        entry = boxString(s);
         // CPython returns mortal but in our current implementation they are inmortal
         entry->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
@@ -394,7 +394,7 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
         *p = entry;
     else {
         num_interned_strings.log();
-        entry = (BoxedString*)PyGC_AddRoot(s);
+        entry = s;
 
         Py_INCREF(s);
 
@@ -2405,12 +2405,6 @@ public:
         ++self->it;
         return characters[c & UCHAR_MAX];
     }
-
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-        BoxedStringIterator* it = (BoxedStringIterator*)b;
-        v->visit(&it->s);
-    }
 };
 
 Box* strIter(BoxedString* self) noexcept {
@@ -2807,7 +2801,7 @@ void setupStr() {
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
+    str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                           sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr(
         "__hasnext__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));

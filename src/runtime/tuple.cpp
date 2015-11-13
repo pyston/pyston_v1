@@ -28,8 +28,6 @@
 namespace pyston {
 
 extern "C" Box* createTuple(int64_t nelts, Box** elts) {
-    for (int i = 0; i < nelts; i++)
-        assert(gc::isValidGCObject(elts[i]));
     return BoxedTuple::create(nelts, elts);
 }
 
@@ -367,7 +365,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             return r;
         }
 
-        std::vector<Box*, StlCompatAllocator<Box*>> elts;
+        std::vector<Box*> elts;
         for (auto e : elements->pyElements())
             elts.push_back(e);
 
@@ -635,19 +633,6 @@ static PyObject* tuplerepeat(PyTupleObject* a, Py_ssize_t n) noexcept {
     return (PyObject*)np;
 }
 
-void BoxedTuple::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedTuple* t = (BoxedTuple*)b;
-    v->visitRange(&t->elts[0], &t->elts[t->size()]);
-}
-
-extern "C" void BoxedTupleIterator::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-    BoxedTupleIterator* it = (BoxedTupleIterator*)b;
-    v->visit(&it->t);
-}
-
 static Box* tuple_getnewargs(Box* _self) noexcept {
     RELEASE_ASSERT(PyTuple_Check(_self), "");
     PyTupleObject* v = reinterpret_cast<PyTupleObject*>(_self);
@@ -686,7 +671,7 @@ void setupTuple() {
     static PyMappingMethods tuple_as_mapping;
     tuple_cls->tp_as_mapping = &tuple_as_mapping;
 
-    tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedTupleIterator::gcHandler, 0, 0,
+    tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                             sizeof(BoxedTupleIterator), false, "tuple");
 
     tuple_cls->giveAttr("__new__",

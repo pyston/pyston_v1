@@ -89,6 +89,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     floatobject.c
     iterobject.c
     memoryobject.c
+    obmalloc.c
     stringobject.c
     structseq.c
     unicodectype.c

@@ -1044,30 +1044,16 @@ extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t sta
     return -1;
 }
 
-extern "C" void* PyObject_Malloc(size_t sz) noexcept {
-    return gc_compat_malloc(sz);
+extern "C" void* PyMem_Malloc(size_t nbytes) noexcept {
+    return PyMem_MALLOC(nbytes);
 }
 
-extern "C" void* PyObject_Realloc(void* ptr, size_t sz) noexcept {
-    return gc_compat_realloc(ptr, sz);
+extern "C" void* PyMem_Realloc(void* p, size_t nbytes) noexcept {
+    return PyMem_REALLOC(p, nbytes);
 }
 
-extern "C" void PyObject_Free(void* ptr) noexcept {
-    // In Pyston, everything is GC'ed and we shouldn't explicitely free memory.
-    // Only the GC knows for sure that an object is no longer referenced.
-}
-
-extern "C" void* PyMem_Malloc(size_t sz) noexcept {
-    return gc_compat_malloc(sz);
-}
-
-extern "C" void* PyMem_Realloc(void* ptr, size_t sz) noexcept {
-    return gc_compat_realloc(ptr, sz);
-}
-
-extern "C" void PyMem_Free(void* ptr) noexcept {
-    // In Pyston, everything is GC'ed and we shouldn't explicitely free memory.
-    // Only the GC knows for sure that an object is no longer referenced.
+extern "C" void PyMem_Free(void* p) noexcept {
+    PyMem_FREE(p);
 }
 
 extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) noexcept {

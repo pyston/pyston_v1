@@ -19,7 +19,6 @@
 #include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
-#include "gc/heap.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -722,21 +721,11 @@ void Rewriter::_trap() {
 }
 
 void Rewriter::addGCReference(void* obj) {
-    assert(gc::isValidGCObject(obj));
     gc_references.push_back(obj);
 }
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-#if MOVING_GC
-    // Moving GCs need to know all existing references in the program, including those that end
-    // up in compiled code.
-    auto al = gc::global_heap.getAllocationFromInteriorPointer((void*)val);
-    if (al) {
-        gc_references.push_back(al->user_data);
-    }
-#endif
 
     for (auto& p : const_loader.consts) {
         if (p.first != val)
@@ -1397,16 +1386,6 @@ void Rewriter::commitReturning(RewriterVar* var) {
 
 void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
     rewrite->addDependenceOn(invalidator);
-}
-
-void Rewriter::gc_visit(GCVisitor* visitor) {
-    rewrite->gc_visit(visitor);
-
-    // A GC could happen during a rewrite, so we need to scan the list of references
-    // both as it is being built and after the rewrite commits.
-    for (auto& reference : gc_references) {
-        visitor->visitNonRelocatable(reference);
-    }
 }
 
 Location Rewriter::allocScratch() {

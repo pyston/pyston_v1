@@ -35,21 +35,6 @@ extern "C" {
 BoxedClass* traceback_cls;
 }
 
-void BoxedTraceback::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == traceback_cls);
-    BoxedTraceback* self = static_cast<BoxedTraceback*>(b);
-
-    if (self->py_lines)
-        v->visit(&self->py_lines);
-    if (self->tb_next)
-        v->visit(&self->tb_next);
-
-    v->visit(&self->line.file);
-    v->visit(&self->line.func);
-
-    Box::gcHandler(v, b);
-}
-
 void printTraceback(Box* b) {
     if (b == None)
         return;
@@ -120,7 +105,7 @@ void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
 }
 
 void setupTraceback() {
-    traceback_cls = BoxedClass::create(type_cls, object_cls, BoxedTraceback::gcHandler, 0, 0, sizeof(BoxedTraceback),
+    traceback_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTraceback),
                                        false, "traceback");
 
     traceback_cls->giveAttr("getLines",

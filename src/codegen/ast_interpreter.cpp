@@ -223,7 +223,6 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 }
 
 void ASTInterpreter::setGlobals(Box* globals) {
-    assert(gc::isValidGCObject(globals));
     this->globals = globals;
 }
 
@@ -450,7 +449,6 @@ void ASTInterpreter::doStore(AST_Name* node, Value value) {
             jit->emitSetItemName(name.getBox(), value);
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
-        assert(gc::isValidGCObject(value.o));
         setitem(frame_info.boxedLocals, name.getBox(), value.o);
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
@@ -706,7 +704,6 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         } else {
             ASSERT(val != NULL, "%s", name.c_str());
             Box* v = sorted_symbol_table[name] = val;
-            assert(gc::isValidGCObject(v));
         }
     }
 
@@ -758,7 +755,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     OSRExit exit(found_entry);
 
-    std::vector<Box*, StlCompatAllocator<Box*>> arg_array;
+    std::vector<Box*> arg_array;
     for (auto& it : sorted_symbol_table) {
         arg_array.push_back(it.second);
     }
@@ -988,7 +985,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
 Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
     FunctionMetadata* md = wrapFunction(node, args, body, source_info);
 
-    std::vector<Box*, StlCompatAllocator<Box*>> defaults;
+    std::vector<Box*> defaults;
 
     RewriterVar* defaults_var = NULL;
     if (jit)
@@ -1072,7 +1069,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     AST_FunctionDef* node = mkfn->function_def;
     AST_arguments* args = node->args;
 
-    std::vector<Value, StlCompatAllocator<Value>> decorators;
+    std::vector<Value> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d));
 
@@ -1098,7 +1095,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
         basesTuple->elts[base_idx++] = visit_expr(b).o;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
+    std::vector<Box*> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -1356,7 +1353,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         func = visit_expr(node->func);
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> args;
+    std::vector<Box*> args;
     llvm::SmallVector<RewriterVar*, 8> args_vars;
     for (AST_expr* e : node->args) {
         Value v = visit_expr(e);
@@ -1528,7 +1525,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assert(getSymVRegMap()[node->id] == node->vreg);
             Box* val = vregs[node->vreg];
             if (val) {
-                ASSERT(gc::isValidGCObject(val), "%s is %p", node->id.c_str(), val);
                 v.o = val;
                 return v;
             }
@@ -1541,7 +1537,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             if (jit)
                 v.var = jit->emitGetBoxedLocal(node->id.getBox());
             v.o = boxedLocalsGet(frame_info.boxedLocals, node->id.getBox(), globals);
-            assert(gc::isValidGCObject(v.o));
             return v;
         }
         default:
@@ -1673,7 +1668,6 @@ Box* ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type,
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
 
-    assert(gc::isValidGCObject(v));
     assert(interpreter->getSymVRegMap().count(id));
     assert(interpreter->getSymVRegMap()[id] == vreg);
     interpreter->vregs[vreg] = v;
@@ -1983,7 +1977,6 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
 
         Box* val = interpreter->getVRegs()[l.second];
         if (val) {
-            assert(gc::isValidGCObject(val));
             rtn->d[l.first.getBox()] = val;
         }
     }

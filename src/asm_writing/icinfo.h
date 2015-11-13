@@ -27,10 +27,6 @@
 
 namespace pyston {
 
-namespace gc {
-class GCVisitor;
-}
-
 class TypeRecorder;
 
 class ICInfo;
@@ -87,8 +83,6 @@ public:
     assembler::GenericRegister returnRegister();
 
     ICSlotInfo* prepareEntry();
-
-    void gc_visit(gc::GCVisitor* visitor);
 
     void addDependenceOn(ICInvalidator&);
     void commit(CommitHook* hook, std::vector<void*> gc_references);
@@ -150,7 +144,6 @@ public:
     int timesRewritten() const { return times_rewritten; }
 
     friend class ICSlotRewrite;
-    static void visitGCReferences(gc::GCVisitor* visitor);
 
     static ICInfo* getICInfoForNode(AST* node);
     void associateNodeWithICInfo(AST* node);

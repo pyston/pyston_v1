@@ -29,8 +29,6 @@ public:
     BoxedListIterator(BoxedList* l, int start);
 
     DEFAULT_CLASS(list_iterator_cls);
-
-    static void gcHandler(GCVisitor* v, Box* b);
 };
 
 Box* listIter(Box* self) noexcept;

@@ -461,7 +461,6 @@ struct _typeobject {
     void* _hcls;
     void* _hcattrs;
     char _ics[40];
-    void* _gcvisit_func;
     int _attrs_offset;
     char _flags[7]; // These are bools in C++
     void* _tpp_descr_get;

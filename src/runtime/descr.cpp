@@ -430,14 +430,6 @@ Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Bo
         return boxInstanceMethod(inst, self, self->type);
 }
 
-void BoxedMethodDescriptor::gcHandler(GCVisitor* v, Box* _o) {
-    assert(_o->cls == method_cls);
-    BoxedMethodDescriptor* o = static_cast<BoxedMethodDescriptor*>(_o);
-
-    Box::gcHandler(v, o);
-    v->visit(&o->type);
-}
-
 Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
     STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_descr_get", 20);
 
@@ -569,14 +561,6 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
     return rtn;
 }
 
-void BoxedWrapperDescriptor::gcHandler(GCVisitor* v, Box* _o) {
-    assert(_o->cls == wrapperdescr_cls);
-    BoxedWrapperDescriptor* o = static_cast<BoxedWrapperDescriptor*>(_o);
-
-    Box::gcHandler(v, o);
-    v->visit(&o->type);
-}
-
 static Box* wrapperdescrGetDoc(Box* b, void*) {
     assert(b->cls == wrapperdescr_cls);
     auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
@@ -668,14 +652,6 @@ Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgP
         = bindObjIntoArgs(self->obj, r_obj, rewrite_args, argspec, arg1, arg2, arg3, args, new_args);
     return BoxedWrapperDescriptor::tppCall<S>(self->descr, rewrite_args, new_argspec, arg1, arg2, arg3, new_args,
                                               keyword_names);
-}
-
-void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
-    assert(_o->cls == wrapperobject_cls);
-    BoxedWrapperObject* o = static_cast<BoxedWrapperObject*>(_o);
-
-    Box::gcHandler(v, o);
-    v->visit(&o->obj);
 }
 
 extern "C" PyObject* PyStaticMethod_New(PyObject* callable) noexcept {

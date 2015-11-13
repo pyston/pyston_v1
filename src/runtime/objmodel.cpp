@@ -37,7 +37,6 @@
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/gc.h"
 #include "runtime/classobj.h"
 #include "runtime/dict.h"
 #include "runtime/file.h"
@@ -326,7 +325,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
         return &l->elts->elts[0];
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*>> elts;
+    std::vector<Box*> elts;
     for (auto e : obj->pyElements()) {
         elts.push_back(e);
         if (elts.size() > expected_size)
@@ -399,10 +398,9 @@ void BoxedClass::freeze() {
 }
 
 std::vector<BoxedClass*> classes;
-BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
+BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined, const char* name)
     : attrs(HiddenClass::makeSingleton()),
-      gc_visit(gc_visit),
       attrs_offset(attrs_offset),
       is_constant(false),
       is_user_defined(is_user_defined),
@@ -469,12 +467,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     }
     tp_free = default_free;
 
-    if (gc_visit == NULL) {
-        assert(base);
-        this->gc_visit = base->gc_visit;
-    }
-    assert(this->gc_visit);
-
     if (!base) {
         assert(object_cls == nullptr);
         // we're constructing 'object'
@@ -495,16 +487,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
-
-    if (!is_user_defined)
-        gc::registerPermanentRoot(this);
 }
 
-BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset,
                                int weaklist_offset, int instance_size, bool is_user_defined, const char* name) {
     assert(!is_user_defined);
     BoxedClass* made = new (metaclass, 0)
-        BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
+        BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:
@@ -533,9 +522,9 @@ void BoxedClass::finishInitialization() {
     tp_flags |= Py_TPFLAGS_READY;
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
                                int instance_size, bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data()),
+    : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data()),
       ht_name(name),
       ht_slots(NULL) {
     assert(is_user_defined);
@@ -555,11 +544,11 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     memset(&as_buffer, 0, sizeof(as_buffer));
 }
 
-BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset,
                                        int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                        BoxedTuple* bases, size_t nslots) {
     BoxedHeapClass* made = new (metaclass, nslots)
-        BoxedHeapClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
+        BoxedHeapClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
 
     assert((name || str_cls == NULL) && "name can only be NULL before str_cls has been initialized.");
 
@@ -792,14 +781,13 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
     RewriterVar* r_new_array2 = NULL;
     int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
     if (numattrs == 0) {
-        attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::PRECISE);
+        attrs->attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(new_size);
         if (rewrite_args) {
             RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-            RewriterVar* r_kind = rewrite_args->rewriter->loadConst((int)gc::GCKind::PRECISE, Location::forArg(1));
-            r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_alloc, r_newsize, r_kind);
+            r_new_array2 = rewrite_args->rewriter->call(true, (void*)PyMem_Malloc, r_newsize);
         }
     } else {
-        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+        attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
         if (rewrite_args) {
             if (cls->attrs_offset < 0) {
                 REWRITE_ABORTED("");
@@ -808,7 +796,7 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
                 RewriterVar* r_oldarray
                     = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
                 RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+                r_new_array2 = rewrite_args->rewriter->call(true, (void*)PyMem_Realloc, r_oldarray, r_newsize);
             }
         }
     }
@@ -830,7 +818,6 @@ void Box::giveAttr(BoxedString* attr, Box* val) {
 }
 
 void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args) {
-    assert(gc::isValidGCObject(val));
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
 
     // Have to guard on the memory layout of this object.
@@ -1567,8 +1554,6 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
         rewrite_args = NULL;
     }
 
-    assert(gc::isValidGCObject(attr));
-
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
 
@@ -1707,7 +1692,7 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
     }
 
 #if 0
-    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getclsattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getclsattr"));
 
     if (rewriter.get()) {
         //rewriter->trap();
@@ -1719,7 +1704,7 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
             rewriter->commit();
         }
 #else
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getclsattr"));
 
     if (rewriter.get()) {
@@ -2149,7 +2134,7 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
 #endif
     }
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getattr"));
 
 #if 0 && STAT_TIMERS
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_getattr_patchable");
@@ -2314,7 +2299,6 @@ void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* r
     }
 
     assert(val);
-    assert(gc::isValidGCObject(val));
 
     static BoxedString* set_str = internStringImmortal("__set__");
 
@@ -2439,7 +2423,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
         return;
     }
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
     setattrofunc tp_setattro = obj->cls->tp_setattro;
@@ -2542,12 +2526,10 @@ static bool nonzeroHelper(Box* r) {
 extern "C" bool nonzero(Box* obj) {
     STAT_TIMER(t0, "us_timer_slowpath_nonzero", 10);
 
-    assert(gc::isValidGCObject(obj));
-
     static StatCounter slowpath_nonzero("slowpath_nonzero");
     slowpath_nonzero.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "nonzero"));
 
     RewriterVar* r_obj = NULL;
@@ -2909,7 +2891,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     static StatCounter slowpath_unboxedlen("slowpath_unboxedlen");
     slowpath_unboxedlen.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unboxedLen"));
 
     BoxedInt* lobj;
@@ -2947,8 +2929,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         assert(!rewrite_args);
         rewrite_args = NULL;
     }
-
-    assert(gc::isValidGCObject(attr));
 
     int npassed_args = argspec.totalPassed();
 
@@ -3128,8 +3108,6 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
     ScopedStatTimer st(counter, 10);
 #endif
 
-    ASSERT(gc::isValidGCObject(obj), "%p", obj);
-
     ArgPassSpec argspec(flags.argspec);
     int npassed_args = argspec.totalPassed();
 
@@ -3145,7 +3123,7 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
     // Uncomment this to help debug if callsites aren't getting rewritten:
     // printf("Slowpath call: %p (%s.%s)\n", return_addr, obj->cls->tp_name, attr->c_str());
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "callattr"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "callattr"));
     Box* rtn;
 
     LookupScope scope = flags.cls_only ? CLASS_ONLY : CLASS_OR_INST;
@@ -3298,9 +3276,7 @@ static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8
                         Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs, BoxedDict* okwargs,
                         FuncNameCB func_name_cb) {
     assert(kw_val);
-    assert(gc::isValidGCObject(kw_val));
     assert(kw_name);
-    assert(gc::isValidGCObject(kw_name));
 
     for (int j = 0; j < param_names->args.size(); j++) {
         if (param_names->args[j] == kw_name->s() && kw_name->size() > 0) {
@@ -3386,15 +3362,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     int num_output_args = paramspec.totalReceived();
     int num_passed_args = argspec.totalPassed();
 
-    if (num_passed_args >= 1)
-        assert(gc::isValidGCObject(oarg1) || !oarg1);
-    if (num_passed_args >= 2)
-        assert(gc::isValidGCObject(oarg2) || !oarg2);
-    if (num_passed_args >= 3)
-        assert(gc::isValidGCObject(oarg3) || !oarg3);
-    for (int i = 3; i < num_passed_args; i++) {
-        assert(gc::isValidGCObject(args[i - 3]) || args[i - 3] == NULL);
-    }
     assert((oargs != NULL) == (num_output_args > 3));
     assert((defaults != NULL) == (paramspec.num_defaults != 0));
 
@@ -3614,8 +3581,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
-    // unused_positional relies on varargs being alive so that it doesn't have to do its own tracking.
-    GC_KEEP_ALIVE(varargs);
+    Py_DECREF(varargs);
 
     ////
     // Second, apply any keywords:
@@ -3868,13 +3834,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         } else
             throw e;
     }
-
-#if 0
-    for (int i = 0; i < num_output_args; i++) {
-        auto arg = getArg(i, arg1, arg2, arg3, oargs);
-        RELEASE_ASSERT(!arg || gc::isValidGCObject(arg), "%p", arg);
-    }
-#endif
 
     if (rewrite_args && !rewrite_success) {
 // These are the cases that we weren't able to rewrite.
@@ -4416,7 +4375,7 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
         assert(argspec.num_keywords == keyword_names->size());
         num_orig_args++;
     }
-    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "runtimeCall"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, num_orig_args, "runtimeCall"));
 
     Box* rtn;
 
@@ -4497,9 +4456,6 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     // TODO handle the case of the rhs being a subclass of the lhs
     // this could get really annoying because you can dynamically make one type a subclass
     // of the other!
-
-    assert(gc::isValidGCObject(lhs));
-    assert(gc::isValidGCObject(rhs));
 
     if (rewrite_args) {
         // TODO probably don't need to guard on the lhs_cls since it
@@ -4652,7 +4608,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    gc::UniqueScanningHandle<Rewriter> rewriter((Rewriter*)NULL);
+    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
     // Currently can't patchpoint user-defined binops since we can't assume that just because
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
@@ -4689,7 +4645,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_augbinop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    gc::UniqueScanningHandle<Rewriter> rewriter((Rewriter*)NULL);
+    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
     // Currently can't patchpoint user-defined binops since we can't assume that just because
     // resolving it one way right now (ex, using the value from lhs.__add__) means that later
     // we'll resolve it the same way, even for the same argument types.
@@ -5019,7 +4975,7 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
     slowpath_compare.log();
     static StatCounter nopatch_compare("nopatch_compare");
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "compare"));
 
     if (rewriter.get()) {
@@ -5078,7 +5034,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     BoxedString* op_name = getOpName(op_type);
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unaryop"));
 
     Box* rtn = NULL;
@@ -5408,7 +5364,7 @@ extern "C" Box* getitem(Box* target, Box* slice) {
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
     Box* rtn;
@@ -5442,7 +5398,7 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
 
     Box* rtn;
@@ -5477,7 +5433,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     static StatCounter slowpath_setitem("slowpath_setitem");
     slowpath_setitem.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
 
     static BoxedString* setitem_str = internStringImmortal("__setitem__");
@@ -5530,7 +5486,7 @@ extern "C" void delitem(Box* target, Box* slice) {
     static StatCounter slowpath_delitem("slowpath_delitem");
     slowpath_delitem.log();
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(
+    std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
 
     static BoxedString* delitem_str = internStringImmortal("__delitem__");
@@ -5598,7 +5554,7 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
 
         // guarantee the size of the attr_list equals the number of attrs
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
-        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+        attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
         return;
     }
 
@@ -5694,7 +5650,7 @@ extern "C" Box* createBoxedIterWrapper(Box* o) {
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
     STAT_TIMER(t0, "us_timer_slowpath_createBoxedIterWrapperIfNeeded", 10);
 
-    gc::UniqueScanningHandle<Rewriter> rewriter(Rewriter::createRewriter(
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), 1, "createBoxedIterWrapperIfNeeded"));
 
     static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
@@ -5966,7 +5922,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 
     size_t total_slots = final_slot_names.size()
                          + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);
-    BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, NULL, attrs_offset, weaklist_offset, basic_size, true,
+    BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, attrs_offset, weaklist_offset, basic_size, true,
                                                   name, bases, total_slots);
     made->tp_dictoffset = dict_offset;
 
@@ -6178,8 +6134,6 @@ extern "C" void delGlobal(Box* globals, BoxedString* name) {
 extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
     STAT_TIMER(t0, "us_timer_slowpath_getglobal", 10);
 
-    ASSERT(gc::isValidGCObject(globals), "%p", globals);
-
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -6193,7 +6147,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
     }
 
     { /* anonymous scope to make sure destructors get run before we err out */
-        gc::UniqueScanningHandle<Rewriter> rewriter(
+        std::unique_ptr<Rewriter> rewriter(
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "getGlobal"));
 
         Box* r;

@@ -26,11 +26,6 @@ extern "C" {
 BoxedClass* code_cls;
 }
 
-void BoxedCode::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == code_cls);
-    Box::gcHandler(v, b);
-}
-
 Box* BoxedCode::name(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     return static_cast<BoxedCode*>(b)->f->source->getName();
@@ -72,7 +67,7 @@ Box* BoxedCode::varnames(Box* b, void*) {
     if (!param_names.takes_param_names)
         return EmptyTuple;
 
-    std::vector<Box*, StlCompatAllocator<Box*>> elts;
+    std::vector<Box*> elts;
     for (auto sr : param_names.args)
         elts.push_back(boxString(sr));
     if (param_names.vararg.size())
@@ -116,7 +111,7 @@ extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
 }
 
 void setupCode() {
-    code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
+    code_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code");
 
     code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
 

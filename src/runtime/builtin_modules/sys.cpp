@@ -239,17 +239,6 @@ public:
 
     DEFAULT_CLASS(sys_flags_cls);
 
-    static void gcHandler(GCVisitor* v, Box* _b) {
-        assert(_b->cls == sys_flags_cls);
-        Box::gcHandler(v, _b);
-
-        BoxedSysFlags* self = static_cast<BoxedSysFlags*>(_b);
-        v->visit(&self->division_warning);
-        v->visit(&self->bytes_warning);
-        v->visit(&self->no_user_site);
-        v->visit(&self->optimize);
-    }
-
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
         raiseExcHelper(TypeError, "cannot create 'sys.flags' instances");
     }
@@ -643,7 +632,6 @@ static int _check_and_flush(FILE* stream) {
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     constants.push_back(sys_modules_dict);
-    gc::registerPermanentRoot(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
     sys_module = createModule(autoDecref(boxString("sys")));
@@ -725,7 +713,7 @@ void setupSys() {
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
     sys_flags_cls = new (0)
-        BoxedClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false, "flags");
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedSysFlags), false, "flags");
     sys_flags_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
     sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
@@ -754,7 +742,7 @@ void setupSys() {
 }
 
 void setupSysEnd() {
-    std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
+    std::vector<Box*> builtin_module_names;
     for (const auto& p : *sys_modules_dict) {
         builtin_module_names.push_back(p.first);
     }

@@ -29,8 +29,6 @@ public:
 
     DEFAULT_CLASS(code_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
-
     // These need to be static functions rather than methods because function
     // pointers could point to them.
     static Box* name(Box* b, void*);

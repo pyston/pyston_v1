@@ -49,17 +49,6 @@ public:
     Box** weakreflist;
 
     BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {}
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == classobj_cls);
-        BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
-
-        Box::gcHandler(v, o);
-        if (o->bases)
-            v->visit(&o->bases);
-        if (o->name)
-            v->visit(&o->name);
-    }
 };
 
 class BoxedInstance : public Box {
@@ -73,15 +62,6 @@ public:
     BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {}
 
     DEFAULT_CLASS(instance_cls);
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == instance_cls);
-        BoxedInstance* o = static_cast<BoxedInstance*>(_o);
-
-        Box::gcHandler(v, o);
-        if (o->inst_cls)
-            v->visit(&o->inst_cls);
-    }
 };
 
 Box* instance_getattro(Box* cls, Box* attr) noexcept;

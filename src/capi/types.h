@@ -62,16 +62,6 @@ public:
             return boxString(s);
         return None;
     }
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == capifunc_cls);
-        BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
-
-        Box::gcHandler(v, o);
-        v->visitPotential(o->method_def);
-        v->visit(&o->passthrough);
-        v->visit(&o->module);
-    }
 };
 static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");
 static_assert(offsetof(BoxedCApiFunction, method_def) == offsetof(PyCFunctionObject, m_ml), "");

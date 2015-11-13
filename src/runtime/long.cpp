@@ -60,14 +60,6 @@ int _PyLong_DigitValue[256] = {
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
-void BoxedLong::gchandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedLong* l = (BoxedLong*)b;
-
-    v->visitPotentialRange((void**)&l->n, (void**)((&l->n) + 1));
-}
-
 extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }
@@ -1411,18 +1403,6 @@ extern "C" Box* longTrunc(BoxedLong* self) {
     return self;
 }
 
-void* customised_allocation(size_t alloc_size) {
-    return gc::gc_alloc(alloc_size, gc::GCKind::CONSERVATIVE);
-}
-
-void* customised_realloc(void* ptr, size_t old_size, size_t new_size) {
-    return gc::gc_realloc(ptr, new_size);
-}
-
-void customised_free(void* ptr, size_t size) {
-    gc::gc_free(ptr);
-}
-
 extern "C" Box* longIndex(BoxedLong* v) noexcept {
     if (PyLong_CheckExact(v))
         return v;
@@ -1509,8 +1489,6 @@ static PyObject* long_getnewargs(PyLongObject* v) noexcept {
 void setupLong() {
     static PyNumberMethods long_as_number;
     long_cls->tp_as_number = &long_as_number;
-
-    mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
     auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,

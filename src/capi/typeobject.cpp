@@ -27,33 +27,6 @@ typedef int (*update_callback)(PyTypeObject*, void*);
 
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 
-extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
-    v->visitPotentialRange((void**)b, (void**)((char*)b + b->cls->tp_basicsize));
-}
-
-extern "C" void conservativeAndBasesGCHandler(GCVisitor* v, Box* b) noexcept {
-    // TODO: this function is expensive.  We should try to make sure it doesn't get used
-    // that often, or to come up with a better approach.
-
-    // Call all the custom gc handlers defined anywhere in the hierarchy:
-    assert(PyTuple_CheckExact(b->cls->tp_mro));
-    for (auto c : *static_cast<BoxedTuple*>(b->cls->tp_mro)) {
-        if (!PyType_Check(c))
-            continue;
-
-        auto gc_visit = static_cast<BoxedClass*>(c)->gc_visit;
-
-        // Skip conservativeGCHandler since it's slow, and skip conservativeAndBasesGCHandler since
-        // it would cause an infinite loop:
-        if (gc_visit == conservativeGCHandler || gc_visit == conservativeAndBasesGCHandler)
-            continue;
-
-        gc_visit(v, b);
-    }
-
-    conservativeGCHandler(v, b);
-}
-
 /* Helper to check for object.__setattr__ or __delattr__ applied to a type.
    This is called the Carlo Verre hack after its discoverer. */
 static int hackcheck(PyObject* self, setattrofunc func, const char* what) noexcept {
@@ -3407,7 +3380,6 @@ extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
-    gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
     classes.push_back(cls);
 
     // unhandled fields:
@@ -3504,16 +3476,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     if (cls->tp_alloc == &PystonType_GenericAlloc)
         cls->tp_alloc = &PyType_GenericAlloc;
 
-    // If an extension class visits from a Pyston class that does custom visiting,
-    // the base class needs to call the parent's visit function in case it visits
-    // non-inline data.  There's not an easy way to put in a function pointer here
-    // that defers to a specific class's gc_visit, even if it's a base class, since
-    // the gc_visit could get inherited by subclasses.  For now just use an expensive
-    // function, conservativeAndBasesGCHandler
-    if (base->gc_visit != object_cls->gc_visit && base->gc_visit != &conservativeGCHandler)
-        cls->gc_visit = &conservativeAndBasesGCHandler;
-    else
-        cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;
 
 

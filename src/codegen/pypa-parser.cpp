@@ -1036,8 +1036,7 @@ PystonReader::PystonReader() : is_eof(false), readline(nullptr), line_number(0) 
 }
 
 PystonReader::~PystonReader() {
-    if (readline)
-        gc::deregisterPermanentRoot(readline);
+    Py_XDECREF(readline);
     readline = nullptr;
 }
 
@@ -1054,7 +1053,6 @@ bool PystonReader::set_encoding(const std::string& coding) {
     if (readline == NULL)
         return false;
 
-    gc::registerPermanentRoot(readline);
     return true;
 }
 

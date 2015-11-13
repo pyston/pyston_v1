@@ -4935,7 +4935,7 @@ _PyPopen(char *cmdstring, int mode, int n, int bufsize)
      */
     if (!_PyPopenProcs)
     {
-        _PyPopenProcs = PyGC_AddRoot(PyDict_New());
+        _PyPopenProcs = PyDict_New();
     }
 
     if (_PyPopenProcs)
@@ -5682,7 +5682,7 @@ _PyPopen(char *cmdstring, int mode, int n)
       * and variable number of files involved.
       */
      if (!_PyPopenProcs) {
-         _PyPopenProcs = PyGC_AddRoot(PyDict_New());
+         _PyPopenProcs = PyDict_New();
      }
 
      if (_PyPopenProcs) {
@@ -6105,7 +6105,7 @@ wait_helper(pid_t pid, int status, struct rusage *ru)
         PyObject *m = PyImport_ImportModuleNoBlock("resource");
         if (m == NULL)
             return NULL;
-        struct_rusage = PyGC_AddRoot(PyObject_GetAttrString(m, "struct_rusage"));
+        struct_rusage = PyObject_GetAttrString(m, "struct_rusage");
         Py_DECREF(m);
         if (struct_rusage == NULL)
             return NULL;
@@ -9451,7 +9451,7 @@ INITFUNC(void)
 
 #ifdef HAVE_PUTENV
     if (posix_putenv_garbage == NULL)
-        posix_putenv_garbage = PyGC_AddRoot(PyDict_New());
+        posix_putenv_garbage = PyDict_New();
 #endif
 
     if (!initialized) {

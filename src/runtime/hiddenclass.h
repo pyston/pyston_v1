@@ -24,7 +24,7 @@
 
 namespace pyston {
 
-class HiddenClass : public gc::GCAllocatedRuntime {
+class HiddenClass {
 public:
     // We have a couple different storage strategies for attributes, which
     // are distinguished by having a different hidden class type.
@@ -74,8 +74,6 @@ public:
 #endif
         return new HiddenClass(DICT_BACKED);
     }
-
-    void gc_visit(GCVisitor* visitor);
 
     // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
     // attributes.

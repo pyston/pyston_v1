@@ -1047,7 +1047,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
-    gc::registerPermanentRoot(source->parent_module, /* allow_duplicates= */ true);
+    //gc::registerPermanentRoot(source->parent_module, /* allow_duplicates= */ true);
 
     llvm::FunctionType* ft = llvm::FunctionType::get(cf->getReturnType()->llvmType(), llvm_arg_types, false /*vararg*/);
 

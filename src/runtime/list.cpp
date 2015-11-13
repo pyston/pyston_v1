@@ -22,7 +22,6 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/roots.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -519,7 +518,7 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     size_t v_size;
     Box** v_elts;
 
-    RootedBox v_as_seq((Box*)nullptr);
+    Box* v_as_seq = nullptr;
     if (!v) {
         v_size = 0;
         v_elts = NULL;
@@ -527,7 +526,7 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
         if (self == v) // handle self assignment by creating a copy
             v = _listSlice(self, 0, self->size, 1, self->size);
 
-        v_as_seq = RootedBox(PySequence_Fast(v, "can only assign an iterable"));
+        v_as_seq = PySequence_Fast(v, "can only assign an iterable");
         if (v_as_seq == NULL)
             throwCAPIException();
 
@@ -1255,36 +1254,15 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     }
 }
 
-void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-    BoxedListIterator* it = (BoxedListIterator*)b;
-    v->visit(&it->l);
-}
-
-void BoxedList::gcHandler(GCVisitor* v, Box* b) {
-    assert(PyList_Check(b));
-
-    Box::gcHandler(v, b);
-
-    BoxedList* l = (BoxedList*)b;
-    int size = l->size;
-    int capacity = l->capacity;
-    assert(capacity >= size);
-    if (capacity)
-        v->visit(&l->elts);
-    if (size)
-        v->visitRange(&l->elts->elts[0], &l->elts->elts[size]);
-}
-
 void setupList() {
     static PySequenceMethods list_as_sequence;
     list_cls->tp_as_sequence = &list_as_sequence;
     static PyMappingMethods list_as_mapping;
     list_cls->tp_as_mapping = &list_as_mapping;
 
-    list_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
+    list_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                            sizeof(BoxedListIterator), false, "listiterator");
-    list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
+    list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                                    sizeof(BoxedListIterator), false, "listreverseiterator");
     list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
 

@@ -733,8 +733,8 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_it;
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_end;
+    std::vector<BoxIterator> args_it;
+    std::vector<BoxIterator> args_end;
 
     for (auto e : *args) {
         auto range = e->pyElements();
@@ -746,7 +746,7 @@ Box* map(Box* f, BoxedTuple* args) {
 
     bool use_identity_func = f == None;
     Box* rtn = new BoxedList();
-    std::vector<Box*, StlCompatAllocator<Box*>> current_val(num_iterable);
+    std::vector<Box*> current_val(num_iterable);
     while (true) {
         int num_done = 0;
         for (int i = 0; i < num_iterable; ++i) {
@@ -1027,12 +1027,12 @@ Box* zip(BoxedTuple* containers) {
     if (containers->size() == 0)
         return rtn;
 
-    std::vector<llvm::iterator_range<BoxIterator>, StlCompatAllocator<llvm::iterator_range<BoxIterator>>> ranges;
+    std::vector<llvm::iterator_range<BoxIterator>> ranges;
     for (auto container : *containers) {
         ranges.push_back(container->pyElements());
     }
 
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> iterators;
+    std::vector<BoxIterator> iterators;
     for (auto range : ranges) {
         iterators.push_back(range.begin());
     }
@@ -1116,7 +1116,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = BoxedClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
+    BoxedClass* cls = BoxedClass::create(type_cls, base, offsetof(BoxedException, attrs), 0, size, false, name);
     cls->giveAttr("__module__", boxString("exceptions"));
 
     if (base == object_cls) {
@@ -1207,14 +1207,6 @@ public:
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         return boxBool(self->iterator != self->iterator_end);
-    }
-
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-
-        BoxedEnumerate* it = (BoxedEnumerate*)b;
-        it->iterator.gcHandler(v);
-        it->iterator_end.gcHandler(v);
     }
 };
 
@@ -1850,11 +1842,10 @@ void setupBuiltins() {
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
+    ellipsis_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis");
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
-    gc::registerPermanentRoot(Ellipsis);
 
     builtins_module->giveAttr("Ellipsis", Ellipsis);
     builtins_module->giveAttr("None", None);
@@ -1865,12 +1856,11 @@ void setupBuiltins() {
         "print", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)print, NONE, 0, true, true), "print",
                                                   print_doc));
 
-    notimplemented_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
+    notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
-    gc::registerPermanentRoot(NotImplemented);
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
 
@@ -1976,7 +1966,7 @@ void setupBuiltins() {
                                                                              { None, None, None, new BoxedInt(-1) },
                                                                              NULL, import_doc));
 
-    enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
+    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate),
                                        false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false),
