@@ -763,6 +763,23 @@ void BoxedDict::dealloc(Box* b) noexcept {
     static_cast<BoxedDict*>(b)->d.freeAllMemory();
 }
 
+int BoxedDict::traverse(PyObject* op, visitproc visit, void* arg) noexcept {
+    Py_ssize_t i = 0;
+    PyObject* pk;
+    PyObject* pv;
+
+    while (PyDict_Next(op, &i, &pk, &pv)) {
+        Py_VISIT(pk);
+        Py_VISIT(pv);
+    }
+    return 0;
+}
+
+int BoxedDict::clear(PyObject* op) noexcept {
+    PyDict_Clear(op);
+    return 0;
+}
+
 extern "C" void _PyDict_MaybeUntrack(PyObject* op) noexcept {
     PyDictObject* mp;
     PyObject* value;

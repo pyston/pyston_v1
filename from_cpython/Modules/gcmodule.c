@@ -382,6 +382,13 @@ subtract_refs(PyGC_Head *containers)
     PyGC_Head *gc = containers->gc.gc_next;
     for (; gc != containers; gc=gc->gc.gc_next) {
         traverse = Py_TYPE(FROM_GC(gc))->tp_traverse;
+        // Pyston addition: some extra checking for our transition
+#ifndef NDEBUG
+        if (!traverse) {
+            fprintf(stderr, "%s needs a tp_traverse\n", Py_TYPE(FROM_GC(gc))->tp_name);
+            assert(0);
+        }
+#endif
         (void) traverse(FROM_GC(gc),
                        (visitproc)visit_decref,
                        NULL);

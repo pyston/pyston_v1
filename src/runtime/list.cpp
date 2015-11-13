@@ -1258,6 +1258,63 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     }
 }
 
+void BoxedList::dealloc(Box* b) noexcept {
+    BoxedList* op = static_cast<BoxedList*>(b);
+
+    Py_ssize_t i;
+    PyObject_GC_UnTrack(op);
+    Py_TRASHCAN_SAFE_BEGIN(op)
+    if (op->elts != NULL) {
+        /* Do it backwards, for Christian Tismer.
+           There's a simple test case where somehow this reduces
+           thrashing when a *very* large list is created and
+           immediately deleted. */
+        i = Py_SIZE(op);
+        while (--i >= 0) {
+            Py_XDECREF(op->elts->elts[i]);
+        }
+        //PyMem_FREE(op->elts);
+    }
+#if 0
+    if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
+        free_list[numfree++] = op;
+    else
+#endif
+    Py_TYPE(op)->tp_free((PyObject*)op);
+    Py_TRASHCAN_SAFE_END(op)
+}
+
+int BoxedList::traverse(Box* _o, visitproc visit, void* arg) noexcept {
+    PyListObject* o = (PyListObject*)_o;
+    Py_ssize_t i;
+
+    for (i = Py_SIZE(o); --i >= 0; )
+        Py_VISIT(o->ob_item[i]);
+    return 0;
+}
+
+int BoxedList::clear(Box* _a) noexcept {
+    PyListObject* a = (PyListObject*)_a;
+    Py_ssize_t i;
+    PyObject **item = a->ob_item;
+    if (item != NULL) {
+        /* Because XDECREF can recursively invoke operations on
+           this list, we make it empty first. */
+        i = Py_SIZE(a);
+        Py_SIZE(a) = 0;
+        a->ob_item = NULL;
+        a->allocated = 0;
+        while (--i >= 0) {
+            Py_XDECREF(item[i]);
+        }
+        PyMem_FREE(item);
+    }
+    /* Never fails; the return value can be ignored.
+       Note that there is no guarantee that the list is actually empty
+       at this point, because XDECREF may have populated it again! */
+    return 0;
+}
+
 void setupList() {
     static PySequenceMethods list_as_sequence;
     list_cls->tp_as_sequence = &list_as_sequence;

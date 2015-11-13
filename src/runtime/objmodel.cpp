@@ -400,7 +400,8 @@ void BoxedClass::freeze() {
 
 std::vector<BoxedClass*> classes;
 BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size, bool is_user_defined,
-                       const char* name, destructor dealloc, freefunc free, bool is_gc)
+                       const char* name, destructor dealloc, freefunc free, bool is_gc, traverseproc traverse,
+                       inquiry clear)
     : attrs(HiddenClass::makeSingleton()),
       attrs_offset(attrs_offset),
       is_constant(false),
@@ -409,6 +410,15 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
       has___class__(false),
       has_instancecheck(false),
       tpp_call(NULL, NULL) {
+
+    bool ok_noclear = (clear == NOCLEAR);
+    if (ok_noclear)
+        clear = NULL;
+    if (is_gc) {
+        ASSERT(traverse, "%s", name);
+        ASSERT(dealloc, "%s", name);
+    }
+    ASSERT(((bool)traverse == (bool)clear) || ok_noclear, "%s", name);
 
     classes.push_back(this);
 
@@ -453,6 +463,22 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
         assert(cls == type_cls || PyType_Check(this));
     }
 
+    tp_traverse = traverse;
+    tp_clear = clear;
+    if (base && !PyType_IS_GC(this) & PyType_IS_GC(base) && !traverse && !tp_clear) {
+        assert(tp_flags & Py_TPFLAGS_HAVE_RICHCOMPARE);
+
+        tp_flags |= Py_TPFLAGS_HAVE_GC;
+        assert(tp_free != PyObject_Del);
+        if (!tp_traverse)
+            tp_traverse = base->tp_traverse;
+        if (!tp_clear)
+            tp_clear = base->tp_clear;
+    }
+
+    ASSERT((bool)tp_traverse == PyType_IS_GC(this), "%s missing traverse", tp_name);
+    ASSERT(((bool)tp_clear == PyType_IS_GC(this)) || ok_noclear, "%s missing clear", tp_name);
+
     if (dealloc)
         tp_dealloc = dealloc;
     else {
@@ -469,9 +495,6 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
         else if (PyType_IS_GC(this) && base->tp_free == PyObject_Del)
             this->tp_free = PyObject_GC_Del;
     }
-
-    if (PyType_IS_GC(this))
-        assert(tp_free != PyObject_Del);
 
     assert(tp_dealloc);
     assert(tp_free);
@@ -500,10 +523,10 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
 
 BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset, int weaklist_offset,
                                int instance_size, bool is_user_defined, const char* name, destructor dealloc,
-                               freefunc free, bool is_gc) {
+                               freefunc free, bool is_gc, traverseproc traverse, inquiry clear) {
     assert(!is_user_defined);
-    BoxedClass* made = new (metaclass, 0)
-        BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name, dealloc, free, is_gc);
+    BoxedClass* made = new (metaclass, 0) BoxedClass(base, attrs_offset, weaklist_offset, instance_size,
+                                                     is_user_defined, name, dealloc, free, is_gc, traverse, clear);
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:
@@ -518,13 +541,6 @@ BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attr
 }
 
 void BoxedClass::finishInitialization() {
-    assert(!tp_traverse);
-    assert(!tp_clear);
-    if (tp_base) {
-        tp_traverse = tp_base->tp_traverse;
-        tp_clear = tp_base->tp_clear;
-    }
-
     assert(!this->tp_dict);
     this->tp_dict = incref(this->getAttrWrapper());
 

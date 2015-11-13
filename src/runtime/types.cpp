@@ -403,6 +403,32 @@ static void functionDtor(Box* b) {
     Py_XDECREF(self->defaults);
 }
 
+static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept {
+    //Py_VISIT(f->func_code);
+    Py_VISIT(f->globals);
+    Py_VISIT(f->modname);
+    Py_VISIT(f->defaults);
+    Py_VISIT(f->doc);
+    Py_VISIT(f->name);
+    Py_VISIT(f->closure);
+
+    //Py_VISIT(f->func_dict);
+    Py_VISIT_HCATTRS(f->attrs);
+    return 0;
+}
+
+static int builtin_func_traverse(BoxedBuiltinFunctionOrMethod* f, visitproc visit, void* arg) noexcept {
+    //Py_VISIT(f->func_code);
+    Py_VISIT(f->globals);
+    Py_VISIT(f->modname);
+    Py_VISIT(f->defaults);
+    Py_VISIT(f->doc);
+    Py_VISIT(f->name);
+    Py_VISIT(f->closure);
+
+    return 0;
+}
+
 std::string BoxedModule::name() {
     static BoxedString* name_str = internStringImmortal("__name__");
     Box* name = this->getattr(name_str);
@@ -2441,6 +2467,16 @@ public:
 
     static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
 
+    static void tp_dealloc(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int tp_traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int tp_clear(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
+
     friend class AttrWrapperIter;
 };
 
@@ -3330,9 +3366,37 @@ done:
     Py_TRASHCAN_SAFE_END(op)
 }
 
+static int
+tupletraverse(PyTupleObject *o, visitproc visit, void *arg)
+{
+    Py_ssize_t i;
+
+    for (i = Py_SIZE(o); --i >= 0; )
+        Py_VISIT(o->ob_item[i]);
+    return 0;
+}
+
 void BoxedModule::dealloc(Box* b) noexcept {
     BoxedModule* self = static_cast<BoxedModule*>(b);
     self->clearAttrs();
+
+    b->cls->tp_free(b);
+}
+
+void BoxedSlice::dealloc(Box* b) noexcept {
+    BoxedSlice* self = static_cast<BoxedSlice*>(b);
+
+    Py_DECREF(self->step);
+    Py_DECREF(self->start);
+    Py_DECREF(self->stop);
+
+    PyObject_Del(b);
+}
+
+int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+    Py_VISIT_HCATTRS(m->attrs);
+    return 0;
 }
 
 void BoxedInstanceMethod::dealloc(Box* b) noexcept {
@@ -3361,30 +3425,12 @@ void BoxedInstanceMethod::dealloc(Box* b) noexcept {
 #endif
 }
 
-void BoxedList::dealloc(Box* b) noexcept {
-    BoxedList* op = static_cast<BoxedList*>(b);
-
-    Py_ssize_t i;
-    PyObject_GC_UnTrack(op);
-    Py_TRASHCAN_SAFE_BEGIN(op)
-    if (op->elts != NULL) {
-        /* Do it backwards, for Christian Tismer.
-           There's a simple test case where somehow this reduces
-           thrashing when a *very* large list is created and
-           immediately deleted. */
-        i = Py_SIZE(op);
-        while (--i >= 0) {
-            Py_XDECREF(op->elts->elts[i]);
-        }
-        //PyMem_FREE(op->elts);
-    }
-#if 0
-    if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
-        free_list[numfree++] = op;
-    else
-#endif
-    Py_TYPE(op)->tp_free((PyObject*)op);
-    Py_TRASHCAN_SAFE_END(op)
+int BoxedInstanceMethod::traverse(Box* _im, visitproc visit, void* arg) noexcept {
+    BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(_im);
+    Py_VISIT(im->func);
+    Py_VISIT(im->obj);
+    Py_VISIT(im->im_class);
+    return 0;
 }
 
 void BoxedClass::dealloc(Box* b) noexcept {
@@ -3423,6 +3469,71 @@ static void object_dealloc(PyObject* self) {
     Py_TYPE(self)->tp_free(self);
 }
 
+static int
+type_traverse(PyTypeObject *type, visitproc visit, void *arg)
+{
+    /* Because of type_is_gc(), the collector only calls this
+       for heaptypes. */
+    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+
+    Py_VISIT(type->tp_dict);
+    Py_VISIT(type->tp_cache);
+    Py_VISIT(type->tp_mro);
+    Py_VISIT(type->tp_bases);
+    Py_VISIT(type->tp_base);
+
+    /* There's no need to visit type->tp_subclasses or
+       ((PyHeapTypeObject *)type)->ht_slots, because they can't be involved
+       in cycles; tp_subclasses is a list of weak references,
+       and slots is a tuple of strings. */
+
+    return 0;
+}
+
+static int
+type_clear(PyTypeObject *type)
+{
+    /* Because of type_is_gc(), the collector only calls this
+       for heaptypes. */
+    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+
+    /* We need to invalidate the method cache carefully before clearing
+       the dict, so that other objects caught in a reference cycle
+       don't start calling destroyed methods.
+
+       Otherwise, the only field we need to clear is tp_mro, which is
+       part of a hard cycle (its first element is the class itself) that
+       won't be broken otherwise (it's a tuple and tuples don't have a
+       tp_clear handler).  None of the other fields need to be
+       cleared, and here's why:
+
+       tp_cache:
+           Not used; if it were, it would be a dict.
+
+       tp_bases, tp_base:
+           If these are involved in a cycle, there must be at least
+           one other, mutable object in the cycle, e.g. a base
+           class's dict; the cycle will be broken that way.
+
+       tp_subclasses:
+           A list of weak references can't be part of a cycle; and
+           lists have their own tp_clear.
+
+       slots (in PyHeapTypeObject):
+           A tuple of strings can't be part of a cycle.
+    */
+
+    PyType_Modified(type);
+    if (type->tp_dict)
+        PyDict_Clear(type->tp_dict);
+    Py_CLEAR(type->tp_mro);
+
+    return 0;
+}
+
+int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
+    Py_FatalError("unimplemented");
+}
 
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
@@ -3450,7 +3561,8 @@ void setupRuntime() {
     PyObject_INIT(type_cls, type_cls);
     ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del, /* is_gc */ false);
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs), offsetof(BoxedClass, tp_weaklist),
-                                sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del);
+                                sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del, true,
+                                (traverseproc)type_traverse, (inquiry)type_clear);
 
     type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
@@ -3495,24 +3607,27 @@ void setupRuntime() {
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
-    tuple_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple", (destructor)tupledealloc, NULL);
+    tuple_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple",
+                                   (destructor)tupledealloc, NULL, true, (traverseproc)tupletraverse, NOCLEAR);
 
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     constants.push_back(EmptyTuple);
-    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", BoxedList::dealloc, NULL);
+    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", BoxedList::dealloc, NULL, true,
+                                  BoxedList::traverse, BoxedList::clear);
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
-    pyston_getset_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor", NULL, NULL);
+    pyston_getset_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor",
+                                           NULL, NULL, false);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", NULL, NULL);
-    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", BoxedDict::dealloc, NULL);
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", AttrWrapper::tp_dealloc, NULL, true,
+                   AttrWrapper::tp_traverse, AttrWrapper::tp_clear);
+    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", BoxedDict::dealloc, NULL, true,
+                                  BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
-                                  sizeof(BoxedFile), false, "file", file_dealloc, NULL);
+                                  sizeof(BoxedFile), false, "file", file_dealloc, NULL, false);
     int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", NULL, NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL, false);
@@ -3521,25 +3636,28 @@ void setupRuntime() {
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", NULL, NULL, false);
     function_cls = new (0)
-        BoxedClass(object_cls, offsetof(BoxedFunction, attrs),
-                   offsetof(BoxedFunction, weakreflist), sizeof(BoxedFunction), false, "function", functionDtor, NULL);
-    builtin_function_or_method_cls = new (0)
-        BoxedClass(object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist),
-                   sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method", functionDtor, NULL);
+        BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
+                   sizeof(BoxedFunction), false, "function", functionDtor, NULL, true, (traverseproc)func_traverse, NOCLEAR);
+    builtin_function_or_method_cls = new (0) BoxedClass(
+        object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist), sizeof(BoxedBuiltinFunctionOrMethod), false,
+        "builtin_function_or_method", functionDtor, NULL, true, (traverseproc)builtin_func_traverse, NOCLEAR);
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
-    module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0,
-                                    sizeof(BoxedModule), false, "module", BoxedModule::dealloc, NULL);
+    module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false, "module",
+                                    BoxedModule::dealloc, NULL, true, BoxedModule::traverse, NOCLEAR);
     member_descriptor_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor", NULL, NULL);
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor", NULL, NULL, false);
     capifunc_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", NULL, NULL);
-    method_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor),
-                                    false, "method_descriptor", NULL, NULL);
-    wrapperobject_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject),
-                                           false, "method-wrapper", NULL, NULL);
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", BoxedCApiFunction::dealloc, NULL,
+                   true, BoxedCApiFunction::traverse, BoxedCApiFunction::clear);
+    method_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor), false, "method_descriptor",
+                   BoxedMethodDescriptor::dealloc, NULL, true, BoxedMethodDescriptor::traverse, NOCLEAR);
+    wrapperobject_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper", BoxedWrapperObject::dealloc,
+                   NULL, true, BoxedWrapperObject::traverse, NOCLEAR);
     wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0,
-                                          sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor", NULL, NULL);
+                                          sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor", NULL, NULL, false);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);
@@ -3645,12 +3763,12 @@ void setupRuntime() {
     type_cls->giveAttr("__dict__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, NULL, NULL));
 
 
-    instancemethod_cls = BoxedClass::create(type_cls, object_cls, 0,
-                                            offsetof(BoxedInstanceMethod, im_weakreflist), sizeof(BoxedInstanceMethod),
-                                            false, "instancemethod", BoxedInstanceMethod::dealloc);
+    instancemethod_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedInstanceMethod, im_weakreflist),
+                                            sizeof(BoxedInstanceMethod), false, "instancemethod",
+                                            BoxedInstanceMethod::dealloc, NULL, true, BoxedInstanceMethod::traverse, NOCLEAR);
 
     slice_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice");
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice", BoxedSlice::dealloc, NULL, false);
     set_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist),
                                  sizeof(BoxedSet), false, "set");
     frozenset_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist),

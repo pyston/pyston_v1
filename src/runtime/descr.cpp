@@ -430,6 +430,38 @@ Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Bo
         return boxInstanceMethod(inst, self, self->type);
 }
 
+void BoxedMethodDescriptor::dealloc(Box* _self) noexcept {
+    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->type);
+    self->cls->tp_free(self);
+}
+
+int BoxedMethodDescriptor::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
+
+    Py_VISIT(self->type);
+    return 0;
+}
+
+void BoxedWrapperObject::dealloc(Box* _self) noexcept {
+    BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->obj);
+    Py_XDECREF(self->descr);
+    self->cls->tp_free(self);
+}
+
+int BoxedWrapperObject::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
+
+    Py_VISIT(self->obj);
+    Py_VISIT(self->descr);
+    return 0;
+}
+
 Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
     STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_descr_get", 20);
 

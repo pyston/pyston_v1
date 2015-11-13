@@ -277,10 +277,12 @@ public:
     // These should only be used for builtin types:
     static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset, int weaklist_offset,
                               int instance_size, bool is_user_defined, const char* name, destructor dealloc = NULL,
-                              freefunc free = NULL, bool is_gc = true);
+                              freefunc free = NULL, bool is_gc = true, traverseproc traverse = NULL,
+                              inquiry clear = NULL);
 
-    BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
-               bool is_user_defined, const char* name, destructor dealloc, freefunc free, bool is_gc = true);
+    BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size, bool is_user_defined,
+               const char* name, destructor dealloc, freefunc free, bool is_gc = true, traverseproc traverse = NULL,
+               inquiry clear = NULL);
 
 
     DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
@@ -498,6 +500,7 @@ public:
     DEFAULT_CLASS_SIMPLE(instancemethod_cls, true);
 
     static void dealloc(Box* self) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 };
 
 class GCdArray {
@@ -534,6 +537,8 @@ public:
     DEFAULT_CLASS_SIMPLE(list_cls, true);
 
     static void dealloc(Box* self) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
 static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");
@@ -824,6 +829,8 @@ public:
     iterator end() { return iterator(d.end()); }
 
     static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
@@ -896,6 +903,7 @@ public:
     Box* getLongConstant(llvm::StringRef s);
 
     static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 
 private:
     ContiguousMap<llvm::StringRef, BoxedString*, llvm::StringMap<int>> str_constants;
@@ -919,6 +927,8 @@ class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
+
+    static void dealloc(Box* b) noexcept;
 
     DEFAULT_CLASS_SIMPLE(slice_cls, true);
 };
@@ -959,7 +969,7 @@ public:
     BoxedMemberDescriptor(PyMemberDef* member)
         : type((MemberType)member->type), offset(member->offset), readonly(member->flags & READONLY) {}
 
-    DEFAULT_CLASS_SIMPLE(member_descriptor_cls, true);
+    DEFAULT_CLASS_SIMPLE(member_descriptor_cls, false);
 };
 
 class BoxedGetsetDescriptor : public Box {
@@ -970,6 +980,9 @@ public:
 
     BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
         : get(get), set(set), closure(closure) {}
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 
     // No DEFAULT_CLASS annotation here -- force callers to explicitly specifiy pyston_getset_cls or capi_getset_cls
 };
@@ -1097,6 +1110,9 @@ public:
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
+
+    static void dealloc(Box* self) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 };
 
 class BoxedMethodDescriptor : public Box {
@@ -1113,6 +1129,9 @@ public:
     template <ExceptionStyle S>
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
+
+    static void dealloc(Box* self) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

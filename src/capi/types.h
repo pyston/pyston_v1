@@ -62,6 +62,32 @@ public:
             return boxString(s);
         return None;
     }
+
+    static void dealloc(Box* _o) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
+
+        _PyObject_GC_UNTRACK(o);
+        Py_XDECREF(o->module);
+        Py_XDECREF(o->passthrough);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(Box* _o, visitproc visit, void* arg) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
+
+        Py_VISIT(o->module);
+        Py_VISIT(o->passthrough);
+        return 0;
+    }
+
+    static int clear(Box* _o) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
+
+        Py_CLEAR(o->module);
+        Py_CLEAR(o->passthrough);
+        return 0;
+    }
+
 };
 static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");
 static_assert(offsetof(BoxedCApiFunction, method_def) == offsetof(PyCFunctionObject, m_ml), "");

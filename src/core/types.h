@@ -590,10 +590,24 @@ public:
     AttrList* attr_list;
 
     HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
+
+    int traverse(visitproc visit, void* arg) noexcept;
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 
+#define Py_VISIT_HCATTRS(hcattrs)                                                                                      \
+    do {                                                                                                               \
+        int vret = hcattrs.traverse(visit, arg);                                                                      \
+        if (vret)                                                                                                      \
+            return vret;                                                                                               \
+    } while (0)
+
+
 extern std::vector<BoxedClass*> classes;
+
+// Debugging helper: pass this as a tp_clear function to say that you have explicitly verified
+// that you don't need a tp_clear (as opposed to haven't added one yet)
+#define NOCLEAR ((inquiry)-1)
 
 class BoxedDict;
 class BoxedString;
