@@ -483,15 +483,21 @@ extern "C" int64_t hashUnboxed(Box* obj);
 
 class BoxedInstanceMethod : public Box {
 public:
-    Box** in_weakreflist;
+    Box** im_weakreflist;
 
     // obj is NULL for unbound instancemethod
     Box* obj, *func, *im_class;
 
     BoxedInstanceMethod(Box* obj, Box* func, Box* im_class) __attribute__((visibility("default")))
-    : in_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {}
+    : im_weakreflist(NULL), obj(obj), func(func), im_class(im_class) {
+        Py_INCREF(func);
+        Py_XINCREF(obj);
+        Py_XINCREF(im_class);
+    }
 
     DEFAULT_CLASS_SIMPLE(instancemethod_cls, true);
+
+    static void dealloc(Box* self) noexcept;
 };
 
 class GCdArray {
@@ -823,7 +829,7 @@ static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
 class BoxedFunctionBase : public Box {
 public:
-    Box** in_weakreflist;
+    Box** weakreflist;
 
     FunctionMetadata* md;
 

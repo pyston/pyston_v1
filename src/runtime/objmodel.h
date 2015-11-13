@@ -169,8 +169,8 @@ extern "C" PyObject* type_getattro(PyObject* o, PyObject* name) noexcept;
 // This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
 // appropriate order. It does not do any descriptor logic.
 template <Rewritable rewritable = REWRITABLE>
-Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args);
-inline Box* typeLookup(BoxedClass* cls, BoxedString* attr) {
+BORROWED(Box*) typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args);
+inline BORROWED(Box*) typeLookup(BoxedClass* cls, BoxedString* attr) {
     return typeLookup<NOT_REWRITABLE>(cls, attr, NULL);
 }
 

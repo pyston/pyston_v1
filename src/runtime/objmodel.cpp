@@ -1755,6 +1755,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
 template <bool IsType, Rewritable rewritable>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
                             Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+    RELEASE_ASSERT(0, "need to check the refcounting here\n");
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;

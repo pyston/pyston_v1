@@ -280,7 +280,7 @@ Box* Box::hasnextOrNullIC() {
 }
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
-    : in_weakreflist(NULL),
+    : weakreflist(NULL),
       md(md),
       closure(NULL),
       defaults(NULL),
@@ -306,7 +306,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, Box* globals, bool can_change_defaults)
-    : in_weakreflist(NULL),
+    : weakreflist(NULL),
       md(md),
       closure(closure),
       globals(globals),
@@ -3349,6 +3349,32 @@ void BoxedModule::dealloc(Box* b) noexcept {
     self->clearAttrs();
 }
 
+void BoxedInstanceMethod::dealloc(Box* b) noexcept {
+    BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(b);
+
+    im->clearAttrs();
+
+    _PyObject_GC_UNTRACK(im);
+    if (im->im_weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *)im);
+    Py_DECREF(im->func);
+    Py_XDECREF(im->obj);
+    Py_XDECREF(im->im_class);
+
+#if 0
+    if (numfree < PyMethod_MAXFREELIST) {
+        im->obj = (PyObject *)free_list;
+        free_list = im;
+        numfree++;
+    }
+    else {
+#endif
+        PyObject_GC_Del(im);
+#if 0
+    }
+#endif
+}
+
 void BoxedList::dealloc(Box* b) noexcept {
     BoxedList* op = static_cast<BoxedList*>(b);
 
@@ -3511,9 +3537,9 @@ void setupRuntime() {
     float_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     function_cls = new (0)
         BoxedClass(object_cls, offsetof(BoxedFunction, attrs),
-                   offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false, "function");
+                   offsetof(BoxedFunction, weakreflist), sizeof(BoxedFunction), false, "function");
     builtin_function_or_method_cls = new (0)
-        BoxedClass(object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
+        BoxedClass(object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist),
                    sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
@@ -3602,24 +3628,6 @@ void setupRuntime() {
     // Weakrefs are used for tp_subclasses:
     init_weakref();
 
-    // XXX
-    _Py_ReleaseInternedStrings();
-    for (auto b : classes)
-        b->clearAttrs();
-    for (auto b : constants) {
-        b->clearAttrs();
-        Py_DECREF(b);
-    }
-    for (auto b : classes) {
-        if (b->tp_mro) {
-            Py_DECREF(b->tp_mro);
-        }
-        Py_DECREF(b);
-    }
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-
     add_operators(object_cls);
 
     object_cls->finishInitialization();
@@ -3655,8 +3663,9 @@ void setupRuntime() {
 
 
     instancemethod_cls = BoxedClass::create(type_cls, object_cls, 0,
-                                            offsetof(BoxedInstanceMethod, in_weakreflist), sizeof(BoxedInstanceMethod),
+                                            offsetof(BoxedInstanceMethod, im_weakreflist), sizeof(BoxedInstanceMethod),
                                             false, "instancemethod");
+    instancemethod_cls->tp_dealloc = BoxedInstanceMethod::dealloc;
 
     slice_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice");
@@ -3694,8 +3703,8 @@ void setupRuntime() {
 
     object_cls->giveAttr("__repr__",
                          new BoxedFunction(FunctionMetadata::create((void*)objectRepr, UNKNOWN, 1, false, false)));
-    object_cls->giveAttr("__subclasshook__", boxInstanceMethod(object_cls, new BoxedFunction(FunctionMetadata::create(
-                                                                               (void*)objectSubclasshook, UNKNOWN, 2)),
+    object_cls->giveAttr("__subclasshook__", boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(FunctionMetadata::create(
+                                                                               (void*)objectSubclasshook, UNKNOWN, 2))),
                                                                object_cls));
     // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
     // object_cls->setattr("__setattr__", new BoxedFunction(FunctionMetadata::create((void*)objectSetattr, UNKNOWN, 3)),
@@ -3726,6 +3735,26 @@ void setupRuntime() {
     type_cls->tp_richcompare = type_richcompare;
     add_operators(type_cls);
     type_cls->freeze();
+
+    // XXX
+    PyType_ClearCache();
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : constants) {
+        b->clearAttrs();
+        Py_DECREF(b);
+    }
+    for (auto b : classes) {
+        if (b->tp_mro) {
+            Py_DECREF(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    PRINT_TOTAL_REFS();
+    exit(0);
+    // XXX
+
     type_cls->tp_new = type_new;
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
