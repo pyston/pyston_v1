@@ -41,7 +41,7 @@ PyAPI_FUNC(int) PyArg_VaParseTupleAndKeywords(PyObject *, PyObject *,
                                                   const char *, char **, va_list) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) Py_VaBuildValue(const char *, va_list) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, STOLEN(PyObject *)) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyModule_AddIntConstant(PyObject *, const char *, long) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyModule_AddStringConstant(PyObject *, const char *, const char *) PYSTON_NOEXCEPT;
 #define PyModule_AddIntMacro(m, c) PyModule_AddIntConstant(m, #c, c)

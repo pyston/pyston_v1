@@ -2638,6 +2638,7 @@ static int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }
@@ -3380,6 +3381,7 @@ extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
+    _Py_INC_REFTOTAL;
     classes.push_back(cls);
 
     // unhandled fields:
