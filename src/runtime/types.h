@@ -506,7 +506,7 @@ public:
     void operator delete(void* p) { PyMem_FREE(p); }
 
     static GCdArray* realloc(GCdArray* array, int capacity) {
-        return (GCdArray*)PyMem_REALLOC(array, capacity);
+        return (GCdArray*)PyMem_REALLOC(array, capacity * sizeof(Box*) + sizeof(GCdArray));
     }
 };
 

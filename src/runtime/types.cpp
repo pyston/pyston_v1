@@ -3650,6 +3650,7 @@ void setupRuntime() {
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
     dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeSubDict, typeSubSetDict, NULL);
+    constants.push_back(dict_descr);
     type_cls->giveAttr("__dict__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, NULL, NULL));
 
 

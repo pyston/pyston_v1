@@ -160,6 +160,7 @@ extern "C" void dumpEx(void* p, int levels) {
         } else {
             printf("\n");
         }
+        printf("Refcount: %ld\n", b->ob_refcnt);
 
         if (b->cls == bool_cls) {
             printf("The %s object\n", b == True ? "True" : "False");
