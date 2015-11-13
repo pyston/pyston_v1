@@ -389,10 +389,11 @@ void BoxedClass::freeze() {
 
     fixup_slot_dispatchers(this);
 
-    if (instancesHaveDictAttrs() || instancesHaveHCAttrs())
-        ASSERT(this == closure_cls || this == classobj_cls || this == instance_cls
-                   || typeLookup(this, internStringMortal("__dict__")),
-               "%s", tp_name);
+    if (instancesHaveDictAttrs() || instancesHaveHCAttrs()) {
+        auto dict_str = getStaticString("__dict__");
+        ASSERT(this == closure_cls || this == classobj_cls || this == instance_cls || typeLookup(this, dict_str), "%s",
+               tp_name);
+    }
 
     is_constant = true;
 }

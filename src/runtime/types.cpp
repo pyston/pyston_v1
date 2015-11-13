@@ -3454,6 +3454,7 @@ void setupRuntime() {
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
     ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object");
+    object_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs),
                                       offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, "type");
 
@@ -3736,32 +3737,13 @@ void setupRuntime() {
     add_operators(type_cls);
     type_cls->freeze();
 
-    // XXX
-    PyType_ClearCache();
-    _Py_ReleaseInternedStrings();
-    for (auto b : classes)
-        b->clearAttrs();
-    for (auto b : constants) {
-        b->clearAttrs();
-        Py_DECREF(b);
-    }
-    for (auto b : classes) {
-        if (b->tp_mro) {
-            Py_DECREF(b->tp_mro);
-        }
-        Py_DECREF(b);
-    }
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-
     type_cls->tp_new = type_new;
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
 
     none_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)none_repr, STR, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)noneNonzero, BOXED_BOOL, 1)));
-    none_cls->giveAttr("__doc__", None);
+    none_cls->giveAttrBorrowed("__doc__", None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->freeze();
     none_cls->tp_repr = none_repr;
@@ -3769,7 +3751,7 @@ void setupRuntime() {
     module_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)moduleInit, UNKNOWN, 3, false, false), { NULL }));
     module_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)moduleRepr, STR, 1)));
-    module_cls->giveAttr("__dict__", dict_descr);
+    module_cls->giveAttrBorrowed("__dict__", dict_descr);
     module_cls->freeze();
 
     closure_cls->freeze();
@@ -3811,6 +3793,25 @@ void setupRuntime() {
     setupTraceback();
     setupCode();
     setupFrame();
+
+    // XXX
+    PyType_ClearCache();
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes)
+        b->clearAttrs();
+    for (auto b : constants) {
+        b->clearAttrs();
+        Py_DECREF(b);
+    }
+    for (auto b : classes) {
+        if (b->tp_mro) {
+            Py_DECREF(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    PRINT_TOTAL_REFS();
+    exit(0);
+    // XXX
 
     function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
