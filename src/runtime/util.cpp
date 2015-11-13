@@ -154,7 +154,7 @@ extern "C" void dumpEx(void* p, int levels) {
         printf("Guessing that it's a Python object\n");
         Box* b = (Box*)p;
 
-        printf("Class: %s", getFullTypeName(b).c_str());
+        printf("Class: %s", b->cls->tp_name);
         if (b->cls->cls != type_cls) {
             printf(" (metaclass: %s)\n", getFullTypeName(b->cls).c_str());
         } else {

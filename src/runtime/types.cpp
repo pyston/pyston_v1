@@ -3448,8 +3448,7 @@ void setupRuntime() {
     type_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
-    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del);
-    object_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
+    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del, /* is_gc */ false);
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs), offsetof(BoxedClass, tp_weaklist),
                                 sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del);
 
@@ -3467,18 +3466,18 @@ void setupRuntime() {
     object_cls->tp_new = object_new;
     type_cls->tp_getattro = type_getattro;
 
-    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", NULL, NULL);
+    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", NULL, NULL, /* is_gc */ false);
     None = new (none_cls) Box();
     constants.push_back(None);
     assert(None->cls);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", NULL, NULL);
+    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", NULL, NULL, false);
 
     // We add 1 to the tp_basicsize of the BoxedString in order to hold the null byte at the end.
     // We use offsetof(BoxedString, s_data) as opposed to sizeof(BoxedString) so that we can
     // use the extra padding bytes at the end of the BoxedString.
-    str_cls = new (0) BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str", NULL, NULL);
+    str_cls = new (0) BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str", NULL, NULL, false);
     str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
     str_cls->tp_itemsize = sizeof(char);
 
@@ -3514,18 +3513,13 @@ void setupRuntime() {
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, "file", file_dealloc, NULL);
-    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", NULL, NULL);
+    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", NULL, NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    int_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL);
-    bool_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL);
-    complex_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", NULL, NULL);
+    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL, false);
+    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL, false);
+    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", NULL, NULL, false);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
-    long_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
-    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", NULL, NULL);
-    float_cls->tp_flags &= ~Py_TPFLAGS_HAVE_GC;
+    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", NULL, NULL, false);
     function_cls = new (0)
         BoxedClass(object_cls, offsetof(BoxedFunction, attrs),
                    offsetof(BoxedFunction, weakreflist), sizeof(BoxedFunction), false, "function", functionDtor, NULL);

@@ -400,7 +400,7 @@ void BoxedClass::freeze() {
 
 std::vector<BoxedClass*> classes;
 BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size, bool is_user_defined,
-                       const char* name, destructor dealloc, freefunc free)
+                       const char* name, destructor dealloc, freefunc free, bool is_gc)
     : attrs(HiddenClass::makeSingleton()),
       attrs_offset(attrs_offset),
       is_constant(false),
@@ -421,7 +421,8 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
     tp_flags |= Py_TPFLAGS_DEFAULT_CORE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
-    tp_flags |= Py_TPFLAGS_HAVE_GC;
+    if (is_gc)
+        tp_flags |= Py_TPFLAGS_HAVE_GC;
 
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
         tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
@@ -458,15 +459,19 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
         assert(base && base->tp_dealloc);
         tp_dealloc = base->tp_dealloc;
     }
-    if (PyType_IS_GC(this))
-        assert(tp_free != PyObject_Del);
 
     if (free)
         tp_free = free;
-    else {
-        assert(base && base->tp_free);
-        tp_free = base->tp_free;
+    else if (base) {
+        // Copied from PyType_Ready
+        if (PyType_IS_GC(this) == PyType_IS_GC(base))
+            tp_free = base->tp_free;
+        else if (PyType_IS_GC(this) && base->tp_free == PyObject_Del)
+            this->tp_free = PyObject_GC_Del;
     }
+
+    if (PyType_IS_GC(this))
+        assert(tp_free != PyObject_Del);
 
     assert(tp_dealloc);
     assert(tp_free);
@@ -495,10 +500,10 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
 
 BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset, int weaklist_offset,
                                int instance_size, bool is_user_defined, const char* name, destructor dealloc,
-                               freefunc free) {
+                               freefunc free, bool is_gc) {
     assert(!is_user_defined);
     BoxedClass* made = new (metaclass, 0)
-        BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name, dealloc, free);
+        BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name, dealloc, free, is_gc);
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:
