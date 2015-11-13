@@ -748,8 +748,10 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         int s1 = self->size;
         int s2 = rhs->size;
 
-        if (s2 == 0)
+        if (s2 == 0) {
+            Py_INCREF(self);
             return self;
+        }
 
         self->ensure(s1 + s2);
 
@@ -769,8 +771,10 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         int s1 = self->size;
         int s2 = rhs->ob_size;
 
-        if (s2 == 0)
+        if (s2 == 0) {
+            Py_INCREF(self);
             return self;
+        }
 
         self->ensure(s1 + s2);
 

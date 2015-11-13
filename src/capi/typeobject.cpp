@@ -3276,8 +3276,10 @@ void commonClassSetup(BoxedClass* cls) {
     }
 
     /* Calculate method resolution order */
-    if (mro_internal(cls) < 0)
-        throwCAPIException();
+    if (!cls->tp_mro) {
+        if (mro_internal(cls) < 0)
+            throwCAPIException();
+    }
 
     if (cls->tp_base)
         inherit_special(cls, cls->tp_base);

@@ -133,7 +133,10 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    if ((((intptr_t)p) & 0x7) == 0) {
+    if ((intptr_t)p < 0x1000){
+        if (p != NULL)
+            printf("Not a real pointer?\n");
+    } else if ((((intptr_t)p) & 0x7) == 0) {
         uint8_t lowbyte = *reinterpret_cast<uint8_t*>(p);
         if (lowbyte == 0xcb) {
             printf("Uninitialized memory\n");
