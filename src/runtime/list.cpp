@@ -1345,7 +1345,7 @@ void setupList() {
     list_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(FunctionMetadata::create((void*)listReverse, NONE, 1)));
 
-    list_cls->giveAttr("__hash__", None);
+    list_cls->giveAttrBorrowed("__hash__", None);
     list_cls->freeze();
     list_cls->tp_iter = listIter;
 

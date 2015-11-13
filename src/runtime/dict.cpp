@@ -836,7 +836,7 @@ void setupDict() {
                                                                                 typeFromClass(dict_iterator_cls), 1)));
 
     dict_cls->giveAttr("keys", new BoxedFunction(FunctionMetadata::create((void*)dictKeys, LIST, 1)));
-    dict_cls->giveAttr("iterkeys", dict_cls->getattr(internStringMortal("__iter__")));
+    dict_cls->giveAttrBorrowed("iterkeys", dict_cls->getattr(autoDecref(internStringMortal("__iter__"))));
 
     dict_cls->giveAttr("pop",
                        new BoxedFunction(FunctionMetadata::create((void*)dictPop, UNKNOWN, 3, false, false), { NULL }));
@@ -845,6 +845,7 @@ void setupDict() {
     auto* fromkeys_func
         = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, DICT, 3, false, false), { None });
     dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func, dict_cls));
+    Py_DECREF(fromkeys_func);
 
     dict_cls->giveAttr("viewkeys", new BoxedFunction(FunctionMetadata::create((void*)dictViewKeys, UNKNOWN, 1)));
     dict_cls->giveAttr("viewvalues", new BoxedFunction(FunctionMetadata::create((void*)dictViewValues, UNKNOWN, 1)));

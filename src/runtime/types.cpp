@@ -3206,6 +3206,7 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     // Do a bunch of inlining + constant folding of this line of CPython's:
     // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
     assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
+    RELEASE_ASSERT(0, " track the ref, but keep the inlining?");
     unicode = (PyUnicodeObject*)PyObject_MALLOC(sizeof(PyUnicodeObject));
     if (unicode == NULL)
         return (PyUnicodeObject*)PyErr_NoMemory();
@@ -3789,10 +3790,6 @@ void setupRuntime() {
     setupClassobj();
     setupSuper();
     _PyUnicode_Init();
-    setupDescr();
-    setupTraceback();
-    setupCode();
-    setupFrame();
 
     // XXX
     PyType_ClearCache();
@@ -3812,6 +3809,11 @@ void setupRuntime() {
     PRINT_TOTAL_REFS();
     exit(0);
     // XXX
+
+    setupDescr();
+    setupTraceback();
+    setupCode();
+    setupFrame();
 
     function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));

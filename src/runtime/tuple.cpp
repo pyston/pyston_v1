@@ -686,9 +686,10 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__contains__",
                         new BoxedFunction(FunctionMetadata::create((void*)tupleContains, BOXED_BOOL, 2)));
-    tuple_cls->giveAttr("index",
-                        new BoxedFunction(FunctionMetadata::create((void*)tupleIndex, BOXED_INT, 4, false, false),
-                                          { boxInt(0), boxInt(std::numeric_limits<Py_ssize_t>::max()) }));
+    tuple_cls->giveAttr(
+        "index",
+        new BoxedFunction(FunctionMetadata::create((void*)tupleIndex, BOXED_INT, 4, false, false),
+                          { autoDecref(boxInt(0)), autoDecref(boxInt(std::numeric_limits<Py_ssize_t>::max())) }));
     tuple_cls->giveAttr("count", new BoxedFunction(FunctionMetadata::create((void*)tupleCount, BOXED_INT, 2)));
 
     tuple_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)tupleIter,

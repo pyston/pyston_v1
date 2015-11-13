@@ -1494,10 +1494,10 @@ void setupLong() {
     auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,
                                              ParamNames({ "", "x", "base" }, "", ""), CXX);
     long_new->addVersion((void*)longNew<CAPI>, UNKNOWN, CAPI);
-    long_cls->giveAttr("__new__", new BoxedFunction(long_new, { boxInt(0), NULL }));
+    long_cls->giveAttr("__new__", new BoxedFunction(long_new, { autoDecref(boxInt(0)), NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)longMul, UNKNOWN, 2)));
-    long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));
+    long_cls->giveAttr("__rmul__", incref(long_cls->getattr(autoDecref(internStringMortal("__mul__")))));
 
     long_cls->giveAttr("__div__", new BoxedFunction(FunctionMetadata::create((void*)longDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)longRdiv, UNKNOWN, 2)));
@@ -1514,13 +1514,13 @@ void setupLong() {
     long_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)longRsub, UNKNOWN, 2)));
 
     long_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)longAdd, UNKNOWN, 2)));
-    long_cls->giveAttr("__radd__", long_cls->getattr(internStringMortal("__add__")));
+    long_cls->giveAttr("__radd__", incref(long_cls->getattr(autoDecref(internStringMortal("__add__")))));
     long_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)longAnd, UNKNOWN, 2)));
-    long_cls->giveAttr("__rand__", long_cls->getattr(internStringMortal("__and__")));
+    long_cls->giveAttr("__rand__", incref(long_cls->getattr(autoDecref(internStringMortal("__and__")))));
     long_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)longOr, UNKNOWN, 2)));
-    long_cls->giveAttr("__ror__", long_cls->getattr(internStringMortal("__or__")));
+    long_cls->giveAttr("__ror__", incref(long_cls->getattr(autoDecref(internStringMortal("__or__")))));
     long_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)longXor, UNKNOWN, 2)));
-    long_cls->giveAttr("__rxor__", long_cls->getattr(internStringMortal("__xor__")));
+    long_cls->giveAttr("__rxor__", incref(long_cls->getattr(autoDecref(internStringMortal("__xor__")))));
 
     // Note: CPython implements long comparisons using tp_compare
     long_cls->tp_richcompare = long_richcompare;

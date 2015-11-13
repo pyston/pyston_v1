@@ -1858,8 +1858,8 @@ void file_dealloc(Box* b) noexcept {
 void setupFile() {
     file_cls->has_safe_tp_dealloc = true;
 
-    file_cls->giveAttr(
-        "read", new BoxedFunction(FunctionMetadata::create((void*)fileRead, STR, 2, false, false), { boxInt(-1) }));
+    file_cls->giveAttr("read", new BoxedFunction(FunctionMetadata::create((void*)fileRead, STR, 2, false, false),
+                                                 { autoDecref(boxInt(-1)) }));
 
     FunctionMetadata* readline = FunctionMetadata::create((void*)fileReadline1, STR, 1);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
@@ -1875,7 +1875,7 @@ void setupFile() {
                        new BoxedFunction(FunctionMetadata::create((void*)fileEnter, typeFromClass(file_cls), 1)));
     file_cls->giveAttr("__exit__", new BoxedFunction(FunctionMetadata::create((void*)fileExit, UNKNOWN, 4)));
 
-    file_cls->giveAttr("__iter__", file_cls->getattr(getStaticString("__enter__")));
+    file_cls->giveAttrBorrowed("__iter__", file_cls->getattr(getStaticString("__enter__")));
     file_cls->giveAttr("__hasnext__",
                        new BoxedFunction(FunctionMetadata::create((void*)fileIterHasNext, BOXED_BOOL, 1)));
     file_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)fileIterNext, STR, 1)));
@@ -1889,7 +1889,7 @@ void setupFile() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
 
     file_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)fileNew, UNKNOWN, 4, false, false),
-                                                    { boxString("r"), boxInt(-1) }));
+                                                    { autoDecref(boxString("r")), autoDecref(boxInt(-1)) }));
 
     for (auto& md : file_methods) {
         file_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, file_cls));

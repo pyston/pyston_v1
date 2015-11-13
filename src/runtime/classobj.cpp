@@ -1658,7 +1658,7 @@ void setupClassobj() {
                            new BoxedFunction(FunctionMetadata::create((void*)classobjSetattr, UNKNOWN, 3)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)classobjStr, STR, 1)));
     classobj_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)classobjRepr, STR, 1)));
-    classobj_cls->giveAttr("__dict__", dict_descr);
+    classobj_cls->giveAttrBorrowed("__dict__", dict_descr);
 
     classobj_cls->freeze();
     classobj_cls->tp_getattro = classobj_getattro;
