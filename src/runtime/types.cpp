@@ -3192,9 +3192,14 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
     // Pyston change: allocate ->str first, so that if this allocation
     // causes a collection, we don't see a half-created unicode object:
     size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-    Py_UNICODE* str = (Py_UNICODE*)PyObject_MALLOC(new_size);
-    if (!str)
+    unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
+    if (unicode == NULL)
+        return NULL;
+    unicode->str = (Py_UNICODE*)PyObject_MALLOC(new_size);
+    if (!unicode->str) {
+        Py_DECREF(unicode);
         return (PyUnicodeObject*)PyErr_NoMemory();
+    }
 
 #if STAT_ALLOCATIONS
     {
@@ -3202,22 +3207,6 @@ extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
         ALLOC_STATS(unicode_cls);
     }
 #endif
-
-    // Do a bunch of inlining + constant folding of this line of CPython's:
-    // unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
-    assert(PyUnicode_Type.tp_basicsize == sizeof(PyUnicodeObject)); // use the compile-time constant
-    RELEASE_ASSERT(0, " track the ref, but keep the inlining?");
-    unicode = (PyUnicodeObject*)PyObject_MALLOC(sizeof(PyUnicodeObject));
-    if (unicode == NULL)
-        return (PyUnicodeObject*)PyErr_NoMemory();
-
-    // Inline PyObject_INIT:
-    assert(!PyType_SUPPORTS_WEAKREFS(&PyUnicode_Type));
-    assert(!PyUnicode_Type.instancesHaveHCAttrs());
-    assert(!PyUnicode_Type.instancesHaveDictAttrs());
-    unicode->ob_type = (struct _typeobject*)&PyUnicode_Type;
-
-    unicode->str = str;
 
     /* Initialize the first element to guard against cases where
      * the caller fails before initializing str -- unicode_resize()
@@ -3442,6 +3431,8 @@ void BoxedClass::dealloc(Box* b) noexcept {
 #endif
 
 std::vector<Box*> constants;
+
+extern "C" void _PyUnicode_Fini(void);
 
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
@@ -3794,6 +3785,7 @@ void setupRuntime() {
     // XXX
     PyType_ClearCache();
     _Py_ReleaseInternedStrings();
+    _PyUnicode_Fini();
     for (auto b : classes)
         b->clearAttrs();
     for (auto b : constants) {
