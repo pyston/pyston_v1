@@ -65,7 +65,7 @@ static Box* dumpStats(Box* includeZeros) {
 }
 
 void setupPyston() {
-    pyston_module = createModule(boxString("__pyston__"));
+    pyston_module = createModule(autoDecref(boxString("__pyston__")));
 
     pyston_module->giveAttr("setOption", new BoxedBuiltinFunctionOrMethod(
                                              FunctionMetadata::create((void*)setOption, UNKNOWN, 2), "setOption"));

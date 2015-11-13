@@ -67,7 +67,7 @@ static Box* createAndRunModule(BoxedString* name, const std::string& fn, const s
     BoxedList* path_list = new BoxedList();
     listAppendInternal(path_list, b_path);
 
-    static BoxedString* path_str = internStringImmortal("__path__");
+    static BoxedString* path_str = getStaticString("__path__");
     module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str(), /* future_flags = */ 0);
@@ -185,12 +185,12 @@ struct SearchResult {
 };
 
 SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedList* path_list) {
-    static BoxedString* meta_path_str = internStringImmortal("meta_path");
+    static BoxedString* meta_path_str = getStaticString("meta_path");
     BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(meta_path_str));
     if (!meta_path || meta_path->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
 
-    static BoxedString* findmodule_str = internStringImmortal("find_module");
+    static BoxedString* findmodule_str = getStaticString("find_module");
     for (int i = 0; i < meta_path->size; i++) {
         Box* finder = meta_path->elts->elts[i];
 
@@ -209,12 +209,12 @@ SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedLi
         raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
     }
 
-    static BoxedString* path_hooks_str = internStringImmortal("path_hooks");
+    static BoxedString* path_hooks_str = getStaticString("path_hooks");
     BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr(path_hooks_str));
     if (!path_hooks || path_hooks->cls != list_cls)
         raiseExcHelper(RuntimeError, "sys.path_hooks must be a list of import hooks");
 
-    static BoxedString* path_importer_cache_str = internStringImmortal("path_importer_cache");
+    static BoxedString* path_importer_cache_str = getStaticString("path_importer_cache");
     BoxedDict* path_importer_cache = static_cast<BoxedDict*>(sys_module->getattr(path_importer_cache_str));
     if (!path_importer_cache || path_importer_cache->cls != dict_cls)
         raiseExcHelper(RuntimeError, "sys.path_importer_cache must be a dict");
@@ -293,7 +293,7 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
     if (globals == NULL || globals == None || level == 0)
         return None;
 
-    static BoxedString* package_str = internStringImmortal("__package__");
+    static BoxedString* package_str = getStaticString("__package__");
     BoxedString* pkgname = static_cast<BoxedString*>(getFromGlobals(globals, package_str));
     if (pkgname != NULL && pkgname != None) {
         /* __package__ is set, so use it */
@@ -312,14 +312,14 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
         }
         buf += pkgname->s();
     } else {
-        static BoxedString* name_str = internStringImmortal("__name__");
+        static BoxedString* name_str = getStaticString("__name__");
 
         /* __package__ not set, so figure it out and set it */
         BoxedString* modname = static_cast<BoxedString*>(getFromGlobals(globals, name_str));
         if (modname == NULL || modname->cls != str_cls)
             return None;
 
-        static BoxedString* path_str = internStringImmortal("__path__");
+        static BoxedString* path_str = getStaticString("__path__");
         Box* modpath = getFromGlobals(globals, path_str);
 
         if (modpath != NULL) {
@@ -411,7 +411,7 @@ static Box* importSub(const std::string& name, BoxedString* full_name, Box* pare
             else if (sr.type == SearchResult::C_EXTENSION)
                 module = importCExtension(full_name, name, sr.path);
             else if (sr.type == SearchResult::IMP_HOOK) {
-                static BoxedString* loadmodule_str = internStringImmortal("load_module");
+                static BoxedString* loadmodule_str = getStaticString("load_module");
                 CallattrFlags callattr_flags{.cls_only = false,
                                              .null_on_nonexistent = false,
                                              .argspec = ArgPassSpec(1) };
@@ -593,7 +593,7 @@ static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool re
             if (recursive)
                 continue;
 
-            static BoxedString* all_str = internStringImmortal("__all__");
+            static BoxedString* all_str = getStaticString("__all__");
             Box* all = getattrInternal<ExceptionStyle::CXX>(module, all_str);
             if (all) {
                 ensureFromlist(module, all, buf, true);
@@ -669,7 +669,7 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
         if (module == NULL)
             return NULL;
 
-        static BoxedString* file_str = internStringImmortal("__file__");
+        static BoxedString* file_str = getStaticString("__file__");
         module->setattr(file_str, boxString(pathname), NULL);
         AST_Module* ast = parse_string(code->data(), /* future_flags = */ 0);
         compileAndRunModule(ast, module);
@@ -844,7 +844,7 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
     assert(_m->cls == module_cls);
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
-    static BoxedString* file_str = internStringImmortal("__file__");
+    static BoxedString* file_str = getStaticString("__file__");
     m->setattr(file_str, boxString(path), NULL);
     return m;
 }
@@ -881,7 +881,7 @@ Box* impIsBuiltin(Box* _name) {
     if (!PyString_Check(_name))
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_name));
 
-    static BoxedString* builtin_module_names_str = internStringImmortal("builtin_module_names");
+    static BoxedString* builtin_module_names_str = getStaticString("builtin_module_names");
     BoxedTuple* builtin_modules = (BoxedTuple*)sys_module->getattr(builtin_module_names_str);
     RELEASE_ASSERT(PyTuple_Check(builtin_modules), "");
     for (Box* m : builtin_modules->pyElements()) {
@@ -923,7 +923,7 @@ On platforms without threads, this function does nothing.");
 
 void setupImport() {
     BoxedModule* imp_module
-        = createModule(boxString("imp"), NULL, "'This module provides the components needed to build your own\n"
+        = createModule(autoDecref(boxString("imp")), NULL, "'This module provides the components needed to build your own\n"
                                                "__import__ function.  Undocumented functions are obsolete.'");
 
     imp_module->giveAttr("PY_SOURCE", boxInt(SearchResult::PY_SOURCE));
@@ -942,7 +942,7 @@ void setupImport() {
         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)nullImporterFindModule, NONE, 2, false, false),
                                          "find_module", { None }, NULL, find_module_doc));
     null_importer_cls->freeze();
-    imp_module->giveAttr("NullImporter", null_importer_cls);
+    imp_module->giveAttrBorrowed("NullImporter", null_importer_cls);
 
     FunctionMetadata* find_module_func = FunctionMetadata::create((void*)impFindModule, UNKNOWN, 2, false, false,
                                                                   ParamNames({ "name", "path" }, "", ""));

@@ -3918,11 +3918,11 @@ void setupRuntime() {
 
     setupBuiltins();
     _PyExc_Init();
-    //setupThread();
+    setupThread();
     //initgc();
-    //setupImport();
-    //setupPyston();
-    //setupAST();
+    setupImport();
+    setupPyston();
+    setupAST();
 
     // XXX
     PyType_ClearCache();

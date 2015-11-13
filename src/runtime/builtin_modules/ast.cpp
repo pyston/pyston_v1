@@ -65,15 +65,14 @@ extern "C" int PyAST_Check(PyObject* o) noexcept {
 }
 
 void setupAST() {
-    BoxedModule* ast_module = createModule(boxString("_ast"), "__builtin__");
+    BoxedModule* ast_module = createModule(autoDecref(boxString("_ast")), "__builtin__");
 
     ast_module->giveAttr("PyCF_ONLY_AST", boxInt(PyCF_ONLY_AST));
 
 // ::create takes care of registering the class as a GC root.
 #define MAKE_CLS(name, base_cls)                                                                                       \
-    BoxedClass* name##_cls = BoxedClass::create(type_cls, base_cls, 0, 0, sizeof(BoxedAST),    \
-                                                false, STRINGIFY(name));                                               \
-    ast_module->giveAttr(STRINGIFY(name), name##_cls);                                                                 \
+    BoxedClass* name##_cls = BoxedClass::create(type_cls, base_cls, 0, 0, sizeof(BoxedAST), false, STRINGIFY(name));   \
+    ast_module->giveAttrBorrowed(STRINGIFY(name), name##_cls);                                                         \
     type_to_cls[AST_TYPE::name] = name##_cls;                                                                          \
     name##_cls->giveAttr("__module__", boxString("_ast"));                                                             \
     name##_cls->freeze()
