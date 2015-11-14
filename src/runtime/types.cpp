@@ -2064,6 +2064,9 @@ public:
     static Box* hasnext(Box* _self);
     static Box* next(Box* _self);
     static Box* next_capi(Box* _self) noexcept;
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 };
 
 // A dictionary-like wrapper around the attributes array.
@@ -3537,6 +3540,22 @@ int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
     Py_FatalError("unimplemented");
 }
 
+void AttrWrapperIter::dealloc(Box* _o) noexcept {
+    AttrWrapperIter* o = (AttrWrapperIter*)_o;
+
+    Py_FatalError("unimplemented?");
+
+    o->cls->tp_free(o);
+}
+
+int AttrWrapperIter::traverse(Box* _o, visitproc visit, void* arg) noexcept {
+    AttrWrapperIter* o = (AttrWrapperIter*)_o;
+
+    Py_FatalError("unimplemented?");
+
+    return 0;
+}
+
 void BoxedClosure::dealloc(Box* _o) noexcept {
     BoxedClosure* o = (BoxedClosure*)_o;
 
@@ -3818,8 +3837,9 @@ void setupRuntime() {
     classmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClassmethod), false, "classmethod",
                                          BoxedClassmethod::dealloc, NULL, true, BoxedClassmethod::traverse,
                                          BoxedClassmethod::clear);
-    attrwrapperiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                             sizeof(AttrWrapperIter), false, "attrwrapperiter");
+    attrwrapperiter_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(AttrWrapperIter), false, "attrwrapperiter",
+                             AttrWrapperIter::dealloc, NULL, true, AttrWrapperIter::traverse, NOCLEAR);
 
     pyston_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));
     capi_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));

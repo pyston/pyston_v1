@@ -60,8 +60,6 @@ struct uw_table_entry {
 
 namespace pyston {
 
-static BoxedClass* unwind_session_cls;
-
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
 // See http://www.airs.com/blog/archives/460 for some useful info.
@@ -531,15 +529,13 @@ public:
     }
 };
 
-class PythonUnwindSession : public Box {
+class PythonUnwindSession {
     ExcInfo exc_info;
     PythonStackExtractor pystack_extractor;
 
     Timer t;
 
 public:
-    DEFAULT_CLASS_SIMPLE(unwind_session_cls, true);
-
     PythonUnwindSession() : exc_info(NULL, NULL, NULL), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() { return &exc_info; }
@@ -1229,8 +1225,5 @@ llvm::JITEventListener* makeTracebacksListener() {
 }
 
 void setupUnwinding() {
-    unwind_session_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                            sizeof(PythonUnwindSession), false, "unwind_session");
-    unwind_session_cls->freeze();
 }
 }
