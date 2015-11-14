@@ -3474,7 +3474,8 @@ type_traverse(PyTypeObject *type, visitproc visit, void *arg)
 {
     /* Because of type_is_gc(), the collector only calls this
        for heaptypes. */
-    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+    // Pyston change: HEAPTYPE is not about whether it is in GC or not
+    // assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 
     Py_VISIT(type->tp_dict);
     Py_VISIT(type->tp_cache);
@@ -3495,7 +3496,8 @@ type_clear(PyTypeObject *type)
 {
     /* Because of type_is_gc(), the collector only calls this
        for heaptypes. */
-    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+    // Pyston change: HEAPTYPE is not about whether it is in GC or not
+    // assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 
     /* We need to invalidate the method cache carefully before clearing
        the dict, so that other objects caught in a reference cycle
