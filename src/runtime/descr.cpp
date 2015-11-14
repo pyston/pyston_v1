@@ -462,6 +462,71 @@ int BoxedWrapperObject::traverse(Box* _self, visitproc visit, void *arg) noexcep
     return 0;
 }
 
+void BoxedProperty::dealloc(Box* _self) noexcept {
+    BoxedProperty* self = static_cast<BoxedProperty*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->prop_get);
+    Py_XDECREF(self->prop_set);
+    Py_XDECREF(self->prop_del);
+    Py_XDECREF(self->prop_doc);
+    self->cls->tp_free(self);
+}
+
+int BoxedProperty::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedProperty* self = static_cast<BoxedProperty*>(_self);
+
+    Py_VISIT(self->prop_get);
+    Py_VISIT(self->prop_set);
+    Py_VISIT(self->prop_del);
+    Py_VISIT(self->prop_doc);
+    return 0;
+}
+
+void BoxedStaticmethod::dealloc(Box* _self) noexcept {
+    BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->sm_callable);
+    self->cls->tp_free(self);
+}
+
+int BoxedStaticmethod::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
+
+    Py_VISIT(self->sm_callable);
+    return 0;
+}
+
+int BoxedStaticmethod::clear(Box* _self) noexcept {
+    BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
+
+    Py_CLEAR(self->sm_callable);
+    return 0;
+}
+
+void BoxedClassmethod::dealloc(Box* _self) noexcept {
+    BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->cm_callable);
+    self->cls->tp_free(self);
+}
+
+int BoxedClassmethod::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
+
+    Py_VISIT(self->cm_callable);
+    return 0;
+}
+
+int BoxedClassmethod::clear(Box* _self) noexcept {
+    BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
+
+    Py_CLEAR(self->cm_callable);
+    return 0;
+}
+
 Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexcept {
     STAT_TIMER(t0, "us_timer_boxedwrapperdescriptor_descr_get", 20);
 

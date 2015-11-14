@@ -374,11 +374,25 @@ extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
 }
 
 
-Box* setClear(BoxedSet* self, Box* v) {
-    RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");
+Box* setClearInternal(BoxedSet* self) {
+    ASSERT(isSubclass(self->cls, set_cls), "");
 
+    RELEASE_ASSERT(0, "refcounting");
+
+    BoxedSet::Set tmp;
+    std::swap(tmp, self->s);
+    for (auto p : tmp) {
+        Py_DECREF(p.value);
+    }
     self->s.clear();
     return None;
+}
+
+Box* setClear(BoxedSet* self) {
+    RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");
+
+    setClearInternal(self);
+    Py_RETURN_NONE;
 }
 
 extern "C" int PySet_Clear(PyObject* set) noexcept {
@@ -785,13 +799,38 @@ done:
 
 } // namespace set
 
-void BoxedSet::dealloc(Box* b) noexcept {
+using namespace pyston::set;
+
+void BoxedSet::dealloc(Box* _o) noexcept {
+    BoxedSet* o = (BoxedSet*)_o;
+
+    for (auto p : o->s) {
+        Py_DECREF(p.value);
+    }
+
     // Unfortunately, this assert requires accessing the type object, which might have been freed already:
     // assert(PyAnySet_Check(b));
-    static_cast<BoxedSet*>(b)->s.freeAllMemory();
+    o->s.freeAllMemory();
+
+    o->cls->tp_free(o);
 }
 
-using namespace pyston::set;
+int BoxedSet::traverse(Box* _o, visitproc visit, void* arg) noexcept {
+    BoxedSet* o = (BoxedSet*)_o;
+
+    for (auto p : o->s) {
+        Py_VISIT(p.value);
+    }
+    return 0;
+}
+
+int BoxedSet::clear(Box* _o) noexcept {
+    BoxedSet* o = (BoxedSet*)_o;
+
+    setClearInternal(o);
+
+    return 0;
+}
 
 static PyMethodDef set_methods[] = {
     { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL },

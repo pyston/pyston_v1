@@ -3535,6 +3535,36 @@ int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
     Py_FatalError("unimplemented");
 }
 
+void BoxedClosure::dealloc(Box* _o) noexcept {
+    BoxedClosure* o = (BoxedClosure*)_o;
+
+    for (int i = 0; i < o->nelts; i++) {
+        Py_XDECREF(o->elts[i]);
+    }
+
+    o->cls->tp_free(o);
+}
+
+int BoxedClosure::traverse(Box* _o, visitproc visit, void* arg) noexcept {
+    BoxedClosure* o = (BoxedClosure*)_o;
+
+    for (int i = 0; i < o->nelts; i++) {
+        Py_XDECREF(o->elts[i]);
+    }
+
+    return 0;
+}
+
+int BoxedClosure::clear(Box* _o) noexcept {
+    BoxedClosure* o = (BoxedClosure*)_o;
+
+    for (int i = 0; i < o->nelts; i++) {
+        Py_CLEAR(o->elts[i]);
+    }
+
+    return 0;
+}
+
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
 #else /* Py_REF_DEBUG */
@@ -3769,20 +3799,23 @@ void setupRuntime() {
 
     slice_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice", BoxedSlice::dealloc, NULL, false);
-    set_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist),
-                                 sizeof(BoxedSet), false, "set");
-    frozenset_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist),
-                                       sizeof(BoxedSet), false, "frozenset");
-    capi_getset_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    set_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist), sizeof(BoxedSet), false,
+                                 "set", BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
+    frozenset_cls
+        = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist), sizeof(BoxedSet), false,
+                             "frozenset", BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
+    capi_getset_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset",
+                                         NULL, NULL, false);
     closure_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClosure), false,
-                                     "closure");
+                                     "closure", BoxedClosure::dealloc, NULL, true, BoxedClosure::traverse, BoxedClosure::clear);
     property_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedProperty),
-                                      false, "property");
-    staticmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                          sizeof(BoxedStaticmethod), false, "staticmethod");
-    classmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                         sizeof(BoxedClassmethod), false, "classmethod");
+                                      false, "property", BoxedProperty::dealloc, NULL, true, BoxedProperty::traverse, NOCLEAR);
+    staticmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStaticmethod), false, "staticmethod",
+                                          BoxedStaticmethod::dealloc, NULL, true, BoxedStaticmethod::traverse,
+                                          BoxedStaticmethod::clear);
+    classmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClassmethod), false, "classmethod",
+                                         BoxedClassmethod::dealloc, NULL, true, BoxedClassmethod::traverse,
+                                         BoxedClassmethod::clear);
     attrwrapperiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
                                              sizeof(AttrWrapperIter), false, "attrwrapperiter");
 

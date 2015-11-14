@@ -38,6 +38,8 @@ public:
     DEFAULT_CLASS(set_cls);
 
     static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 }
 

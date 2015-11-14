@@ -998,6 +998,9 @@ public:
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+
     DEFAULT_CLASS_SIMPLE(property_cls, true);
 };
 
@@ -1008,6 +1011,10 @@ public:
     BoxedStaticmethod(Box* callable) : sm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls, true);
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 class BoxedClassmethod : public Box {
@@ -1017,6 +1024,10 @@ public:
     BoxedClassmethod(Box* callable) : cm_callable(callable){};
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls, true);
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 // TODO is there any particular reason to make this a Box, i.e. a python-level object?
@@ -1041,6 +1052,10 @@ public:
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 class BoxedGenerator : public Box {
