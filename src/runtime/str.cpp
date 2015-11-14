@@ -2405,6 +2405,17 @@ public:
         ++self->it;
         return characters[c & UCHAR_MAX];
     }
+
+    static void dealloc(BoxedStringIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->s);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedStringIterator* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->s);
+        return 0;
+    }
 };
 
 Box* strIter(BoxedString* self) noexcept {
@@ -2801,8 +2812,9 @@ void setupStr() {
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                          sizeof(BoxedStringIterator), false, "striterator");
+    str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStringIterator), false, "striterator",
+                                          (destructor)BoxedStringIterator::dealloc, NULL, true,
+                                          (traverseproc)BoxedStringIterator::traverse, NOCLEAR);
     str_iterator_cls->giveAttr(
         "__hasnext__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr(

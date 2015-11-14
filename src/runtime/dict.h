@@ -37,6 +37,17 @@ public:
     BoxedDictIterator(BoxedDict* d, IteratorType type);
 
     DEFAULT_CLASS(dict_iterator_cls);
+
+    static void dealloc(BoxedDictIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->d);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedDictIterator* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->d);
+        return 0;
+    }
 };
 
 Box* dictGetitem(BoxedDict* self, Box* k);
@@ -55,6 +66,17 @@ class BoxedDictView : public Box {
 public:
     BoxedDict* d;
     BoxedDictView(BoxedDict* d);
+
+    static void dealloc(BoxedDictIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->d);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedDictIterator* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->d);
+        return 0;
+    }
 };
 
 Box* dictViewKeysIter(Box* self);

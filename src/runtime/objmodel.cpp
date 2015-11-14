@@ -414,10 +414,12 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
     bool ok_noclear = (clear == NOCLEAR);
     if (ok_noclear)
         clear = NULL;
-    if (is_gc) {
-        ASSERT(traverse, "%s", name);
-        ASSERT(dealloc, "%s", name);
-    }
+    if (clear)
+        assert(traverse);
+    if (traverse)
+        assert(dealloc);
+    if (dealloc)
+        assert(traverse || !is_gc);
     ASSERT(((bool)traverse == (bool)clear) || ok_noclear, "%s", name);
 
     classes.push_back(this);

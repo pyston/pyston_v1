@@ -35,6 +35,13 @@ public:
     BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {}
 
     DEFAULT_CLASS(super_cls);
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 static const char* class_str = "__class__";
@@ -185,7 +192,8 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 
 void setupSuper() {
     super_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super");
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super",
+                             (destructor)BoxedSuper::dealloc, NULL, true, (traverseproc)BoxedSuper::traverse, NOCLEAR);
 
     // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,
     // UNKNOWN, 2)));

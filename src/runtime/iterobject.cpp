@@ -189,7 +189,9 @@ bool calliter_hasnext(Box* b) {
 
 
 void setupIter() {
-    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "iterator");
+    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "iterator",
+                                     (destructor)BoxedSeqIter::dealloc, NULL, true,
+                                     (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
     seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__",
@@ -201,8 +203,9 @@ void setupIter() {
     seqiter_cls->tp_iter = PyObject_SelfIter;
     seqiter_cls->tp_iternext = seqiter_next;
 
-    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter),
-                                        false, "reversed");
+    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "reversed",
+                                        (destructor)BoxedSeqIter::dealloc, NULL, true,
+                                        (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
     seqreviter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
     seqreviter_cls->giveAttr("__hasnext__",
@@ -213,8 +216,9 @@ void setupIter() {
     seqreviter_cls->tp_iter = PyObject_SelfIter;
     seqreviter_cls->tp_iternext = seqiter_next;
 
-    iterwrapper_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                         sizeof(BoxedIterWrapper), false, "iterwrapper");
+    iterwrapper_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedIterWrapper), false, "iterwrapper",
+                                         (destructor)BoxedIterWrapper::dealloc, NULL, true,
+                                         (traverseproc)BoxedIterWrapper::traverse, NOCLEAR);
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)iterwrapperNext, UNKNOWN, 1)));
     iterwrapper_cls->giveAttr("__hasnext__",

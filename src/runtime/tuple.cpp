@@ -675,8 +675,9 @@ void setupTuple() {
     static PyMappingMethods tuple_as_mapping;
     tuple_cls->tp_as_mapping = &tuple_as_mapping;
 
-    tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                            sizeof(BoxedTupleIterator), false, "tuple");
+    tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTupleIterator), false,
+                                            "tupleiterator", (destructor)BoxedTupleIterator::dealloc, NULL, true,
+                                            (traverseproc)BoxedTupleIterator::traverse, NOCLEAR);
 
     tuple_cls->giveAttr("__new__",
                         new BoxedFunction(FunctionMetadata::create((void*)tupleNew, UNKNOWN, 1, true, true)));

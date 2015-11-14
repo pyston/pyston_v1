@@ -1641,10 +1641,14 @@ extern "C" int PyMethod_ClearFreeList(void) noexcept {
 }
 
 void setupClassobj() {
-    classobj_cls = BoxedClass::create(type_cls, object_cls, offsetof(BoxedClassobj, attrs),
-                                      offsetof(BoxedClassobj, weakreflist), sizeof(BoxedClassobj), false, "classobj");
-    instance_cls = BoxedClass::create(type_cls, object_cls, offsetof(BoxedInstance, attrs),
-                                      offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
+    classobj_cls
+        = BoxedClass::create(type_cls, object_cls, offsetof(BoxedClassobj, attrs), offsetof(BoxedClassobj, weakreflist),
+                             sizeof(BoxedClassobj), false, "classobj", (destructor)BoxedClassobj::dealloc, NULL, true,
+                             (traverseproc)BoxedClassobj::traverse, (inquiry)BoxedClassobj::clear);
+    instance_cls
+        = BoxedClass::create(type_cls, object_cls, offsetof(BoxedInstance, attrs), offsetof(BoxedInstance, weakreflist),
+                             sizeof(BoxedInstance), false, "instance", (destructor)BoxedInstance::dealloc, NULL, true,
+                             (traverseproc)BoxedInstance::traverse, (inquiry)BoxedInstance::clear);
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(FunctionMetadata::create((void*)classobjNew, UNKNOWN, 4, false, false)));

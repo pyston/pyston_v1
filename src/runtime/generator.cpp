@@ -423,12 +423,6 @@ Box* generatorName(Box* _self, void* context) {
     return self->function->md->source->getName();
 }
 
-void generatorDestructor(Box* b) {
-    assert(isSubclass(b->cls, generator_cls));
-    BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
-    freeGeneratorStack(self);
-}
-
 extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
     Py_FatalError("unimplemented");
 #if 0
@@ -450,11 +444,21 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 #endif
 }
 
+static void generator_dealloc(BoxedGenerator* self) noexcept {
+    assert(isSubclass(self->cls, generator_cls));
+    freeGeneratorStack(self);
+
+    Py_FatalError("unimplemented");
+}
+
+static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 void setupGenerator() {
-    generator_cls
-        = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
-                             sizeof(BoxedGenerator), false, "generator");
-    generator_cls->tp_dealloc = generatorDestructor;
+    generator_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
+                                       sizeof(BoxedGenerator), false, "generator", (destructor)generator_dealloc, NULL,
+                                       true, (traverseproc)generator_traverse, NOCLEAR);
     generator_cls->has_safe_tp_dealloc = true;
     generator_cls->giveAttr(
         "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));

@@ -812,15 +812,19 @@ void setupDict() {
     static PySequenceMethods dict_as_sequence;
     dict_cls->tp_as_sequence = &dict_as_sequence;
 
-    dict_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                           sizeof(BoxedDictIterator), false, "dictionary-itemiterator");
+    dict_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictIterator), false,
+                                           "dictionary-itemiterator", (destructor)BoxedDictIterator::dealloc, NULL,
+                                           true, (traverseproc)BoxedDictIterator::traverse, NOCLEAR);
 
-    dict_keys_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
-                                       false, "dict_keys");
-    dict_values_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
-                                         false, "dict_values");
-    dict_items_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView),
-                                        false, "dict_items");
+    dict_keys_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView), false, "dict_keys",
+                                       (destructor)BoxedDictView::dealloc, NULL, true,
+                                       (traverseproc)BoxedDictView::traverse, NOCLEAR);
+    dict_values_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView), false, "dict_values",
+                                         (destructor)BoxedDictView::dealloc, NULL, true,
+                                         (traverseproc)BoxedDictView::traverse, NOCLEAR);
+    dict_items_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictView), false, "dict_items",
+                                        (destructor)BoxedDictView::dealloc, NULL, true,
+                                        (traverseproc)BoxedDictView::traverse, NOCLEAR);
 
     dict_iterator_cls->instances_are_nonzero = dict_keys_cls->instances_are_nonzero
         = dict_values_cls->instances_are_nonzero = dict_items_cls->instances_are_nonzero = true;

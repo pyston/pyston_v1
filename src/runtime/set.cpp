@@ -43,6 +43,17 @@ public:
         ++it;
         return rtn;
     }
+
+    static void dealloc(BoxedSetIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->s);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedSetIterator* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->s);
+        return 0;
+    }
 };
 
 Box* setiteratorHasnext(BoxedSetIterator* self) {
@@ -804,6 +815,7 @@ using namespace pyston::set;
 void BoxedSet::dealloc(Box* _o) noexcept {
     BoxedSet* o = (BoxedSet*)_o;
 
+    PyObject_GC_UnTrack(o);
     for (auto p : o->s) {
         Py_DECREF(p.value);
     }
@@ -852,8 +864,9 @@ void setupSet() {
     set_cls->tp_dealloc = frozenset_cls->tp_dealloc = BoxedSet::dealloc;
     set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
 
-    set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                          sizeof(BoxedSetIterator), false, "setiterator");
+    set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSetIterator), false, "setiterator",
+                                          (destructor)BoxedSetIterator::dealloc, NULL, true,
+                                          (traverseproc)BoxedSetIterator::traverse, NOCLEAR);
     set_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
                                                (void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",

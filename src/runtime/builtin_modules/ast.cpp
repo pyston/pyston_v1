@@ -71,13 +71,14 @@ void setupAST() {
 
 // ::create takes care of registering the class as a GC root.
 #define MAKE_CLS(name, base_cls)                                                                                       \
-    BoxedClass* name##_cls = BoxedClass::create(type_cls, base_cls, 0, 0, sizeof(BoxedAST), false, STRINGIFY(name));   \
+    BoxedClass* name##_cls                                                                                             \
+        = BoxedClass::create(type_cls, base_cls, 0, 0, sizeof(BoxedAST), false, STRINGIFY(name), NULL, NULL, false);   \
     ast_module->giveAttrBorrowed(STRINGIFY(name), name##_cls);                                                         \
     type_to_cls[AST_TYPE::name] = name##_cls;                                                                          \
     name##_cls->giveAttr("__module__", boxString("_ast"));                                                             \
     name##_cls->freeze()
 
-    AST_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedAST), false, "AST");
+    AST_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedAST), false, "AST", NULL, NULL, false);
     // ::create takes care of registering the class as a GC root.
     AST_cls->giveAttr("__module__", boxString("_ast"));
     AST_cls->freeze();

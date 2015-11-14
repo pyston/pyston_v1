@@ -130,6 +130,13 @@ public:
     static Box* xrangeIteratorNext(Box* s) __attribute__((visibility("default"))) {
         return boxInt(xrangeIteratorNextUnboxed(s));
     }
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
@@ -236,9 +243,10 @@ Box* xrangeReduce(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrange), false, "xrange");
-    xrange_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0,
-                                             sizeof(BoxedXrangeIterator), false, "rangeiterator");
+    xrange_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrange), false, "xrange", NULL, NULL, false);
+    xrange_iterator_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrangeIterator), false, "rangeiterator",
+                             BoxedXrangeIterator::dealloc, NULL, true, BoxedXrangeIterator::traverse, NOCLEAR);
 
     static PySequenceMethods xrange_as_sequence;
     xrange_cls->tp_as_sequence = &xrange_as_sequence;

@@ -41,6 +41,16 @@ public:
 
     // somewhat equivalent to PyTraceBack_Here
     static void here(LineInfo lineInfo, Box** tb);
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int clear(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 void printTraceback(Box* b);

@@ -933,7 +933,7 @@ void setupImport() {
     imp_module->giveAttr("C_BUILTIN", boxInt(SearchResult::C_BUILTIN));
     imp_module->giveAttr("PY_FROZEN", boxInt(SearchResult::PY_FROZEN));
 
-    null_importer_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NullImporter");
+    null_importer_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NullImporter", NULL, NULL, false);
     null_importer_cls->giveAttr(
         "__init__",
         new BoxedFunction(FunctionMetadata::create((void*)nullImporterInit, NONE, 2, false, false), { None }));

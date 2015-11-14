@@ -36,6 +36,19 @@ public:
     BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {}
 
     DEFAULT_CLASS(seqiter_cls);
+
+    static void dealloc(BoxedSeqIter* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->b);
+        Py_XDECREF(o->next);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedSeqIter* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->b);
+        Py_VISIT(self->next);
+        return 0;
+    }
 };
 
 extern BoxedClass* iterwrapper_cls;
@@ -49,6 +62,19 @@ public:
     BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {}
 
     DEFAULT_CLASS(iterwrapper_cls);
+
+    static void dealloc(BoxedIterWrapper* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->iter);
+        Py_XDECREF(o->next);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedIterWrapper* self, visitproc visit, void *arg) noexcept {
+        Py_VISIT(self->iter);
+        Py_VISIT(self->next);
+        return 0;
+    }
 };
 
 bool calliter_hasnext(Box* b);

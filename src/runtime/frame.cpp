@@ -130,6 +130,16 @@ public:
 
         return fi->frame_obj;
     }
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int clear(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 Box* getFrame(int depth) {
@@ -141,8 +151,9 @@ Box* getFrame(int depth) {
 }
 
 void setupFrame() {
-    frame_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedFrame), false, "frame");
+    frame_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedFrame), false, "frame",
+                                   (destructor)BoxedFrame::dealloc, NULL, true, (traverseproc)BoxedFrame::traverse,
+                                   (inquiry)BoxedFrame::clear);
     frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
     frame_cls->has_safe_tp_dealloc = true;
 

@@ -49,6 +49,16 @@ public:
     Box** weakreflist;
 
     BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {}
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int clear(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 class BoxedInstance : public Box {
@@ -62,6 +72,16 @@ public:
     BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {}
 
     DEFAULT_CLASS(instance_cls);
+
+    static void dealloc(Box* b) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+        Py_FatalError("unimplemented");
+    }
+    static int clear(Box* self) noexcept {
+        Py_FatalError("unimplemented");
+    }
 };
 
 Box* instance_getattro(Box* cls, Box* attr) noexcept;
