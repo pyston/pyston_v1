@@ -21,20 +21,6 @@ index d4ef54d..7a49dbd 100644
  
      # Filter annoying Cython warnings that serve no good purpose.
      import warnings
-diff --git a/numpy/core/arrayprint.py b/numpy/core/arrayprint.py
-index a28b5a8..28b948b 100644
---- a/numpy/core/arrayprint.py
-+++ b/numpy/core/arrayprint.py
-@@ -609,7 +609,8 @@ class FloatFormat(object):
-                 else:
-                     return self.special_fmt % ('-' + _inf_str,)
- 
--        s = self.format % x
-+        # s = self.format % x
-+        s = "%#+3.0f" % x
-         if self.large_exponent:
-             # 3-digit exponent
-             expsign = s[-3]
 diff --git a/numpy/core/include/numpy/ndarrayobject.h b/numpy/core/include/numpy/ndarrayobject.h
 index fbaaeac..cb4adbb 100644
 --- a/numpy/core/include/numpy/ndarrayobject.h
@@ -195,90 +181,6 @@ index 7797731..93edc66 100644
 +    */
      return NULL;
  }
- 
-diff --git a/numpy/lib/_iotools.py b/numpy/lib/_iotools.py
-index 44bd48d..3822b25 100644
---- a/numpy/lib/_iotools.py
-+++ b/numpy/lib/_iotools.py
-@@ -526,7 +526,7 @@ class StringConverter(object):
-         _mapper.append((nx.int64, int, -1))
- 
-     _mapper.extend([(nx.floating, float, nx.nan),
--                    (complex, _bytes_to_complex, nx.nan + 0j),
-+                    (complex, _bytes_to_complex, complex(nx.nan) + 0j),
-                     (nx.string_, bytes, asbytes('???'))])
- 
-     (_defaulttype, _defaultfunc, _defaultfill) = zip(*_mapper)
-diff --git a/numpy/lib/function_base.py b/numpy/lib/function_base.py
-index 1904080..3d78b5c 100644
---- a/numpy/lib/function_base.py
-+++ b/numpy/lib/function_base.py
-@@ -965,7 +965,7 @@ def gradient(f, *varargs, **kwargs):
-     Returns
-     -------
-     gradient : list of ndarray
--        Each element of `list` has the same shape as `f` giving the derivative 
-+        Each element of `list` has the same shape as `f` giving the derivative
-         of `f` with respect to each dimension.
- 
-     Examples
-@@ -976,10 +976,10 @@ def gradient(f, *varargs, **kwargs):
-     >>> np.gradient(x, 2)
-     array([ 0.5 ,  0.75,  1.25,  1.75,  2.25,  2.5 ])
- 
--    For two dimensional arrays, the return will be two arrays ordered by 
--    axis. In this example the first array stands for the gradient in 
-+    For two dimensional arrays, the return will be two arrays ordered by
-+    axis. In this example the first array stands for the gradient in
-     rows and the second one in columns direction:
--    
-+
-     >>> np.gradient(np.array([[1, 2, 6], [3, 4, 5]], dtype=np.float))
-     [array([[ 2.,  2., -1.],
-             [ 2.,  2., -1.]]), array([[ 1. ,  2.5,  4. ],
-@@ -3875,7 +3875,7 @@ def delete(arr, obj, axis=None):
-                 "`numpy.delete`.", FutureWarning)
-             obj = obj[positive_indices]
- 
--        keep[obj, ] = False
-+        keep[(obj, )] = False
-         slobj[axis] = keep
-         new = arr[slobj]
- 
-diff --git a/numpy/ma/core.py b/numpy/ma/core.py
-index d4771fb..54f3983 100644
---- a/numpy/ma/core.py
-+++ b/numpy/ma/core.py
-@@ -158,10 +158,10 @@ for v in ["Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", "ps",
- max_filler = ntypes._minvals
- max_filler.update([(k, -np.inf) for k in [np.float32, np.float64]])
- min_filler = ntypes._maxvals
--min_filler.update([(k, +np.inf) for k in [np.float32, np.float64]])
-+# min_filler.update([(k, +np.inf) for k in [np.float32, np.float64]])
- if 'float128' in ntypes.typeDict:
-     max_filler.update([(np.float128, -np.inf)])
--    min_filler.update([(np.float128, +np.inf)])
-+    # min_filler.update([(np.float128, +np.inf)])
- 
- 
- def default_fill_value(obj):
-@@ -6816,7 +6816,7 @@ def resize(x, new_shape):
-     return result
- 
- 
--def rank(obj): 
-+def rank(obj):
-     """
-     maskedarray version of the numpy function.
- 
-@@ -6833,7 +6833,7 @@ def rank(obj):
- rank.__doc__ = np.rank.__doc__
- 
- 
--def ndim(obj): 
-+def ndim(obj):
-     """
-     maskedarray version of the numpy function.
  
 diff --git a/numpy/random/setup.py b/numpy/random/setup.py
 index 9d90590..b3ee24f 100644
