@@ -596,7 +596,7 @@ public:
 
     void addDependenceOn(ICInvalidator&);
 
-    void gc_visit(gc::GCVisitor* visitor);
+    void gc_visit(gc::GCVisitor* visitor) override;
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 
