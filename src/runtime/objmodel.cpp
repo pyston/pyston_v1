@@ -446,6 +446,7 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
             tp_flags |= Py_TPFLAGS_CHECKTYPES;
     }
 
+    Py_XINCREF(base);
     tp_base = base;
 
     if (tp_base) {

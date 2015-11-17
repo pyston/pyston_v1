@@ -392,6 +392,7 @@ static void functionDtor(Box* b) {
     assert(isSubclass(b->cls, function_cls) || isSubclass(b->cls, builtin_function_or_method_cls));
 
     BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
+    PyObject_GC_UnTrack(self);
     self->dependent_ics.invalidateAll();
     self->dependent_ics.~ICInvalidator();
 
@@ -401,6 +402,8 @@ static void functionDtor(Box* b) {
     Py_XDECREF(self->closure);
     Py_XDECREF(self->globals);
     Py_XDECREF(self->defaults);
+
+    self->cls->tp_free(self);
 }
 
 static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept {
@@ -2557,6 +2560,10 @@ void attrwrapperDel(Box* b, llvm::StringRef attr) {
     AttrWrapper::delitem(b, boxString(attr));
 }
 
+void attrwrapperClear(Box* aw) {
+    AttrWrapper::clear(aw);
+}
+
 BoxedDict* attrwrapperToDict(Box* b) {
     assert(b->cls == attrwrapper_cls);
     Box* d = AttrWrapper::copy(static_cast<AttrWrapper*>(b));
@@ -3426,15 +3433,24 @@ int BoxedInstanceMethod::traverse(Box* _im, visitproc visit, void* arg) noexcept
     return 0;
 }
 
+bool IN_SHUTDOWN = false;
 void BoxedClass::dealloc(Box* b) noexcept {
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
+    if (PyObject_IS_GC(type))
+        _PyObject_GC_UNTRACK(type);
     type->clearAttrs();
 
     Py_XDECREF(type->tp_dict);
     Py_XDECREF(type->tp_bases);
     Py_XDECREF(type->tp_subclasses);
-    //Py_XDECREF(type->tp_mro); // XXX was done manually
+    Py_XDECREF(type->tp_mro);
+    Py_XDECREF(type->tp_base);
+
+    // During shutdown, don't free class objects since that would make
+    // debugging very hard.
+    if (!IN_SHUTDOWN)
+        Py_TYPE(type)->tp_free(type);
 
     // Copied in the CPython implementation for reference:
 #if 0
@@ -4093,21 +4109,25 @@ void setupRuntime() {
     setupAST();
 
     // XXX
+    PyGC_Collect(); // To make sure it creates any static objects
+    IN_SHUTDOWN = true;
     PyType_ClearCache();
     _Py_ReleaseInternedStrings();
     _PyUnicode_Fini();
-    for (auto b : classes)
+    for (auto b : classes) {
         b->clearAttrs();
+        if (!PyObject_IS_GC(b)) {
+            Py_CLEAR(b->tp_mro);
+        }
+    }
     for (auto b : constants) {
         b->clearAttrs();
         Py_DECREF(b);
     }
     for (auto b : classes) {
-        if (b->tp_mro) {
-            Py_DECREF(b->tp_mro);
-        }
         Py_DECREF(b);
     }
+    PyGC_Collect();
     PRINT_TOTAL_REFS();
     exit(0);
     // XXX

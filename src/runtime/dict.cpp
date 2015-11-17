@@ -194,6 +194,11 @@ extern "C" Py_ssize_t PyDict_Size(PyObject* op) noexcept {
 }
 
 extern "C" void PyDict_Clear(PyObject* op) noexcept {
+    if (op->cls == attrwrapper_cls) {
+        attrwrapperClear(op);
+        return;
+    }
+
     RELEASE_ASSERT(PyDict_Check(op), "");
     static_cast<BoxedDict*>(op)->d.clear();
 }
@@ -755,12 +760,17 @@ static Box* dict_repr(PyObject* self) noexcept {
 }
 
 void BoxedDict::dealloc(Box* b) noexcept {
+    if (_PyObject_GC_IS_TRACKED(b))
+        _PyObject_GC_UNTRACK(b);
+
     assert(PyDict_Check(b));
     for (auto p : *static_cast<BoxedDict*>(b)) {
         Py_DECREF(p.first);
         Py_DECREF(p.second);
     }
     static_cast<BoxedDict*>(b)->d.freeAllMemory();
+
+    b->cls->tp_free(b);
 }
 
 int BoxedDict::traverse(PyObject* op, visitproc visit, void* arg) noexcept {

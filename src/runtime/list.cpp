@@ -1273,7 +1273,7 @@ void BoxedList::dealloc(Box* b) noexcept {
         while (--i >= 0) {
             Py_XDECREF(op->elts->elts[i]);
         }
-        //PyMem_FREE(op->elts);
+        delete op->elts;
     }
 #if 0
     if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
@@ -1294,20 +1294,21 @@ int BoxedList::traverse(Box* _o, visitproc visit, void* arg) noexcept {
 }
 
 int BoxedList::clear(Box* _a) noexcept {
-    PyListObject* a = (PyListObject*)_a;
+    BoxedList* a = (BoxedList*)_a;
     Py_ssize_t i;
-    PyObject **item = a->ob_item;
-    if (item != NULL) {
+    if (a->elts) {
+        PyObject **item = a->elts->elts;
         /* Because XDECREF can recursively invoke operations on
            this list, we make it empty first. */
         i = Py_SIZE(a);
         Py_SIZE(a) = 0;
-        a->ob_item = NULL;
-        a->allocated = 0;
+        a->capacity = 0;
+        auto old_elts = a->elts;
+        a->elts = NULL;
         while (--i >= 0) {
             Py_XDECREF(item[i]);
         }
-        PyMem_FREE(item);
+        delete old_elts;
     }
     /* Never fails; the return value can be ignored.
        Note that there is no guarantee that the list is actually empty

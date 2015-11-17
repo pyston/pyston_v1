@@ -3416,6 +3416,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     BoxedClass* base = cls->tp_base;
     if (base == NULL)
         base = cls->tp_base = object_cls;
+
+    // CPython only increfs the base if it picked one, not if it one was passed in.
+    // Not sure why.
+    Py_INCREF(base);
+
     if (!cls->cls)
         cls->cls = cls->tp_base->cls;
     cls->giveAttrBorrowed("__base__", base);

@@ -553,7 +553,6 @@ move_finalizers(PyGC_Head *unreachable, PyGC_Head *finalizers)
         PyObject *op = FROM_GC(gc);
 
         // Pyston addition: for now assert that the gc isn't freeing anything.
-        assert(0 && "something getting freed by the GC! check it out");
 
         assert(IS_TENTATIVELY_UNREACHABLE(op));
         next = gc->gc.gc_next;

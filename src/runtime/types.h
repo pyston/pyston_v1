@@ -528,7 +528,7 @@ public:
     GCdArray* elts;
     Py_ssize_t capacity;
 
-    BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
+    BoxedList() __attribute__((visibility("default"))) : size(0), elts(NULL), capacity(0) {}
 
     void ensure(int min_free);
     void shrink();
@@ -697,6 +697,7 @@ public:
 
         BoxVar* rtn = static_cast<BoxVar*>(PyObject_GC_NewVar(BoxedTuple, &PyTuple_Type, nitems));
         assert(rtn);
+        _PyObject_GC_TRACK(rtn);
 
         return rtn;
     }
@@ -1154,6 +1155,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, llvm::StringRef attr);
+void attrwrapperClear(Box* b);
 BoxedDict* attrwrapperToDict(Box* b);
 
 Box* boxAst(AST* ast);
