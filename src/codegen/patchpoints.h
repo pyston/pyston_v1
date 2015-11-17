@@ -32,7 +32,9 @@ class TypeRecorder;
 
 static const int MAX_FRAME_SPILLS = 9; // TODO this shouldn't have to be larger than the set of non-callee-save args (9)
                                        // except that will we currently spill the same reg multiple times
-static const int CALL_ONLY_SIZE
+static const int CALL_ONLY_SIZE = 13 + 1; // 13 for the call, + 1 if we want to nop/trap
+
+static const int DEOPT_CALL_ONLY_SIZE
     = 13 + (MAX_FRAME_SPILLS * 9)
       + 1; // 13 for the call, 9 bytes per spill (7 for GP, 9 for XMM), + 1 if we want to nop/trap
 
@@ -53,6 +55,7 @@ public:
         Binexp,
         Nonzero,
         Hasnext,
+        Deopt,
     };
 
 private:
@@ -72,6 +75,7 @@ public:
 
     int totalSize() const;
     bool hasReturnValue() const { return has_return_value; }
+    bool isDeopt() const { return type == Deopt; }
 
     llvm::CallingConv::ID getCallingConvention() const {
 // FIXME: we currently have some issues with using PreserveAll (the rewriter currently
@@ -124,6 +128,8 @@ public:
 
     int scratchStackmapArg() { return 0; }
     int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
+    bool isDeopt() const { return icinfo ? icinfo->isDeopt() : false; }
+    int numFrameSpillsSupported() const { return isDeopt() ? MAX_FRAME_SPILLS : 0; }
 
     void addFrameVar(llvm::StringRef name, CompilerType* type);
     void setNumFrameArgs(int num_frame_args) {
@@ -164,6 +170,7 @@ ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
+ICSetupInfo* createDeoptIC();
 
 } // namespace pyston
 

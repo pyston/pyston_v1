@@ -145,7 +145,7 @@ private:
 
     Box** vregs;
     ExcInfo last_exception;
-    BoxedClosure* passed_closure, *created_closure;
+    BoxedClosure* created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
     FrameInfo frame_info;
@@ -174,7 +174,7 @@ public:
 
     FunctionMetadata* getMD() { return md; }
     FrameInfo* getFrameInfo() { return &frame_info; }
-    BoxedClosure* getPassedClosure() { return passed_closure; }
+    BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
     Box** getVRegs() { return vregs; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
@@ -203,9 +203,9 @@ void ASTInterpreter::setGenerator(Box* gen) {
 }
 
 void ASTInterpreter::setPassedClosure(Box* closure) {
-    assert(!this->passed_closure); // This should only used for initialization
-    assert(closure->cls == closure_cls);
-    this->passed_closure = static_cast<BoxedClosure*>(closure);
+    assert(!frame_info.passed_closure); // This should only used for initialization
+    assert(!closure || closure->cls == closure_cls);
+    frame_info.passed_closure = static_cast<BoxedClosure*>(closure);
 }
 
 void ASTInterpreter::setCreatedClosure(Box* closure) {
@@ -236,7 +236,6 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
       phis(NULL),
       vregs(vregs),
       last_exception(NULL, NULL, NULL),
-      passed_closure(0),
       created_closure(0),
       generator(0),
       edgecount(0),
@@ -246,17 +245,18 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
       should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
+    frame_info.vregs = vregs;
 
     assert(scope_info);
 }
 
 void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2, Box* arg3,
                                    Box** args) {
-    passed_closure = _closure;
+    setPassedClosure(_closure);
     generator = _generator;
 
     if (scope_info->createsClosure())
-        created_closure = createClosure(passed_closure, scope_info->getClosureSize());
+        created_closure = createClosure(_closure, scope_info->getClosureSize());
 
     const ParamNames& param_names = md->param_names;
 
@@ -724,8 +724,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     if (generator)
         sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
 
-    if (passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = passed_closure;
+    if (frame_info.passed_closure)
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = frame_info.passed_closure;
 
     if (created_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
@@ -1038,9 +1038,9 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
                 closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, created_closure));
         } else {
             assert(scope_info->passesThroughClosure());
-            closure = passed_closure;
+            closure = frame_info.passed_closure;
             if (jit)
-                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, passed_closure));
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, frame_info.passed_closure));
         }
         assert(closure);
     }
@@ -1105,7 +1105,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     BoxedClosure* closure = NULL;
     if (scope_info->takesClosure()) {
         if (this->scope_info->passesThroughClosure())
-            closure = passed_closure;
+            closure = getPassedClosure();
         else
             closure = created_closure;
         assert(closure);
@@ -1633,8 +1633,8 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
 Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString s) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     DerefInfo deref_info = interpreter->scope_info->getDerefInfo(s);
-    assert(interpreter->passed_closure);
-    BoxedClosure* closure = interpreter->passed_closure;
+    assert(interpreter->getPassedClosure());
+    BoxedClosure* closure = interpreter->getPassedClosure();
     for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
         closure = closure->parent;
     }
@@ -1965,12 +1965,15 @@ FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     return interpreter->getFrameInfo();
 }
 
-BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visible) {
-    BoxedDict* rtn = new BoxedDict();
-    for (auto& l : cfg->sym_vreg_map) {
-        if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
-            continue;
+Box** getVRegsForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
+    assert(interpreter);
+    return interpreter->getVRegs();
+}
 
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg) {
+    BoxedDict* rtn = new BoxedDict();
+    for (auto& l : cfg->sym_vreg_map_user_visible) {
         Box* val = vregs[l.second];
         if (val) {
             assert(gc::isValidGCObject(val));
@@ -1981,15 +1984,9 @@ BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg, bool only_user_visib
     return rtn;
 }
 
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+BoxedDict* localsForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
-    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg, only_user_visible);
-}
-
-BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
-    assert(interpreter);
-    return interpreter->getPassedClosure();
+    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg);
 }
 }

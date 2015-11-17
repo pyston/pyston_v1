@@ -857,7 +857,7 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
 
     // make space for patchpoint
     uint8_t* pp_start = rewrite->getSlotStart() + assembler->bytesWritten();
-    constexpr int call_size = 16;
+    constexpr int call_size = 13;
     assembler->skipBytes(pp_size + call_size);
     uint8_t* pp_end = rewrite->getSlotStart() + assembler->bytesWritten();
     assert(assembler->hasFailed() || (pp_start + pp_size + call_size == pp_end));
