@@ -130,7 +130,7 @@ void setupTraceback() {
     traceback_cls->giveAttr("tb_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_lineno, NULL,
     NULL));
     */
-    traceback_cls->giveAttr("tb_next", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_next, NULL, NULL));
+    // traceback_cls->giveAttr("tb_next", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_next, NULL, NULL));
 
     traceback_cls->freeze();
 }
