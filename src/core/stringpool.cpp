@@ -36,4 +36,10 @@ llvm::StringRef InternedString::s() const {
 const char* InternedString::c_str() const {
     return _str->c_str();
 }
+
+bool InternedString::isCompilerCreatedName() const {
+    char c = _str->s()[0];
+    return c == '!' || c == '#';
+}
+
 }
