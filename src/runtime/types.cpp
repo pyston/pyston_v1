@@ -2074,7 +2074,7 @@ public:
 // or PyModule_GetDict to return real dicts.
 class AttrWrapper : public Box {
 private:
-    Box* b;
+    WEAK(Box*) b; // The parent object ('b') will keep the attrwrapper alive (forever)
 
     void convertToDictBacked() {
         HCAttrs* attrs = this->b->getHCAttrsPtr();
@@ -2469,16 +2469,6 @@ public:
     }
 
     static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
-
-    static void tp_dealloc(Box* self) noexcept {
-        Py_FatalError("unimplemented");
-    }
-    static int tp_traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
-    }
-    static int tp_clear(Box* self) noexcept {
-        Py_FatalError("unimplemented");
-    }
 
     friend class AttrWrapperIter;
 };
@@ -3327,7 +3317,7 @@ void Box::clearAttrs() {
 
         if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
             Box* d = attrs->attr_list->attrs[0];
-            PyDict_Clear(d);
+            Py_DECREF(d);
             return;
         }
 
@@ -3446,6 +3436,7 @@ void BoxedClass::dealloc(Box* b) noexcept {
     Py_XDECREF(type->tp_subclasses);
     //Py_XDECREF(type->tp_mro); // XXX was done manually
 
+    // Copied in the CPython implementation for reference:
 #if 0
     /* Assert this is a heap-allocated type object */
     assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
@@ -3470,6 +3461,10 @@ void BoxedClass::dealloc(Box* b) noexcept {
 
 static void object_dealloc(PyObject* self) {
     Py_TYPE(self)->tp_free(self);
+}
+
+static int type_is_gc(BoxedClass* type) {
+    return type->is_pyston_class || (type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 }
 
 static int
@@ -3537,7 +3532,11 @@ type_clear(PyTypeObject *type)
 }
 
 int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
-    Py_FatalError("unimplemented");
+    int nattrs = hcls->attributeArraySize();
+    for (int i = 0; i < nattrs; i++) {
+        Py_VISIT(attr_list->attrs[i]);
+    }
+    return 0;
 }
 
 void AttrWrapperIter::dealloc(Box* _o) noexcept {
@@ -3606,14 +3605,17 @@ void setupRuntime() {
 
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
-    object_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
-    type_cls = static_cast<BoxedClass*>(PyObject_MALLOC(sizeof(BoxedClass)));
+    object_cls = static_cast<BoxedClass*>(_PyObject_GC_Malloc(sizeof(BoxedClass)));
+    type_cls = static_cast<BoxedClass*>(_PyObject_GC_Malloc(sizeof(BoxedClass)));
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
     ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del, /* is_gc */ false);
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs), offsetof(BoxedClass, tp_weaklist),
                                 sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del, true,
                                 (traverseproc)type_traverse, (inquiry)type_clear);
+    _PyObject_GC_TRACK(object_cls);
+    _PyObject_GC_TRACK(type_cls);
+    type_cls->tp_is_gc = (inquiry)type_is_gc;
 
     type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
@@ -3672,8 +3674,7 @@ void setupRuntime() {
     pyston_getset_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor",
                                            NULL, NULL, false);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", AttrWrapper::tp_dealloc, NULL, true,
-                   AttrWrapper::tp_traverse, AttrWrapper::tp_clear);
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", NULL, NULL, false);
     dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", BoxedDict::dealloc, NULL, true,
                                   BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;

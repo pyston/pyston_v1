@@ -552,6 +552,9 @@ move_finalizers(PyGC_Head *unreachable, PyGC_Head *finalizers)
     for (gc = unreachable->gc.gc_next; gc != unreachable; gc = next) {
         PyObject *op = FROM_GC(gc);
 
+        // Pyston addition: for now assert that the gc isn't freeing anything.
+        assert(0 && "something getting freed by the GC! check it out");
+
         assert(IS_TENTATIVELY_UNREACHABLE(op));
         next = gc->gc.gc_next;
 
@@ -793,6 +796,7 @@ handle_finalizers(PyGC_Head *finalizers, PyGC_Head *old)
         garbage = PyList_New(0);
         if (garbage == NULL)
             Py_FatalError("gc couldn't create gc.garbage list");
+        PyGC_RegisterStaticConstant(garbage);
     }
     for (; gc != finalizers; gc = gc->gc.gc_next) {
         PyObject *op = FROM_GC(gc);
@@ -848,8 +852,7 @@ static void
 clear_freelists(void)
 {
     (void)PyMethod_ClearFreeList();
-    Py_FatalError("unimplemented");
-    //(void)PyFrame_ClearFreeList();
+    (void)PyFrame_ClearFreeList();
     (void)PyCFunction_ClearFreeList();
     (void)PyTuple_ClearFreeList();
 #ifdef Py_USING_UNICODE
@@ -896,6 +899,7 @@ collect(int generation)
         delstr = PyString_InternFromString("__del__");
         if (delstr == NULL)
             Py_FatalError("gc couldn't allocate \"__del__\"");
+        PyGC_RegisterStaticConstant(delstr);
     }
 
     if (debug & DEBUG_STATS) {
@@ -1032,8 +1036,10 @@ collect(int generation)
     }
 
     if (PyErr_Occurred()) {
-        if (gc_str == NULL)
+        if (gc_str == NULL) {
             gc_str = PyString_FromString("garbage collection");
+            PyGC_RegisterStaticConstant(gc_str);
+        }
         PyErr_WriteUnraisable(gc_str);
         Py_FatalError("unexpected exception during garbage collection");
     }
@@ -1410,6 +1416,7 @@ initgc(void)
         garbage = PyList_New(0);
         if (garbage == NULL)
             return;
+        PyGC_RegisterStaticConstant(garbage);
     }
     Py_INCREF(garbage);
     if (PyModule_AddObject(m, "garbage", garbage) < 0)

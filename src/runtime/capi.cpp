@@ -1948,6 +1948,10 @@ extern "C" void _Py_FatalError(const char* fmt, const char* function, const char
     abort();
 }
 
+extern "C" int PyCFunction_ClearFreeList() noexcept {
+    return 0; // number of entries cleared
+}
+
 void setupCAPI() {
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));

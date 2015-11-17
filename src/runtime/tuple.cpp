@@ -669,6 +669,10 @@ _PyTuple_MaybeUntrack(PyObject *op) noexcept
     _PyObject_GC_UNTRACK(op);
 }
 
+extern "C" int PyTuple_ClearFreeList() noexcept {
+    return 0; // number of entries cleared
+}
+
 void setupTuple() {
     static PySequenceMethods tuple_as_sequence;
     tuple_cls->tp_as_sequence = &tuple_as_sequence;

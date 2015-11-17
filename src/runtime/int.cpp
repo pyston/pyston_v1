@@ -1161,6 +1161,10 @@ static PyObject* int_getnewargs(BoxedInt* v) noexcept {
     return Py_BuildValue("(l)", v->n);
 }
 
+extern "C" int PyInt_ClearFreeList() noexcept {
+    return 0; // number of entries cleared
+}
+
 void setupInt() {
     static PyNumberMethods int_as_number;
     int_cls->tp_as_number = &int_as_number;

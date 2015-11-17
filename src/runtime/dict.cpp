@@ -781,29 +781,18 @@ int BoxedDict::clear(PyObject* op) noexcept {
 }
 
 extern "C" void _PyDict_MaybeUntrack(PyObject* op) noexcept {
-    PyDictObject* mp;
-    PyObject* value;
-    Py_ssize_t mask, i;
-
     if (!PyDict_CheckExact(op) || !_PyObject_GC_IS_TRACKED(op))
         return;
 
-    Py_FatalError("unimplemented");
-    /*
-    PyDictEntry* ep;
-    mp = (PyDictObject *) op;
-    ep = mp->ma_table;
-    mask = mp->ma_mask;
-    for (i = 0; i <= mask; i++) {
-        if ((value = ep[i].me_value) == NULL)
-            continue;
-        if (_PyObject_GC_MAY_BE_TRACKED(value) ||
-            _PyObject_GC_MAY_BE_TRACKED(ep[i].me_key))
+    BoxedDict* d = static_cast<BoxedDict*>(op);
+
+    for (auto&& p : d->d) {
+        if (_PyObject_GC_MAY_BE_TRACKED(p.second) ||
+            _PyObject_GC_MAY_BE_TRACKED(p.first.value))
             return;
     }
-    DECREASE_TRACK_COUNT
+
     _PyObject_GC_UNTRACK(op);
-    */
 }
 
 void setupDict() {

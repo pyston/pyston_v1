@@ -31,7 +31,10 @@ public:
 
 public:
     BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module = NULL)
-        : method_def(method_def), passthrough(passthrough), module(module) {}
+        : method_def(method_def), passthrough(passthrough), module(module) {
+        Py_XINCREF(passthrough);
+        Py_XINCREF(module);
+    }
 
     DEFAULT_CLASS(capifunc_cls);
 

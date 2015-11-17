@@ -1639,6 +1639,10 @@ static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOA
                                        { "is_integer", (PyCFunction)float_is_integer, METH_NOARGS, NULL },
                                        { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL } };
 
+extern "C" int PyFloat_ClearFreeList() noexcept {
+    return 0; // number of entries cleared
+}
+
 void setupFloat() {
     static PyNumberMethods float_as_number;
     float_cls->tp_as_number = &float_as_number;

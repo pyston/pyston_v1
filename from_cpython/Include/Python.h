@@ -175,6 +175,9 @@ extern PyTypeObject Scanner_Type;
 
 extern PyTypeObject* Itertool_SafeDealloc_Types[];
 
+// In CPython this is in frameobject.h:
+PyAPI_FUNC(int) PyFrame_ClearFreeList(void) PYSTON_NOEXCEPT;
+
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str

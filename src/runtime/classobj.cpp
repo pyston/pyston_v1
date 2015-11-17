@@ -1637,7 +1637,7 @@ extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
 }
 
 extern "C" int PyMethod_ClearFreeList(void) noexcept {
-    Py_FatalError("unimplemented");
+    return 0; // number of entries cleared
 }
 
 void setupClassobj() {

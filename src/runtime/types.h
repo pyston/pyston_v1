@@ -1135,7 +1135,7 @@ public:
     PyMethodDef* method;
     BoxedClass* type;
 
-    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) {}
+    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) { Py_INCREF(type); }
 
     DEFAULT_CLASS(method_cls);
 

@@ -142,6 +142,10 @@ public:
     }
 };
 
+extern "C" int PyFrame_ClearFreeList(void) noexcept {
+    return 0; // number of entries cleared
+}
+
 Box* getFrame(int depth) {
     auto it = getPythonFrame(depth);
     if (!it.exists())
