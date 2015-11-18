@@ -117,6 +117,7 @@ BaseException_clear(PyBaseExceptionObject *self)
 {
     // Pyston change:
     // Py_CLEAR(self->dict);
+    PyObject_ClearHcAttrs(&self->hcattrs);
     Py_CLEAR(self->args);
     Py_CLEAR(self->message);
     return 0;
@@ -135,6 +136,9 @@ BaseException_traverse(PyBaseExceptionObject *self, visitproc visit, void *arg)
 {
     // Pyston change:
     // Py_VISIT(self->dict);
+    int vret = PyObject_TraverseHcAttrs(&self->hcattrs, visit, arg);
+    if (vret)
+        return vret;
     Py_VISIT(self->args);
     Py_VISIT(self->message);
     return 0;

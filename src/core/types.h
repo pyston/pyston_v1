@@ -592,6 +592,7 @@ public:
     HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
 
     int traverse(visitproc visit, void* arg) noexcept;
+    void clear() noexcept;
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 

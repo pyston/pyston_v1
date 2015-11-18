@@ -3085,10 +3085,12 @@ extern "C" void PyObject_InitHcAttrs(HCAttrs* attrs) noexcept {
 extern "C" PyObject* PyObject_GetHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
     return obj->getattr(internStringMortal(attr));
 }
+
 extern "C" int PyObject_SetHcAttrString(PyObject* obj, const char* attr, PyObject* val) PYSTON_NOEXCEPT {
     obj->setattr(internStringMortal(attr), val, NULL);
     return 0;
 }
+
 extern "C" int PyObject_DelHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
     BoxedString* attr_str = internStringMortal(attr);
     bool has = obj->hasattr(attr_str);
@@ -3096,6 +3098,15 @@ extern "C" int PyObject_DelHcAttrString(PyObject* obj, const char* attr) PYSTON_
         return -1;
     obj->delattr(attr_str, NULL);
     return 0;
+}
+
+extern "C" int PyObject_ClearHcAttrs(HCAttrs* attrs) noexcept {
+    attrs->clear();
+    return 0;
+}
+
+extern "C" int PyObject_TraverseHcAttrs(HCAttrs* attrs, visitproc visit, void* arg) noexcept {
+    return attrs->traverse(visit, arg);
 }
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
@@ -3320,20 +3331,7 @@ static Box* getsetDelete(Box* self, Box* obj) {
 void Box::clearAttrs() {
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
-        HiddenClass* hcls = attrs->hcls;
-
-        if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
-            Box* d = attrs->attr_list->attrs[0];
-            Py_DECREF(d);
-            return;
-        }
-
-        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
-
-        for (int i = 0; i < hcls->attributeArraySize(); i++) {
-            Py_DECREF(attrs->attr_list->attrs[i]);
-        }
-        new ((void*)attrs) HCAttrs(root_hcls);
+        attrs->clear();
         return;
     }
 
@@ -3342,6 +3340,23 @@ void Box::clearAttrs() {
         PyDict_Clear(d);
         return;
     }
+}
+
+void HCAttrs::clear() noexcept {
+    HiddenClass* hcls = this->hcls;
+
+    if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
+        Box* d = this->attr_list->attrs[0];
+        Py_DECREF(d);
+        return;
+    }
+
+    assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+
+    for (int i = 0; i < hcls->attributeArraySize(); i++) {
+        Py_DECREF(this->attr_list->attrs[i]);
+    }
+    new ((void*)this) HCAttrs(root_hcls);
 }
 
 static void tupledealloc(PyTupleObject* op) noexcept {
@@ -4127,7 +4142,9 @@ void setupRuntime() {
     for (auto b : classes) {
         Py_DECREF(b);
     }
-    PyGC_Collect();
+    // May need to run multiple collections to collect everything:
+    while (PyGC_Collect())
+        ;
     PRINT_TOTAL_REFS();
     exit(0);
     // XXX
