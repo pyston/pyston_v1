@@ -794,7 +794,7 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
 
         return res;
     } else {
-        static BoxedString* float_str = internStringImmortal("__float__");
+        static BoxedString* float_str = getStaticString("__float__");
         Box* r = callattrInternal<S, NOT_REWRITABLE>(a, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL,
                                                      NULL, NULL);
 

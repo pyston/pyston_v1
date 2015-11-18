@@ -1716,7 +1716,7 @@ extern "C" char* PyModule_GetName(PyObject* m) noexcept {
         PyErr_BadArgument();
         return NULL;
     }
-    static BoxedString* name_str = internStringImmortal("__name__");
+    static BoxedString* name_str = getStaticString("__name__");
     if ((nameobj = m->getattr(name_str)) == NULL || !PyString_Check(nameobj)) {
         PyErr_SetString(PyExc_SystemError, "nameless module");
         return NULL;
@@ -1731,7 +1731,7 @@ extern "C" char* PyModule_GetFilename(PyObject* m) noexcept {
         PyErr_BadArgument();
         return NULL;
     }
-    static BoxedString* file_str = internStringImmortal("__file__");
+    static BoxedString* file_str = getStaticString("__file__");
     if ((fileobj = m->getattr(file_str)) == NULL || !PyString_Check(fileobj)) {
         PyErr_SetString(PyExc_SystemError, "module filename missing");
         return NULL;

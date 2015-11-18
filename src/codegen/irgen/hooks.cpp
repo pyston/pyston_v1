@@ -110,8 +110,8 @@ InternedStringPool& SourceInfo::getInternedStrings() {
 BoxedString* SourceInfo::getName() {
     assert(ast);
 
-    static BoxedString* lambda_name = internStringImmortal("<lambda>");
-    static BoxedString* module_name = internStringImmortal("<module>");
+    static BoxedString* lambda_name = getStaticString("<lambda>");
+    static BoxedString* module_name = getStaticString("<module>");
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:
@@ -325,10 +325,10 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, boxString(fn)));
 
-        static BoxedString* doc_str = internStringImmortal("__doc__");
+        static BoxedString* doc_str = getStaticString("__doc__");
         bm->setattr(doc_str, si->getDocString(), NULL);
 
-        static BoxedString* builtins_str = internStringImmortal("__builtins__");
+        static BoxedString* builtins_str = getStaticString("__builtins__");
         if (!bm->hasattr(builtins_str))
             bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
 
@@ -347,7 +347,7 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
 
     Box* doc_string = md->source->getDocString();
     if (doc_string != None) {
-        static BoxedString* doc_box = internStringImmortal("__doc__");
+        static BoxedString* doc_box = getStaticString("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
     }
 
@@ -589,7 +589,7 @@ static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags*
         assert(caller_cl->source != NULL);
 
         AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
-        static BoxedString* string_string = internStringImmortal("<string>");
+        static BoxedString* string_string = getStaticString("<string>");
         md = compileEval(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
         md = metadataFromCode(boxedCode);
@@ -682,7 +682,7 @@ Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags)
         assert(caller_cl->source != NULL);
 
         auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
-        static BoxedString* string_string = internStringImmortal("<string>");
+        static BoxedString* string_string = getStaticString("<string>");
         md = compileExec(parsed, string_string, flags);
     } else if (boxedCode->cls == code_cls) {
         md = metadataFromCode(boxedCode);

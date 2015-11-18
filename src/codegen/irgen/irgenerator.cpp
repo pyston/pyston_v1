@@ -1004,7 +1004,7 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
-            static BoxedString* setitem_str = internStringImmortal("__setitem__");
+            static BoxedString* setitem_str = getStaticString("__setitem__");
             CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
                 CompilerVariable* key = evalExpr(node->keys[i], unw_info);
@@ -1247,7 +1247,7 @@ private:
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
 
-        static BoxedString* add_str = internStringImmortal("add");
+        static BoxedString* add_str = getStaticString("add");
 
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
@@ -1849,7 +1849,7 @@ private:
 
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
-        static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
+        static BoxedString* AssertionError_str = getStaticString("AssertionError");
         llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
                                                 embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
 

@@ -159,7 +159,7 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
         return obj->cls;
     }
 
-    static BoxedString* class_str = internStringImmortal("__class__");
+    static BoxedString* class_str = getStaticString("__class__");
     Box* class_attr = obj->getattr(class_str);
     if (class_attr && PyType_Check(class_attr) && class_attr != obj->cls) {
         Py_FatalError("warning: this path never tested"); // blindly copied from CPython

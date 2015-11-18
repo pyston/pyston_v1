@@ -82,7 +82,7 @@ extern "C" Box* vars(Box* obj) {
     if (!obj)
         return fastLocalsToBoxedLocals();
 
-    static BoxedString* dict_str = internStringImmortal("__dict__");
+    static BoxedString* dict_str = getStaticString("__dict__");
     Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str);
     if (!rtn)
         raiseExcHelper(TypeError, "vars() argument must have __dict__ attribute");
@@ -99,14 +99,14 @@ extern "C" Box* abs_(Box* x) {
     } else if (x->cls == long_cls) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
-        static BoxedString* abs_str = internStringImmortal("__abs__");
+        static BoxedString* abs_str = getStaticString("__abs__");
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
         return callattr(x, abs_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     }
 }
 
 extern "C" Box* binFunc(Box* x) {
-    static BoxedString* bin_str = internStringImmortal("__bin__");
+    static BoxedString* bin_str = getStaticString("__bin__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, bin_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -119,7 +119,7 @@ extern "C" Box* binFunc(Box* x) {
 }
 
 extern "C" Box* hexFunc(Box* x) {
-    static BoxedString* hex_str = internStringImmortal("__hex__");
+    static BoxedString* hex_str = getStaticString("__hex__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, hex_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -132,7 +132,7 @@ extern "C" Box* hexFunc(Box* x) {
 }
 
 extern "C" Box* octFunc(Box* x) {
-    static BoxedString* oct_str = internStringImmortal("__oct__");
+    static BoxedString* oct_str = getStaticString("__oct__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, oct_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -1091,7 +1091,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
 
 Box* exceptionStr(Box* b) {
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    static BoxedString* message_str = internStringImmortal("message");
+    static BoxedString* message_str = getStaticString("message");
     Box* message = b->getattr(message_str);
     assert(message);
     message = str(message);
@@ -1102,7 +1102,7 @@ Box* exceptionStr(Box* b) {
 
 Box* exceptionRepr(Box* b) {
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    static BoxedString* message_str = internStringImmortal("message");
+    static BoxedString* message_str = getStaticString("message");
     Box* message = b->getattr(message_str);
     assert(message);
     message = repr(message);
@@ -1267,9 +1267,9 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     Box* dest, *end;
 
-    static BoxedString* file_str = internStringImmortal("file");
-    static BoxedString* end_str = internStringImmortal("end");
-    static BoxedString* space_str = internStringImmortal(" ");
+    static BoxedString* file_str = getStaticString("file");
+    static BoxedString* end_str = getStaticString("end");
+    static BoxedString* space_str = getStaticString(" ");
 
     BoxedDict::DictMap::iterator it;
     if (kwargs && ((it = kwargs->d.find(file_str)) != kwargs->d.end())) {
@@ -1288,7 +1288,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     RELEASE_ASSERT(!kwargs || kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
-    static BoxedString* write_str = internStringImmortal("write");
+    static BoxedString* write_str = getStaticString("write");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
 
     // TODO softspace handling?
@@ -1312,7 +1312,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 Box* getreversed(Box* o) {
-    static BoxedString* reversed_str = internStringImmortal("__reversed__");
+    static BoxedString* reversed_str = getStaticString("__reversed__");
 
     // common case:
     if (o->cls == list_cls) {
@@ -1325,7 +1325,7 @@ Box* getreversed(Box* o) {
     if (r)
         return r;
 
-    static BoxedString* getitem_str = internStringImmortal("__getitem__");
+    static BoxedString* getitem_str = getStaticString("__getitem__");
     if (!typeLookup(o->cls, getitem_str)) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }

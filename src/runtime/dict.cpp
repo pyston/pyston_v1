@@ -257,7 +257,7 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
                 defaultdict_cls = self->cls;
             }
 
-            static BoxedString* missing_str = internStringImmortal("__missing__");
+            static BoxedString* missing_str = getStaticString("__missing__");
             CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(1) };
             Box* r;
             try {
@@ -643,7 +643,7 @@ void dictMerge(BoxedDict* self, Box* other) {
     if (other->cls == attrwrapper_cls) {
         keys = attrwrapperKeys(other);
     } else {
-        static BoxedString* keys_str = internStringImmortal("keys");
+        static BoxedString* keys_str = getStaticString("keys");
         CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         keys = callattr(other, keys_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     }
@@ -707,7 +707,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
     if (args->size()) {
         Box* arg = args->elts[0];
-        static BoxedString* keys_str = internStringImmortal("keys");
+        static BoxedString* keys_str = getStaticString("keys");
         if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str)) {
             dictMerge(self, arg);
         } else {

@@ -2236,7 +2236,7 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
 
     // Pyston change: this should be an optimization
     // PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
-    static BoxedString* trunc_str = internStringImmortal("__trunc__");
+    static BoxedString* trunc_str = getStaticString("__trunc__");
     PyObject* trunc_func = getattrInternal<ExceptionStyle::CAPI>(o, trunc_str);
 
     if (trunc_func) {

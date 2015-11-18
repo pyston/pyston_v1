@@ -36,8 +36,8 @@
 namespace pyston {
 
 CompilerType* CompilerType::getPystonIterType() {
-    static BoxedString* iter_str = internStringImmortal("__iter__");
-    static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
+    static BoxedString* iter_str = getStaticString("__iter__");
+    static BoxedString* hasnext_str = getStaticString("__hasnext__");
     if (hasattr(iter_str) == Yes) {
         CompilerType* iter_type = getattrType(iter_str, true)->callType(ArgPassSpec(0), {}, NULL);
         if (iter_type->hasattr(hasnext_str) == Yes)
@@ -347,7 +347,7 @@ public:
             UnboxedSlice slice_val = extractSlice(slice);
 
             if (slice_val.step == NULL) {
-                static BoxedString* attr = internStringImmortal("__getitem__");
+                static BoxedString* attr = getStaticString("__getitem__");
                 CompilerType* return_type
                     = var->getType()->getattrType(attr, true)->callType(ArgPassSpec(1), { SLICE }, NULL);
                 assert(return_type->getConcreteType() == return_type);
@@ -398,7 +398,7 @@ public:
     }
 
     CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* iter_box = internStringImmortal("__iter__");
+        static BoxedString* iter_box = getStaticString("__iter__");
 
         CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
         CompilerVariable* iter_call = var->callattr(emitter, info, iter_box, flags, {}, 0);
@@ -2043,7 +2043,7 @@ public:
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
-        static BoxedString* attr = internStringImmortal("__getitem__");
+        static BoxedString* attr = getStaticString("__getitem__");
         bool no_attribute = false;
 
         if (slice->getType() == UNBOXED_SLICE) {
@@ -2123,7 +2123,7 @@ public:
     }
 
     CompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
-        static BoxedString* attr = internStringImmortal("__len__");
+        static BoxedString* attr = getStaticString("__len__");
         CompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
         if (called_constant)
@@ -2136,7 +2136,7 @@ public:
         if (cls == None->cls)
             return makeBool(false);
 
-        static BoxedString* attr = internStringImmortal("__nonzero__");
+        static BoxedString* attr = getStaticString("__nonzero__");
         bool no_attribute = false;
         CompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, &no_attribute);
@@ -2173,7 +2173,7 @@ public:
     }
 
     CompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        static BoxedString* attr = internStringImmortal("__hasnext__");
+        static BoxedString* attr = getStaticString("__hasnext__");
 
         CompilerVariable* called_constant
             = tryCallattrConstant(emitter, info, var, attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, NULL);

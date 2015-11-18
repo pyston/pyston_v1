@@ -170,7 +170,7 @@ Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
         hasnext_ic.reset(ic);
     }
 
-    static BoxedString* hasnext_str = internStringImmortal("__hasnext__");
+    static BoxedString* hasnext_str = getStaticString("__hasnext__");
     CallattrFlags callattr_flags
         = {.cls_only = true, .null_on_nonexistent = null_on_nonexistent, .argspec = ArgPassSpec(0) };
     return ic->call(obj, hasnext_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -209,7 +209,7 @@ Box* BoxedClass::call_nextIC(Box* obj) noexcept {
         next_ic.reset(ic);
     }
 
-    static BoxedString* next_str = internStringImmortal("next");
+    static BoxedString* next_str = getStaticString("next");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, next_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -223,7 +223,7 @@ Box* BoxedClass::callReprIC(Box* obj) {
         repr_ic.reset(ic);
     }
 
-    static BoxedString* repr_str = internStringImmortal("__repr__");
+    static BoxedString* repr_str = getStaticString("__repr__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
     return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -237,7 +237,7 @@ Box* BoxedClass::callIterIC(Box* obj) {
         iter_ic.reset(ic);
     }
 
-    static BoxedString* iter_str = internStringImmortal("__iter__");
+    static BoxedString* iter_str = getStaticString("__iter__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     return ic->call(obj, iter_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -294,7 +294,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
         Box* globals_for_name = md->source->parent_module;
 
         assert(0 && "check the refcounting here");
-        static BoxedString* name_str = internStringImmortal("__name__");
+        static BoxedString* name_str = getStaticString("__name__");
         this->modname = globals_for_name->getattr(name_str);
         this->doc = md->source->getDocString();
     } else {
@@ -338,7 +338,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
         }
 
         assert(0 && "check the refcounting here");
-        static BoxedString* name_str = internStringImmortal("__name__");
+        static BoxedString* name_str = getStaticString("__name__");
         if (globals_for_name->cls == module_cls) {
             this->modname = globals_for_name->getattr(name_str);
         } else {
@@ -433,7 +433,7 @@ static int builtin_func_traverse(BoxedBuiltinFunctionOrMethod* f, visitproc visi
 }
 
 std::string BoxedModule::name() {
-    static BoxedString* name_str = internStringImmortal("__name__");
+    static BoxedString* name_str = getStaticString("__name__");
     Box* name = this->getattr(name_str);
     if (!name || name->cls != str_cls) {
         return "?";
@@ -690,8 +690,8 @@ static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, B
 static Box* objectNewNoArgs(BoxedClass* cls) noexcept {
     assert(PyType_Check(cls));
 #ifndef NDEBUG
-    static BoxedString* new_str = internStringImmortal("__new__");
-    static BoxedString* init_str = internStringImmortal("__init__");
+    static BoxedString* new_str = getStaticString("__new__");
+    static BoxedString* init_str = getStaticString("__init__");
     assert(typeLookup(cls, new_str) == typeLookup(object_cls, new_str)
            && typeLookup(cls, init_str) != typeLookup(object_cls, init_str));
 #endif
@@ -825,7 +825,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
-    static BoxedString* new_str = internStringImmortal("__new__");
+    static BoxedString* new_str = getStaticString("__new__");
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
@@ -964,7 +964,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             which_init = TYPE_NEW_SPECIAL_CASE;
     }
 
-    static BoxedString* init_str = internStringImmortal("__init__");
+    static BoxedString* init_str = getStaticString("__init__");
     if (cls->tp_init == slot_tp_init) {
         // If there's a Python-level tp_init, try getting it, since calling it might be faster than calling
         // tp_init if we can manage to rewrite it.
@@ -1397,7 +1397,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         assert(msg);
         // TODO this is an extra Pyston check and I don't think we should have to do it:
         if (isSubclass(e.value->cls, BaseException)) {
-            static BoxedString* message_str = internStringImmortal("message");
+            static BoxedString* message_str = getStaticString("message");
             msg = getattr(e.value, message_str);
         }
 
@@ -1565,7 +1565,7 @@ static Box* functionGlobals(Box* self, void*) {
     assert(func->md->source);
     assert(func->md->source->scoping->areGlobalsFromModule());
 
-    static BoxedString* dict_str = internStringImmortal("__dict__");
+    static BoxedString* dict_str = getStaticString("__dict__");
     return getattr(func->md->source->parent_module, dict_str);
 }
 
@@ -1689,7 +1689,7 @@ static Box* instancemethodRepr(Box* b) {
     Box* funcname = NULL, * klassname = NULL, * result = NULL;
     const char* sfuncname = "?", * sklassname = "?";
 
-    static BoxedString* name_str = internStringImmortal("__name__");
+    static BoxedString* name_str = getStaticString("__name__");
     funcname = getattrInternal<CXX>(func, name_str);
 
     if (funcname != NULL) {
@@ -1911,7 +1911,7 @@ Box* typeRepr(BoxedClass* self) {
     else
         os << "<type '";
 
-    static BoxedString* module_str = internStringImmortal("__module__");
+    static BoxedString* module_str = getStaticString("__module__");
     Box* m = self->getattr(module_str);
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
@@ -1933,7 +1933,7 @@ static PyObject* typeModule(Box* _type, void* context) {
     const char* s;
 
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE && type->is_user_defined) {
-        static BoxedString* module_str = internStringImmortal("__module__");
+        static BoxedString* module_str = getStaticString("__module__");
         mod = type->getattr(module_str);
         if (!mod)
             raiseExcHelper(AttributeError, "__module__");
@@ -1958,7 +1958,7 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
 
     PyType_Modified(type);
 
-    static BoxedString* module_str = internStringImmortal("__module__");
+    static BoxedString* module_str = getStaticString("__module__");
     type->setattr(module_str, value, NULL);
 }
 
@@ -2126,7 +2126,7 @@ public:
             self->convertToDictBacked();
 
         if (self->isDictBacked()) {
-            static BoxedString* setitem_str = internStringImmortal("__setitem__");
+            static BoxedString* setitem_str = getStaticString("__setitem__");
             return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), setitem_str, LookupScope::CLASS_ONLY,
                                                          NULL, ArgPassSpec(2), _key, value, NULL, NULL, NULL);
         }
@@ -2163,7 +2163,7 @@ public:
             self->convertToDictBacked();
 
         if (self->isDictBacked()) {
-            static BoxedString* setdefault_str = internStringImmortal("setdefault");
+            static BoxedString* setdefault_str = getStaticString("setdefault");
             return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), setdefault_str,
                                                          LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), _key, value,
                                                          NULL, NULL, NULL);
@@ -2455,7 +2455,7 @@ public:
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
         if (self->isDictBacked()) {
-            static BoxedString* iter_str = internStringImmortal("__iter__");
+            static BoxedString* iter_str = getStaticString("__iter__");
             return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), iter_str, LookupScope::CLASS_ONLY,
                                                          NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         }
@@ -2470,7 +2470,7 @@ public:
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
         assert(dict->cls == dict_cls);
-        static BoxedString* eq_str = internStringImmortal("__eq__");
+        static BoxedString* eq_str = getStaticString("__eq__");
         return callattrInternal<CXX, NOT_REWRITABLE>(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1),
                                                      _other, NULL, NULL, NULL, NULL);
     }
