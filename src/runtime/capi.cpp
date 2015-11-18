@@ -779,9 +779,7 @@ finally:
 }
 
 void setCAPIException(const ExcInfo& e) {
-    cur_thread_state.curexc_type = e.type;
-    cur_thread_state.curexc_value = e.value;
-    cur_thread_state.curexc_traceback = e.traceback;
+    PyErr_Restore(e.type, e.value, e.traceback);
 }
 
 void ensureCAPIExceptionSet() {

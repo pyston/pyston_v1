@@ -405,14 +405,18 @@ extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexc
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
     Box*& pos = self->d[k];
+    Py_INCREF(v);
 
-    if (pos != NULL) {
-        pos = v;
+    Box* old = pos;
+    pos = v;
+
+    if (old) {
+        Py_DECREF(old);
     } else {
-        pos = v;
+        Py_INCREF(k);
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 Box* dictDelitem(BoxedDict* self, Box* k) {
@@ -420,6 +424,7 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
         raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
+    assert(0 && "check refcounting");
     auto it = self->d.find(k);
     if (it == self->d.end()) {
         raiseExcHelper(KeyError, k);
@@ -427,7 +432,7 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 
     self->d.erase(it);
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 // Analoguous to CPython's, used for sq_ slots.
@@ -440,6 +445,7 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
             res = dictSetitem((BoxedDict*)mp, v, w);
         }
         assert(res == None);
+        Py_DECREF(res);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

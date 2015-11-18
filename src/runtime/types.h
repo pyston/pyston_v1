@@ -170,7 +170,7 @@ void checkAndThrowCAPIException();
 void throwCAPIException() __attribute__((noreturn));
 void ensureCAPIExceptionSet();
 struct ExcInfo;
-void setCAPIException(const ExcInfo& e);
+void setCAPIException(STOLEN(const ExcInfo&) e);
 
 // Finalizer-related
 void dealloc_null(Box* box);
