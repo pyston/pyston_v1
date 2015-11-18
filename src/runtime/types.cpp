@@ -2375,20 +2375,24 @@ public:
         return rtn;
     }
 
-    static Box* clear(Box* _self) {
+    static void _clear(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
+        attrs->clear();
 
-        // Clear the attrs array:
-        new ((void*)attrs) HCAttrs(root_hcls);
         // Add the existing attrwrapper object (ie self) back as the attrwrapper:
         self->b->appendNewHCAttr(self, NULL);
         attrs->hcls = attrs->hcls->getAttrwrapperChild();
+    }
 
-        return None;
+    static Box* clear(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        _clear(_self);
+
+        Py_RETURN_NONE;
     }
 
     static Box* len(Box* _self) {
@@ -2561,7 +2565,7 @@ void attrwrapperDel(Box* b, llvm::StringRef attr) {
 }
 
 void attrwrapperClear(Box* aw) {
-    AttrWrapper::clear(aw);
+    AttrWrapper::_clear(aw);
 }
 
 BoxedDict* attrwrapperToDict(Box* b) {
@@ -3353,9 +3357,11 @@ void HCAttrs::clear() noexcept {
 
     assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
+    // TODO: should swap in the new HCAttrs before doing any decrefs.
     for (int i = 0; i < hcls->attributeArraySize(); i++) {
         Py_DECREF(this->attr_list->attrs[i]);
     }
+    // TODO need to free the attrs memory
     new ((void*)this) HCAttrs(root_hcls);
 }
 
@@ -3522,6 +3528,8 @@ type_traverse(PyTypeObject *type, visitproc visit, void *arg)
     // Pyston change: HEAPTYPE is not about whether it is in GC or not
     // assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 
+    Py_VISIT_HCATTRS(type->attrs);
+
     Py_VISIT(type->tp_dict);
     Py_VISIT(type->tp_cache);
     Py_VISIT(type->tp_mro);
@@ -3573,6 +3581,8 @@ type_clear(PyTypeObject *type)
     PyType_Modified(type);
     if (type->tp_dict)
         PyDict_Clear(type->tp_dict);
+    type->attrs.clear();
+    Py_CLEAR(type->tp_dict);
     Py_CLEAR(type->tp_mro);
 
     return 0;
@@ -4146,8 +4156,8 @@ void setupRuntime() {
     _Py_ReleaseInternedStrings();
     _PyUnicode_Fini();
     for (auto b : classes) {
-        b->clearAttrs();
         if (!PyObject_IS_GC(b)) {
+            b->clearAttrs();
             Py_CLEAR(b->tp_mro);
         }
     }

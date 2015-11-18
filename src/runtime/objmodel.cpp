@@ -5659,6 +5659,7 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
         // of remaining attributes
         int num_attrs = hcls->attributeArraySize();
         int offset = hcls->getOffset(attr);
+        Box* removed_object = attrs->attr_list->attrs[offset];
         assert(offset >= 0);
         Box** start = attrs->attr_list->attrs;
         memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
@@ -5674,6 +5675,8 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
         // guarantee the size of the attr_list equals the number of attrs
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
         attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
+
+        Py_DECREF(removed_object);
         return;
     }
 
