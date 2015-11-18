@@ -37,7 +37,7 @@ extern "C" void raise0(ExcInfo* frame_exc_info) __attribute__((__noreturn__));
 extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept;
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 extern "C" void raise3_capi(Box*, Box*, Box*) noexcept;
-void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
+void raiseExc(STOLEN(Box*) exc_obj) __attribute__((__noreturn__));
 void _printStacktrace();
 
 extern "C" Box* deopt(AST_expr* expr, Box* value);

@@ -4150,8 +4150,8 @@ void setupRuntime() {
     setupBuiltins();
     _PyExc_Init();
     setupThread();
-    //initgc();
     setupImport();
+    initgc();
     setupPyston();
     setupAST();
 

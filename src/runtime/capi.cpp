@@ -848,9 +848,17 @@ extern "C" void Py_Exit(int sts) noexcept {
 }
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
+    auto oldtype = cur_thread_state.curexc_type;
+    auto oldvalue = cur_thread_state.curexc_value;
+    auto oldtraceback = cur_thread_state.curexc_traceback;
+
     cur_thread_state.curexc_type = type;
     cur_thread_state.curexc_value = value;
     cur_thread_state.curexc_traceback = traceback;
+
+    Py_XDECREF(oldtype);
+    Py_XDECREF(oldvalue);
+    Py_XDECREF(oldtraceback);
 }
 
 extern "C" void PyErr_Clear() noexcept {

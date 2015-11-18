@@ -515,6 +515,7 @@ Box* importModuleLevel(llvm::StringRef name, Box* globals, Box* from_imports, in
     bool again = loadNext(parent, level < 0 ? None : parent, _name, buf, &head);
     if (head == NULL)
         return NULL;
+    assert((!again) && "check refcounting");
 
     Box* tail = head;
     while (again) {

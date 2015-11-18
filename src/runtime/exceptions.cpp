@@ -28,7 +28,7 @@ namespace pyston {
 
 void raiseExc(Box* exc_obj) {
     assert(!PyErr_Occurred());
-    throw ExcInfo(exc_obj->cls, exc_obj, None);
+    throw ExcInfo(incref(exc_obj->cls), exc_obj, incref(None));
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -231,8 +231,7 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         va_end(ap);
 
         BoxedString* message = boxString(buf);
-        Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), message, NULL, NULL, NULL, NULL);
-        Py_DECREF(message);
+        Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), autoDecref(message), NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     } else {
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
