@@ -3393,9 +3393,31 @@ tupletraverse(PyTupleObject *o, visitproc visit, void *arg)
 
 void BoxedModule::dealloc(Box* b) noexcept {
     BoxedModule* self = static_cast<BoxedModule*>(b);
-    self->clearAttrs();
+
+    BoxedModule::clear(b);
 
     b->cls->tp_free(b);
+}
+
+int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+    Py_VISIT_HCATTRS(m->attrs);
+    return 0;
+}
+
+int BoxedModule::clear(Box* b) noexcept {
+    BoxedModule* self = static_cast<BoxedModule*>(b);
+    self->clearAttrs();
+
+    assert(!self->str_constants.size());
+    assert(!self->unicode_constants.size());
+    assert(!self->int_constants.size());
+    assert(!self->float_constants.size());
+    assert(!self->imaginary_constants.size());
+    assert(!self->long_constants.size());
+    assert(!self->keep_alive.size());
+
+    return 0;
 }
 
 void BoxedSlice::dealloc(Box* b) noexcept {
@@ -3406,12 +3428,6 @@ void BoxedSlice::dealloc(Box* b) noexcept {
     Py_DECREF(self->stop);
 
     PyObject_Del(b);
-}
-
-int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-    Py_VISIT_HCATTRS(m->attrs);
-    return 0;
 }
 
 void BoxedInstanceMethod::dealloc(Box* b) noexcept {
@@ -3727,7 +3743,7 @@ void setupRuntime() {
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
     module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false, "module",
-                                    BoxedModule::dealloc, NULL, true, BoxedModule::traverse, NOCLEAR);
+                                    BoxedModule::dealloc, NULL, true, BoxedModule::traverse, BoxedModule::clear);
     member_descriptor_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor", NULL, NULL, false);
     capifunc_cls = new (0)
@@ -4136,7 +4152,6 @@ void setupRuntime() {
         }
     }
     for (auto b : constants) {
-        b->clearAttrs();
         Py_DECREF(b);
     }
     for (auto b : classes) {

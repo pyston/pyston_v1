@@ -200,7 +200,11 @@ extern "C" void PyDict_Clear(PyObject* op) noexcept {
     }
 
     RELEASE_ASSERT(PyDict_Check(op), "");
-    static_cast<BoxedDict*>(op)->d.clear();
+    for (auto p : *static_cast<BoxedDict*>(op)) {
+        Py_DECREF(p.first);
+        Py_DECREF(p.second);
+    }
+    static_cast<BoxedDict*>(op)->d.freeAllMemory();
 }
 
 extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
@@ -764,11 +768,8 @@ void BoxedDict::dealloc(Box* b) noexcept {
         _PyObject_GC_UNTRACK(b);
 
     assert(PyDict_Check(b));
-    for (auto p : *static_cast<BoxedDict*>(b)) {
-        Py_DECREF(p.first);
-        Py_DECREF(p.second);
-    }
-    static_cast<BoxedDict*>(b)->d.freeAllMemory();
+
+    BoxedDict::clear(b);
 
     b->cls->tp_free(b);
 }

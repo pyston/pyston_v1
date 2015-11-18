@@ -905,6 +905,7 @@ public:
 
     static void dealloc(Box* b) noexcept;
     static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* b) noexcept;
 
 private:
     ContiguousMap<llvm::StringRef, BoxedString*, llvm::StringMap<int>> str_constants;
