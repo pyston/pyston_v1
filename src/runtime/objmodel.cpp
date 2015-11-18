@@ -3700,7 +3700,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
-    Py_DECREF(varargs);
+    Py_XDECREF(varargs);
 
     ////
     // Second, apply any keywords:

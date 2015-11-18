@@ -69,7 +69,7 @@ void setupAST();
 void setupSysEnd();
 
 BORROWED(BoxedDict*) getSysModulesDict();
-BoxedList* getSysPath();
+BORROWED(BoxedList*) getSysPath();
 extern "C" Box* getSysStdout();
 
 extern "C" BoxedTuple* EmptyTuple;

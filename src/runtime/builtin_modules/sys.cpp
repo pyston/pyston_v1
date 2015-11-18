@@ -87,7 +87,9 @@ BoxedDict* getSysModulesDict() {
 
 BoxedList* getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
-    Box* _sys_path = sys_module->getattr(internStringMortal("path"));
+    auto path_str = getStaticString("path");
+
+    Box* _sys_path = sys_module->getattr(path_str);
     assert(_sys_path);
 
     if (_sys_path->cls != list_cls) {
@@ -99,7 +101,8 @@ BoxedList* getSysPath() {
 }
 
 Box* getSysStdout() {
-    Box* sys_stdout = sys_module->getattr(internStringMortal("stdout"));
+    auto stdout_str = getStaticString("stdout");
+    Box* sys_stdout = sys_module->getattr(stdout_str);
     RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");
     return sys_stdout;
 }
@@ -137,10 +140,10 @@ Box* sysGetRecursionLimit() {
 extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
-            if (sys_module->getattr(internStringMortal(name)))
-                sys_module->delattr(internStringMortal(name), NULL);
+            if (sys_module->getattr(autoDecref(internStringMortal(name))))
+                sys_module->delattr(autoDecref(internStringMortal(name)), NULL);
         } else
-            sys_module->setattr(internStringMortal(name), v, NULL);
+            sys_module->setattr(autoDecref(internStringMortal(name)), v, NULL);
     } catch (ExcInfo e) {
         abort();
     }
@@ -148,7 +151,7 @@ extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
-    return sys_module->getattr(internStringMortal(name));
+    return sys_module->getattr(autoDecref(internStringMortal(name)));
 }
 
 extern "C" FILE* PySys_GetFile(char* name, FILE* def) noexcept {

@@ -785,6 +785,7 @@ Box* getGlobals() {
     auto it = getTopPythonFrame();
     if (!it)
         return NULL;
+    RELEASE_ASSERT(0, "check refcounting");
     return it->getGlobals();
 }
 

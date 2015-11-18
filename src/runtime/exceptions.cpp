@@ -232,6 +232,7 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
         BoxedString* message = boxString(buf);
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), message, NULL, NULL, NULL, NULL);
+        Py_DECREF(message);
         raiseExc(exc_obj);
     } else {
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);

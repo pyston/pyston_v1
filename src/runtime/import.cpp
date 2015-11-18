@@ -428,7 +428,7 @@ static Box* importSub(const std::string& name, BoxedString* full_name, Box* pare
         return module;
     }
 
-    return None;
+    return incref(None);
 }
 
 static void markMiss(std::string& name) {
@@ -474,6 +474,7 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
 
     result = importSub(subname, autoDecref(boxString(buf)), mod);
     if (result == None && altmod != mod) {
+        Py_DECREF(result);
         /* Here, altmod must be None and mod must not be None */
         result = importSub(subname, autoDecref(boxString(subname)), altmod);
         if (result != NULL && result != None) {
@@ -485,8 +486,10 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
     if (result == NULL)
         throwCAPIException();
 
-    if (result == None)
+    if (result == None) {
+        Py_DECREF(result);
         raiseExcHelper(ImportError, "No module named %.200s", local_name.c_str());
+    }
 
     *rtn = result;
     return call_again;
@@ -517,12 +520,16 @@ Box* importModuleLevel(llvm::StringRef name, Box* globals, Box* from_imports, in
     while (again) {
         Box* next;
         again = loadNext(tail, tail, _name, buf, &next);
+        Py_DECREF(tail);
         if (next == NULL) {
+            Py_DECREF(head);
             return NULL;
         }
         tail = next;
     }
     if (tail == None) {
+        Py_DECREF(tail);
+        Py_DECREF(head);
         /* If tail is Py_None, both get_parent and load_next found
            an empty module name: someone called __import__("") or
            doctored faulty bytecode */
@@ -707,7 +714,7 @@ Box* nullImporterFindModule(Box* self, Box* fullname, Box* path) {
 }
 
 extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name) {
-    return importModuleLevel(module_name, getGlobals(), from_imports, level);
+    return importModuleLevel(module_name, autoDecref<Box, true>(getGlobals()), from_imports, level);
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {
