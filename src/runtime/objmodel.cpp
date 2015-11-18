@@ -1859,7 +1859,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
     Box* descr_r = processDescriptorOrNull(obj, inst, owner);
     if (descr_r)
         return descr_r;
-    return obj;
+    return incref(obj);
 }
 
 
@@ -3403,7 +3403,7 @@ static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8
                 raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                                kw_name->c_str());
             }
-            getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
+            getArg(j, oarg1, oarg2, oarg3, oargs) = incref(kw_val);
             params_filled[j] = true;
             return j;
         }
@@ -3415,7 +3415,8 @@ static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8
             raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                            kw_name->c_str());
         }
-        v = kw_val;
+        incref(kw_name);
+        v = incref(kw_val);
         return -1;
     } else {
         raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name_cb(), kw_name->c_str());
@@ -3470,6 +3471,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         rewrite_args = NULL;
     }
 
+    assert(!rewrite_args && "check refcounting");
+
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3491,6 +3494,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // Super fast path:
     if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
+        assert(0 && "check refcounting");
         rewrite_success = true;
         if (num_output_args > 3)
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
@@ -3501,6 +3505,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && (!paramspec.takes_kwargs || paramspec.kwargsIndex() < 3)) {
+        assert(0 && "check refcounting");
 
         // TODO could also do this for empty varargs
         if (paramspec.takes_kwargs) {
@@ -3589,7 +3594,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         }
     }
 
-    PyObject* varargs = NULL;
+    DecrefHandle<PyObject, true> varargs(NULL);
     size_t varargs_size = 0;
     if (argspec.has_starargs) {
         assert(!rewrite_args);
@@ -3604,13 +3609,13 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // First, match up positional parameters to positional/varargs:
     int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
     for (int i = 0; i < positional_to_positional; i++) {
-        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
+        getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
     }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
         assert(!rewrite_args && "would need to be handled here");
-        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = PySequence_Fast_GET_ITEM(varargs, i);
+        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = incref(PySequence_Fast_GET_ITEM(varargs, i));
     }
 
     llvm::SmallVector<bool, 8> params_filled(num_output_args);
@@ -3620,7 +3625,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
     // unussed_positional relies on the fact that all the args (including a potentially-created varargs) will keep its
     // contents alive
-    llvm::SmallVector<Box*, 4> unused_positional;
+    llvm::SmallVector<BORROWED(Box*), 4> unused_positional;
     unused_positional.reserve(argspec.num_args - positional_to_positional + varargs_size - varargs_to_positional);
 
     RewriterVar::SmallVector unused_positional_rvars;
@@ -3645,6 +3650,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     if (paramspec.takes_varargs) {
         int varargs_idx = paramspec.num_args;
         if (rewrite_args) {
+            assert(0 && "check refcounting");
             assert(!varargs_size);
             assert(!argspec.has_starargs);
 
@@ -3686,9 +3692,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             assert(varargs_size == unused_positional.size());
 
             if (!varargs)
-                ovarargs = EmptyTuple;
+                ovarargs = incref(EmptyTuple);
             else
-                ovarargs = varargs;
+                ovarargs = incref(varargs.get()); // TODO we could have DecrefHandle be smart and hand off it's reference
         } else {
             ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
         }
@@ -3699,8 +3705,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%ld given)", func_name_cb(), paramspec.num_args,
                        (paramspec.num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs_size);
     }
-
-    Py_XDECREF(varargs);
 
     ////
     // Second, apply any keywords:
@@ -3802,7 +3806,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             BoxedDict* d = new BoxedDict();
             dictMerge(d, kwargs);
             kwargs = d;
+        } else {
+            Py_INCREF(kwargs);
         }
+        DecrefHandle<Box> _kwargs_handle(kwargs);
+
         assert(PyDict_Check(kwargs));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
@@ -3835,7 +3843,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'", func_name_cb(),
                                    s->data());
                 }
-                v = p.second;
+                v = incref(p.second);
+                incref(p.first);
                 assert(!rewrite_args);
             }
         }
@@ -3861,6 +3870,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         Box* default_obj = defaults[default_idx];
 
         if (rewrite_args) {
+            assert(0 && "check refcounting");
             if (arg_idx == 0)
                 rewrite_args->arg1 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0));
             else if (arg_idx == 1)
@@ -3872,7 +3882,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                                             rewrite_args->rewriter->loadConst((intptr_t)default_obj));
         }
 
-        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
+        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = incref(default_obj);
     }
 }
 

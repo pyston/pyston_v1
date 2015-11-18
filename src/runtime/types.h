@@ -361,6 +361,30 @@ public:
             Py_DECREF(b);
     }
     operator B*() { return b; }
+    B* operator->() { return b; }
+    explicit operator intptr_t() { return (intptr_t)b; }
+    bool operator==(B* rhs) {
+        return b == rhs;
+    }
+    bool operator!=(B* rhs) {
+        return b != rhs;
+    }
+
+    // Hacky, but C API macros like to use direct C casts.  At least this is "explicit"
+    template <typename B2> explicit operator B2*() { return (B2*)(b); }
+
+    B* get() {
+        return b;
+    }
+
+    void operator=(B* new_b) {
+        B* old_b = b;
+        b = new_b;
+        if (Nullable)
+            Py_XDECREF(old_b);
+        else
+            Py_DECREF(old_b);
+    }
 };
 template <typename B, bool Nullable = false> DecrefHandle<B, Nullable> autoDecref(B* b) {
     return DecrefHandle<B, Nullable>(b);

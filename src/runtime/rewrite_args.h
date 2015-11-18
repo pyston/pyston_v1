@@ -294,6 +294,8 @@ struct CompareRewriteArgs {
 // The caller is responsible for guarding for paramspec, argspec, param_names, and defaults.
 // TODO Fix this function's signature.  should we pass back out through args?  the common case is that they
 // match anyway.  Or maybe it should call a callback function, which could save on the common case.
+//
+// Reference semantics: takes borrowed references, and everything written out is an owned reference.
 template <Rewritable rewritable = REWRITABLE>
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,

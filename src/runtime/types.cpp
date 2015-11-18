@@ -793,7 +793,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
-    Box* new_attr, * init_attr = NULL;
+    Box* init_attr = NULL;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
         assert(!argspec.has_kwargs);
@@ -825,8 +825,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
+    DecrefHandle<Box, true> new_attr(nullptr);
     static BoxedString* new_str = getStaticString("__new__");
     if (rewrite_args) {
+        assert(0 && "check refcounting");
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
         new_attr = typeLookup(cls, new_str, &grewrite_args);
@@ -856,7 +858,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
     } else {
-        new_attr = typeLookup(cls, new_str);
+        new_attr = incref(typeLookup(cls, new_str));
         try {
             if (new_attr->cls != function_cls) // optimization
                 new_attr = processDescriptor(new_attr, None, cls);
@@ -1152,6 +1154,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         Box* initrtn;
         // If there's a Python-level __init__ function, try calling it.
         if (init_attr && init_attr->cls == function_cls) {
+            assert(0 && "check refcounting");
             if (rewrite_args) {
                 // We are going to rewrite as a call to cls.init:
                 assert(which_init == MAKES_CLS);
@@ -1232,6 +1235,9 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             assert(!arg3 || arg3->cls == dict_cls);
 
             int err = tpinit(made, arg2, arg3);
+            Py_DECREF(made);
+            Py_DECREF(arg2);
+            Py_XDECREF(arg3);
             if (err == -1) {
                 if (S == CAPI)
                     return NULL;
