@@ -38,6 +38,69 @@ extern "C" long PyInt_GetMax() noexcept {
     return LONG_MAX; /* To initialize sys.maxint */
 }
 
+/* Integers are quite normal objects, to make object handling uniform.
+   (Using odd pointers to represent integers would save much space
+   but require extra checks for this special case throughout the code.)
+   Since a typical Python program spends much of its time allocating
+   and deallocating integers, these operations should be very fast.
+   Therefore we use a dedicated allocation scheme with a much lower
+   overhead (in space and time) than straight malloc(): a simple
+   dedicated free list, filled when necessary with memory from malloc().
+
+   block_list is a singly-linked list of all PyIntBlocks ever allocated,
+   linked via their next members.  PyIntBlocks are never returned to the
+   system before shutdown (PyInt_Fini).
+
+   free_list is a singly-linked list of available PyIntObjects, linked
+   via abuse of their ob_type members.
+*/
+
+#define BLOCK_SIZE      1000    /* 1K less typical malloc overhead */
+#define BHEAD_SIZE      8       /* Enough for a 64-bit pointer */
+#define N_INTOBJECTS    ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyIntObject))
+
+struct _intblock {
+    struct _intblock *next;
+    PyIntObject objects[N_INTOBJECTS];
+};
+
+typedef struct _intblock PyIntBlock;
+
+static PyIntBlock *block_list = NULL;
+PyIntObject *BoxedInt::free_list = NULL;
+
+PyIntObject* BoxedInt::fill_free_list(void) {
+    PyIntObject* p, *q;
+    /* Python's object allocator isn't appropriate for large blocks. */
+    p = (PyIntObject*)PyMem_MALLOC(sizeof(PyIntBlock));
+    if (p == NULL)
+        return (PyIntObject*)PyErr_NoMemory();
+    ((PyIntBlock*)p)->next = block_list;
+    block_list = (PyIntBlock*)p;
+    /* Link the int objects together, from rear to front, then return
+       the address of the last int object in the block. */
+    p = &((PyIntBlock*)p)->objects[0];
+    q = p + N_INTOBJECTS;
+    while (--q > p)
+        q->ob_type = (struct _typeobject*)(q - 1);
+    q->ob_type = NULL;
+    return p + N_INTOBJECTS - 1;
+}
+
+void BoxedInt::tp_dealloc(Box* v) {
+    if (PyInt_CheckExact(v)) {
+        BoxedInt::tp_free(v);
+    } else {
+        v->cls->tp_free(v);
+    }
+}
+
+void BoxedInt::tp_free(void* b) {
+    PyIntObject* v = static_cast<PyIntObject*>(b);
+    v->ob_type = (struct _typeobject *)free_list;
+    free_list = v;
+}
+
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
     if (op && PyInt_Check(op))
         return PyInt_AS_LONG((PyIntObject*)op);
@@ -1162,7 +1225,46 @@ static PyObject* int_getnewargs(BoxedInt* v) noexcept {
 }
 
 extern "C" int PyInt_ClearFreeList() noexcept {
-    return 0; // number of entries cleared
+    PyIntObject* p;
+    PyIntBlock* list, *next;
+    int i;
+    int u; /* remaining unfreed ints per block */
+    int freelist_size = 0;
+
+    list = block_list;
+    block_list = NULL;
+    BoxedInt::free_list = NULL;
+    while (list != NULL) {
+        u = 0;
+        for (i = 0, p = &list->objects[0]; i < N_INTOBJECTS; i++, p++) {
+            if (PyInt_CheckExact((BoxedInt*)p) && p->ob_refcnt != 0)
+                u++;
+        }
+        next = list->next;
+        if (u) {
+            list->next = block_list;
+            block_list = list;
+            for (i = 0, p = &list->objects[0]; i < N_INTOBJECTS; i++, p++) {
+                if (!PyInt_CheckExact((BoxedInt*)p) || p->ob_refcnt == 0) {
+                    p->ob_type = (struct _typeobject*)BoxedInt::free_list;
+                    BoxedInt::free_list = p;
+                }
+#if NSMALLNEGINTS + NSMALLPOSINTS > 0
+                else if (-NSMALLNEGINTS <= p->ob_ival && p->ob_ival < NSMALLPOSINTS
+                         && small_ints[p->ob_ival + NSMALLNEGINTS] == NULL) {
+                    Py_INCREF(p);
+                    small_ints[p->ob_ival + NSMALLNEGINTS] = p;
+                }
+#endif
+            }
+        } else {
+            PyMem_FREE(list);
+        }
+        freelist_size += u;
+        list = next;
+    }
+
+    return freelist_size;
 }
 
 void setupInt() {

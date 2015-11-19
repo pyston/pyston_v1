@@ -399,14 +399,40 @@ template <typename B> B* xincref(B* b) {
     return b;
 }
 
+extern "C" int PyInt_ClearFreeList() noexcept;
 class BoxedInt : public Box {
+private:
+    static PyIntObject *free_list;
+    static PyIntObject * fill_free_list();
+
 public:
     int64_t n;
 
     BoxedInt(int64_t n) __attribute__((visibility("default"))) : n(n) {}
 
-    DEFAULT_CLASS_SIMPLE(int_cls, false);
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default"))) {
+        return Box::operator new(size, cls);
+    }
+    // int uses a customized allocator, so we can't use DEFAULT_CLASS_SIMPLE (which inlines the default allocator)
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        if (free_list == NULL) {
+            free_list = fill_free_list();
+            RELEASE_ASSERT(free_list, "");
+        }
+
+        PyIntObject* v = free_list;
+        free_list = (PyIntObject*)v->ob_type;
+        PyObject_INIT((BoxedInt*)v, &PyInt_Type);
+        return v;
+    }
+
+    static void tp_dealloc(Box* b);
+    static void tp_free(void* b);
+
+    friend int PyInt_ClearFreeList() noexcept;
 };
+static_assert(sizeof(BoxedInt) == sizeof(PyIntObject), "");
+static_assert(offsetof(BoxedInt, n) == offsetof(PyIntObject, ob_ival), "");
 
 class BoxedFloat : public Box {
 public:

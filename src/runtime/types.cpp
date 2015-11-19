@@ -3754,7 +3754,7 @@ void setupRuntime() {
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, "file", file_dealloc, NULL, false);
-    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", NULL, NULL, false);
+    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", BoxedInt::tp_dealloc, BoxedInt::tp_free, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL, false);
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL, false);
@@ -4225,12 +4225,13 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 
     Box* l = NULL;
-    for (int i = 0; i < 100000000; i++) {
-        if (i % 100 == 0) {
-            Py_XDECREF(l);
-            l = PyList_New(0);
-        }
-        PyList_Append(l, autoDecref(boxInt(i)));
+    for (int i = 0; i < 1000000000; i++) {
+        //if (i % 10000 == 0) {
+            //Py_XDECREF(l);
+            //l = PyList_New(0);
+        //}
+        //PyList_Append(l, autoDecref(boxInt(i)));
+        autoDecref(boxInt(i));
     }
     Py_XDECREF(l);
 
