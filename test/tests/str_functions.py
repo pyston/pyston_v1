@@ -112,6 +112,31 @@ def test_just_funcs(s, w):
     t5 = s.rjust(w)
     t6 = s.center(w)
 
+    try:
+        print s.ljust("a string")
+    except TypeError as e:
+        print e
+    try:
+        print s.rjust("a string")
+    except TypeError:
+        print e
+    try:
+        print s.center("a string")
+    except TypeError:
+        print e
+    try:
+        print s.ljust(10, 12345)
+    except TypeError:
+        print e
+    try:
+        print s.rjust(10, 12345)
+    except TypeError:
+        print e
+    try:
+        print s.center(10, 12345)
+    except TypeError:
+        print e
+
     print t1, t1 == s, t1 is s, type(t1)
     print t2, t2 == s, t2 is s, type(t2)
     print t3, t3 == s, t3 is s, type(t3)
