@@ -4168,31 +4168,6 @@ void setupRuntime() {
     setupPyston();
     setupAST();
 
-    // XXX
-    PyGC_Collect(); // To make sure it creates any static objects
-    IN_SHUTDOWN = true;
-    PyType_ClearCache();
-    _Py_ReleaseInternedStrings();
-    _PyUnicode_Fini();
-    for (auto b : classes) {
-        if (!PyObject_IS_GC(b)) {
-            b->clearAttrs();
-            Py_CLEAR(b->tp_mro);
-        }
-    }
-    for (auto b : constants) {
-        Py_DECREF(b);
-    }
-    for (auto b : classes) {
-        Py_DECREF(b);
-    }
-    // May need to run multiple collections to collect everything:
-    while (PyGC_Collect())
-        ;
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
 
@@ -4238,8 +4213,6 @@ void setupRuntime() {
     PyMarshal_Init();
     initstrop();
 
-    setupDefaultClassGCParticipation();
-
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
 
@@ -4250,6 +4223,34 @@ void setupRuntime() {
     setupSysEnd();
 
     TRACK_ALLOCATIONS = true;
+
+    // XXX
+    PyGC_Collect(); // To make sure it creates any static objects
+    IN_SHUTDOWN = true;
+    PyType_ClearCache();
+    PyOS_FiniInterrupts();
+    _PyUnicode_Fini();
+    for (auto b : constants) {
+        Py_DECREF(b);
+    }
+    // May need to run multiple collections to collect everything:
+    while (PyGC_Collect())
+        ;
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes) {
+        if (!PyObject_IS_GC(b)) {
+            b->clearAttrs();
+            Py_CLEAR(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    // May need to run multiple collections to collect everything:
+    while (PyGC_Collect())
+        ;
+    PRINT_TOTAL_REFS();
+    exit(0);
+    // XXX
+
 }
 
 BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
