@@ -878,10 +878,12 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
 }
 
 extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
-    PyErr_SetObject(exception, boxString(string));
+    PyErr_SetObject(exception, autoDecref(boxString(string)));
 }
 
 extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
+    Py_XINCREF(exception);
+    Py_XINCREF(value);
     PyErr_Restore(exception, value, NULL);
 }
 

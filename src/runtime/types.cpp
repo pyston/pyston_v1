@@ -2142,7 +2142,7 @@ public:
         internStringMortalInplace(key);
 
         self->b->setattr(key, value, NULL);
-        return None;
+        Py_RETURN_NONE;
     }
 
     static int ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
@@ -2154,6 +2154,7 @@ public:
                 res = AttrWrapper::setitem((Box*)mp, v, w);
             }
             assert(res == None);
+            Py_DECREF(res);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return -1;
@@ -2259,7 +2260,7 @@ public:
             self->b->delattr(key, NULL);
         else
             raiseExcHelper(KeyError, "'%s'", key->data());
-        return None;
+        Py_RETURN_NONE;
     }
 
     static Box* str(Box* _self) {

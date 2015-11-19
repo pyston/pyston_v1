@@ -551,12 +551,28 @@ void BoxedClass::finishInitialization() {
     tp_flags |= Py_TPFLAGS_READY;
 }
 
-static int
-subtype_traverse(PyObject *self, visitproc visit, void *arg)
-{
-    Py_FatalError("unimplemented");
-#if 0
-    PyTypeObject *type, *base;
+static int traverse_slots(BoxedClass* type, PyObject* self, visitproc visit, void* arg) noexcept {
+    Py_ssize_t i, n;
+    PyMemberDef* mp;
+
+    n = Py_SIZE(type);
+    mp = PyHeapType_GET_MEMBERS((BoxedHeapClass*)type);
+    for (i = 0; i < n; i++, mp++) {
+        if (mp->type == T_OBJECT_EX) {
+            char* addr = (char*)self + mp->offset;
+            PyObject* obj = *(PyObject**)addr;
+            if (obj != NULL) {
+                int err = visit(obj, arg);
+                if (err)
+                    return err;
+            }
+        }
+    }
+    return 0;
+}
+
+static int subtype_traverse(PyObject* self, visitproc visit, void* arg) noexcept {
+    PyTypeObject* type, *base;
     traverseproc basetraverse;
 
     /* Find the nearest base with a different tp_traverse,
@@ -574,7 +590,7 @@ subtype_traverse(PyObject *self, visitproc visit, void *arg)
     }
 
     if (type->tp_dictoffset != base->tp_dictoffset) {
-        PyObject **dictptr = _PyObject_GetDictPtr(self);
+        PyObject** dictptr = _PyObject_GetDictPtr(self);
         if (dictptr && *dictptr)
             Py_VISIT(*dictptr);
     }
@@ -588,15 +604,28 @@ subtype_traverse(PyObject *self, visitproc visit, void *arg)
     if (basetraverse)
         return basetraverse(self, visit, arg);
     return 0;
-#endif
 }
 
-static int
-subtype_clear(PyObject *self)
-{
-    Py_FatalError("unimplemented");
-#if 0
-    PyTypeObject *type, *base;
+static void clear_slots(BoxedClass* type, PyObject* self) noexcept {
+    Py_ssize_t i, n;
+    PyMemberDef* mp;
+
+    n = Py_SIZE(type);
+    mp = PyHeapType_GET_MEMBERS((BoxedHeapClass*)type);
+    for (i = 0; i < n; i++, mp++) {
+        if (mp->type == T_OBJECT_EX && !(mp->flags & READONLY)) {
+            char* addr = (char*)self + mp->offset;
+            PyObject* obj = *(PyObject**)addr;
+            if (obj != NULL) {
+                *(PyObject**)addr = NULL;
+                Py_DECREF(obj);
+            }
+        }
+    }
+}
+
+static int subtype_clear(PyObject* self) noexcept {
+    PyTypeObject* type, *base;
     inquiry baseclear;
 
     /* Find the nearest base with a different tp_clear
@@ -621,24 +650,19 @@ subtype_clear(PyObject *self)
     if (baseclear)
         return baseclear(self);
     return 0;
-#endif
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset,
-                               int instance_size, bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data(), subtype_dealloc, NULL),
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
+                               bool is_user_defined, BoxedString* name)
+    : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data(), subtype_dealloc,
+                 PyObject_GC_Del, true, subtype_traverse, subtype_clear),
       ht_name(name),
       ht_slots(NULL) {
     assert(is_user_defined);
 
     /* Always override allocation strategy to use regular heap */
     this->tp_alloc = PyType_GenericAlloc;
-    if (this->tp_flags & Py_TPFLAGS_HAVE_GC) {
-        this->tp_free = PyObject_GC_Del;
-        this->tp_traverse = subtype_traverse;
-        this->tp_clear = subtype_clear;
-    } else
-        this->tp_free = PyObject_Del;
+    assert(this->tp_flags & Py_TPFLAGS_HAVE_GC); // Otherwise, could have avoided setting GC tp slots.
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
@@ -667,7 +691,7 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
     // expectations as to who was going to calculate them:
     assert(!made->tp_mro);
     assert(!made->tp_bases);
-    made->tp_bases = bases;
+    made->tp_bases = incref(bases);
 
     made->finishInitialization();
     assert(made->tp_mro);
@@ -980,8 +1004,11 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
             assert(offset < hcls->attributeArraySize());
             Box* prev = attrs->attr_list->attrs[offset];
             attrs->attr_list->attrs[offset] = val;
+            Py_INCREF(val);
+            Py_DECREF(prev);
 
             if (rewrite_args) {
+                assert(0 && "check refcounting");
 
                 if (cls->attrs_offset < 0) {
                     REWRITE_ABORTED("");
@@ -1491,7 +1518,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     assert(attr_name->data()[attr_name->size()] == '\0');
                     raiseExcHelper(AttributeError, "%s", attr_name->data());
                 }
-                return rtn;
+                return incref(rtn);
             }
             case BoxedMemberDescriptor::OBJECT: {
                 if (rewrite_args) {
@@ -1502,7 +1529,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
-                return noneIfNull(rtn);
+                return incref(noneIfNull(rtn));
             }
 
             case BoxedMemberDescriptor::DOUBLE: {
@@ -1593,6 +1620,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         }
 
         if (rewrite_args) {
+            assert(0 && "check refcounting");
             r_descr->addAttrGuard(offsetof(BoxedProperty, prop_get), (intptr_t)prop->prop_get);
 
             RewriterVar* r_prop_get = r_descr->getAttr(offsetof(BoxedProperty, prop_get));
@@ -1632,6 +1660,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         }
 
         if (rewrite_args) {
+            assert(0 && "check refcounting");
             // hmm, maybe we should write assembly which can look up the function address and call any function
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
 
@@ -1919,7 +1948,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     } else {
         descr = typeLookup(obj->cls, attr);
     }
-    RELEASE_ASSERT(!descr, "need to check the refcounting for this");
 
     // Check if it's a data descriptor
     descrgetfunc descr_get = NULL;
@@ -1928,7 +1956,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     Box* _get_ = NULL;
     RewriterVar* r_get = NULL;
     if (descr) {
-        RELEASE_ASSERT(0, "need to check the refcounting for this");
         descr_get = descr->cls->tp_descr_get;
 
         if (rewrite_args)
@@ -1946,6 +1973,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         // we can immediately know to skip this part if it's one of the
         // special case nondata descriptors.
         if (!isNondataDescriptorInstanceSpecialCase(descr)) {
+            assert(0 && "check refcounting");
             if (rewrite_args) {
                 RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                 r_descr_cls->addAttrGuard(offsetof(BoxedClass, tp_descr_get), (intptr_t)descr_get);
@@ -3494,10 +3522,19 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // Super fast path:
     if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
-        assert(0 && "check refcounting");
         rewrite_success = true;
+        if (num_output_args > 1)
+            Py_INCREF(oarg1);
+        if (num_output_args > 2)
+            Py_INCREF(oarg2);
         if (num_output_args > 3)
+            Py_INCREF(oarg3);
+        if (num_output_args > 3) {
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+            for (int i = 0; i < num_output_args - 3; i++) {
+                Py_INCREF(oargs[i]);
+            }
+        }
         return;
     }
 
@@ -3965,6 +4002,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 
     if (rewrite_args && !rewrite_success) {
+        assert(0 && "check refcounting");
 // These are the cases that we weren't able to rewrite.
 // So instead, just rewrite them to be a call to callFunc, which helps a little bit.
 // TODO we should extract the rest of this function from the end of this block,
@@ -4033,6 +4071,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // the call to function containing a yield should just create a new generator object.
     Box* res;
     if (md->isGenerator()) {
+        assert(0 && "check refcounting");
         // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
         // rewrite up to the call to it:
         res = createGenerator(func, arg1, arg2, arg3, oargs);
@@ -4050,6 +4089,12 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     } else {
         res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
                                         arg3, oargs);
+    }
+    Py_XDECREF(arg1);
+    Py_XDECREF(arg2);
+    Py_XDECREF(arg3);
+    for (int i = 0; i < num_output_args - 3; i++) {
+        Py_DECREF(oargs[i]);
     }
 
     return res;
@@ -5882,6 +5927,9 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     int nbases = bases->size();
     BoxedClass* winner = metatype;
 
+    RELEASE_ASSERT(nbases >= 0, "supposed to set bases to (object,)");
+    DecrefHandle<Box> _bases_handle(incref(bases));
+
     for (auto tmp : *bases) {
         auto tmptype = tmp->cls;
         if (tmptype == classobj_cls)
@@ -5900,7 +5948,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 
     static BoxedString* new_box = getStaticString(new_str.c_str());
     if (winner != metatype) {
-        if (getattr(winner, new_box) != getattr(type_cls, new_box)) {
+        if (winner->tp_new != type_new) {
             CallattrFlags callattr_flags
                 = {.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(4) };
             Box* args[1] = { (Box*)attr_dict };
@@ -6110,12 +6158,12 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         static BoxedString* name_str = getStaticString("__name__");
         Box* attr = PyDict_GetItem(gl, name_str);
         if (attr)
-            made->giveAttr(module_str, attr);
+            made->setattr(module_str, attr, NULL);
     }
 
     static BoxedString* doc_str = getStaticString("__doc__");
     if (!made->hasattr(doc_str))
-        made->giveAttr(doc_str, None);
+        made->setattr(doc_str, None, NULL);
 
     made->tp_new = base->tp_new;
 
@@ -6224,9 +6272,7 @@ Box* typeNewGeneric(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     if (arg2 == NULL) {
         assert(arg3 == NULL);
-        BoxedClass* rtn = arg1->cls;
-
-        return rtn;
+        return incref(arg1->cls);
     }
 
     RELEASE_ASSERT(PyDict_Check(arg3), "%s", getTypeName(arg3));

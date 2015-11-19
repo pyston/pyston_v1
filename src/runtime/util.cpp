@@ -77,7 +77,7 @@ void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i6
 
 Box* boxStringOrNone(const char* s) {
     if (s == NULL) {
-        return None;
+        return incref(None);
     } else {
         return boxString(s);
     }

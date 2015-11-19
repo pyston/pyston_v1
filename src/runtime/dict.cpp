@@ -329,8 +329,17 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     ASSERT(PyDict_Check(dict) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
     if (PyDict_Check(dict)) {
         BoxedDict* d = static_cast<BoxedDict*>(dict);
-        return d->getOrNull(key);
+
+        /* preserve the existing exception */
+        PyObject* err_type, *err_value, *err_tb;
+        PyErr_Fetch(&err_type, &err_value, &err_tb);
+        Box* b = d->getOrNull(key);
+        /* ignore errors */
+        PyErr_Restore(err_type, err_value, err_tb);
+        return b;
     }
+
+    assert(0 && "check refcounting");
 
     auto&& tstate = _PyThreadState_Current;
     if (tstate != NULL && tstate->curexc_type != NULL) {
@@ -392,7 +401,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
 
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
     if (dict->cls == attrwrapper_cls)
-        return unwrapAttrWrapper(dict)->getattr(internStringMortal(key));
+        return unwrapAttrWrapper(dict)->getattr(autoDecref(internStringMortal(key)));
 
     Box* key_s;
     try {
@@ -400,7 +409,7 @@ extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexc
     } catch (ExcInfo e) {
         abort();
     }
-    return PyDict_GetItem(dict, key_s);
+    return PyDict_GetItem(dict, autoDecref(key_s));
 }
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {

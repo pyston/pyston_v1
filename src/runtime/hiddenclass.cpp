@@ -79,6 +79,7 @@ HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
     static StatCounter num_hclses("num_hidden_classes");
     num_hclses.log();
 
+    // XXX: need to hold a ref to the string (or maybe we don't if we can hook the un-interning)
     HiddenClass* rtn = new HiddenClass(this);
     rtn->attr_offsets[attr] = this->attributeArraySize();
     this->children[attr] = rtn;

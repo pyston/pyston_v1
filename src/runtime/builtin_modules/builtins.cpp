@@ -1137,6 +1137,8 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         _base = Exception;
     if (dict == NULL)
         dict = new BoxedDict();
+    else
+        Py_INCREF(dict);
 
     try {
         char* dot_pos = strchr(name, '.');
@@ -1149,11 +1151,13 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         BoxedClass* base = static_cast<BoxedClass*>(_base);
 
         if (PyDict_GetItemString(dict, "__module__") == NULL) {
-            PyDict_SetItemString(dict, "__module__", boxString(llvm::StringRef(name, dot_pos - name)));
+            PyDict_SetItemString(dict, "__module__", autoDecref(boxString(llvm::StringRef(name, dot_pos - name))));
         }
         checkAndThrowCAPIException();
 
-        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
+        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, autoDecref(BoxedTuple::create({ base })), dict, NULL, NULL);
+        Py_DECREF(boxedName);
+        Py_DECREF(dict);
         return cls;
     } catch (ExcInfo e) {
         // PyErr_NewException isn't supposed to fail, and callers sometimes take advantage of that
