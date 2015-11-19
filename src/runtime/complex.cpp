@@ -1267,6 +1267,9 @@ void setupComplex() {
     _addFunc("__div__", BOXED_COMPLEX, (void*)complexDivComplex, (void*)complexDivFloat, (void*)complexDivInt,
              (void*)complexDiv);
 
+    _addFunc("__truediv__", BOXED_COMPLEX, (void*)complexDivComplex, (void*)complexDivFloat, (void*)complexDivInt,
+             (void*)complexDiv);
+
     complex_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)complexRSub, UNKNOWN, 2)));
     complex_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)complexRDiv, UNKNOWN, 2)));
     complex_cls->giveAttr(
@@ -1279,8 +1282,6 @@ void setupComplex() {
     complex_cls->giveAttr("__floordiv__",
                           new BoxedFunction(FunctionMetadata::create((void*)complexFloordiv, UNKNOWN, 2)));
 
-    complex_cls->giveAttr("__truediv__",
-                          new BoxedFunction(FunctionMetadata::create((void*)complexDivComplex, BOXED_COMPLEX, 2)));
     complex_cls->giveAttr("conjugate",
                           new BoxedFunction(FunctionMetadata::create((void*)complexConjugate, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)complexCoerce, UNKNOWN, 2)));
