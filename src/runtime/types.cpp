@@ -4224,6 +4224,16 @@ void setupRuntime() {
 
     TRACK_ALLOCATIONS = true;
 
+    Box* l = NULL;
+    for (int i = 0; i < 100000000; i++) {
+        if (i % 100 == 0) {
+            Py_XDECREF(l);
+            l = PyList_New(0);
+        }
+        PyList_Append(l, autoDecref(boxInt(i)));
+    }
+    Py_XDECREF(l);
+
     // XXX
     PyGC_Collect(); // To make sure it creates any static objects
     IN_SHUTDOWN = true;
