@@ -4,7 +4,13 @@ import sys
 import subprocess
 import shutil
 
+def print_progress_header(text):
+    print "\n>>>"
+    print ">>> " + text + "..."
+    print ">>>"
+
 ENV_NAME = "numpy_test_env_" + os.path.basename(sys.executable)
+DEPENDENCIES = ["nose==1.3.7"]
 
 if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(ENV_NAME + "/bin/python").st_mtime:
     print "Creating virtualenv to install testing dependencies..."
@@ -14,6 +20,8 @@ if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(EN
         args = [sys.executable, VIRTUALENV_SCRIPT, "-p", sys.executable, ENV_NAME]
         print "Running", args
         subprocess.check_call(args)
+
+        subprocess.check_call([ENV_NAME + "/bin/pip", "install"] + DEPENDENCIES)
     except:
         print "Error occurred; trying to remove partially-created directory"
         ei = sys.exc_info()
@@ -28,10 +36,8 @@ PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
 CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "Cython-0.22"))
 NUMPY_DIR = os.path.dirname(__file__) + "/../lib/numpy"
 
-print "\n>>>"
-print ">>> Setting up Cython..."
+print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
-    print ">>>"
 
     url = "http://cython.org/release/Cython-0.22.tar.gz"
     subprocess.check_call(["wget", url], cwd=SRC_DIR)
@@ -39,7 +45,7 @@ if not os.path.exists(CYTHON_DIR):
 
     PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython_0001-Pyston-change-we-don-t-support-custom-traceback-entr.patch"))
     subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
-    print "Applied Cython patch"
+    print ">>> Applied Cython patch"
 
 
     try:
@@ -49,11 +55,8 @@ if not os.path.exists(CYTHON_DIR):
         subprocess.check_call(["rm", "-rf", CYTHON_DIR])
 else:
     print ">>> Cython already installed."
-    print ">>>"
 
-print "\n>>>"
-print ">>> Patching NumPy..."
-print ">>>"
+print_progress_header("Patching NumPy...")
 NUMPY_PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
 try:
     cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-d", NUMPY_DIR]
@@ -63,14 +66,10 @@ except subprocess.CalledProcessError as e:
     if "Reversed (or previously applied) patch detected!  Skipping patch" not in e.output:
         raise e
 
-print "\n>>>"
-print ">>> Setting up NumPy..."
-print ">>>"
+print_progress_header("Setting up NumPy...")
 subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR)
 
-print "\n>>>"
-print ">>> Installing NumPy..."
-print ">>>"
+print_progress_header("Installing NumPy...")
 subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR)
 
 # From Wikipedia
@@ -110,19 +109,20 @@ m = mandelbrot(complex(400),complex(400))
 print m
 """
 
-print "\n>>>"
-print ">>> Running NumPy linear algebra test..."
-print ">>>"
+numpy_test = "import numpy as np; np.test(verbose=2)"
+
+print_progress_header("Running NumPy linear algebra test...")
 subprocess.check_call([PYTHON_EXE, "-c", script], cwd=CYTHON_DIR)
 
-print "\n>>>"
-print ">>> Running NumPy mandelbrot test..."
-print ">>>"
+print_progress_header("Running NumPy mandelbrot test...")
 subprocess.check_call([PYTHON_EXE, "-c", mandelbrot], cwd=CYTHON_DIR)
 
-print "\n>>>"
-print ">>> Unpatching NumPy..."
-print ">>>"
+print_progress_header("Running NumPy test suite...")
+# Currently we crash running the test suite. Uncomment for testing or
+# when all the crashes are fixed.
+# subprocess.check_call([PYTHON_EXE, "-c", numpy_test], cwd=CYTHON_DIR)
+
+print_progress_header("Unpatching NumPy...")
 cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
 subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
