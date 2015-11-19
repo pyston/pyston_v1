@@ -29,7 +29,7 @@ inline void BoxedList::grow(int min_free) {
         capacity = initial;
     } else {
         int new_capacity = std::max(capacity * 2, size + min_free);
-        elts = GCdArray::realloc(elts, new_capacity);
+        elts = GCdArray::grow(elts, new_capacity);
         capacity = new_capacity;
     }
 }

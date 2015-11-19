@@ -77,7 +77,7 @@ PyAPI_FUNC(void) PyMem_Free(void *) PYSTON_NOEXCEPT;
 				: malloc((n) ? (n) : 1))
 #define PyMem_REALLOC(p, n)	((size_t)(n) > (size_t)PY_SSIZE_T_MAX  ? NULL \
 				: realloc((p), (n) ? (n) : 1))
-#define PyMem_FREE		PyMem_Free
+#define PyMem_FREE		free
 
 #endif	/* PYMALLOC_DEBUG */
 

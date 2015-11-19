@@ -146,7 +146,7 @@ void BoxedList::shrink() {
     if (capacity > size * 3) {
         int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
         if (size > 0) {
-            elts = GCdArray::realloc(elts, new_capacity);
+            elts = GCdArray::grow(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
             delete elts;
