@@ -573,6 +573,7 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         }
 
         Box* r = cpython_type_call(static_cast<BoxedClass*>(self), arg1, argspec.has_kwargs ? arg2 : NULL);
+        Py_DECREF(arg1);
         if (S == CXX && !r)
             throwCAPIException();
         return r;
@@ -3287,11 +3288,6 @@ void dealloc_null(Box* box) {
     assert(box->cls->tp_del == NULL);
 }
 
-static void setupDefaultClassGCParticipation() {
-    unicode_cls->is_constant = true;
-    unicode_cls->is_user_defined = false;
-}
-
 static Box* getsetGet(Box* self, Box* obj, Box* type) {
     // TODO: should call the full descr_check instead
     if (obj == NULL || obj == None)
@@ -3350,6 +3346,20 @@ void Box::clearAttrs() {
         BoxedDict* d = getDict();
         PyDict_Clear(d);
         return;
+    }
+}
+
+void HiddenClass::dump() noexcept {
+    if (type == SINGLETON || type == NORMAL) {
+        if (type == SINGLETON)
+            printf("Singleton hcls:\n");
+        else
+            printf("Normal hcls:\n");
+        printf("Attrwrapper offset: %d\n", attrwrapper_offset);
+        for (auto p : attr_offsets) {
+            //printf("%d: %s\n", p.second, p.first->c_str());
+            printf("%d: %p\n", p.second, p.first);
+        }
     }
 }
 
@@ -4008,6 +4018,8 @@ void setupRuntime() {
     setupClassobj();
     setupSuper();
     _PyUnicode_Init();
+    unicode_cls->is_constant = true;
+    unicode_cls->is_user_defined = false;
     setupDescr();
     setupTraceback();
     setupCode();

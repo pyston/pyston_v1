@@ -9450,8 +9450,10 @@ INITFUNC(void)
     PyModule_AddObject(m, "error", PyExc_OSError);
 
 #ifdef HAVE_PUTENV
-    if (posix_putenv_garbage == NULL)
+    if (posix_putenv_garbage == NULL) {
         posix_putenv_garbage = PyDict_New();
+        PyGC_RegisterStaticConstant(posix_putenv_garbage);
+    }
 #endif
 
     if (!initialized) {

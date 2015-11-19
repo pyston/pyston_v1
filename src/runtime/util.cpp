@@ -19,6 +19,7 @@
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/long.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
@@ -153,6 +154,13 @@ extern "C" void dumpEx(void* p, int levels) {
 
         printf("Guessing that it's a Python object\n");
         Box* b = (Box*)p;
+
+        if (b->cls->instancesHaveHCAttrs()) {
+            printf("Object has hcattrs:\n");
+            HCAttrs* attrs = b->getHCAttrsPtr();
+            attrs->hcls->dump();
+            //attrs->dump();
+        }
 
         printf("Class: %s", b->cls->tp_name);
         if (b->cls->cls != type_cls) {

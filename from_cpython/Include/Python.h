@@ -126,9 +126,9 @@ PyAPI_FUNC(int) PyObject_TraverseHcAttrs(PyHcAttrs*, visitproc visit, void* arg)
 PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 
 // Pyston addition: register an object as a "static constant".  Current purpose is that this will
-// get decref'd when the interpreter shuts down.
+// get decref'd when the interpreter shuts down.  This functions returns its argument.
 // PyType_Ready calls this automatically.
-PyAPI_FUNC(void) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject*) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
 
 // Pyston addition:
 PyAPI_FUNC(void) PyGC_Enable() PYSTON_NOEXCEPT;

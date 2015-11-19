@@ -754,7 +754,6 @@ void setupSysEnd() {
 
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
-    sys_flags_cls->finishInitialization();
 
     /* version_info */
     if (VersionInfoType.tp_name == 0)

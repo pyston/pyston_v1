@@ -1625,5 +1625,10 @@ init_csv(void)
     error_obj = PyErr_NewException("_csv.Error", NULL, NULL);
     if (error_obj == NULL)
         return;
+
+    // Pyston change: I *think* an incref is needed here, but it doesn't matter in CPython since they don't
+    // try to tear down builtin classes:
+    Py_INCREF(error_obj);
+
     PyModule_AddObject(module, "Error", error_obj);
 }

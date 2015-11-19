@@ -35,6 +35,7 @@ public:
     } const type;
 
     static HiddenClass* dict_backed;
+    void dump() noexcept;
 
 private:
     HiddenClass(HCType type) : type(type) {}
