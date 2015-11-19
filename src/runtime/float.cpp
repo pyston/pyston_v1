@@ -854,8 +854,14 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
     } else if (PyLong_Check(a)) {
         double a_f = PyLong_AsDouble(a);
         if (a_f == -1.0 && PyErr_Occurred()) {
-            throwCAPIException();
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
         }
+
+        // Make sure that we're not in an error state when we return a non-NULL value.
+        assert(!PyErr_Occurred());
         return new BoxedFloat(a_f);
     } else if (a->cls == str_cls || a->cls == unicode_cls) {
         BoxedFloat* res = (BoxedFloat*)PyFloat_FromString(a, NULL);
