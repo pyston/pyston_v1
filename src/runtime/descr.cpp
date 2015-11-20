@@ -253,6 +253,8 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         }
     }
 
+    assert(!rewrite_args && "check refcounting");
+
     STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
 
     assert(_self->cls == method_cls);
@@ -392,6 +394,15 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
         rewrite_args->out_success = true;
     }
+
+    if (paramspec.totalReceived() >= 1)
+        Py_DECREF(arg1);
+    if (paramspec.totalReceived() >= 2)
+        Py_DECREF(arg2);
+    if (paramspec.totalReceived() >= 3)
+        Py_DECREF(arg3);
+    for (int i = 0; i < paramspec.totalReceived() - 3; i++)
+        Py_DECREF(oargs[i]);
 
     return rtn;
 }

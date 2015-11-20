@@ -1370,12 +1370,12 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             }
             return boxInstanceMethod(im_self, im_func, im_class);
         } else {
-            *bind_obj_out = im_self;
+            *bind_obj_out = incref(im_self);
             if (rewrite_args) {
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
             }
-            return im_func;
+            return incref(im_func);
         }
     } else if (descr->cls == staticmethod_cls) {
         BoxedStaticmethod* sm = static_cast<BoxedStaticmethod*>(descr);
@@ -1396,8 +1396,8 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = rewrite_args->obj;
             }
-            *bind_obj_out = obj;
-            return descr;
+            *bind_obj_out = incref(obj);
+            return incref(descr);
         } else {
             BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
             Box* inst = obj;
@@ -1973,7 +1973,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         // we can immediately know to skip this part if it's one of the
         // special case nondata descriptors.
         if (!isNondataDescriptorInstanceSpecialCase(descr)) {
-            assert(0 && "check refcounting");
             if (rewrite_args) {
                 RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                 r_descr_cls->addAttrGuard(offsetof(BoxedClass, tp_descr_get), (intptr_t)descr_get);
@@ -1982,6 +1981,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
             // Check if __get__ exists
             if (descr_get) {
                 if (rewrite_args) {
+                    assert(0 && "check refcounting");
                     RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _get_ = typeLookup<rewritable>(descr->cls, get_str, &grewrite_args);
@@ -2006,6 +2006,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 // Check if __set__ exists
                 Box* _set_ = NULL;
                 if (rewrite_args) {
+                    assert(0 && "check refcounting");
                     RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _set_ = typeLookup<REWRITABLE>(descr->cls, set_str, &grewrite_args);
@@ -2166,7 +2167,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
 
     // If descr and __get__ exist, then call __get__
     if (descr) {
-        RELEASE_ASSERT(0, "need to check the refcounting for this");
         // Special cases first
         Box* res = nondataDescriptorInstanceSpecialCases<rewritable>(rewrite_args, obj, descr, r_descr, for_call,
                                                                      bind_obj_out, r_bind_obj_out);
@@ -3213,17 +3213,19 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         return Helper::call(val, argspec, arg1, arg2, arg3, _args);
     }
 
+    Box* r;
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args);
-        Box* r
-            = runtimeCallInternal<S, REWRITABLE>(val, &crewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        r = runtimeCallInternal<S, REWRITABLE>(val, &crewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         if (crewrite_args.out_success)
             rewrite_args->setReturn(crewrite_args.out_rtn,
                                     S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
-        return r;
     } else {
-        return runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        r = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
+    Py_XDECREF(bind_obj);
+    Py_DECREF(val);
+    return r;
 }
 
 // Force instantiation of the template
@@ -3523,13 +3525,13 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
         rewrite_success = true;
-        if (num_output_args > 1)
+        if (num_output_args >= 1)
             Py_INCREF(oarg1);
-        if (num_output_args > 2)
+        if (num_output_args >= 2)
             Py_INCREF(oarg2);
-        if (num_output_args > 3)
+        if (num_output_args >= 3)
             Py_INCREF(oarg3);
-        if (num_output_args > 3) {
+        if (num_output_args >= 3) {
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
             for (int i = 0; i < num_output_args - 3; i++) {
                 Py_INCREF(oargs[i]);

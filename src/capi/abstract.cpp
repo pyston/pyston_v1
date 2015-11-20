@@ -659,8 +659,8 @@ extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const ch
             argspec = ArgPassSpec(1);
     } else
         argspec = ArgPassSpec(0);
-    retval = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
-                                                                    argspec, args, NULL, NULL, NULL, NULL);
+    retval = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
+        o, autoDecref(internStringMortal(name)), CLASS_OR_INST, NULL, argspec, args, NULL, NULL, NULL, NULL);
     if (!retval && !PyErr_Occurred())
         PyErr_SetString(PyExc_AttributeError, name);
 
