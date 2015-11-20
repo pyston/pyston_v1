@@ -388,12 +388,6 @@ static int main(int argc, char** argv) noexcept {
             Py_Initialize();
         }
 
-        // XXX
-        {
-            Py_Finalize();
-            return 0;
-        }
-
         // Arguments left over after option parsing are of the form:
         //     [ script | - ] [ arguments... ]
         // unless we've been already parsed a `-c command` option, in which case only:
@@ -449,6 +443,12 @@ static int main(int argc, char** argv) noexcept {
 
         _t.split("to run");
         BoxedModule* main_module = NULL;
+
+        // XXX
+        {
+            Py_Finalize();
+            return 0;
+        }
 
         // if the user invoked `pyston -c command`
         if (command != NULL) {

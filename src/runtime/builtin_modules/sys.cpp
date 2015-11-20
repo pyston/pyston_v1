@@ -207,15 +207,16 @@ extern "C" void PySys_WriteStderr(const char* format, ...) noexcept {
 }
 
 void addToSysArgv(const char* str) {
-    Box* sys_argv = sys_module->getattr(internStringMortal("argv"));
+    static BoxedString* argv_str = getStaticString("argv");
+    Box* sys_argv = sys_module->getattr(argv_str);
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
-    listAppendInternal(sys_argv, boxString(str));
+    listAppendInternal(sys_argv, autoDecref(boxString(str)));
 }
 
 void appendToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    listAppendInternal(sys_path, boxString(path));
+    listAppendInternal(sys_path, autoDecref(boxString(path)));
 }
 
 void prependToSysPath(llvm::StringRef path) {

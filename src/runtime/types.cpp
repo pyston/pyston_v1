@@ -4224,6 +4224,7 @@ void setupRuntime() {
 
     TRACK_ALLOCATIONS = true;
 
+#if 0
     Box* l = NULL;
     for (int i = 0; i < 1000000000; i++) {
         //if (i % 10000 == 0) {
@@ -4261,7 +4262,7 @@ void setupRuntime() {
     PRINT_TOTAL_REFS();
     exit(0);
     // XXX
-
+#endif
 }
 
 BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
@@ -4320,9 +4321,29 @@ extern "C" void Py_Finalize() noexcept {
     call_sys_exitfunc();
     // initialized = 0;
 
-    // PyOS_FiniInterrupts();
-
+    // XXX
+    PyGC_Collect(); // To make sure it creates any static objects
+    IN_SHUTDOWN = true;
+    PyOS_FiniInterrupts();
     PyType_ClearCache();
+    _PyUnicode_Fini();
+    for (auto b : constants) {
+        Py_DECREF(b);
+    }
+    // May need to run multiple collections to collect everything:
+    while (PyGC_Collect())
+        ;
+    _Py_ReleaseInternedStrings();
+    for (auto b : classes) {
+        if (!PyObject_IS_GC(b)) {
+            b->clearAttrs();
+            Py_CLEAR(b->tp_mro);
+        }
+        Py_DECREF(b);
+    }
+    // May need to run multiple collections to collect everything:
+    while (PyGC_Collect())
+        ;
 
 // PyGC_Collect());
 
@@ -4332,46 +4353,6 @@ extern "C" void Py_Finalize() noexcept {
 // _PyExc_Fini();
 
 // _PyGILState_Fini();
-
-// TODO it's probably a waste of time to tear these down in non-debugging mode
-/*
-// clear all the attributes on the base classes before freeing the classes themselves,
-// since we will run into problem if we free a class but there is an object somewhere
-// else that refers to it.
-clearAttrs(bool_cls);
-clearAttrs(int_cls);
-clearAttrs(float_cls);
-clearAttrs(none_cls);
-clearAttrs(function_cls);
-clearAttrs(instancemethod_cls);
-clearAttrs(str_cls);
-clearAttrs(list_cls);
-clearAttrs(slice_cls);
-clearAttrs(type_cls);
-clearAttrs(module_cls);
-clearAttrs(dict_cls);
-clearAttrs(tuple_cls);
-clearAttrs(file_cls);
-
-decref(bool_cls);
-decref(int_cls);
-decref(float_cls);
-decref(function_cls);
-decref(instancemethod_cls);
-decref(str_cls);
-decref(list_cls);
-decref(slice_cls);
-decref(module_cls);
-decref(dict_cls);
-decref(tuple_cls);
-decref(file_cls);
-
-ASSERT(None->nrefs == 1, "%ld", None->nrefs);
-decref(None);
-
-decref(none_cls);
-decref(type_cls);
-*/
 
 #if 0
     /* Delete current thread */
