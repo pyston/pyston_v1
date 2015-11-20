@@ -70,6 +70,8 @@ private:
 
 public:
     BoxedXrangeIterator(BoxedXrange* xrange, bool reversed) : xrange(xrange) {
+        Py_INCREF(xrange);
+
         int64_t start = xrange->start;
 
         step = xrange->step;
@@ -132,10 +134,13 @@ public:
     }
 
     static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(b);
+        Py_DECREF(self->xrange);
     }
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
+    static int traverse(Box* s, visitproc visit, void *arg) noexcept {
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
+        Py_VISIT(self->xrange);
+        return 0;
     }
 };
 
@@ -177,6 +182,7 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
 
 Box* xrangeIterIter(Box* self) {
     assert(self->cls == xrange_iterator_cls);
+    Py_INCREF(self);
     return self;
 }
 
@@ -237,9 +243,10 @@ Box* xrangeReduce(Box* self) {
         return None;
     }
     BoxedXrange* r = static_cast<BoxedXrange*>(self);
-    BoxedTuple* range = BoxedTuple::create({ boxInt(r->start), boxInt(r->stop), boxInt(r->step) });
+    BoxedTuple* range = BoxedTuple::create(
+        { autoDecref(boxInt(r->start)), autoDecref(boxInt(r->stop)), autoDecref(boxInt(r->step)) });
 
-    return BoxedTuple::create({ r->cls, range });
+    return BoxedTuple::create({ r->cls, autoDecref(range) });
 }
 
 void setupXrange() {

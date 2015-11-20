@@ -22,6 +22,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringRef.h"
+#include "Python.h"
 
 #include "core/common.h"
 
@@ -61,7 +62,7 @@ public:
     InternedString() : _str(NULL) {}
 #endif
 
-    BoxedString* getBox() const {
+    BORROWED(BoxedString*) getBox() const {
         assert(this->_str);
         return _str;
     }

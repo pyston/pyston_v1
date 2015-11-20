@@ -50,7 +50,12 @@ public:
         }
     }
 
-    Box* getValue() override { return value; }
+    Box* getValue() override {
+        Box* r = value;
+        assert(r);
+        value = NULL;
+        return r;
+    }
 
     bool isSame(const BoxIteratorImpl* _rhs) override {
         const BoxIteratorGeneric* rhs = (const BoxIteratorGeneric*)_rhs;

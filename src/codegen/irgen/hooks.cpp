@@ -115,15 +115,15 @@ BoxedString* SourceInfo::getName() {
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name;
+            return incref(ast_cast<AST_ClassDef>(ast)->name.getBox());
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name;
+            return incref(ast_cast<AST_FunctionDef>(ast)->name.getBox());
         case AST_TYPE::Lambda:
-            return lambda_name;
+            return incref(lambda_name);
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
         case AST_TYPE::Suite:
-            return module_name;
+            return incref(module_name);
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }

@@ -1112,7 +1112,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     for (int i = decorators.size() - 1; i >= 0; i--) {
         if (jit)
             func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
-        func.o = runtimeCall(decorators[i].o, ArgPassSpec(1), func.o, 0, 0, 0, 0);
+        func.o = runtimeCall(autoDecref(decorators[i].o), ArgPassSpec(1), autoDecref(func.o), 0, 0, 0, 0);
     }
     return func;
 }

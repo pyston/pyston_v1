@@ -543,9 +543,11 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     int remaining_elts = self->size - stop;
     self->ensure(delts);
 
-    // XXX should make a copy here in case a destructor gets run
-    for (int i = start; i < step; i++) {
-        Py_CLEAR(self->elts->elts[i]);
+    Box** removed_elts = NULL;
+    if (stop > start) {
+        removed_elts = (Box**)PyMem_MALLOC((stop - start) * sizeof(Box*));
+        RELEASE_ASSERT(removed_elts, "");
+        memcpy(removed_elts, self->elts->elts + start, (stop - start) * sizeof(Box*));
     }
 
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
@@ -556,6 +558,12 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     }
 
     self->size += delts;
+
+    for (int i = 0; i < stop - start; i++) {
+        Py_DECREF(removed_elts[i]);
+    }
+    if (removed_elts)
+        PyMem_FREE(removed_elts);
 
     Py_XDECREF(v_as_seq);
 }
@@ -1108,7 +1116,8 @@ Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
 
     if (container) {
-        listIAdd(self, container);
+        Box* r = listIAdd(self, container);
+        Py_DECREF(r);
     }
 
     Py_RETURN_NONE;

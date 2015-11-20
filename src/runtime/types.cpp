@@ -793,7 +793,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
-    Box* init_attr = NULL;
+    BORROWED(Box*) init_attr = NULL;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
         assert(!argspec.has_kwargs);
@@ -1154,7 +1154,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         Box* initrtn;
         // If there's a Python-level __init__ function, try calling it.
         if (init_attr && init_attr->cls == function_cls) {
-            assert(0 && "check refcounting");
             if (rewrite_args) {
                 // We are going to rewrite as a call to cls.init:
                 assert(which_init == MAKES_CLS);
@@ -1163,6 +1162,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // Note: this code path includes the descriptor logic
             if (rewrite_args) {
+                assert(0 && "check refcounting");
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
                 srewrite_args.arg1 = r_made;
                 if (npassed_args >= 2)
@@ -1197,11 +1197,11 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             if (S == CAPI) {
                 if (initrtn != None) {
-                    PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(initrtn));
+                    PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(autoDecref(initrtn)));
                     return NULL;
                 }
             } else
-                assertInitNone(initrtn);
+                assertInitNone(autoDecref(initrtn));
         } else {
             // Otherwise, just call tp_init.  This will work out well for extension classes, and no worse
             // than failing the rewrite for Python non-extension non-functions (when does that happen?).
