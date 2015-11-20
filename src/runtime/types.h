@@ -978,11 +978,15 @@ public:
 class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
-    BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
+    BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {
+        ASSERT(lower->cls == none_cls || lower->cls == int_cls, "slice objects are not gc-aware (like in CPython)");
+        ASSERT(upper->cls == none_cls || upper->cls == int_cls, "slice objects are not gc-aware (like in CPython)");
+        ASSERT(step->cls == none_cls || step->cls == int_cls, "slice objects are not gc-aware (like in CPython)");
+    }
 
     static void dealloc(Box* b) noexcept;
 
-    DEFAULT_CLASS_SIMPLE(slice_cls, true);
+    DEFAULT_CLASS_SIMPLE(slice_cls, false);
 };
 static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
 static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
