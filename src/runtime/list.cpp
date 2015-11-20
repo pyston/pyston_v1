@@ -336,7 +336,7 @@ static void _listSetitem(BoxedList* self, int64_t n, Box* v) {
 extern "C" Box* listSetitemUnboxed(BoxedList* self, int64_t n, Box* v) {
     assert(PyList_Check(self));
     _listSetitem(self, n, v);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
@@ -567,11 +567,11 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         int r = list_ass_ext_slice(self, slice, v);
         if (r)
             throwCAPIException();
-        return None;
+        Py_RETURN_NONE;
     }
 
     listSetitemSliceInt64(self, start, stop, step, v);
-    return None;
+    Py_RETURN_NONE;
 }
 
 // Analoguous to CPython's, used for sq_ slots.
@@ -589,7 +589,7 @@ extern "C" Box* listSetslice(BoxedList* self, Box* boxedStart, Box* boxedStop, B
     sliceIndex(boxedStop, &stop);
 
     listSetitemSliceInt64(self, start, stop, 1, value);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
@@ -599,7 +599,7 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
         listSetitemUnboxed(self, i, v);
-        return None;
+        Py_RETURN_NONE;
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
@@ -617,7 +617,7 @@ extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
     }
     memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
     self->size--;
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
@@ -665,10 +665,11 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
         memmove(self->elts->elts + n + 1, self->elts->elts + n, (self->size - n) * sizeof(Box*));
 
         self->size++;
+        Py_INCREF(v);
         self->elts->elts[n] = v;
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) noexcept {
@@ -825,7 +826,7 @@ Box* listReverse(BoxedList* self) {
         self->elts->elts[j] = e;
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Reverse(PyObject* v) noexcept {
@@ -923,7 +924,7 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
 Box* listSortFunc(BoxedList* self, Box* cmp, Box* key, Box** _args) {
     Box* reverse = _args[0];
     listSort(self, cmp, key, reverse);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Sort(PyObject* v) noexcept {
@@ -1084,7 +1085,7 @@ Box* listRemove(BoxedList* self, Box* elt) {
         if (r) {
             memmove(self->elts->elts + i, self->elts->elts + i + 1, (self->size - i - 1) * sizeof(Box*));
             self->size--;
-            return None;
+            Py_RETURN_NONE;
         }
     }
 
@@ -1101,7 +1102,7 @@ Box* listInit(BoxedList* self, Box* container) {
         listIAdd(self, container);
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {

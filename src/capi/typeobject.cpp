@@ -452,7 +452,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     PyObject* res;
 
     if (*attrobj == NULL) {
-        *attrobj = PyString_InternFromString(attrstr);
+        *attrobj = getStaticString(attrstr);
         if (*attrobj == NULL)
             return NULL;
     }
@@ -466,7 +466,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
             return NULL;
         }
     }
-    return obj;
+    return incref(obj);
 }
 
 extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {

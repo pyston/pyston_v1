@@ -223,7 +223,8 @@ void prependToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
     static BoxedString* insert_str = getStaticString("insert");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
-    callattr(sys_path, insert_str, callattr_flags, boxInt(0), boxString(path), NULL, NULL, NULL);
+    autoDecref(callattr(sys_path, insert_str, callattr_flags, autoDecref(boxInt(0)), autoDecref(boxString(path)), NULL,
+                        NULL, NULL));
 }
 
 static BoxedClass* sys_flags_cls;

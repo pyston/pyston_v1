@@ -337,12 +337,11 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
             globals_for_name = md->source->parent_module;
         }
 
-        assert(0 && "check the refcounting here");
         static BoxedString* name_str = getStaticString("__name__");
         if (globals_for_name->cls == module_cls) {
-            this->modname = globals_for_name->getattr(name_str);
+            this->modname = incref(globals_for_name->getattr(name_str));
         } else {
-            this->modname = PyDict_GetItem(globals_for_name, name_str);
+            this->modname = incref(PyDict_GetItem(globals_for_name, name_str));
         }
         // It's ok for modname to be NULL
 
@@ -3434,7 +3433,12 @@ int BoxedModule::clear(Box* b) noexcept {
 
     assert(!self->str_constants.size());
     assert(!self->unicode_constants.size());
-    assert(!self->int_constants.size());
+
+    for (auto p : self->int_constants) {
+        Py_DECREF(self->int_constants.getMapped(p.second));
+    }
+    self->int_constants.~ContiguousMap();
+
     assert(!self->float_constants.size());
     assert(!self->imaginary_constants.size());
     assert(!self->long_constants.size());

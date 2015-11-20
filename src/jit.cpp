@@ -444,12 +444,6 @@ static int main(int argc, char** argv) noexcept {
         _t.split("to run");
         BoxedModule* main_module = NULL;
 
-        // XXX
-        {
-            Py_Finalize();
-            return 0;
-        }
-
         // if the user invoked `pyston -c command`
         if (command != NULL) {
             try {
@@ -467,7 +461,7 @@ static int main(int argc, char** argv) noexcept {
             main_module = createModule(boxString("__main__"), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
-            main_module = createModule(boxString("__main__"), fn ? fn : "<stdin>");
+            main_module = createModule(autoDecref(boxString("__main__")), fn ? fn : "<stdin>");
             rtncode = 0;
             if (fn != NULL) {
                 rtncode = RunMainFromImporter(fn);

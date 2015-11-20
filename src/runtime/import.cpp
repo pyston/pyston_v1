@@ -707,11 +707,11 @@ Box* nullImporterInit(Box* self, Box* _path) {
     if (isdir(path->data()))
         raiseExcHelper(ImportError, "existing directory");
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 Box* nullImporterFindModule(Box* self, Box* fullname, Box* path) {
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name) {

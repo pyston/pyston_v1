@@ -137,7 +137,7 @@ Box* SourceInfo::getDocString() {
         return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
     }
 
-    return None;
+    return incref(None);
 }
 
 ScopeInfo* SourceInfo::getScopeInfo() {
