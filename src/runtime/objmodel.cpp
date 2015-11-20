@@ -4160,7 +4160,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
                g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
                chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
-        ASSERT(!PyErr_Occurred(), "%p", chosen_cf->code);
+        ASSERT(!PyErr_Occurred() || S == CAPI, "%p", chosen_cf->code);
     }
 
     return r;
