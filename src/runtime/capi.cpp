@@ -1470,6 +1470,11 @@ extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
     return dict;
 }
 
+extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
+    assert(tstate == NULL);
+    Py_CLEAR(cur_thread_state.dict);
+}
+
 extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) noexcept {
     if (size < 0) {
         PyErr_Format(PyExc_ValueError, "negative argument not allowed");

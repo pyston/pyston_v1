@@ -262,7 +262,7 @@ BoxedString* Box::reprICAsString() {
     Box* r = this->reprIC();
 
     if (isSubclass(r->cls, unicode_cls)) {
-        r = PyUnicode_AsASCIIString(r);
+        r = PyUnicode_AsASCIIString(autoDecref(r));
         checkAndThrowCAPIException();
     }
     if (r->cls != str_cls) {
@@ -4334,6 +4334,7 @@ extern "C" void Py_Finalize() noexcept {
     PyOS_FiniInterrupts();
     PyType_ClearCache();
     _PyUnicode_Fini();
+    PyThreadState_Clear(NULL);
     for (auto b : constants) {
         Py_DECREF(b);
     }

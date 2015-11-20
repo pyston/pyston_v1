@@ -87,6 +87,7 @@ extern "C" Box* listRepr(BoxedList* self) {
             assert(r->cls == str_cls);
             BoxedString* s = static_cast<BoxedString*>(r);
             chars.insert(chars.end(), s->s().begin(), s->s().end());
+            Py_DECREF(s);
         }
         chars.push_back(']');
     } catch (ExcInfo e) {
@@ -542,13 +543,21 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     int remaining_elts = self->size - stop;
     self->ensure(delts);
 
+    // XXX should make a copy here in case a destructor gets run
+    for (int i = start; i < step; i++) {
+        Py_CLEAR(self->elts->elts[i]);
+    }
+
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
     for (int i = 0; i < v_size; i++) {
         Box* r = v_elts[i];
+        Py_INCREF(r);
         self->elts->elts[start + i] = r;
     }
 
     self->size += delts;
+
+    Py_XDECREF(v_as_seq);
 }
 
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
@@ -1246,12 +1255,15 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     BoxedList* l = (BoxedList*)a;
     ASSERT(PyList_Check(l), "%s", l->cls->tp_name);
 
+    // TODO should just call list_ass_slice
     try {
-        BoxedSlice* slice = (BoxedSlice*)createSlice(boxInt(ilow), boxInt(ihigh), None);
+        BoxedSlice* slice = (BoxedSlice*)createSlice(autoDecref(boxInt(ilow)), autoDecref(boxInt(ihigh)), None);
         if (v)
-            listSetitemSlice(l, slice, v);
+            autoDecref(listSetitemSlice(l, slice, v));
         else
-            listDelitemSlice(l, slice);
+            autoDecref(listDelitemSlice(l, slice));
+
+        Py_DECREF(slice);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
