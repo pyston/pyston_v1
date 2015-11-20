@@ -53,6 +53,8 @@
 
 namespace pyston {
 
+static int calculateNumVRegs(FunctionMetadata* md);
+
 namespace {
 
 class ASTInterpreter;
@@ -76,8 +78,8 @@ public:
 private:
     Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type);
-    void doStore(AST_expr* node, Value value);
-    void doStore(AST_Name* name, Value value);
+    void doStore(AST_expr* node, STOLEN(Value) value);
+    void doStore(AST_Name* name, STOLEN(Value) value);
     Box* doOSR(AST_Jump* node);
     Value getNone();
 
@@ -157,6 +159,18 @@ private:
     bool should_jit;
 
 public:
+    ~ASTInterpreter() {
+        Py_XDECREF(frame_info.boxedLocals);
+
+        int nvregs = calculateNumVRegs(md);
+
+        for (int i = 0; i < nvregs; i++) {
+            Py_XDECREF(vregs[i]);
+        }
+
+        Py_DECREF(this->globals);
+    }
+
     llvm::DenseMap<InternedString, int>& getSymVRegMap() {
         assert(source_info->cfg);
         return source_info->cfg->sym_vreg_map;
@@ -224,6 +238,7 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 
 void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
+    Py_INCREF(globals);
 }
 
 ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
@@ -285,6 +300,8 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
+    assert(0 && "refcounting not set up");
+
     auto& code_blocks = md->code_blocks;
     JitCodeBlock* code_block = NULL;
     if (!code_blocks.empty())
@@ -340,7 +357,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 }
 
 Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    Value v;
+    Value v(nullptr, nullptr);
 
     bool from_start = start_block == NULL && start_at == NULL;
 
@@ -366,6 +383,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             }
 
             interpreter.current_inst = s;
+            Py_XDECREF(v.o);
             v = interpreter.visit_stmt(s);
         }
     } else {
@@ -398,6 +416,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             interpreter.current_inst = s;
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
+            Py_XDECREF(v.o);
             v = interpreter.visit_stmt(s);
         }
     }
@@ -434,17 +453,19 @@ Value ASTInterpreter::doBinOp(AST_expr* node, Value left, Value right, int op, B
     return Value();
 }
 
-void ASTInterpreter::doStore(AST_Name* node, Value value) {
+void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
         node->lookup_type = scope_info->getScopeTypeOfName(node->id);
 
     InternedString name = node->id;
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+        assert(0 && "check refcounting");
         if (jit)
             jit->emitSetGlobal(globals, name.getBox(), value);
         setGlobal(globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
+        assert(0 && "check refcounting");
         if (jit)
             jit->emitSetItemName(name.getBox(), value);
         assert(frame_info.boxedLocals != NULL);
@@ -453,6 +474,7 @@ void ASTInterpreter::doStore(AST_Name* node, Value value) {
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
+            assert(0 && "check refcounting");
             if (!closure) {
                 bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
                 if (is_live)
@@ -465,9 +487,12 @@ void ASTInterpreter::doStore(AST_Name* node, Value value) {
 
         assert(getSymVRegMap().count(name));
         assert(getSymVRegMap()[name] == node->vreg);
+        Box* prev = vregs[node->vreg];
         vregs[node->vreg] = value.o;
+        Py_XDECREF(prev);
 
         if (closure) {
+            assert(0 && "check refcounting");
             created_closure->elts[scope_info->getClosureOffset(name)] = value.o;
         }
     }
@@ -524,7 +549,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
 }
 
 Value ASTInterpreter::getNone() {
-    return Value(None, jit ? jit->imm(None) : NULL);
+    return Value(incref(None), jit ? jit->imm(None) : NULL);
 }
 
 Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
@@ -538,7 +563,10 @@ Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
 Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->right);
-    return doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
+    Value r = doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
+    Py_DECREF(left.o);
+    Py_DECREF(right.o);
+    return r;
 }
 
 Value ASTInterpreter::visit_slice(AST_slice* node) {
@@ -599,6 +627,8 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
         next_block = node->iftrue;
     else
         next_block = node->iffalse;
+    // TODO could potentially avoid doing this if we skip the incref in NONZERO
+    Py_DECREF(v.o);
 
     if (jit) {
         jit->emitJump(next_block);
@@ -812,7 +842,10 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
 
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->right);
-    return doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
+    Value r = doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
+    Py_DECREF(left.o);
+    Py_DECREF(right.o);
+    return r;
 }
 
 Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
@@ -879,6 +912,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
+        Py_DECREF(obj.o);
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
@@ -1235,8 +1269,7 @@ Value ASTInterpreter::visit_assign(AST_Assign* node) {
     assert(node->targets.size() == 1 && "cfg should have lowered it to a single target");
 
     Value v = visit_expr(node->value);
-    for (AST_expr* e : node->targets)
-        doStore(e, v);
+    doStore(node->targets[0], v);
     return Value();
 }
 
@@ -1249,9 +1282,9 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
         jit->emitPrint(dest, var, node->nl);
 
     if (node->dest)
-        printHelper(dest.o, var.o, node->nl);
+        printHelper(autoDecref(dest.o), autoXDecref(var.o), node->nl);
     else
-        printHelper(getSysStdout(), var.o, node->nl);
+        printHelper(getSysStdout(), autoXDecref(var.o), node->nl);
 
     return Value();
 }
@@ -1273,7 +1306,10 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     RELEASE_ASSERT(node->comparators.size() == 1, "not implemented");
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->comparators[0]);
-    return doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
+    Value r = doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
+    Py_DECREF(left.o);
+    Py_DECREF(right.o);
+    return r;
 }
 
 Value ASTInterpreter::visit_expr(AST_expr* node) {
@@ -1424,6 +1460,7 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
         o = parent_module->getPureImaginaryConstant(node->n_float);
     } else
         RELEASE_ASSERT(0, "not implemented");
+    Py_INCREF(o);
     return Value(o, jit ? jit->imm(o) : NULL);
 }
 
@@ -1499,10 +1536,12 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             if (jit)
                 v.var = jit->emitGetGlobal(globals, node->id.getBox());
 
+            assert(0 && "check refcounting");
             v.o = getGlobal(globals, node->id.getBox());
             return v;
         }
         case ScopeInfo::VarScopeType::DEREF: {
+            assert(0 && "check refcounting");
             return Value(ASTInterpreterJitInterface::derefHelper(this, node->id),
                          jit ? jit->emitDeref(node->id) : NULL);
         }
@@ -1510,6 +1549,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         case ScopeInfo::VarScopeType::CLOSURE: {
             Value v;
             if (jit) {
+                assert(0 && "check refcounting");
                 bool is_live = false;
                 if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
@@ -1525,6 +1565,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assert(getSymVRegMap()[node->id] == node->vreg);
             Box* val = vregs[node->vreg];
             if (val) {
+                Py_INCREF(val);
                 v.o = val;
                 return v;
             }
@@ -1533,6 +1574,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
+            assert(0 && "check refcounting");
             Value v;
             if (jit)
                 v.var = jit->emitGetBoxedLocal(node->id.getBox());
@@ -1566,6 +1608,7 @@ Value ASTInterpreter::visit_list(AST_List* node) {
 }
 
 Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
+    return getNone();
     llvm::SmallVector<RewriterVar*, 8> items;
 
     BoxedTuple* rtn = BoxedTuple::create(node->elts.size());
@@ -1804,7 +1847,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
 
     interpreter.initArguments((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
     Box* v = ASTInterpreter::execute(interpreter);
-    return v ? v : None;
+    return v ? v : incref(None);
 }
 
 Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLocals) {

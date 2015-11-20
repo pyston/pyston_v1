@@ -323,10 +323,11 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         FutureFlags future_flags = getFutureFlags(m->body, fn);
         ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, boxString(fn)));
+        auto fn_str = getStaticString(fn); // XXX this is not a static string
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn_str));
 
         static BoxedString* doc_str = getStaticString("__doc__");
-        bm->setattr(doc_str, si->getDocString(), NULL);
+        bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
 
         static BoxedString* builtins_str = getStaticString("__builtins__");
         if (!bm->hasattr(builtins_str))
@@ -338,6 +339,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == None);
+    Py_DECREF(r);
 }
 
 Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {

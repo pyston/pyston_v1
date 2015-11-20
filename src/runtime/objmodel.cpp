@@ -164,13 +164,14 @@ extern "C" bool softspace(Box* b, bool newval) {
             r = 0;
         } else {
             r = nonzero(gotten);
+            Py_DECREF(gotten);
         }
     } catch (ExcInfo e) {
         r = 0;
     }
 
     try {
-        setattr(b, softspace_str, boxInt(newval));
+        setattr(b, softspace_str, autoDecref(boxInt(newval)));
     } catch (ExcInfo e) {
         r = 0;
     }
@@ -193,11 +194,12 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
             callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0,
                                                   0);
 
-        Box* str_or_unicode_var = (var->cls == unicode_cls) ? var : str(var);
+        Box* str_or_unicode_var = (var->cls == unicode_cls) ? incref(var) : str(var);
         Box* write_rtn = callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
-                                                               str_or_unicode_var, 0, 0, 0, 0);
+                                                               autoDecref(str_or_unicode_var), 0, 0, 0, 0);
         if (!write_rtn)
             raiseAttributeError(dest, write_str->s());
+        Py_DECREF(write_rtn);
     }
 
     if (nl) {
@@ -205,6 +207,8 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
                                                                newline_str, 0, 0, 0, 0);
         if (!write_rtn)
             raiseAttributeError(dest, write_str->s());
+        Py_DECREF(write_rtn);
+
         if (!var)
             softspace(dest, false);
     }

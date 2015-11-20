@@ -20,7 +20,8 @@ namespace pyston {
 
 InternedString InternedStringPool::get(llvm::StringRef arg) {
     // HACK: should properly track this liveness:
-    BoxedString* s = internStringImmortal(arg);
+    // XXX it's not a static string
+    BoxedString* s = getStaticString(arg);
 
 #ifndef NDEBUG
     return InternedString(s, this);

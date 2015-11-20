@@ -3427,21 +3427,24 @@ int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     return 0;
 }
 
+template <typename CM>
+void clearContiguousMap(CM& cm) {
+    for (auto&& p : cm) {
+        Py_DECREF(cm.getMapped(p.second));
+    }
+    cm.~ContiguousMap();
+}
+
 int BoxedModule::clear(Box* b) noexcept {
     BoxedModule* self = static_cast<BoxedModule*>(b);
     self->clearAttrs();
 
-    assert(!self->str_constants.size());
-    assert(!self->unicode_constants.size());
-
-    for (auto p : self->int_constants) {
-        Py_DECREF(self->int_constants.getMapped(p.second));
-    }
-    self->int_constants.~ContiguousMap();
-
-    assert(!self->float_constants.size());
-    assert(!self->imaginary_constants.size());
-    assert(!self->long_constants.size());
+    clearContiguousMap(self->str_constants);
+    clearContiguousMap(self->unicode_constants);
+    clearContiguousMap(self->int_constants);
+    clearContiguousMap(self->float_constants);
+    clearContiguousMap(self->imaginary_constants);
+    clearContiguousMap(self->long_constants);
     assert(!self->keep_alive.size());
 
     return 0;

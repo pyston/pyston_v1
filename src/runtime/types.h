@@ -70,7 +70,7 @@ void setupSysEnd();
 
 BORROWED(BoxedDict*) getSysModulesDict();
 BORROWED(BoxedList*) getSysPath();
-extern "C" Box* getSysStdout();
+extern "C" BORROWED(Box*) getSysStdout();
 
 extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;
@@ -388,6 +388,9 @@ public:
 };
 template <typename B, bool Nullable = false> DecrefHandle<B, Nullable> autoDecref(B* b) {
     return DecrefHandle<B, Nullable>(b);
+}
+template <typename B> DecrefHandle<B, true> autoXDecref(B* b) {
+    return DecrefHandle<B, true>(b);
 }
 
 template <typename B> B* incref(B* b) {
@@ -946,12 +949,12 @@ public:
     BoxedModule() {} // noop constructor to disable zero-initialization of cls
     std::string name();
 
-    BoxedString* getStringConstant(llvm::StringRef ast_str, bool intern = false);
-    Box* getUnicodeConstant(llvm::StringRef ast_str);
-    BoxedInt* getIntConstant(int64_t n);
-    BoxedFloat* getFloatConstant(double d);
-    Box* getPureImaginaryConstant(double d);
-    Box* getLongConstant(llvm::StringRef s);
+    BORROWED(BoxedString*) getStringConstant(llvm::StringRef ast_str, bool intern = false);
+    BORROWED(Box*) getUnicodeConstant(llvm::StringRef ast_str);
+    BORROWED(BoxedInt*) getIntConstant(int64_t n);
+    BORROWED(BoxedFloat*) getFloatConstant(double d);
+    BORROWED(Box*) getPureImaginaryConstant(double d);
+    BORROWED(Box*) getLongConstant(llvm::StringRef s);
 
     static void dealloc(Box* b) noexcept;
     static int traverse(Box* self, visitproc visit, void *arg) noexcept;
