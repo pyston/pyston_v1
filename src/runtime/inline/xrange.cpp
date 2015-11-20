@@ -135,7 +135,10 @@ public:
 
     static void dealloc(Box* b) noexcept {
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(b);
+        _PyObject_GC_UNTRACK(self);
         Py_DECREF(self->xrange);
+
+        self->cls->tp_free(self);
     }
     static int traverse(Box* s, visitproc visit, void *arg) noexcept {
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);

@@ -809,7 +809,7 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
     RELEASE_ASSERT(_rhs != self, "unsupported");
 
     for (auto* b : _rhs->pyElements())
-        listAppendInternal(self, b);
+        listAppendInternalStolen(self, b);
 
     Py_INCREF(self);
     return self;

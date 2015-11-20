@@ -541,7 +541,16 @@ public:
     BoxIteratorImpl* impl;
 
     BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
-    ~BoxIterator() = default;
+    BoxIterator(const BoxIterator& rhs) = default;
+    BoxIterator(BoxIterator&& rhs) {
+        impl = rhs.impl;
+        rhs.impl = NULL;
+    }
+
+    ~BoxIterator() {
+        if (impl)
+            impl->~BoxIteratorImpl();
+    }
 
     static llvm::iterator_range<BoxIterator> getRange(Box* container);
     bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
