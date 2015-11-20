@@ -3925,7 +3925,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                                             rewrite_args->rewriter->loadConst((intptr_t)default_obj));
         }
 
-        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = incref(default_obj);
+        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
     }
 }
 
@@ -6335,6 +6335,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         if (globals->cls == module_cls) {
             BoxedModule* m = static_cast<BoxedModule*>(globals);
             if (rewriter.get()) {
+                assert(0 && "check refcounting");
                 RewriterVar* r_mod = rewriter->getArg(0);
 
                 // Guard on it being a module rather than a dict
@@ -6359,6 +6360,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 r = m->getattr(name);
                 nopatch_getglobal.log();
                 if (r) {
+                    Py_INCREF(r);
                     return r;
                 }
             }
@@ -6371,6 +6373,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
             auto it = d->d.find(name);
             if (it != d->d.end()) {
+                Py_INCREF(it->second);
                 return it->second;
             }
         }
@@ -6380,6 +6383,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
         Box* rtn;
         if (rewriter.get()) {
+            assert(0 && "check refcounting");
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), builtins, rewriter->getReturnDestination());
             rewrite_args.obj_shape_guarded = true; // always builtin module
@@ -6398,8 +6402,10 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
             rtn = builtins_module->getattr(name);
         }
 
-        if (rtn)
+        if (rtn) {
+            Py_INCREF(rtn);
             return rtn;
+        }
     }
 
     assert(name->data()[name->size()] == '\0');

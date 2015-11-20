@@ -151,6 +151,7 @@ BoxedString* boxStringTwine(const llvm::Twine& s);
 extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 
 extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
+extern "C" inline void listAppendInternalStolen(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* createFunctionFromMetadata(FunctionMetadata* f, BoxedClosure* closure, Box* globals,
                                            std::initializer_list<Box*> defaults) noexcept;

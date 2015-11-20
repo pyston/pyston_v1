@@ -460,10 +460,10 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     InternedString name = node->id;
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-        assert(0 && "check refcounting");
         if (jit)
             jit->emitSetGlobal(globals, name.getBox(), value);
         setGlobal(globals, name.getBox(), value.o);
+        Py_DECREF(value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(0 && "check refcounting");
         if (jit)
@@ -1430,17 +1430,19 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         v.o = callattr(func.o, attr.getBox(), callattr_flags, args.size() > 0 ? args[0] : 0,
                        args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0,
                        keyword_names);
-        return v;
     } else {
-        Value v;
-
         if (jit)
             v.var = jit->emitRuntimeCall(node, func, argspec, args_vars, keyword_names);
 
         v.o = runtimeCall(func.o, argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
                           args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, keyword_names);
-        return v;
     }
+
+    Py_DECREF(func.o);
+    for (auto e : args)
+        Py_DECREF(e);
+
+    return v;
 }
 
 
@@ -1536,7 +1538,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             if (jit)
                 v.var = jit->emitGetGlobal(globals, node->id.getBox());
 
-            assert(0 && "check refcounting");
             v.o = getGlobal(globals, node->id.getBox());
             return v;
         }
@@ -1596,12 +1597,12 @@ Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
 Value ASTInterpreter::visit_list(AST_List* node) {
     llvm::SmallVector<RewriterVar*, 8> items;
 
-    BoxedList* list = new BoxedList;
+    BoxedList* list = new BoxedList();
     list->ensure(node->elts.size());
     for (AST_expr* e : node->elts) {
         Value v = visit_expr(e);
         items.push_back(v);
-        listAppendInternal(list, v.o);
+        listAppendInternalStolen(list, v.o);
     }
 
     return Value(list, jit ? jit->emitCreateList(items) : NULL);

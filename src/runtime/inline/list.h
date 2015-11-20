@@ -42,7 +42,7 @@ inline void BoxedList::ensure(int min_free) {
 }
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
-extern "C" inline void listAppendInternal(Box* s, Box* v) {
+extern "C" inline void listAppendInternalStolen(Box* s, Box* v) {
     // Lock must be held!
 
     assert(PyList_Check(s));
@@ -52,9 +52,13 @@ extern "C" inline void listAppendInternal(Box* s, Box* v) {
     self->ensure(1);
 
     assert(self->size < self->capacity);
-    Py_INCREF(v);
     self->elts->elts[self->size] = v;
     self->size++;
+}
+
+extern "C" inline void listAppendInternal(Box* s, Box* v) {
+    Py_INCREF(v);
+    listAppendInternalStolen(s, v);
 }
 }
 
