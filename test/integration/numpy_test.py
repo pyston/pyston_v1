@@ -1,8 +1,34 @@
-# script expects to find the numpy directory at the same level as the Pyston directory
 import os
 import sys
 import subprocess
 import shutil
+
+"""
+Using this test file.
+
+We apply some patches on NumPy for some issues that we can't fix at the moment. The
+patches are applied directly to the NumPy subrepository (test/lib/numpy). If you need,
+you can make modifications in that folder directly for testing purposes. Just make sure
+that everytime you do, run this script again, so that the contents of numpy_test_env_*
+are updated (this is where the code and binaries that get tested are located).
+
+Note that sometimes it can be a pain to run this script everytime you make a change,
+as it does take a while. You can cd to the numpy_test_env_* directory and run the
+binaries inside of that folder, which will be able to "see" the NumPy module. For example:
+
+~/pyston/numpy_test_env_pyston_dbg$ gdb --args ./bin/python -c "import numpy as np; np.test()"
+
+The /bin/python is the pyston executable so if you recompile pyston, you need to run this
+script again to update it.
+
+Currently this script is not running the NumPy tests since there are still crashes
+happening. If you want to run the test, go to the bottom of the file and uncomment
+the subprocess call to the test suite.
+
+Some test cases in test/lib/numpy are commented out by the patch since they caused
+a crash where the cause was not immediately obvious and I wanted to make progress. Those
+will need to be uncommented at some point.
+"""
 
 def print_progress_header(text):
     print "\n>>>"
