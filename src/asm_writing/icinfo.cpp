@@ -340,7 +340,7 @@ bool ICInfo::shouldAttempt() {
     // retry counter even if we attempt it again.  We could probably handle this by setting
     // the backoff to 0 on commit, and then setting the retry to the backoff here.
 
-    return !isMegamorphic();
+    return !isMegamorphic() && ENABLE_ICS;
 }
 
 bool ICInfo::isMegamorphic() {
