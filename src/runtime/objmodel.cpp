@@ -4142,6 +4142,10 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         }
     }
 
+    // We check for this assertion later too - by checking it twice, we know
+    // if the error state was set before calling the chosen CF or after.
+    ASSERT(!PyErr_Occurred(), "");
+
     Box* r;
     // we duplicate the call to callChosenCf here so we can
     // distinguish lexically between calls that target jitted python
