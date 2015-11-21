@@ -477,6 +477,73 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
     assertConsistent();
 }
 
+class Helper {
+public:
+    static void incref(Box* b) {
+        Py_INCREF(b);
+    }
+    static void decref(Box* b) {
+        Py_DECREF(b);
+    }
+    static void xdecref(Box* b) {
+        Py_XDECREF(b);
+    }
+};
+
+void RewriterVar::incref() {
+    rewriter->addAction([=]() {
+        rewriter->_incref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void RewriterVar::decref() {
+    rewriter->addAction([=]() {
+        rewriter->_decref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void RewriterVar::xdecref() {
+    rewriter->addAction([=]() {
+        rewriter->_xdecref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void Rewriter::_incref(RewriterVar* var) {
+    //assembler->trap();
+    //auto reg = var->getInReg();
+    //assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+
+    //this->_trap();
+    this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                llvm::ArrayRef<RewriterVar*>());
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
+void Rewriter::_decref(RewriterVar* var) {
+    //assembler->trap();
+
+    this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
+void Rewriter::_xdecref(RewriterVar* var) {
+    //assembler->trap();
+
+    this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
 RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
@@ -846,6 +913,10 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     addAction([args_size, xmm_args_size, has_side_effects, this, result, func_addr, _args, _args_xmm]() {
         this->_call(result, has_side_effects, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
                     llvm::ArrayRef<RewriterVar*>(_args_xmm, xmm_args_size));
+        for (int i = 0; i < args_size; i++)
+            _args[i]->bumpUse();
+        for (int i = 0; i < xmm_args_size; i++)
+            _args_xmm[i]->bumpUse();
     }, uses, type);
 
     return result;
@@ -869,7 +940,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
         assert(assembler->bytesWritten() >= IC_INVALDITION_HEADER_SIZE);
     }
 
-    if (has_side_effects) {
+    if (has_side_effects && needs_invalidation_support) {
         if (!marked_inside_ic) {
             uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
             if (isLargeConstant(counter_addr)) {
@@ -1011,12 +1082,15 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     _setupCall(has_side_effects, args, args_xmm, assembler::R11);
 
+    // This duty is now on the caller:
+    /*
     for (RewriterVar* arg : args) {
         arg->bumpUse();
     }
     for (RewriterVar* arg_xmm : args_xmm) {
         arg_xmm->bumpUse();
     }
+    */
 
     assertConsistent();
 
@@ -1036,12 +1110,14 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     if (!failed) {
         assert(vars_by_location.count(assembler::RAX) == 0);
-        result->initializeInReg(assembler::RAX);
 
+        if (result)
+            result->initializeInReg(assembler::RAX);
         assertConsistent();
     }
 
-    result->releaseIfNoUses();
+    if (result)
+        result->releaseIfNoUses();
 }
 
 void Rewriter::abort() {
@@ -1204,6 +1280,8 @@ void Rewriter::commit() {
 
     if (marked_inside_ic) {
         assembler->comment("mark inside ic");
+
+        ASSERT(this->needs_invalidation_support, "why did we mark ourselves as inside this?");
 
         uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
         if (isLargeConstant(counter_addr)) {
@@ -1824,13 +1902,14 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs)
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs, bool needs_invalidation_support)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
       picked_slot(NULL),
       const_loader(this),
       return_location(this->rewrite->returnRegister()),
       failed(false),
+      needs_invalidation_support(needs_invalidation_support),
       added_changing_action(false),
       marked_inside_ic(false),
       done_guarding(false),

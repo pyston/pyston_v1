@@ -132,10 +132,10 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
                                      void* entry_code, JitCodeBlock& code_block)
-    : Rewriter(std::move(rewrite), 0, {}),
+    : Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
       block(block),
       code_offset(code_offset),
-      num_bytes_exit(0),
+      exit_info(),
       num_bytes_overlapping(num_bytes_overlapping),
       entry_code(entry_code),
       code_block(code_block),
@@ -296,6 +296,8 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end())
         return emitGetLocal(s, vreg);
+    // TODO xincref?
+    it->second->incref();
     return it->second;
 }
 
@@ -462,7 +464,7 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     RewriterVar* next = imm(b);
-    addAction([=]() { _emitJump(b, next, num_bytes_exit); }, { next }, ActionType::NORMAL);
+    addAction([=]() { _emitJump(b, next, exit_info); }, { next }, ActionType::NORMAL);
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
@@ -496,7 +498,12 @@ void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedStrin
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, RewriterVar* v) {
+    RewriterVar* prev = local_syms[s];
     local_syms[s] = v;
+    if (prev) {
+        // TODO: xdecref?
+        prev->decref();
+    }
 }
 
 void JitFragmentWriter::emitSetCurrentInst(AST_stmt* node) {
@@ -522,6 +529,7 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
 void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v) {
     assert(vreg >= 0);
     if (set_closure) {
+        assert(0 && "check refcounting");
         call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
 #ifndef NDEBUG
              imm(asUInt(s).first), imm(asUInt(s).second),
@@ -530,7 +538,9 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 #endif
              v);
     } else {
+        RewriterVar* prev = vregs_array->getAttr(8 * vreg);
         vregs_array->setAttr(8 * vreg, v);
+        prev->xdecref();
     }
 }
 
@@ -624,6 +634,10 @@ int JitFragmentWriter::finishCompilation() {
     }
 
     void* next_fragment_start = (uint8_t*)block->code + assembler->bytesWritten();
+    if (exit_info.num_bytes)
+        ASSERT(assembler->curInstPointer() == (uint8_t*)exit_info.exit_start + exit_info.num_bytes,
+               "Error! wrote more bytes out after the 'retq' that we thought was going to be the end of the assembly.  "
+               "We will end up overwriting those instructions.");
     code_block.fragmentFinished(assembler->bytesWritten(), num_bytes_overlapping, next_fragment_start);
 
 #if MOVING_GC
@@ -634,7 +648,7 @@ int JitFragmentWriter::finishCompilation() {
     registerGCTrackedICInfo(ic_info.release());
 #endif
 
-    return num_bytes_exit;
+    return exit_info.num_bytes;
 }
 
 bool JitFragmentWriter::finishAssembly(int continue_offset) {
@@ -777,10 +791,13 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
         assembler->mov(assembler::Immediate((void*)assertNameDefinedHelper), assembler::R11);
         assembler->callq(assembler::R11);
     }
+
+    _incref(val_var);
 }
 
-void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp) {
-    size_of_exit_to_interp = 0;
+void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info) {
+    assert(exit_info.num_bytes == 0);
+    assert(exit_info.exit_start == NULL);
     if (b->code) {
         int64_t offset = (uint64_t)b->code - ((uint64_t)entry_code + code_offset);
         if (isLargeConstant(offset)) {
@@ -790,6 +807,7 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
             assembler->jmp(assembler::JumpDestination::fromStart(offset));
     } else {
         int num_bytes = assembler->bytesWritten();
+        exit_info.exit_start = assembler->curInstPointer();
         block_next->getInReg(assembler::RAX, true);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
         assembler->pop(assembler::R12);
@@ -800,8 +818,8 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
         for (int i = assembler->bytesWritten() - num_bytes; i < min_patch_size; ++i)
             assembler->trap(); // we could use nops but traps may help if something goes wrong
 
-        size_of_exit_to_interp = assembler->bytesWritten() - num_bytes;
-        assert(assembler->hasFailed() || size_of_exit_to_interp >= min_patch_size);
+        exit_info.num_bytes = assembler->bytesWritten() - num_bytes;
+        assert(assembler->hasFailed() || exit_info.num_bytes >= min_patch_size);
     }
     block_next->bumpUse();
 }
@@ -813,6 +831,8 @@ void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var
     _call(result, false, (void*)ASTInterpreterJitInterface::doOSRHelper, args, RewriterVar::SmallVector());
     auto result_reg = result->getInReg(assembler::RDX);
     result->bumpUse();
+    for (auto a : args)
+        a->bumpUse();
 
     assembler->test(result_reg, result_reg);
     {
@@ -935,12 +955,13 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
 
     {
         assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
-        int exit_size = 0;
-        _emitJump(next_block, next_block_var, exit_size);
-        if (exit_size) {
+        ExitInfo exit_info;
+        _emitJump(next_block, next_block_var, exit_info);
+        if (exit_info.num_bytes) {
+            assert(assembler->curInstPointer() == (uint8_t*)exit_info.exit_start + exit_info.num_bytes);
             RELEASE_ASSERT(!side_exit_patch_location.first,
                            "if we start to emit more than one side exit we should make this a vector");
-            side_exit_patch_location = std::make_pair(next_block, assembler->bytesWritten() - exit_size);
+            side_exit_patch_location = std::make_pair(next_block, assembler->bytesWritten() - exit_info.num_bytes);
         }
     }
 

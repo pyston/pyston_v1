@@ -300,8 +300,6 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
-    assert(0 && "refcounting not set up");
-
     auto& code_blocks = md->code_blocks;
     JitCodeBlock* code_block = NULL;
     if (!code_blocks.empty())
@@ -474,7 +472,6 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
-            assert(0 && "check refcounting");
             if (!closure) {
                 bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
                 if (is_live)
@@ -1550,7 +1547,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         case ScopeInfo::VarScopeType::CLOSURE: {
             Value v;
             if (jit) {
-                assert(0 && "check refcounting");
                 bool is_live = false;
                 if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);

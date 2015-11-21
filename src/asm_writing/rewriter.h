@@ -216,6 +216,9 @@ public:
     void setAttr(int offset, RewriterVar* other);
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
+    void incref();
+    void decref();
+    void xdecref();
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
@@ -397,8 +400,9 @@ protected:
 
     bool failed;   // if we tried to generate an invalid rewrite.
     bool finished; // committed or aborted
-#ifndef NDEBUG
+    const bool needs_invalidation_support;
 
+#ifndef NDEBUG
     bool phase_emitting;
     void initPhaseCollecting() { phase_emitting = false; }
     void initPhaseEmitting() { phase_emitting = true; }
@@ -417,7 +421,11 @@ protected:
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
 
-    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs);
+    // needs_invalidation_support: whether we do some extra work to make sure that the code that this Rewriter
+    // produces will support invalidation.  Normally we want this, but the baseline jit needs to turn
+    // this off (for the non-IC assembly it generates).
+    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs,
+             bool needs_invalidation_support = true);
 
     std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
     template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
@@ -490,6 +498,7 @@ protected:
     void _loadConst(RewriterVar* result, int64_t val);
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
                     Location preserve = Location::any());
+    // _call does not call bumpUse on its arguments:
     void _call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                llvm::ArrayRef<RewriterVar*> args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
@@ -510,6 +519,11 @@ protected:
     void _cmp(RewriterVar* result, RewriterVar* var1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* var2,
               Location loc = Location::any());
     void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());
+
+    // These do not call bumpUse on their arguments:
+    void _incref(RewriterVar* var);
+    void _decref(RewriterVar* var);
+    void _xdecref(RewriterVar* var);
 
     void assertConsistent() {
 #ifndef NDEBUG

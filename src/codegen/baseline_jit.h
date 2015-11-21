@@ -158,6 +158,13 @@ public:
 
 class JitFragmentWriter : public Rewriter {
 private:
+    struct ExitInfo {
+        int num_bytes; // the number of bytes for the overwriteable jump
+        void* exit_start; // where that jump starts
+
+        ExitInfo() : num_bytes(0), exit_start(NULL) {}
+    };
+
     static constexpr int min_patch_size = 13;
 
     CFGBlock* block;
@@ -169,7 +176,7 @@ private:
     // value which will make the fragment start at the instruction where the last block is exiting to the interpreter to
     // interpret the new block -> we overwrite the exit with the code of the new block.
     // If there is nothing to overwrite this field will be 0.
-    int num_bytes_exit;
+    ExitInfo exit_info;
     int num_bytes_overlapping; // num of bytes this block overlaps with the prev. used to patch unessary jumps
 
     void* entry_code; // JitCodeBlock start address. Must have an offset of 0 into the code block
@@ -292,7 +299,7 @@ private:
                                   std::vector<BoxedString*>* keyword_names);
 
     void _emitGetLocal(RewriterVar* val_var, const char* name);
-    void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
+    void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                      int slot_size, AST* ast_node);
