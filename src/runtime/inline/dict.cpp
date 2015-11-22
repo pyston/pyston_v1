@@ -20,7 +20,7 @@
 namespace pyston {
 
 BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
-    : d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
+    : d(d), it(d->d.begin()), size(d->d.size()), itEnd(d->d.end()), type(type) {
 }
 
 Box* dict_iter(Box* s) noexcept {
@@ -53,10 +53,15 @@ i1 dictIterHasnextUnboxed(Box* s) {
     assert(s->cls == dict_iterator_cls);
     BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
 
-    return self->it != self->itEnd;
+    return self->it != self->d->d.end();
 }
 
 Box* dictIterHasnext(Box* s) {
+
+    BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
+    if (self->d->d.size() != self->size) {
+        raiseExcHelper(RuntimeError, "dictionary changed size during iteration");
+    }
     return boxBool(dictIterHasnextUnboxed(s));
 }
 
@@ -80,7 +85,10 @@ Box* dictiter_next(Box* s) noexcept {
 }
 
 Box* dictIterNext(Box* s) {
-    auto* rtn = dictiter_next(s);
+    BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
+
+    auto* rtn = dictiter_next(self);
+
     if (!rtn)
         raiseExcHelper(StopIteration, "");
     return rtn;

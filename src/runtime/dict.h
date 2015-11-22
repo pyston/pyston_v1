@@ -31,6 +31,8 @@ public:
 
     BoxedDict* d;
     BoxedDict::DictMap::iterator it;
+    long size;
+
     const BoxedDict::DictMap::iterator itEnd;
     const IteratorType type;
 
