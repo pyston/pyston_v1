@@ -81,7 +81,6 @@ test_deque              couple unknown issues
 test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
 test_dictcomps          we need to disallow assigning to dictcomps
-test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
 test_dictviews          various unique bugs
 test_difflib            [unknown]
 test_distutils          [unknown]
@@ -179,7 +178,6 @@ test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           [unknown]
-test_richcmp            PyObject_Not
 test_rlcompleter        [unknown]
 test_runpy              [unknown]
 test_sax                [unknown]

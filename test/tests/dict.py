@@ -235,3 +235,9 @@ print sorted(l)
 d = dict()
 d['two'] = d
 print d
+
+d1 = {1:1, 2:2, 3:3}
+d2 = {1:1, 2:'2', 3:3}
+d3 = {1:1, 2:3, 3:3}
+print(d1.__cmp__(d2))
+print(d1.__cmp__(d3))

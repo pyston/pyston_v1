@@ -1,4 +1,3 @@
-# expected: fail
 # Tests for rich comparisons
 
 import unittest
