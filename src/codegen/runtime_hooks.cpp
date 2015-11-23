@@ -200,6 +200,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSet);
     GET(initFrame);
     GET(deinitFrame);
+    GET(makePendingCalls);
 
     GET(getattr);
     GET(getattr_capi);

@@ -626,6 +626,9 @@ initsignal(void)
         old_siginthandler = PyOS_setsig(SIGINT, signal_handler);
     }
 
+    // Pyston change: let the GC scan the handlers
+    PyGC_AddPotentialRoot(Handlers, sizeof(Handlers));
+
 #ifdef SIGHUP
     x = PyInt_FromLong(SIGHUP);
     PyDict_SetItemString(d, "SIGHUP", x);
@@ -895,10 +898,6 @@ PyErr_CheckSignals(void)
     if (!is_tripped)
         return 0;
 
-    // Pyston change:
-    Py_FatalError("TODO");
-
-#if 0
     int i;
     PyObject *f;
 
@@ -943,7 +942,6 @@ PyErr_CheckSignals(void)
             Py_DECREF(result);
         }
     }
-#endif
 
     return 0;
 }
