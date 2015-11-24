@@ -473,6 +473,11 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 }
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
+    for (auto v : local_syms) {
+        if (v.second)
+            v.second->decref(); // xdecref?
+    }
+
     RewriterVar* next = imm(b);
     addAction([=]() { _emitJump(b, next, exit_info); }, { next }, ActionType::NORMAL);
 }
@@ -560,9 +565,18 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 }
 
 void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
-    assert(0 && "need to decref any local syms");
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
+
+    llvm::SmallVector<RewriterVar*, 16> vars;
+    vars.push_back(v);
+    vars.push_back(var);
+    vars.push_back(next_block_var);
+    for (auto v : local_syms) {
+        if (v.second)
+            vars.push_back(v.second);
+    }
+
     addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
               ActionType::NORMAL);
 }
@@ -812,11 +826,6 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
 }
 
 void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info) {
-    for (auto v : local_syms) {
-        if (v.second)
-            v.second->decref(); // xdecref?
-    }
-
     assert(exit_info.num_bytes == 0);
     assert(exit_info.exit_start == NULL);
     if (b->code) {
@@ -976,6 +985,12 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
 
     {
         assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
+
+        for (auto v : local_syms) {
+            if (v.second)
+                _decref(v.second);
+        }
+
         ExitInfo exit_info;
         _emitJump(next_block, next_block_var, exit_info);
         if (exit_info.num_bytes) {
