@@ -56,9 +56,9 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       func_dbg_info(func_dbg_info),
       scratch_space(NULL),
       frame_info(NULL),
-      frame_info_arg(NULL),
       globals(NULL),
       vregs(NULL),
+      stmt(NULL),
       scratch_size(0) {
     assert(cf->func);
     assert(!cf->md); // in this case don't need to pass in sourceinfo
@@ -164,7 +164,18 @@ template <typename Builder> static llvm::Value* getVRegsGep(Builder& builder, ll
     return builder.CreateConstInBoundsGEP2_32(v, 0, 4);
 }
 
-llvm::Value* IRGenState::getFrameInfoVar() {
+template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, stmt) == 56, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 5);
+}
+
+template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, globals) == 64, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
+}
+
+void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
+                                   llvm::Value* frame_info_arg) {
     /*
         There is a matrix of possibilities here.
 
@@ -182,101 +193,123 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         - If the function is NAME-scope, we extract the boxedLocals from the frame_info in order
           to set this->boxed_locals.
     */
+    assert(!frame_info);
+    llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
 
-    if (!this->frame_info) {
-        llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
+    llvm::IRBuilder<true> builder(&entry_block);
 
-        llvm::IRBuilder<true> builder(&entry_block);
+    if (entry_block.begin() != entry_block.end())
+        builder.SetInsertPoint(&entry_block, entry_block.getFirstInsertionPt());
 
-        if (entry_block.begin() != entry_block.end())
-            builder.SetInsertPoint(&entry_block, entry_block.getFirstInsertionPt());
+    if (entry_block.getTerminator())
+        builder.SetInsertPoint(entry_block.getTerminator());
+    else
+        builder.SetInsertPoint(&entry_block);
 
-        if (entry_block.getTerminator())
-            builder.SetInsertPoint(entry_block.getTerminator());
-        else
-            builder.SetInsertPoint(&entry_block);
+    llvm::AllocaInst* al_pointer_to_frame_info
+        = builder.CreateAlloca(g.llvm_frame_info_type->getPointerTo(), NULL, "frame_info_ptr");
 
-        if (frame_info_arg) {
-            // The OSR case
+    if (frame_info_arg) {
+        assert(!passed_closure);
+        assert(!passed_globals);
 
-            this->frame_info = frame_info_arg;
+        // The OSR case
 
-            // use vrags array from the interpreter
-            vregs = builder.CreateLoad(getVRegsGep(builder, frame_info_arg));
+        this->frame_info = frame_info_arg;
 
-            if (getScopeInfo()->usesNameLookup()) {
-                // load frame_info.boxedLocals
-                this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
-            }
+        // use vrags array from the interpreter
+        vregs = builder.CreateLoad(getVRegsGep(builder, frame_info_arg));
+        this->globals = builder.CreateLoad(getGlobalsGep(builder, frame_info_arg));
 
-        } else {
-            // The "normal" case
-
-            assert(!vregs);
-            getMD()->calculateNumVRegs();
-            int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
-            if (num_user_visible_vregs > 0) {
-                auto* vregs_alloca
-                    = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
-                // Clear the vregs array because 0 means undefined valued.
-                builder.CreateMemSet(vregs_alloca, getConstantInt(0, g.i8),
-                                     getConstantInt(num_user_visible_vregs * sizeof(Box*)),
-                                     vregs_alloca->getAlignment());
-                vregs = vregs_alloca;
-            } else
-                vregs = getNullPtr(g.llvm_value_type_ptr_ptr);
-
-            llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
-            assert(al->isStaticAlloca());
-
-            // frame_info.exc.type = NULL
-            llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
-            llvm::Value* exc_info = getExcinfoGep(builder, al);
-            builder.CreateStore(
-                null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
-
-            // frame_info.boxedLocals = NULL
-            llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
-            builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
-
-            if (getScopeInfo()->usesNameLookup()) {
-                // frame_info.boxedLocals = createDict()
-                // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
-                this->boxed_locals = builder.CreateCall(g.funcs.createDict);
-                builder.CreateStore(this->boxed_locals, boxed_locals_gep);
-            }
-
-            // frame_info.frame_obj = NULL
-            static llvm::Type* llvm_frame_obj_type_ptr
-                = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
-            builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
-
-            // frame_info.passed_closure = NULL
-            builder.CreateStore(getNullPtr(g.llvm_closure_type_ptr), getPassedClosureGep(builder, al));
-            // set frame_info.vregs
-            builder.CreateStore(vregs, getVRegsGep(builder, al));
-
-            this->frame_info = al;
+        if (getScopeInfo()->usesNameLookup()) {
+            // load frame_info.boxedLocals
+            this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
         }
+
+    } else {
+        // The "normal" case
+        assert(!vregs);
+        getMD()->calculateNumVRegs();
+        int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
+        if (num_user_visible_vregs > 0) {
+            auto* vregs_alloca
+                = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
+            // Clear the vregs array because 0 means undefined valued.
+            builder.CreateMemSet(vregs_alloca, getConstantInt(0, g.i8),
+                                 getConstantInt(num_user_visible_vregs * sizeof(Box*)), vregs_alloca->getAlignment());
+            vregs = vregs_alloca;
+        } else
+            vregs = getNullPtr(g.llvm_value_type_ptr_ptr);
+
+        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
+        assert(al->isStaticAlloca());
+
+
+        // frame_info.exc.type = NULL
+        llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+        llvm::Value* exc_info = getExcinfoGep(builder, al);
+        builder.CreateStore(null_value,
+                            builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
+
+        // frame_info.boxedLocals = NULL
+        llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
+        builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
+
+        if (getScopeInfo()->usesNameLookup()) {
+            // frame_info.boxedLocals = createDict()
+            // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
+            this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+            builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+        }
+
+        // frame_info.frame_obj = NULL
+        static llvm::Type* llvm_frame_obj_type_ptr
+            = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
+        builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
+
+        // set  frame_info.passed_closure
+        builder.CreateStore(passed_closure, getPassedClosureGep(builder, al));
+        // set frame_info.globals
+        builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
+        // set frame_info.vregs
+        builder.CreateStore(vregs, getVRegsGep(builder, al));
+
+        this->frame_info = al;
+        this->globals = passed_globals;
     }
 
-    return this->frame_info;
+    stmt = getStmtGep(builder, frame_info);
+    builder.CreateStore(this->frame_info, al_pointer_to_frame_info);
+    // Create stackmap to make a pointer to the frame_info location known
+    PatchpointInfo* info = PatchpointInfo::create(getCurFunction(), 0, 0, 0);
+    std::vector<llvm::Value*> args;
+    args.push_back(getConstantInt(info->getId(), g.i64));
+    args.push_back(getConstantInt(0, g.i32));
+    args.push_back(al_pointer_to_frame_info);
+    info->setNumFrameArgs(1);
+    info->setIsFrameInfoStackmap();
+    builder.CreateCall(llvm::Intrinsic::getDeclaration(g.cur_module, llvm::Intrinsic::experimental_stackmap), args);
+}
+
+llvm::Value* IRGenState::getFrameInfoVar() {
+    assert(frame_info);
+    return frame_info;
 }
 
 llvm::Value* IRGenState::getBoxedLocalsVar() {
     assert(getScopeInfo()->usesNameLookup());
-    getFrameInfoVar(); // ensures this->boxed_locals_var is initialized
     assert(this->boxed_locals != NULL);
     return this->boxed_locals;
 }
 
 llvm::Value* IRGenState::getVRegsVar() {
-    if (!vregs) {
-        // calling this sets also the vregs member
-        getFrameInfoVar();
-        assert(vregs);
-    }
+    assert(vregs);
     return vregs;
+}
+
+llvm::Value* IRGenState::getStmtVar() {
+    assert(stmt);
+    return stmt;
 }
 
 ScopeInfo* IRGenState::getScopeInfo() {
@@ -288,18 +321,9 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
     return source->scoping->getScopeInfoForNode(node);
 }
 
-void IRGenState::setGlobals(llvm::Value* globals) {
-    assert(!source_info->scoping->areGlobalsFromModule());
-    assert(!this->globals);
-    this->globals = globals;
-}
-
 llvm::Value* IRGenState::getGlobals() {
-    if (!globals) {
-        assert(source_info->scoping->areGlobalsFromModule());
-        this->globals = embedRelocatablePtr(source_info->parent_module, g.llvm_value_type_ptr);
-    }
-    return this->globals;
+    assert(globals);
+    return globals;
 }
 
 llvm::Value* IRGenState::getGlobalsIfCustom() {
@@ -464,27 +488,10 @@ public:
         }
 #endif
 
-        if (ENABLE_FRAME_INTROSPECTION) {
-            llvm::Type* rtn_type = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())
-                                                                      ->getElementType())->getReturnType();
-
-            llvm::Value* bitcasted = getBuilder()->CreateBitCast(callee, g.i8->getPointerTo());
-            llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, unw_info, target_exception_style);
-
-            if (rtn_type == cs->getType()) {
-                return cs.getInstruction();
-            } else if (rtn_type == g.i1) {
-                return getBuilder()->CreateTrunc(cs.getInstruction(), rtn_type);
-            } else if (llvm::isa<llvm::PointerType>(rtn_type)) {
-                return getBuilder()->CreateIntToPtr(cs.getInstruction(), rtn_type);
-            } else {
-                cs.getInstruction()->getType()->dump();
-                rtn_type->dump();
-                RELEASE_ASSERT(0, "don't know how to convert those");
-            }
-        } else {
-            return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
-        }
+        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
+                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
+        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
+        return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
     }
 
     llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
@@ -577,7 +584,6 @@ const std::string CREATED_CLOSURE_NAME = "#created_closure";
 const std::string PASSED_CLOSURE_NAME = "#passed_closure";
 const std::string PASSED_GENERATOR_NAME = "#passed_generator";
 const std::string FRAME_INFO_PTR_NAME = "#frame_info_ptr";
-const std::string PASSED_GLOBALS_NAME = "#passed_globals";
 
 bool isIsDefinedName(llvm::StringRef name) {
     return startswith(name, "!is_defined_");
@@ -1129,11 +1135,6 @@ private:
         llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
         auto ellipsis_cls = Ellipsis->cls;
         return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis, false);
-    }
-
-    llvm::Constant* embedParentModulePtr() {
-        BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
-        return embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, const UnwindInfo& unw_info) {
@@ -1778,7 +1779,7 @@ private:
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             if (irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
-                auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
+                auto parent_module = irstate->getGlobals();
                 ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
                 module->decvref(emitter);
@@ -2209,11 +2210,6 @@ private:
         sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
             = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
 
-        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
-            sorted_symbol_table[internString(PASSED_GLOBALS_NAME)]
-                = new ConcreteCompilerVariable(UNKNOWN, irstate->getGlobals(), true);
-        }
-
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
         // It would be nice to directly pass all variables as arguments, instead of packing them into
@@ -2595,13 +2591,6 @@ public:
                               std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
 
-        stackmap_args.push_back(irstate->getFrameInfoVar());
-
-        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
-            stackmap_args.push_back(irstate->getGlobals());
-            pp->addFrameVar(PASSED_GLOBALS_NAME, UNKNOWN);
-        }
-
         assert(UNBOXED_INT->llvmType() == g.i64);
         if (ENABLE_JIT_OBJECT_CACHE) {
             llvm::Value* v;
@@ -2756,40 +2745,48 @@ public:
 
         auto scope_info = irstate->getScopeInfo();
 
-        llvm::Value* passed_closure = NULL;
+
         llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
+        llvm::Value* passed_closure = NULL;
+        llvm::Value* generator = NULL;
+        llvm::Value* globals = NULL;
 
         if (scope_info->takesClosure()) {
             passed_closure = AI;
-            symbol_table[internString(PASSED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getPassedClosureType(), AI, true);
+            ++AI;
+        } else
+            passed_closure = getNullPtr(g.llvm_closure_type_ptr);
 
-            // store the passed_closure inside the frame info so that frame introspection can access it without needing
-            // a stackmap entry
-            emitter.getBuilder()->CreateStore(passed_closure,
-                                              getPassedClosureGep(*emitter.getBuilder(), irstate->getFrameInfoVar()));
+        if (irstate->getSourceInfo()->is_generator) {
+            generator = AI;
             ++AI;
         }
 
-        if (scope_info->createsClosure()) {
-            if (!passed_closure)
-                passed_closure = getNullPtr(g.llvm_closure_type_ptr);
+        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            globals = AI;
+            ++AI;
+        } else {
+            BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
+            globals = embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
+        }
 
+        irstate->setupFrameInfoVar(passed_closure, globals);
+
+        if (scope_info->takesClosure()) {
+            symbol_table[internString(PASSED_CLOSURE_NAME)]
+                = new ConcreteCompilerVariable(getPassedClosureType(), passed_closure, true);
+        }
+
+        if (scope_info->createsClosure()) {
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
                 g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
             symbol_table[internString(CREATED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
         }
 
-        if (irstate->getSourceInfo()->is_generator) {
-            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI, true);
-            ++AI;
-        }
-
-        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
-            irstate->setGlobals(AI);
-            ++AI;
-        }
+        if (irstate->getSourceInfo()->is_generator)
+            symbol_table[internString(PASSED_GENERATOR_NAME)]
+                = new ConcreteCompilerVariable(GENERATOR, generator, true);
 
         std::vector<llvm::Value*> python_parameters;
         for (int i = 0; i < arg_types.size(); i++) {

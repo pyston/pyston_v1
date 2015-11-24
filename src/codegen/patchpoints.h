@@ -106,6 +106,7 @@ private:
     const ICSetupInfo* icinfo;
     int num_ic_stackmap_args;
     int num_frame_stackmap_args;
+    bool is_frame_info_stackmap;
 
     std::vector<FrameVarInfo> frame_vars;
     unsigned int id;
@@ -115,6 +116,7 @@ private:
           icinfo(icinfo),
           num_ic_stackmap_args(num_ic_stackmap_args),
           num_frame_stackmap_args(-1),
+          is_frame_info_stackmap(false),
           id(0) {}
 
 
@@ -129,6 +131,7 @@ public:
     int scratchStackmapArg() { return 0; }
     int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
     bool isDeopt() const { return icinfo ? icinfo->isDeopt() : false; }
+    bool isFrameInfoStackmap() const { return is_frame_info_stackmap; }
     int numFrameSpillsSupported() const { return isDeopt() ? MAX_FRAME_SPILLS : 0; }
 
     void addFrameVar(llvm::StringRef name, CompilerType* type);
@@ -136,8 +139,9 @@ public:
         assert(num_frame_stackmap_args == -1);
         num_frame_stackmap_args = num_frame_args;
     }
+    void setIsFrameInfoStackmap(bool b = true) { is_frame_info_stackmap = b; }
 
-    int icStackmapArgsStart() { return 1; }
+    int icStackmapArgsStart() { return isFrameInfoStackmap() ? 0 : 1; }
     int numICStackmapArgs() { return num_ic_stackmap_args; }
 
     int frameStackmapArgsStart() { return icStackmapArgsStart() + numICStackmapArgs(); }

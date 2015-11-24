@@ -82,22 +82,6 @@ Box* listiter_next(Box* s) noexcept {
     return rtn;
 }
 
-template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
-    Box* rtn = listiter_next(s);
-    if (!rtn) {
-        if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
-            return NULL;
-        } else
-            raiseExcHelper(StopIteration, "");
-    }
-    return rtn;
-}
-
-// force instantiation:
-template Box* listiterNext<CAPI>(Box*);
-template Box* listiterNext<CXX>(Box*);
-
 Box* listReversed(Box* s) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);

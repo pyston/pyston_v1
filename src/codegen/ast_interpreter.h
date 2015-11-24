@@ -76,13 +76,10 @@ Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLoca
 Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state);
 
-AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
-Box* getGlobalsForInterpretedFrame(void* frame_ptr);
 FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 
-Box** getVRegsForInterpretedFrame(void* frame_ptr);
 BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr);
 

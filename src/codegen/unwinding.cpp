@@ -344,7 +344,6 @@ public:
 
         assert(cf->location_map);
         const LocationMap::LocationTable& table = cf->location_map->names[name];
-        assert(table.locations.size());
 
         auto entry = table.findEntry(offset);
         if (!entry)
@@ -356,28 +355,17 @@ public:
     AST_stmt* getCurrentStatement() {
         if (id.type == PythonFrameId::COMPILED) {
             auto locations = findLocations("!current_stmt");
-            RELEASE_ASSERT(locations.size() == 1, "%ld", locations.size());
-            return reinterpret_cast<AST_stmt*>(readLocation(locations[0]));
-        } else if (id.type == PythonFrameId::INTERPRETED) {
-            return getCurrentStatementForInterpretedFrame((void*)id.bp);
+            if (locations.size() == 1)
+                return reinterpret_cast<AST_stmt*>(readLocation(locations[0]));
         }
-        abort();
+        assert(getFrameInfo()->stmt);
+        return getFrameInfo()->stmt;
     }
 
     Box* getGlobals() {
-        if (id.type == PythonFrameId::COMPILED) {
-            CompiledFunction* cf = getCF();
-            if (cf->md->source->scoping->areGlobalsFromModule())
-                return cf->md->source->parent_module;
-            auto locations = findLocations(PASSED_GLOBALS_NAME);
-            assert(locations.size() == 1);
-            Box* r = (Box*)readLocation(locations[0]);
-            ASSERT(gc::isValidGCObject(r), "%p", r);
-            return r;
-        } else if (id.type == PythonFrameId::INTERPRETED) {
-            return getGlobalsForInterpretedFrame((void*)id.bp);
-        }
-        abort();
+        Box* r = getFrameInfo()->globals;
+        ASSERT(gc::isValidGCObject(r), "%p", r);
+        return r;
     }
 
     Box* getGlobalsDict() {
@@ -395,8 +383,7 @@ public:
             CompiledFunction* cf = getCF();
             assert(cf->location_map->frameInfoFound());
             const auto& frame_info_loc = cf->location_map->frame_info_location;
-
-            return reinterpret_cast<FrameInfo*>(readLocation(frame_info_loc));
+            return *reinterpret_cast<FrameInfo**>(readLocation(frame_info_loc));
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getFrameInfoForInterpretedFrame((void*)id.bp);
         }

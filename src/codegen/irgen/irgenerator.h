@@ -49,7 +49,6 @@ extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
 extern const std::string FRAME_INFO_PTR_NAME;
-extern const std::string PASSED_GLOBALS_NAME;
 
 
 // Class that holds state of the current IR generation, that might not be local
@@ -70,9 +69,9 @@ private:
     llvm::AllocaInst* scratch_space;
     llvm::Value* frame_info;
     llvm::Value* boxed_locals;
-    llvm::Value* frame_info_arg;
     llvm::Value* globals;
     llvm::Value* vregs;
+    llvm::Value* stmt;
     int scratch_size;
 
 public:
@@ -91,10 +90,15 @@ public:
 
     GCBuilder* getGC() { return gc; }
 
+    void setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
+                           llvm::Value* frame_info_arg = NULL);
+    void setupFrameInfoVarOSR(llvm::Value* frame_info_arg) { return setupFrameInfoVar(NULL, NULL, frame_info_arg); }
+
     llvm::Value* getScratchSpace(int min_bytes);
     llvm::Value* getFrameInfoVar();
     llvm::Value* getBoxedLocalsVar();
     llvm::Value* getVRegsVar();
+    llvm::Value* getStmtVar();
 
     ConcreteCompilerType* getReturnType() { return cf->getReturnType(); }
 
@@ -110,9 +114,6 @@ public:
 
     ParamNames* getParamNames() { return param_names; }
 
-    void setFrameInfoArgument(llvm::Value* v) { frame_info_arg = v; }
-
-    void setGlobals(llvm::Value* globals);
     // Returns the custom globals, or the module if the globals come from the module.
     llvm::Value* getGlobals();
     // Returns the custom globals, or null if the globals come from the module.
