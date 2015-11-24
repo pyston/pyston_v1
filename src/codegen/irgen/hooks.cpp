@@ -340,6 +340,11 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == None);
     Py_DECREF(r);
+
+    // XXX for bjit testing
+    r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    assert(r == None);
+    Py_DECREF(r);
 }
 
 Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
