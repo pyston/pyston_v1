@@ -306,7 +306,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(source_info->getName()->s())));
+        code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(autoDecref(source_info->getName())->s())));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }
@@ -415,6 +415,8 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
             Py_XDECREF(v.o);
+            if (v.var)
+                v.var->xdecref();
             v = interpreter.visit_stmt(s);
         }
     }
@@ -546,7 +548,12 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
 }
 
 Value ASTInterpreter::getNone() {
-    return Value(incref(None), jit ? jit->imm(None) : NULL);
+    RewriterVar* v = NULL;
+    if (jit) {
+        v = jit->imm(None);
+        v->incref();
+    }
+    return Value(incref(None), v);
 }
 
 Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
@@ -1460,7 +1467,12 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     } else
         RELEASE_ASSERT(0, "not implemented");
     Py_INCREF(o);
-    return Value(o, jit ? jit->imm(o) : NULL);
+    RewriterVar* v = NULL;
+    if (jit) {
+        v = jit->imm(o);
+        v->incref();
+    }
+    return Value(o, v);
 }
 
 Value ASTInterpreter::visit_index(AST_Index* node) {
