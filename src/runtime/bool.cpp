@@ -34,8 +34,8 @@ extern "C" Box* boolRepr(BoxedBool* v) {
     static BoxedString* false_str = getStaticString("False");
 
     if (v == True)
-        return true_str;
-    return false_str;
+        return incref(true_str);
+    return incref(false_str);
 }
 
 size_t bool_hash(BoxedBool* v) {
@@ -59,7 +59,7 @@ extern "C" Box* boolAnd(BoxedBool* lhs, BoxedBool* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls != bool_cls)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return boxBool(lhs->n && rhs->n);
 }
@@ -69,7 +69,7 @@ extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'bool' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != bool_cls)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return boxBool(lhs->n || rhs->n);
 }
@@ -80,7 +80,7 @@ extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls != bool_cls)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return boxBool(lhs->n ^ rhs->n);
 }

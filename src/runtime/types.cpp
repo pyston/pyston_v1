@@ -2626,7 +2626,7 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
 static Box* typeName(Box* b, void*);
 Box* objectRepr(Box* self) {
     BoxedClass* type = self->cls;
-    Box* mod = NULL;
+    DecrefHandle<Box, true> mod(NULL);
     try {
         mod = typeModule(type, NULL);
         if (!PyString_Check(mod))
@@ -2634,7 +2634,7 @@ Box* objectRepr(Box* self) {
     } catch (ExcInfo) {
     }
 
-    Box* name = typeName(type, NULL);
+    DecrefHandle<Box> name(typeName(type, NULL));
     if (mod != NULL && strcmp(PyString_AS_STRING(mod), "__builtin__"))
         return PyString_FromFormat("<%s.%s object at %p>", PyString_AS_STRING(mod), PyString_AS_STRING(name), self);
     return PyString_FromFormat("<%s object at %p>", type->tp_name, self);
@@ -3023,7 +3023,7 @@ static Box* typeName(Box* b, void*) {
 
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* et = static_cast<BoxedHeapClass*>(type);
-        return et->ht_name;
+        return incref(et->ht_name);
     } else {
         const char* s = strrchr(type->tp_name, '.');
         if (s == NULL)

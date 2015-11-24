@@ -20,6 +20,7 @@
 namespace pyston {
 
 BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : t(t), pos(0) {
+    Py_INCREF(t);
 }
 
 Box* tupleIterIter(Box* s) {
@@ -53,6 +54,7 @@ Box* tupleiter_next(Box* s) noexcept {
 
     Box* rtn = self->t->elts[self->pos];
     self->pos++;
+    Py_INCREF(rtn);
     return rtn;
 }
 

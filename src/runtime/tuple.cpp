@@ -240,6 +240,7 @@ Box* tupleRepr(BoxedTuple* t) {
             }
             BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
             chars.insert(chars.end(), elt_repr->s().begin(), elt_repr->s().end());
+            Py_DECREF(elt_repr);
         }
 
         if (n == 1)

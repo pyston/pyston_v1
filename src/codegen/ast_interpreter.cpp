@@ -871,6 +871,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         Value val = visit_expr(node->args[0]);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
+        Py_DECREF(val.o);
+        if (jit)
+            val.var->decref();
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -956,6 +959,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
+        Py_DECREF(obj.o);
+        if (jit)
+            obj.var->decref();
     } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
         abortJITing();
         Value obj = visit_expr(node->args[0]);
