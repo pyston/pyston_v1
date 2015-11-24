@@ -464,6 +464,8 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
             jit->emitSetGlobal(globals, name.getBox(), value);
         setGlobal(globals, name.getBox(), value.o);
         Py_DECREF(value.o);
+        if (jit)
+            value.var->decref();
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(0 && "check refcounting");
         if (jit)
@@ -570,6 +572,10 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Value r = doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
     Py_DECREF(left.o);
     Py_DECREF(right.o);
+    if (jit) {
+        left.var->xdecref();
+        right.var->xdecref();
+    }
     return r;
 }
 
@@ -624,8 +630,10 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     Value v = visit_expr(node->test);
     ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
 
-    if (jit)
+    if (jit) {
         jit->emitSideExit(v, v.o, v.o == True ? node->iffalse : node->iftrue);
+        v.var->decref();
+    }
 
     if (v.o == True)
         next_block = node->iftrue;
@@ -849,6 +857,11 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
     Value r = doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
     Py_DECREF(left.o);
     Py_DECREF(right.o);
+
+    if (jit) {
+        left.var->decref();
+        right.var->decref();
+    }
     return r;
 }
 
@@ -917,6 +930,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
         Py_DECREF(obj.o);
+        if (jit)
+            obj.var->decref();
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
@@ -1114,9 +1129,14 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     Value func = createFunction(node, args, node->body);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
-        if (jit)
-            func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
         func.o = runtimeCall(autoDecref(decorators[i].o), ArgPassSpec(1), autoDecref(func.o), 0, 0, 0, 0);
+
+        if (jit) {
+            auto prev_func_var = func.var;
+            func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
+            decorators[i].var->decref();
+            prev_func_var->decref();
+        }
     }
     return func;
 }
@@ -1290,6 +1310,12 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     else
         printHelper(getSysStdout(), autoXDecref(var.o), node->nl);
 
+    if (jit) {
+        if (node->dest)
+            dest.var->decref();
+        var.var->decref();
+    }
+
     return Value();
 }
 
@@ -1313,6 +1339,10 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     Value r = doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
     Py_DECREF(left.o);
     Py_DECREF(right.o);
+    if (jit) {
+        left.var->decref();
+        right.var->decref();
+    }
     return r;
 }
 
@@ -1445,6 +1475,12 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     Py_DECREF(func.o);
     for (auto e : args)
         Py_DECREF(e);
+
+    if (jit) {
+        func.var->decref();
+        for (auto e : args_vars)
+            e->decref();
+    }
 
     return v;
 }
@@ -1617,7 +1653,6 @@ Value ASTInterpreter::visit_list(AST_List* node) {
 }
 
 Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
-    return getNone();
     llvm::SmallVector<RewriterVar*, 8> items;
 
     BoxedTuple* rtn = BoxedTuple::create(node->elts.size());

@@ -4653,7 +4653,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
 
     Box* irtn = NULL;
     if (inplace) {
-        BoxedString* iop_name = getInplaceOpName(op_type);
+        DecrefHandle<BoxedString> iop_name(getInplaceOpName(op_type));
         if (rewrite_args) {
             CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
             srewrite_args.arg1 = rewrite_args->rhs;

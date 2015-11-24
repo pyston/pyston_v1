@@ -263,16 +263,23 @@ RewriterVar* JitFragmentWriter::emitCreateSlice(RewriterVar* start, RewriterVar*
 
 RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values) {
     auto num = values.size();
-    if (num == 0)
-        return imm(EmptyTuple);
-    else if (num == 1)
-        return call(false, (void*)BoxedTuple::create1, values[0]);
+    RewriterVar* r;
+    if (num == 0) {
+        r = imm(EmptyTuple);
+        r->incref();
+    } else if (num == 1)
+        r = call(false, (void*)BoxedTuple::create1, values[0]);
     else if (num == 2)
-        return call(false, (void*)BoxedTuple::create2, values[0], values[1]);
+        r = call(false, (void*)BoxedTuple::create2, values[0], values[1]);
     else if (num == 3)
-        return call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2]);
+        r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2]);
     else
-        return call(false, (void*)createTupleHelper, imm(num), allocArgs(values));
+        r = call(false, (void*)createTupleHelper, imm(num), allocArgs(values));
+
+    for (auto v : values)
+        v->decref();
+
+    return r;
 }
 
 RewriterVar* JitFragmentWriter::emitDeref(InternedString s) {
@@ -316,8 +323,11 @@ RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s)
 }
 
 RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
-    if (s->s() == "None")
-        return imm(None);
+    if (s->s() == "None") {
+        RewriterVar* r = imm(None);
+        r->incref();
+        return r;
+    }
     return emitPPCall((void*)getGlobal, { imm(global), imm(s) }, 2, 512);
 }
 
@@ -490,6 +500,11 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
 }
 
 void JitFragmentWriter::emitReturn(RewriterVar* v) {
+    for (auto v : local_syms) {
+        if (v.second)
+            v.second->decref();
+    }
+
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
 }
 
@@ -545,6 +560,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 }
 
 void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
+    assert(0 && "need to decref any local syms");
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
     addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
@@ -796,6 +812,11 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
 }
 
 void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info) {
+    for (auto v : local_syms) {
+        if (v.second)
+            v.second->decref(); // xdecref?
+    }
+
     assert(exit_info.num_bytes == 0);
     assert(exit_info.exit_start == NULL);
     if (b->code) {
