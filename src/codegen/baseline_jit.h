@@ -265,7 +265,7 @@ public:
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
     void emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v);
-    void emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block);
+    void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
 
     void abortCompilation();

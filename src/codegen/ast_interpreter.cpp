@@ -631,8 +631,10 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
 
     if (jit) {
+        // Special note: emitSideExit decrefs v for us.
+        // TODO: since the value is always True or False, maybe could optimize by putting the decref
+        // before the conditional instead of after.
         jit->emitSideExit(v, v.o, v.o == True ? node->iffalse : node->iftrue);
-        v.var->decref();
     }
 
     if (v.o == True)

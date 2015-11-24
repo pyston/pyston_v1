@@ -986,6 +986,8 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
     {
         assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
 
+        _decref(var);
+
         for (auto v : local_syms) {
             if (v.second)
                 _decref(v.second);
@@ -1000,6 +1002,8 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
             side_exit_patch_location = std::make_pair(next_block, assembler->bytesWritten() - exit_info.num_bytes);
         }
     }
+
+    _decref(var);
 
     var->bumpUse();
     val_constant->bumpUse();
