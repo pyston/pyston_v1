@@ -1,0 +1,65 @@
+From fda9fd463dae38840cc02c5ae668cb1097395b9a Mon Sep 17 00:00:00 2001
+From: Benjamin Kramer <benny.kra@googlemail.com>
+Date: Fri, 1 May 2015 15:16:11 +0000
+Subject: [PATCH] Remove std::move on return when it could prevent copy
+ elision.
+
+Found by -Wpessimizing-move, no functional change. The APFloat and
+PassManager change doesn't affect codegen as returning a by-value
+argument will always result in a move.
+
+git-svn-id: https://llvm.org/svn/llvm-project/llvm/trunk@236316 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ include/llvm/ADT/APFloat.h     | 2 +-
+ include/llvm/IR/PassManager.h  | 4 ++--
+ utils/yaml-bench/YAMLBench.cpp | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/include/llvm/ADT/APFloat.h b/include/llvm/ADT/APFloat.h
+index 53b53c5..958e3fd 100644
+--- a/include/llvm/ADT/APFloat.h
++++ b/include/llvm/ADT/APFloat.h
+@@ -343,7 +343,7 @@ class APFloat {
+   /// copied from some other APFloat.
+   static APFloat copySign(APFloat Value, const APFloat &Sign) {
+     Value.copySign(Sign);
+-    return std::move(Value);
++    return Value;
+   }
+ 
+   /// @}
+diff --git a/include/llvm/IR/PassManager.h b/include/llvm/IR/PassManager.h
+index 3c24e72..b566f01 100644
+--- a/include/llvm/IR/PassManager.h
++++ b/include/llvm/IR/PassManager.h
+@@ -509,7 +509,7 @@ class AnalysisManager
+   PreservedAnalyses invalidateImpl(IRUnitT &IR, PreservedAnalyses PA) {
+     // Short circuit for a common case of all analyses being preserved.
+     if (PA.areAllPreserved())
+-      return std::move(PA);
++      return PA;
+ 
+     if (DebugLogging)
+       dbgs() << "Invalidating all non-preserved analyses for: "
+@@ -549,7 +549,7 @@ class AnalysisManager
+     if (ResultsList.empty())
+       AnalysisResultLists.erase(&IR);
+ 
+-    return std::move(PA);
++    return PA;
+   }
+ 
+   /// \brief List of function analysis pass IDs and associated concept pointers.
+diff --git a/utils/yaml-bench/YAMLBench.cpp b/utils/yaml-bench/YAMLBench.cpp
+index 872f586..0fb3138 100644
+--- a/utils/yaml-bench/YAMLBench.cpp
++++ b/utils/yaml-bench/YAMLBench.cpp
+@@ -69,7 +69,7 @@ static std::string prettyTag(yaml::Node *N) {
+   if (StringRef(Tag).startswith("tag:yaml.org,2002:")) {
+     std::string Ret = "!!";
+     Ret += StringRef(Tag).substr(18);
+-    return std::move(Ret);
++    return Ret;
+   }
+   std::string Ret = "!<";
+   Ret += Tag;
