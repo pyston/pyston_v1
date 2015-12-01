@@ -289,7 +289,7 @@ template <ExceptionStyle S> static Box* generatorNext(Box* s) noexcept(S == CAPI
     return generatorSend<S>(s, None);
 }
 
-i1 generatorHasnextUnboxed(Box* s) {
+llvm_compat_bool generatorHasnextUnboxed(Box* s) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 

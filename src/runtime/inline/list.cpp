@@ -50,7 +50,7 @@ Box* listiterHasnext(Box* s) {
     return boxBool(ans);
 }
 
-i1 listiterHasnextUnboxed(Box* s) {
+llvm_compat_bool listiterHasnextUnboxed(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
@@ -95,7 +95,7 @@ Box* listreviterHasnext(Box* s) {
     return boxBool(self->pos >= 0);
 }
 
-i1 listreviterHasnextUnboxed(Box* s) {
+llvm_compat_bool listreviterHasnextUnboxed(Box* s) {
     assert(s->cls == list_reverse_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 

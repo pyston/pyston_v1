@@ -42,7 +42,7 @@ calliter_traverse(calliterobject *it, visitproc visit, void *arg)
 }
 
 // Pyston change: extract most of the body of calliter_iternext here
-// so we can use it from both calliter_iternext and calliter_hasnext
+// so we can use it from both calliter_iternext and calliterHasnextUnboxed
 PyObject *
 calliter_next(calliterobject *it)
 {

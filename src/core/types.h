@@ -514,7 +514,11 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
                                   ExceptionStyle forced_exception_style = CXX);
 EffortLevel initialEffort();
 
-typedef bool i1;
+#if BOOLS_AS_I64
+typedef int64_t llvm_compat_bool;
+#else
+typedef bool llvm_compat_bool;
+#endif
 typedef int64_t i64;
 
 const char* getNameOfClass(BoxedClass* cls);

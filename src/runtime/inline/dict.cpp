@@ -49,7 +49,7 @@ Box* dictIterIter(Box* s) {
     return s;
 }
 
-i1 dictIterHasnextUnboxed(Box* s) {
+llvm_compat_bool dictIterHasnextUnboxed(Box* s) {
     assert(s->cls == dict_iterator_cls);
     BoxedDictIterator* self = static_cast<BoxedDictIterator*>(s);
 

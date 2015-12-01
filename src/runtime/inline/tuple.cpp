@@ -36,7 +36,7 @@ Box* tupleiterHasnext(Box* s) {
     return boxBool(tupleiterHasnextUnboxed(s));
 }
 
-i1 tupleiterHasnextUnboxed(Box* s) {
+llvm_compat_bool tupleiterHasnextUnboxed(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 

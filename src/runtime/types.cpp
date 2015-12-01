@@ -4089,7 +4089,7 @@ void setupRuntime() {
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
 
-    PyCallIter_Type.tpp_hasnext = calliter_hasnext;
+    PyCallIter_Type.tpp_hasnext = calliterHasnextUnboxed;
     PyType_Ready(&PyCallIter_Type);
 
     PyType_Ready(&PyCObject_Type);

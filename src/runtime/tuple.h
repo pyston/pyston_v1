@@ -35,7 +35,7 @@ public:
 Box* tupleIter(Box* self) noexcept;
 Box* tupleIterIter(Box* self);
 Box* tupleiterHasnext(Box* self);
-i1 tupleiterHasnextUnboxed(Box* self);
+llvm_compat_bool tupleiterHasnextUnboxed(Box* self);
 Box* tupleiter_next(Box* self) noexcept;
 Box* tupleiterNext(Box* self);
 }
