@@ -212,6 +212,12 @@ public:
 template <typename T> class UniqueScanningHandle {
     T* obj = NULL;
 
+    // Compiler bug workaround:
+    // clang-3.7 crashes if we do 'delete obj' in the places that are now 'do_delete(obj)'.
+    // Using a wrapper function seems to avoid whatever the weird code path is hat causes the crash.
+    // https://llvm.org/bugs/show_bug.cgi?id=25700
+    static void do_delete(T* t) { delete t; }
+
 public:
     UniqueScanningHandle(T* obj) : obj(obj) {
 #if MOVING_GC
@@ -227,7 +233,7 @@ public:
             threading::popGCObject(obj);
         }
 #endif
-        delete obj;
+        do_delete(obj);
     }
 
     T* operator->() { return obj; }
@@ -238,7 +244,7 @@ public:
             threading::popGCObject(obj);
         }
 #endif
-        delete obj;
+        do_delete(obj);
         obj = t;
 #if MOVING_GC
         if (t) {
