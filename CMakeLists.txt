@@ -8,6 +8,10 @@ include(ExternalProject)
 
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
 
+if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(FATAL_ERROR "Pyston does not support 32-bit systems yet")
+endif()
+
 # set build type to release by default
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 if(NOT CMAKE_BUILD_TYPE)

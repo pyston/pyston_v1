@@ -1,0 +1,15 @@
+The tests in this directory are unusual in that they don't contain typical testing assertions.
+This comes from the time that Pyston didn't support exceptions or assertions: they only way
+we had of checking our behavior was to compare the output.  So these tests get checked by
+running them under both Pyston and CPython and making sure that the output is the same.
+(There are small differences allowed -- see tools/tester.py for more details.)
+
+Now that we support proper assertions and exceptions, it can be easier to use assertions rather
+than using stdout to show the behavior.  But it can still be nice to use the output-checking,
+for example for tricky bits of logic that would be just as error-prone to recode in a test.
+For example, for slice-index handling, we exhaustively test all sets of indices and ensure
+that we get the same slice as CPython.
+
+One last feature is that it's possible to write out a manual foo.expected file.  Then when the test
+foo.py gets run, instead of running CPython and checking the output, foo.expected is used as the
+expected output.  This is less useful these days but it can still be handy.
