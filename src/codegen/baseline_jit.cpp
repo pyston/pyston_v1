@@ -770,7 +770,7 @@ Box* JitFragmentWriter::createListHelper(uint64_t num, Box** data) {
     BoxedList* list = (BoxedList*)createList();
     list->ensure(num);
     for (uint64_t i = 0; i < num; ++i) {
-        listAppendInternal(list, data[i]);
+        listAppendInternalStolen(list, data[i]);
     }
     return list;
 }

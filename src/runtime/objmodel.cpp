@@ -1376,6 +1376,8 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         } else {
             *bind_obj_out = incref(im_self);
             if (rewrite_args) {
+                r_im_func->incref();
+                r_im_self->incref();
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
             }
@@ -3179,15 +3181,18 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
     if (unlikely(rewrite_args && rewrite_args->rewriter->aggressiveness() < 50)) {
         class Helper {
         public:
-            static Box* call(Box* val, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, void** extra_args) {
+            static Box* call(STOLEN(Box*) val, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                             void** extra_args) {
                 if (!val) {
                     assert(S == CAPI);
                     return NULL;
                 }
                 Box** args = (Box**)extra_args[0];
                 const std::vector<BoxedString*>* keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
-                return runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args,
-                                                              keyword_names);
+                Box* rtn
+                    = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+                Py_DECREF(val);
+                return rtn;
             }
         };
 
@@ -3212,9 +3217,13 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
 
         auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
         rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
+        if (r_bind_obj)
+            r_bind_obj->decref();
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
-        return Helper::call(val, argspec, arg1, arg2, arg3, _args);
+        Box* rtn = Helper::call(val, argspec, arg1, arg2, arg3, _args);
+        Py_XDECREF(bind_obj);
+        return rtn;
     }
 
     Box* r;
@@ -3229,6 +3238,11 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
     }
     Py_XDECREF(bind_obj);
     Py_DECREF(val);
+    if (rewrite_args) {
+        if (r_bind_obj)
+            r_bind_obj->decref();
+        r_val->decref();
+    }
     return r;
 }
 
@@ -3505,8 +3519,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         rewrite_args = NULL;
     }
 
-    assert(!rewrite_args && "check refcounting");
-
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -3541,8 +3553,25 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 Py_INCREF(oargs[i]);
             }
         }
+        if (rewrite_args) {
+            if (num_output_args >= 1)
+                rewrite_args->arg1->incref();
+            if (num_output_args >= 2)
+                rewrite_args->arg2->incref();
+            if (num_output_args >= 3)
+                rewrite_args->arg3->incref();
+            if (num_output_args >= 3) {
+                for (int i = 0; i < num_output_args - 3; i++) {
+                    rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
+                }
+            }
+        }
         return;
     }
+
+    assert(!rewrite_args && "check refcounting");
+    if (rewrite_args)
+        raise(SIGTRAP);
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
@@ -4102,6 +4131,11 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     for (int i = 0; i < num_output_args - 3; i++) {
         Py_XDECREF(oargs[i]);
     }
+    if (rewrite_args) {
+        for (int i = 0; i < num_output_args; i++) {
+            getArg(i, rewrite_args)->xdecref();
+        }
+    }
 
     return res;
 }
@@ -4653,6 +4687,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
 
     Box* irtn = NULL;
     if (inplace) {
+        // XXX I think we need to make sure that we keep these strings alive?
         DecrefHandle<BoxedString> iop_name(getInplaceOpName(op_type));
         if (rewrite_args) {
             CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
@@ -6335,7 +6370,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         if (globals->cls == module_cls) {
             BoxedModule* m = static_cast<BoxedModule*>(globals);
             if (rewriter.get()) {
-                assert(0 && "check refcounting");
                 RewriterVar* r_mod = rewriter->getArg(0);
 
                 // Guard on it being a module rather than a dict
@@ -6351,9 +6385,13 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                     rewrite_args.assertReturnConvention(r ? ReturnConvention::HAS_RETURN : ReturnConvention::NO_RETURN);
                 }
                 if (r) {
-                    if (rewriter.get())
-                        rewriter->commitReturning(rewrite_args.getReturn(ReturnConvention::HAS_RETURN));
+                    if (rewriter.get()) {
+                        RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+                        r_rtn->incref();
+                        rewriter->commitReturning(r_rtn);
+                    }
 
+                    Py_INCREF(r);
                     return r;
                 }
             } else {

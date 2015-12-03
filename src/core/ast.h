@@ -1431,7 +1431,7 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
 void makeModuleInteractive(AST_Module* m);
 
 llvm::StringRef getOpSymbol(int op_type);
-BoxedString* getOpName(int op_type);
+BORROWED(BoxedString*) getOpName(int op_type);
 int getReverseCmpOp(int op_type, bool& success);
 BoxedString* getReverseOpName(int op_type);
 BoxedString* getInplaceOpName(int op_type);
