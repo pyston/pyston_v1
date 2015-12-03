@@ -37,7 +37,7 @@ bool ENABLE_INTERPRETER = true;
 bool ENABLE_BASELINEJIT = true;
 bool ENABLE_PYPA_PARSER = true;
 bool ENABLE_CPYTHON_PARSER = false;
-bool USE_REGALLOC_BASIC = true;
+bool USE_REGALLOC_BASIC = false;
 bool PAUSE_AT_ABORT = false;
 bool ENABLE_TRACEBACKS = true;
 // Forces the llvm jit to use capi exceptions whenever it can, as opposed to whenever it thinks
