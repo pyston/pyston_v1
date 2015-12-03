@@ -51,6 +51,8 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 void registerMainThread();
 void finishMainThread();
 
+bool isMainThread();
+
 // Hook for the GC; will visit all the threads (including the current one), visiting their
 // stacks and thread-local PyThreadState objects
 void visitAllStacks(gc::GCVisitor* v);
@@ -92,6 +94,9 @@ void releaseGLRead();
 void acquireGLWrite();
 void releaseGLWrite();
 void _allowGLReadPreemption();
+void _makePendingCalls();
+
+extern "C" volatile int _pendingcalls_to_do;
 
 #define GIL_CHECK_INTERVAL 1000
 // Note: this doesn't need to be an atomic, since it should
@@ -121,6 +126,9 @@ extern "C" inline void allowGLReadPreemption() {
     if (!gc::pending_finalization_list.empty() || !gc::weakrefs_needing_callback_list.empty()) {
         gc::callPendingDestructionLogic();
     }
+
+    if (unlikely(_pendingcalls_to_do))
+        _makePendingCalls();
 
     // Double-checked locking: first read with no ordering constraint:
     if (!threads_waiting_on_gil.load(std::memory_order_relaxed))

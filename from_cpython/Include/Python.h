@@ -173,6 +173,7 @@ PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
 // a temporary patching mechanism - we want to have a better way of dealing with such objects
 // in the future (even if it's an invalid use of CPython APIs).
 PyObject* PyGC_AddNonHeapRoot(PyObject* obj, int size) PYSTON_NOEXCEPT;
+void* PyGC_AddPotentialRoot(void* obj, int size) PYSTON_NOEXCEPT;
 
 // Pyston change : expose these type objects
 extern PyTypeObject Pattern_Type;

@@ -30,6 +30,7 @@
 #include "core/thread_utils.h"
 #include "core/util.h"
 #include "runtime/objmodel.h" // _printStacktrace
+#include "runtime/types.h" // throwCAPIException
 
 namespace pyston {
 namespace threading {
@@ -497,8 +498,12 @@ static void* find_stack() {
     return NULL; /* not found =^P */
 }
 
+static long main_thread_id;
+
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
+
+    main_thread_id = pthread_self();
 
     assert(!current_internal_thread_state);
     current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
@@ -524,6 +529,17 @@ void finishMainThread() {
     // TODO maybe this is the place to wait for non-daemon threads?
 }
 
+bool isMainThread() {
+    return pthread_self() == main_thread_id;
+}
+
+void _makePendingCalls()
+{
+    assert(_pendingcalls_to_do);
+    int ret = Py_MakePendingCalls();
+    if (ret)
+        throwCAPIException();
+}
 
 // For the "AllowThreads" regions, let's save the thread state at the beginning of the region.
 // This means that the thread won't get interrupted by the signals we would otherwise need to
