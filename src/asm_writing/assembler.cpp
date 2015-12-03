@@ -80,7 +80,7 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
     // assert(r != RSP && "This breaks unwinding, please don't use.");
 
     int64_t amount = imm.val;
-    RELEASE_ASSERT((-1L << 31) <= amount && amount < (1L << 31) - 1, "");
+    RELEASE_ASSERT(fitsInto<int32_t>(amount), "");
     assert(0 <= opcode && opcode < 8);
 
     int rex = REX_W;
@@ -183,7 +183,7 @@ void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
 
 void Assembler::movq(Immediate src, Indirect dest) {
     int64_t src_val = src.val;
-    assert((-1L << 31) <= src_val && src_val < (1L << 31) - 1);
+    assert(fitsInto<int32_t>(src_val));
 
     int rex = REX_W;
 
@@ -739,7 +739,7 @@ void Assembler::cmp(Register reg, Immediate imm) {
 
 void Assembler::cmp(Indirect mem, Immediate imm) {
     int64_t val = imm.val;
-    assert((-1L << 31) <= val && val < (1L << 31) - 1);
+    assert(fitsInto<int32_t>(val));
 
     int src_idx = mem.base.regnum;
 
@@ -760,7 +760,7 @@ void Assembler::cmp(Indirect mem, Immediate imm) {
         emitModRM(0b01, 7, src_idx);
         emitByte(mem.offset);
     } else {
-        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        assert(fitsInto<int32_t>(mem.offset));
         emitModRM(0b10, 7, src_idx);
         emitInt(mem.offset, 4);
     }
@@ -794,7 +794,7 @@ void Assembler::cmp(Indirect mem, Register reg) {
         emitModRM(0b01, reg_idx, mem_idx);
         emitByte(mem.offset);
     } else {
-        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        assert(fitsInto<int32_t>(mem.offset));
         emitModRM(0b10, reg_idx, mem_idx);
         emitInt(mem.offset, 4);
     }
@@ -830,7 +830,7 @@ void Assembler::lea(Indirect mem, Register reg) {
     if (mode == 0b01) {
         emitByte(mem.offset);
     } else if (mode == 0b10) {
-        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        assert(fitsInto<int32_t>(mem.offset));
         emitInt(mem.offset, 4);
     }
 }
@@ -910,7 +910,7 @@ void Assembler::jmp(Indirect dest) {
         emitModRM(0b01, 0b100, reg_idx);
         emitByte(dest.offset);
     } else {
-        assert((-1L << 31) <= dest.offset && dest.offset < (1L << 31) - 1);
+        assert(fitsInto<int32_t>(dest.offset));
         emitModRM(0b10, 0b100, reg_idx);
         emitInt(dest.offset, 4);
     }

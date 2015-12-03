@@ -600,7 +600,7 @@ public:
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 
-    static bool isLargeConstant(int64_t val) { return (val < (-1L << 31) || val >= (1L << 31) - 1); }
+    static bool isLargeConstant(int64_t val) { return !fitsInto<int32_t>(val); }
 
     // The "aggressiveness" with which we should try to do this rewrite.  It starts high, and decreases over time.
     // The values are nominally in the range 0-100, with 0 being no aggressiveness and 100 being fully aggressive,

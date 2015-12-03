@@ -2545,7 +2545,7 @@ public:
         for (int i = 0; i < orig_elts.size(); i++) {
             elts.push_back(orig_elts[i]->dup(cache));
         }
-        return std::move(elts);
+        return elts;
     }
 
     ConcreteCompilerVariable* _makeConverted(IREmitter& emitter, const VEC& v, ConcreteCompilerType* other_type) {
