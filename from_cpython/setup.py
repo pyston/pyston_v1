@@ -40,6 +40,13 @@ def bz2_ext():
             ]), libraries = ['bz2'])
 
 @unique
+def cmath_ext():
+    return Extension("cmath", sources = map(relpath, [
+            "Modules/cmathmodule.c",
+            ]))
+
+
+@unique
 def ctypes_ext():
     ext = Extension("_ctypes", sources = map(relpath, [
             "Modules/_ctypes/_ctypes.c",
@@ -144,6 +151,7 @@ ext_modules = [future_builtins_ext(),
                pyexpat_ext(),
                elementtree_ext(),
                bz2_ext(),
+               cmath_ext(),
                ctypes_ext(),
                ctypes_test_ext(),
                grp_ext(),
