@@ -215,6 +215,8 @@ c_abs(Py_complex z)
     return result;
 }
 
+// Pyston changes: comment this out
+#if 0
 static PyObject *
 complex_subtype_from_c_complex(PyTypeObject *type, Py_complex cval)
 {
@@ -477,10 +479,12 @@ complex_hash(PyComplexObject *v)
     return combined;
 }
 
+#endif
+
 /* This macro may return! */
 #define TO_COMPLEX(obj, c) \
     if (PyComplex_Check(obj)) \
-        c = ((PyComplexObject *)(obj))->cval; \
+        c = PyComplex_AsCComplex(obj); \
     else if (to_complex(&(obj), &(c)) < 0) \
         return (obj)
 
@@ -511,7 +515,8 @@ to_complex(PyObject **pobj, Py_complex *pc)
     return -1;
 }
 
-
+// Pyston change: comment this out
+#if 0
 static PyObject *
 complex_add(PyObject *v, PyObject *w)
 {
@@ -645,8 +650,10 @@ complex_divmod(PyObject *v, PyObject *w)
     Py_XDECREF(m);
     return z;
 }
+#endif
 
-static PyObject *
+// Pyston change: make no static
+PyObject *
 complex_pow(PyObject *v, PyObject *w, PyObject *z)
 {
     Py_complex p;
@@ -683,6 +690,8 @@ complex_pow(PyObject *v, PyObject *w, PyObject *z)
     return PyComplex_FromCComplex(p);
 }
 
+// Pyston changes: comment this out
+#if 0
 static PyObject *
 complex_int_div(PyObject *v, PyObject *w)
 {
@@ -1349,5 +1358,6 @@ PyTypeObject PyComplex_Type = {
     complex_new,                                /* tp_new */
     PyObject_Del,                               /* tp_free */
 };
+#endif
 
 #endif
