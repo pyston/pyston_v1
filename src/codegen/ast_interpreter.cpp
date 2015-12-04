@@ -407,17 +407,6 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
 Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
-
-    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
-    // it can go, due to the fact that it can throw an exception.
-    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
-    // delete the partially-constructed memory which we don't currently handle.  It can't go into
-    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
-    // (For instance, throwing the exception will try to fetch the current statement, but we determine
-    // that by looking at the cfg.)
-    if (!interpreter.source_info->cfg)
-        interpreter.source_info->cfg = computeCFG(interpreter.source_info, interpreter.source_info->body);
-
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 
@@ -1698,20 +1687,6 @@ extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start
     return ASTInterpreter::executeInner(interpreter, start_block, start_at);
 }
 
-static int calculateNumVRegs(FunctionMetadata* md) {
-    SourceInfo* source_info = md->source.get();
-
-    CFG* cfg = source_info->cfg;
-    if (!cfg)
-        cfg = source_info->cfg = computeCFG(source_info, source_info->body);
-
-    if (!cfg->hasVregsAssigned()) {
-        ScopeInfo* scope_info = md->source->getScopeInfo();
-        cfg->assignVRegs(md->param_names, scope_info);
-    }
-    return cfg->sym_vreg_map.size();
-}
-
 Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
@@ -1777,6 +1752,16 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
         }
     }
 
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    if (!source_info->cfg)
+        source_info->cfg = computeCFG(source_info, source_info->body);
+
     Box** vregs = NULL;
     int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
@@ -1807,6 +1792,17 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
 
 Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     ++md->times_interpreted;
+
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    SourceInfo* source_info = md->source.get();
+    if (!source_info->cfg)
+        source_info->cfg = computeCFG(source_info, source_info->body);
 
     Box** vregs = NULL;
     int num_vregs = md->calculateNumVRegs();
