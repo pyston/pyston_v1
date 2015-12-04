@@ -145,7 +145,7 @@ private:
 
     Box** vregs;
     ExcInfo last_exception;
-    BoxedClosure* passed_closure, *created_closure;
+    BoxedClosure* created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
     FrameInfo frame_info;
@@ -174,7 +174,7 @@ public:
 
     FunctionMetadata* getMD() { return md; }
     FrameInfo* getFrameInfo() { return &frame_info; }
-    BoxedClosure* getPassedClosure() { return passed_closure; }
+    BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
     Box** getVRegs() { return vregs; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
@@ -203,9 +203,9 @@ void ASTInterpreter::setGenerator(Box* gen) {
 }
 
 void ASTInterpreter::setPassedClosure(Box* closure) {
-    assert(!this->passed_closure); // This should only used for initialization
-    assert(closure->cls == closure_cls);
-    this->passed_closure = static_cast<BoxedClosure*>(closure);
+    assert(!frame_info.passed_closure); // This should only used for initialization
+    assert(!closure || closure->cls == closure_cls);
+    frame_info.passed_closure = static_cast<BoxedClosure*>(closure);
 }
 
 void ASTInterpreter::setCreatedClosure(Box* closure) {
@@ -236,7 +236,6 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
       phis(NULL),
       vregs(vregs),
       last_exception(NULL, NULL, NULL),
-      passed_closure(0),
       created_closure(0),
       generator(0),
       edgecount(0),
@@ -246,17 +245,18 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
       should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
+    frame_info.vregs = vregs;
 
     assert(scope_info);
 }
 
 void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2, Box* arg3,
                                    Box** args) {
-    passed_closure = _closure;
+    setPassedClosure(_closure);
     generator = _generator;
 
     if (scope_info->createsClosure())
-        created_closure = createClosure(passed_closure, scope_info->getClosureSize());
+        created_closure = createClosure(_closure, scope_info->getClosureSize());
 
     const ParamNames& param_names = md->param_names;
 
@@ -407,17 +407,6 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
 Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
-
-    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
-    // it can go, due to the fact that it can throw an exception.
-    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
-    // delete the partially-constructed memory which we don't currently handle.  It can't go into
-    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
-    // (For instance, throwing the exception will try to fetch the current statement, but we determine
-    // that by looking at the cfg.)
-    if (!interpreter.source_info->cfg)
-        interpreter.source_info->cfg = computeCFG(interpreter.source_info, interpreter.source_info->body);
-
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 
@@ -724,8 +713,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     if (generator)
         sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
 
-    if (passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = passed_closure;
+    if (frame_info.passed_closure)
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = frame_info.passed_closure;
 
     if (created_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
@@ -1038,9 +1027,9 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
                 closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, created_closure));
         } else {
             assert(scope_info->passesThroughClosure());
-            closure = passed_closure;
+            closure = frame_info.passed_closure;
             if (jit)
-                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, passed_closure));
+                closure_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, frame_info.passed_closure));
         }
         assert(closure);
     }
@@ -1105,7 +1094,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     BoxedClosure* closure = NULL;
     if (scope_info->takesClosure()) {
         if (this->scope_info->passesThroughClosure())
-            closure = passed_closure;
+            closure = getPassedClosure();
         else
             closure = created_closure;
         assert(closure);
@@ -1633,8 +1622,8 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
 Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString s) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     DerefInfo deref_info = interpreter->scope_info->getDerefInfo(s);
-    assert(interpreter->passed_closure);
-    BoxedClosure* closure = interpreter->passed_closure;
+    assert(interpreter->getPassedClosure());
+    BoxedClosure* closure = interpreter->getPassedClosure();
     for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
         closure = closure->parent;
     }
@@ -1696,28 +1685,6 @@ const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 // small wrapper around executeInner because we can not directly call the member function from asm.
 extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     return ASTInterpreter::executeInner(interpreter, start_block, start_at);
-}
-
-static int calculateNumVRegs(FunctionMetadata* md) {
-    SourceInfo* source_info = md->source.get();
-
-    CFG* cfg = source_info->cfg;
-
-    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
-    // it can go, due to the fact that it can throw an exception.
-    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
-    // delete the partially-constructed memory which we don't currently handle.  It can't go into
-    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
-    // (For instance, throwing the exception will try to fetch the current statement, but we determine
-    // that by looking at the cfg.)
-    if (!cfg)
-        cfg = source_info->cfg = computeCFG(source_info, source_info->body);
-
-    if (!cfg->hasVregsAssigned()) {
-        ScopeInfo* scope_info = md->source->getScopeInfo();
-        cfg->assignVRegs(md->param_names, scope_info);
-    }
-    return cfg->sym_vreg_map.size();
 }
 
 Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
@@ -1785,8 +1752,18 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
         }
     }
 
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    if (!source_info->cfg)
+        source_info->cfg = computeCFG(source_info, source_info->body);
+
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1816,8 +1793,19 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
 Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     ++md->times_interpreted;
 
+    // Note: due to some (avoidable) restrictions, this check is pretty constrained in where
+    // it can go, due to the fact that it can throw an exception.
+    // It can't go in the ASTInterpreter constructor, since that will cause the C++ runtime to
+    // delete the partially-constructed memory which we don't currently handle.  It can't go into
+    // executeInner since we want the SyntaxErrors to happen *before* the stack frame is entered.
+    // (For instance, throwing the exception will try to fetch the current statement, but we determine
+    // that by looking at the cfg.)
+    SourceInfo* source_info = md->source.get();
+    if (!source_info->cfg)
+        source_info->cfg = computeCFG(source_info, source_info->body);
+
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1848,7 +1836,7 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
     SourceInfo* source_info = md->source.get();
 
     Box** vregs = NULL;
-    int num_vregs = calculateNumVRegs(md);
+    int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -1973,15 +1961,16 @@ FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     return interpreter->getFrameInfo();
 }
 
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+Box** getVRegsForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
-    BoxedDict* rtn = new BoxedDict();
-    for (auto& l : interpreter->getSymVRegMap()) {
-        if (only_user_visible && (l.first.s()[0] == '!' || l.first.s()[0] == '#'))
-            continue;
+    return interpreter->getVRegs();
+}
 
-        Box* val = interpreter->getVRegs()[l.second];
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg) {
+    BoxedDict* rtn = new BoxedDict();
+    for (auto& l : cfg->sym_vreg_map_user_visible) {
+        Box* val = vregs[l.second];
         if (val) {
             assert(gc::isValidGCObject(val));
             rtn->d[l.first.getBox()] = val;
@@ -1991,9 +1980,9 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     return rtn;
 }
 
-BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
+BoxedDict* localsForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
-    return interpreter->getPassedClosure();
+    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg);
 }
 }

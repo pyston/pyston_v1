@@ -82,6 +82,8 @@ public:
     operator llvm::StringRef() const { return s(); }
     operator BoxedString*() const { return getBox(); }
 
+    bool isCompilerCreatedName() const;
+
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
     friend struct std::less<InternedString>;

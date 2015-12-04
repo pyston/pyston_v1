@@ -81,9 +81,10 @@ Box* getGlobalsForInterpretedFrame(void* frame_ptr);
 FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
-BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);
 
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
+Box** getVRegsForInterpretedFrame(void* frame_ptr);
+BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg);
+BoxedDict* localsForInterpretedFrame(void* frame_ptr);
 
 // Executes the equivalent of CPython's PRINT_EXPR opcode (call sys.displayhook)
 extern "C" void printExprHelper(Box* b);

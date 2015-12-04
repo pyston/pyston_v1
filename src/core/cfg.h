@@ -81,7 +81,10 @@ private:
 public:
     std::vector<CFGBlock*> blocks;
 
+    // Contains the vreg assignment for every name including the user visible ones
+    // (which will have lower ids than the compiler generated ones).
     llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, int> sym_vreg_map_user_visible;
 
     CFG() : next_idx(0), has_vregs_assigned(false) {}
 

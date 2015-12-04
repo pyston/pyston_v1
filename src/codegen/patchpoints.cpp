@@ -34,6 +34,9 @@ void PatchpointInfo::addFrameVar(llvm::StringRef name, CompilerType* type) {
 }
 
 int ICSetupInfo::totalSize() const {
+    if (isDeopt())
+        return DEOPT_CALL_ONLY_SIZE;
+
     int call_size = CALL_ONLY_SIZE;
     if (getCallingConvention() != llvm::CallingConv::C) {
         // 14 bytes per reg that needs to be spilled
@@ -198,7 +201,8 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
             if (spilled)
                 nspills++;
         }
-        ASSERT(nspills <= MAX_FRAME_SPILLS, "did %d spills but expected only %d!", nspills, MAX_FRAME_SPILLS);
+        RELEASE_ASSERT(nspills <= pp->numFrameSpillsSupported(), "did %d spills but expected only %d!", nspills,
+                       pp->numFrameSpillsSupported());
 
         assert(scratch_size % sizeof(void*) == 0);
         assert(scratch_rbp_offset % sizeof(void*) == 0);
@@ -216,7 +220,6 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
                                   frame_remapped);
             continue;
         }
-
         LiveOutSet live_outs(extractLiveOuts(r, ic->getCallingConvention()));
 
         if (ic->hasReturnValue()) {
@@ -349,6 +352,10 @@ ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder) {
 
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 2, 64, ICSetupInfo::Hasnext, type_recorder);
+}
+
+ICSetupInfo* createDeoptIC() {
+    return ICSetupInfo::initialize(true, 1, 0, ICSetupInfo::Deopt, NULL);
 }
 
 } // namespace pyston
