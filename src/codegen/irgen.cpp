@@ -369,6 +369,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
+    llvm::Value* osr_frame_info_arg = NULL;
+
     // the function entry block, where we add the type guards [no guards anymore]
     llvm::BasicBlock* osr_entry_block = NULL;
     llvm::BasicBlock* osr_unbox_block_end = NULL; // the block after type guards where we up/down-convert things
@@ -438,14 +440,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             if (from_arg->getType() == g.llvm_frame_info_type->getPointerTo()) {
                 assert(p.first.s() == FRAME_INFO_PTR_NAME);
-                irstate->setFrameInfoArgument(from_arg);
+                osr_frame_info_arg = from_arg;
                 // Don't add the frame info to the symbol table since we will store it separately:
-                continue;
-            }
-
-            if (p.first.s() == PASSED_GLOBALS_NAME) {
-                assert(!source->scoping->areGlobalsFromModule());
-                irstate->setGlobals(from_arg);
                 continue;
             }
 
@@ -609,12 +605,12 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             assert(osr_entry_block);
             assert(phis);
 
+            irstate->setupFrameInfoVarOSR(osr_frame_info_arg);
+
             for (const auto& p : entry_descriptor->args) {
                 // Don't add the frame info to the symbol table since we will store it separately
                 // (we manually added it during the calculation of osr_syms):
                 if (p.first.s() == FRAME_INFO_PTR_NAME)
-                    continue;
-                if (p.first.s() == PASSED_GLOBALS_NAME)
                     continue;
 
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);

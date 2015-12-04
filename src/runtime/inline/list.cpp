@@ -50,7 +50,7 @@ Box* listiterHasnext(Box* s) {
     return boxBool(ans);
 }
 
-i1 listiterHasnextUnboxed(Box* s) {
+llvm_compat_bool listiterHasnextUnboxed(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
@@ -82,22 +82,6 @@ Box* listiter_next(Box* s) noexcept {
     return rtn;
 }
 
-template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
-    Box* rtn = listiter_next(s);
-    if (!rtn) {
-        if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
-            return NULL;
-        } else
-            raiseExcHelper(StopIteration, "");
-    }
-    return rtn;
-}
-
-// force instantiation:
-template Box* listiterNext<CAPI>(Box*);
-template Box* listiterNext<CXX>(Box*);
-
 Box* listReversed(Box* s) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
@@ -111,7 +95,7 @@ Box* listreviterHasnext(Box* s) {
     return boxBool(self->pos >= 0);
 }
 
-i1 listreviterHasnextUnboxed(Box* s) {
+llvm_compat_bool listreviterHasnextUnboxed(Box* s) {
     assert(s->cls == list_reverse_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 

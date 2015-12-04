@@ -70,7 +70,7 @@ Box* seqiterHasnext(Box* s) {
     return rtn;
 }
 
-bool seqiterHasnextUnboxed(Box* s) {
+llvm_compat_bool seqiterHasnextUnboxed(Box* s) {
     return unboxBool(seqiterHasnext(s));
 }
 
@@ -151,7 +151,7 @@ void BoxedIterWrapper::gcHandler(GCVisitor* v, Box* b) {
         v->visit(&iw->next);
 }
 
-bool iterwrapperHasnextUnboxed(Box* s) {
+llvm_compat_bool iterwrapperHasnextUnboxed(Box* s) {
     RELEASE_ASSERT(s->cls == iterwrapper_cls, "");
     BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
 
@@ -196,7 +196,7 @@ extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
     }
 }
 
-bool calliter_hasnext(Box* b) {
+llvm_compat_bool calliterHasnextUnboxed(Box* b) {
     calliterobject* it = (calliterobject*)b;
     if (!it->it_nextvalue) {
         it->it_nextvalue = calliter_next(it);

@@ -397,31 +397,6 @@ extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs) {
     return longMul(boxLong(lhs), boxLong(rhs));
 }
 
-extern "C" i1 eq_i64_i64(i64 lhs, i64 rhs) {
-    return lhs == rhs;
-}
-
-extern "C" i1 ne_i64_i64(i64 lhs, i64 rhs) {
-    return lhs != rhs;
-}
-
-extern "C" i1 lt_i64_i64(i64 lhs, i64 rhs) {
-    return lhs < rhs;
-}
-
-extern "C" i1 le_i64_i64(i64 lhs, i64 rhs) {
-    return lhs <= rhs;
-}
-
-extern "C" i1 gt_i64_i64(i64 lhs, i64 rhs) {
-    return lhs > rhs;
-}
-
-extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs) {
-    return lhs >= rhs;
-}
-
-
 extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));

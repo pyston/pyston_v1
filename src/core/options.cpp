@@ -37,7 +37,7 @@ bool ENABLE_INTERPRETER = true;
 bool ENABLE_BASELINEJIT = true;
 bool ENABLE_PYPA_PARSER = true;
 bool ENABLE_CPYTHON_PARSER = false;
-bool USE_REGALLOC_BASIC = true;
+bool USE_REGALLOC_BASIC = false;
 bool PAUSE_AT_ABORT = false;
 bool ENABLE_TRACEBACKS = true;
 // Forces the llvm jit to use capi exceptions whenever it can, as opposed to whenever it thinks
@@ -81,7 +81,6 @@ bool ENABLE_JIT_OBJECT_CACHE = 1 && _GLOBAL_ENABLE;
 bool LAZY_SCOPING_ANALYSIS = 1;
 
 bool ENABLE_FRAME_INTROSPECTION = 1;
-bool BOOLS_AS_I64 = ENABLE_FRAME_INTROSPECTION;
 
 extern "C" {
 int Py_FrozenFlag = 1;

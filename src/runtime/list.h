@@ -36,12 +36,12 @@ public:
 Box* listIter(Box* self) noexcept;
 Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
-i1 listiterHasnextUnboxed(Box* self);
+llvm_compat_bool listiterHasnextUnboxed(Box* self);
 template <ExceptionStyle S> Box* listiterNext(Box* self) noexcept(S == CAPI);
 Box* listiter_next(Box* s) noexcept;
 Box* listReversed(Box* self);
 Box* listreviterHasnext(Box* self);
-i1 listreviterHasnextUnboxed(Box* self);
+llvm_compat_bool listreviterHasnextUnboxed(Box* self);
 Box* listreviterNext(Box* self);
 Box* listreviter_next(Box* s) noexcept;
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse);
