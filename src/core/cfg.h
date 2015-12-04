@@ -82,6 +82,8 @@ public:
     std::vector<CFGBlock*> blocks;
 
     llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, int> sym_vreg_map_user;
+    int num_vregs_user_visible = -1;
 
     CFG() : next_idx(0), has_vregs_assigned(false) {}
 

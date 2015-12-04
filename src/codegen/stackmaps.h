@@ -91,14 +91,7 @@ public:
         };
         llvm::SmallVector<LocationEntry, 2> locations;
 
-        const LocationEntry* findEntry(unsigned offset) const {
-            for (const LocationMap::LocationTable::LocationEntry& e : locations) {
-                if (e.offset < offset && offset <= e.offset + e.length) {
-                    return &e;
-                }
-            }
-            return NULL;
-        }
+        const LocationEntry* findEntry(unsigned offset) const;
     };
 
     llvm::StringMap<LocationTable> names;

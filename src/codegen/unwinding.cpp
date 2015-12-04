@@ -36,6 +36,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/irgenerator.h"
 #include "codegen/stackmaps.h"
+#include "core/cfg.h"
 #include "core/util.h"
 #include "runtime/ctxswitching.h"
 #include "runtime/objmodel.h"
@@ -535,17 +536,19 @@ public:
 class PythonUnwindSession : public Box {
     ExcInfo exc_info;
     PythonStackExtractor pystack_extractor;
+    Box* prev_frame;
 
     Timer t;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    PythonUnwindSession() : exc_info(NULL, NULL, NULL), t(/*min_usec=*/10000) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), prev_frame(NULL), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() { return &exc_info; }
 
     void begin() {
+        prev_frame = NULL;
         exc_info = ExcInfo(NULL, NULL, NULL);
         t.restart();
 
@@ -553,15 +556,19 @@ public:
         stat.log();
     }
     void end() {
+        prev_frame = NULL;
         static StatCounter stat("us_unwind_session");
         stat.log(t.end());
     }
 
     void handleCFrame(unw_cursor_t* cursor) {
-        unw_word_t ip = get_cursor_ip(cursor);
-        unw_word_t bp = get_cursor_bp(cursor);
-
         PythonFrameIteratorImpl frame_iter;
+
+        if (prev_frame) {
+            deinitFrame((BoxedFrame*)prev_frame);
+            prev_frame = NULL;
+        }
+
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
         if (found_frame) {
             frame_iter.getMD()->propagated_cxx_exceptions++;
@@ -570,7 +577,9 @@ public:
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
                 auto line_info = lineInfoForFrame(&frame_iter);
-                exceptionAtLine(line_info, &exc_info.traceback);
+                prev_frame = getFrame(std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(frame_iter)),
+                                      false);
+                exceptionAtLine(line_info, &exc_info.traceback, prev_frame);
             }
         }
     }
@@ -740,7 +749,9 @@ Box* getTraceback() {
 
     Box* tb = None;
     unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb);
+        Box* frame
+            = getFrame(std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter)), false);
+        BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb, frame);
         return false;
     });
 
@@ -850,6 +861,7 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
     std::swap(this->impl, impl);
 }
 
+
 // TODO factor getDeoptState and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
@@ -953,67 +965,13 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
 
     if (impl->getId().type == PythonFrameId::COMPILED) {
         CompiledFunction* cf = impl->getCF();
-        d = new BoxedDict();
-
         uint64_t ip = impl->getId().ip;
 
         assert(ip > cf->code_start);
         unsigned offset = ip - cf->code_start;
 
-        assert(cf->location_map);
-
-        // We have to detect + ignore any entries for variables that
-        // could have been defined (so they have entries) but aren't (so the
-        // entries point to uninitialized memory).
-        std::unordered_set<std::string> is_undefined;
-
-        for (const auto& p : cf->location_map->names) {
-            if (!startswith(p.first(), "!is_defined_"))
-                continue;
-
-            auto e = p.second.findEntry(offset);
-            if (e) {
-                const auto& locs = e->locations;
-
-                assert(locs.size() == 1);
-                uint64_t v = impl->readLocation(locs[0]);
-                if ((v & 1) == 0)
-                    is_undefined.insert(p.first().substr(12));
-            }
-        }
-
-        for (const auto& p : cf->location_map->names) {
-            if (p.first()[0] == '!')
-                continue;
-
-            if (p.first()[0] == '#')
-                continue;
-
-            if (is_undefined.count(p.first()))
-                continue;
-
-            auto e = p.second.findEntry(offset);
-            if (e) {
-                const auto& locs = e->locations;
-
-                llvm::SmallVector<uint64_t, 1> vals;
-                // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
-                // printf("%ld locs\n", locs.size());
-
-                for (auto& loc : locs) {
-                    auto v = impl->readLocation(loc);
-                    vals.push_back(v);
-                    // printf("%d %d %d: 0x%lx\n", loc.type, loc.regnum, loc.offset, v);
-                    // dump((void*)v);
-                }
-
-                Box* v = e->type->deserializeFromFrame(vals);
-                // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                assert(gc::isValidGCObject(v));
-                d->d[boxString(p.first())] = v;
-            }
-        }
-
+        frame_info = impl->getFrameInfo();
+        d = localsForInterpretedFrame(frame_info->vregs, cf->md->source->cfg, true);
         closure = NULL;
         if (cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
             auto e = cf->location_map->names[PASSED_CLOSURE_NAME].findEntry(offset);
@@ -1031,8 +989,6 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
                 closure = static_cast<BoxedClosure*>(v);
             }
         }
-
-        frame_info = impl->getFrameInfo();
     } else if (impl->getId().type == PythonFrameId::INTERPRETED) {
         d = localsForInterpretedFrame((void*)impl->getId().bp, true);
         closure = passedClosureForInterpretedFrame((void*)impl->getId().bp);
@@ -1071,10 +1027,14 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
     // TODO Right now d just has all the python variables that are *initialized*
     // But we also need to loop through all the uninitialized variables that we have
     // access to and delete them from the locals dict
-    for (const auto& p : *d) {
-        Box* varname = p.first;
-        Box* value = p.second;
-        setitem(frame_info->boxedLocals, varname, value);
+    if (frame_info->boxedLocals == dict_cls) {
+        ((BoxedDict*)frame_info->boxedLocals)->d.insert(d->d.begin(), d->d.end());
+    } else {
+        for (const auto& p : *d) {
+            Box* varname = p.first;
+            Box* value = p.second;
+            setitem(frame_info->boxedLocals, varname, value);
+        }
     }
 
     return frame_info->boxedLocals;

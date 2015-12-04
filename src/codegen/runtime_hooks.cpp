@@ -198,6 +198,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createClosure);
     GET(createGenerator);
     GET(createSet);
+    GET(deinitFrame);
 
     GET(getattr);
     GET(getattr_capi);

@@ -31,7 +31,14 @@ class BoxedFrame : public Box {
 private:
     // Call boxFrame to get a BoxedFrame object.
     BoxedFrame(PythonFrameIterator it) __attribute__((visibility("default")))
-    : it(std::move(it)), thread_id(PyThread_get_thread_ident()) {}
+    : it(std::move(it)),
+      thread_id(PyThread_get_thread_ident()),
+      _globals(NULL),
+      _code(NULL),
+      _locals(NULL),
+      _back(NULL),
+      _stmt(NULL),
+      exited(false) {}
 
 public:
     PythonFrameIterator it;
@@ -40,12 +47,28 @@ public:
     Box* _globals;
     Box* _code;
 
+    Box* _locals;
+    Box* _back;
+    AST_stmt* _stmt;
+
+    bool exited;
+
     void update() {
+        if (exited)
+            return;
+
+        // printf("cl: %p\n", it.getCL());
+
         // This makes sense as an exception, but who knows how the user program would react
         // (it might swallow it and do something different)
         RELEASE_ASSERT(thread_id == PyThread_get_thread_ident(),
                        "frame objects can only be accessed from the same thread");
         PythonFrameIterator new_it = it.getCurrentVersion();
+        if (!(new_it.exists() && new_it.getFrameInfo()->frame_obj == this)) {
+            printf("%p\n", this);
+            new_it = it.getCurrentVersion();
+        }
+
         RELEASE_ASSERT(new_it.exists() && new_it.getFrameInfo()->frame_obj == this, "frame has exited");
         it = std::move(new_it);
     }
@@ -84,6 +107,9 @@ public:
 
         v->visit(&f->_code);
         v->visit(&f->_globals);
+
+        v->visit(&f->_locals);
+        v->visit(&f->_back);
     }
 
     static void simpleDestructor(Box* b) {
@@ -100,6 +126,11 @@ public:
     static Box* locals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
         f->update();
+
+        if (f->exited) {
+            return f->_locals;
+        }
+
         return f->it.fastLocalsToBoxedLocals();
     }
 
@@ -110,17 +141,27 @@ public:
 
     static Box* back(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
+
+        if (f->_back)
+            return f->_back;
+
         f->update();
 
         PythonFrameIterator it = f->it.back();
         if (!it.exists())
-            return None;
-        return BoxedFrame::boxFrame(std::move(it));
+            f->_back = None;
+        else
+            f->_back = BoxedFrame::boxFrame(std::move(it));
+        return f->_back;
     }
 
     static Box* lineno(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
         f->update();
+
+        if (f->exited)
+            return boxInt(f->_stmt->lineno);
+
         AST_stmt* stmt = f->it.getCurrentStatement();
         return boxInt(stmt->lineno);
     }
@@ -128,8 +169,15 @@ public:
     DEFAULT_CLASS(frame_cls);
 
     static Box* boxFrame(PythonFrameIterator it) {
+        bool dummy;
+        return boxFrame(std::move(it), dummy);
+    }
+
+
+    static Box* boxFrame(PythonFrameIterator it, bool& created_new) {
         FrameInfo* fi = it.getFrameInfo();
-        if (fi->frame_obj == NULL) {
+        created_new = fi->frame_obj == NULL;
+        if (created_new) {
             auto md = it.getMD();
             Box* globals = it.getGlobalsDict();
             BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
@@ -139,14 +187,56 @@ public:
 
         return fi->frame_obj;
     }
+
+    void handleExit(bool should_update) {
+        if (exited)
+            return;
+
+        if (0 && should_update)
+            update();
+
+        _locals = it.fastLocalsToBoxedLocals();
+        if (!_back) {
+            PythonFrameIterator it_back = it.back();
+            if (!it_back.exists())
+                _back = None;
+            else
+                _back = BoxedFrame::boxFrame(std::move(it_back));
+        }
+        _stmt = it.getCurrentStatement();
+
+        exited = true;
+    }
 };
 
-Box* getFrame(int depth) {
+Box* getFrame(PythonFrameIterator it, bool exits) {
+    bool created_new;
+    BoxedFrame* rtn = (BoxedFrame*)BoxedFrame::boxFrame(std::move(it), created_new);
+    if (exits)
+        rtn->handleExit(!created_new);
+    return rtn;
+}
+
+Box* getFrame(int depth, bool exits) {
     auto it = getPythonFrame(depth);
     if (!it.exists())
         return NULL;
 
-    return BoxedFrame::boxFrame(std::move(it));
+    bool created_new;
+    BoxedFrame* rtn = (BoxedFrame*)BoxedFrame::boxFrame(std::move(it), created_new);
+    if (exits)
+        rtn->handleExit(!created_new);
+    return rtn;
+}
+
+void updateFrameForDeopt(BoxedFrame* frame) {
+    assert(frame->cls == frame_cls);
+    RELEASE_ASSERT(!frame->exited, "");
+    frame->it = getPythonFrame(0);
+}
+
+extern "C" void deinitFrame(BoxedFrame* frame) {
+    frame->handleExit(true);
 }
 
 void setupFrame() {
