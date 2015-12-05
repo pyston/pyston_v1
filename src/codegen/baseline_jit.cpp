@@ -167,7 +167,8 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
 }
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 240, node);
+    /// XXX increase this too much for testing
+    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node);
 }
 
 RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
