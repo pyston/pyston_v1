@@ -517,8 +517,15 @@ void Rewriter::_incref(RewriterVar* var) {
     //assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
     //this->_trap();
-    this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                llvm::ArrayRef<RewriterVar*>());
+
+    //this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                //llvm::ArrayRef<RewriterVar*>());
+#ifdef Py_REF_DEBUG
+    //assembler->trap();
+    assembler->incl(assembler::Immediate(&_Py_RefTotal));
+#endif
+    auto reg = var->getInReg();
+    assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
