@@ -4129,11 +4129,11 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     Py_XDECREF(arg2);
     Py_XDECREF(arg3);
     for (int i = 0; i < num_output_args - 3; i++) {
-        Py_XDECREF(oargs[i]);
+        Py_DECREF(oargs[i]);
     }
     if (rewrite_args) {
         for (int i = 0; i < num_output_args; i++) {
-            getArg(i, rewrite_args)->xdecref();
+            getArg(i, rewrite_args)->decref();
         }
     }
 

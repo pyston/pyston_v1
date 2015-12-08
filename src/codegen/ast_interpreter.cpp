@@ -573,8 +573,8 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Py_DECREF(left.o);
     Py_DECREF(right.o);
     if (jit) {
-        left.var->xdecref();
-        right.var->xdecref();
+        left.var->decref();
+        right.var->decref();
     }
     return r;
 }
