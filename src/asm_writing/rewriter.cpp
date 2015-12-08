@@ -553,8 +553,9 @@ void Rewriter::_decref(RewriterVar* var) {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         //assembler->trap();
         assembler->mov(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
-        assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
-        assembler->callq(assembler::R11);
+        assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
+        //assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
+        //assembler->callq(assembler::R11);
     }
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.

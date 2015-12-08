@@ -163,6 +163,7 @@ public:
 
     void call(Immediate imm); // the value is the offset
     void callq(Register reg);
+    void callq(Indirect reg);
     void retq();
     void leave();
 

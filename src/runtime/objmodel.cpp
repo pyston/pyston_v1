@@ -6483,6 +6483,11 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, Box* value) {
     if (globals->cls == module_cls) {
         // Note: in optimized builds, this will be a tail call, which will
         // preserve the return address, letting the setattr() call rewrite itself.
+        // XXX this isn't really safe in general, since the guards that led to this
+        // path need to end up in the rewrite.  I think this is safe for now since
+        // writing the module case won't accidentally work for the dict case, but
+        // we should make all the entrypoints (the ones that look at the return address)
+        // be noinline.
         setattr(static_cast<BoxedModule*>(globals), name, value);
     } else {
         RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);

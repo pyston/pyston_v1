@@ -706,6 +706,31 @@ void Assembler::callq(Register r) {
     emitByte(0xd3);
 }
 
+void Assembler::callq(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        assert(0 && "check this");
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 2, src_idx);
+    } else {
+        emitModRM(0b01, 2, src_idx);
+        emitByte(mem.offset);
+    }
+}
+
 void Assembler::retq() {
     emitByte(0xc3);
 }
