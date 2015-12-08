@@ -216,10 +216,11 @@ public:
 // generated conditional jump with the correct offset depending on the number of bytes emitted in between.
 class ForwardJump {
 private:
-    const int max_jump_size = 128;
+    const int max_jump_size = 1048587;
     Assembler& assembler;
     ConditionCode condition;
     uint8_t* jmp_inst;
+    uint8_t* jmp_end;
 
 public:
     ForwardJump(Assembler& assembler, ConditionCode condition);

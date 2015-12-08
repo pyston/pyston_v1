@@ -1141,6 +1141,7 @@ void Assembler::skipBytes(int num) {
 ForwardJump::ForwardJump(Assembler& assembler, ConditionCode condition)
     : assembler(assembler), condition(condition), jmp_inst(assembler.curInstPointer()) {
     assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + max_jump_size), condition);
+    jmp_end = assembler.curInstPointer();
 }
 
 ForwardJump::~ForwardJump() {
@@ -1149,6 +1150,8 @@ ForwardJump::~ForwardJump() {
     RELEASE_ASSERT(offset < max_jump_size, "");
     assembler.setCurInstPointer(jmp_inst);
     assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + offset), condition);
+    while (assembler.curInstPointer() < jmp_end)
+        assembler.nop();
     assembler.setCurInstPointer(new_pos);
 }
 }

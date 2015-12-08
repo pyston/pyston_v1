@@ -561,7 +561,9 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg);
         vregs_array->setAttr(8 * vreg, v);
-        prev->xdecref();
+        // XXX: this either needs to be an xdecref or we should check liveness analysis.
+        prev->decref();
+        //prev->xdecref();
     }
 }
 
