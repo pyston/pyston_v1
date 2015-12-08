@@ -1012,8 +1012,6 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
             Py_DECREF(prev);
 
             if (rewrite_args) {
-                assert(0 && "check refcounting");
-
                 if (cls->attrs_offset < 0) {
                     REWRITE_ABORTED("");
                     rewrite_args = NULL;
@@ -1021,6 +1019,8 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
                     RewriterVar* r_hattrs
                         = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
 
+                    r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))->decref();
+                    rewrite_args->attrval->incref();
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
 
@@ -6391,6 +6391,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                         rewriter->commitReturning(r_rtn);
                     }
 
+                    assert(r->ob_refcnt > 0);
                     Py_INCREF(r);
                     return r;
                 }
@@ -6398,6 +6399,8 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 r = m->getattr(name);
                 nopatch_getglobal.log();
                 if (r) {
+                    assert(r->ob_refcnt > 0);
+
                     Py_INCREF(r);
                     return r;
                 }
@@ -6411,6 +6414,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
             auto it = d->d.find(name);
             if (it != d->d.end()) {
+                assert(it->second->ob_refcnt > 0);
                 Py_INCREF(it->second);
                 return it->second;
             }
@@ -6440,6 +6444,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
             rtn = builtins_module->getattr(name);
         }
 
+        assert(rtn->ob_refcnt > 0);
         if (rtn) {
             Py_INCREF(rtn);
             return rtn;
@@ -6476,6 +6481,8 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, Box* value) {
     }
 
     if (globals->cls == module_cls) {
+        // Note: in optimized builds, this will be a tail call, which will
+        // preserve the return address, letting the setattr() call rewrite itself.
         setattr(static_cast<BoxedModule*>(globals), name, value);
     } else {
         RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
