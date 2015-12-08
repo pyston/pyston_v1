@@ -534,8 +534,28 @@ void Rewriter::_incref(RewriterVar* var) {
 void Rewriter::_decref(RewriterVar* var) {
     //assembler->trap();
 
-    this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+    //this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                //llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+
+#ifdef Py_REF_DEBUG
+    //assembler->trap();
+    assembler->decl(assembler::Immediate(&_Py_RefTotal));
+#endif
+
+    _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (int)0), assembler::RAX);
+
+    // _setupCall doesn't remember that it added the arg regs to the location set
+    auto reg = assembler::RDI;
+    //auto reg = var->getInReg();
+
+    assembler->decl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    {
+        assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
+        //assembler->trap();
+        assembler->mov(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
+        assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
+        assembler->callq(assembler::R11);
+    }
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
