@@ -522,10 +522,10 @@ void Rewriter::_incref(RewriterVar* var) {
                 //llvm::ArrayRef<RewriterVar*>());
 #ifdef Py_REF_DEBUG
     //assembler->trap();
-    assembler->incl(assembler::Immediate(&_Py_RefTotal));
+    assembler->incq(assembler::Immediate(&_Py_RefTotal));
 #endif
     auto reg = var->getInReg();
-    assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
@@ -539,7 +539,7 @@ void Rewriter::_decref(RewriterVar* var) {
 
 #ifdef Py_REF_DEBUG
     //assembler->trap();
-    assembler->decl(assembler::Immediate(&_Py_RefTotal));
+    assembler->decq(assembler::Immediate(&_Py_RefTotal));
 #endif
 
     _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (int)0), assembler::RAX);
@@ -548,7 +548,7 @@ void Rewriter::_decref(RewriterVar* var) {
     auto reg = assembler::RDI;
     //auto reg = var->getInReg();
 
-    assembler->decl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    assembler->decq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         //assembler->trap();

@@ -157,9 +157,12 @@ public:
 
     void incl(Indirect mem);
     void decl(Indirect mem);
-
     void incl(Immediate mem);
     void decl(Immediate mem);
+    void incq(Indirect mem);
+    void decq(Indirect mem);
+    void incq(Immediate mem);
+    void decq(Immediate mem);
 
     void call(Immediate imm); // the value is the offset
     void callq(Register reg);

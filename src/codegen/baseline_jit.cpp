@@ -954,7 +954,7 @@ void JitFragmentWriter::_emitRecordType(RewriterVar* type_recorder_var, Rewriter
         assembler->mov(obj_cls_reg, last_seen_indirect);
         assembler->movq(assembler::Immediate(0ul), last_seen_count);
     }
-    assembler->incl(last_seen_count);
+    assembler->incq(last_seen_count);
 
     type_recorder_var->bumpUse();
     obj_cls_var->bumpUse();
