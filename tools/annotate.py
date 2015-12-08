@@ -57,6 +57,7 @@ def lookupAsHeapAddr(n):
     lines = []
     while True:
         l = _heap_proc.stdout.readline()
+        assert l, "heapmap subprocess exited? code: %r" % _heap_proc.poll()
         if l == '!!!!\n':
             break
         lines.append(l)
@@ -95,7 +96,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("func_name", metavar="FUNC_NAME")
-    parser.add_argument("--collapse-nops", dest="collapse_nops", action="store_true", default=True)
+    parser.add_argument("--collapse-nops", dest="collapse_nops", action="store", default=5, type=int)
     parser.add_argument("--no-collapse-nops", dest="collapse_nops", action="store_false")
     parser.add_argument("--heap-map-args", nargs='+', help="""
 Command to run that will provide heap map information.
@@ -157,7 +158,13 @@ equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
                 nops = (nops[0] + count, nops[1] + 1, nops[2], addr)
         else:
             if nops:
-                print str(nops[0]).rjust(8), ("    %s-%s              nop*%d" % (nops[2], nops[3], nops[1])).ljust(70)
+                if int(nops[3], 16) - int(nops[2], 16) + 1 <= args.collapse_nops:
+                    nop_count = nops[0]
+                    for addr in xrange(int(nops[2], 16), int(nops[3], 16) + 1):
+                        print str(nop_count).rjust(8), ("    %s              nop" % ("%x:      90" % addr).ljust(29)).ljust(70)
+                        nop_count = 0
+                else:
+                    print str(nops[0]).rjust(8), ("    %s              nop*%d" % (("%s-%s" % (nops[2], nops[3])).ljust(29), nops[1])).ljust(70)
                 nops = None
             print str(count).rjust(8), l.ljust(70), extra
 

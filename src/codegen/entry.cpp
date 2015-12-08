@@ -529,9 +529,6 @@ extern "C" void Py_Initialize() noexcept {
 }
 
 void teardownCodegen() {
-    if (PROFILE)
-        g.func_addr_registry.dumpPerfMap();
-
     for (int i = 0; i < g.jit_listeners.size(); i++) {
         g.engine->UnregisterJITEventListener(g.jit_listeners[i]);
         delete g.jit_listeners[i];

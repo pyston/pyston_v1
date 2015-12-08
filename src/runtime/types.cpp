@@ -4325,6 +4325,9 @@ extern "C" void Py_Finalize() noexcept {
 
     // wait_for_thread_shutdown();
 
+    if (PROFILE)
+        g.func_addr_registry.dumpPerfMap();
+
     call_sys_exitfunc();
     // initialized = 0;
 

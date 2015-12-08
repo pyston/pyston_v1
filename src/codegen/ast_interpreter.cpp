@@ -414,9 +414,11 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             interpreter.current_inst = s;
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
-            Py_XDECREF(v.o);
-            if (v.var)
-                v.var->xdecref();
+            if (v.o) {
+                Py_XDECREF(v.o);
+                if (v.var)
+                    v.var->decref();
+            }
             v = interpreter.visit_stmt(s);
         }
     }

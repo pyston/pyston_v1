@@ -214,18 +214,21 @@ public:
 // This class helps generating a forward jump with a relative offset.
 // It keeps track of the current assembler offset at construction time and in the destructor patches the
 // generated conditional jump with the correct offset depending on the number of bytes emitted in between.
-class ForwardJump {
+template <int MaxJumpSize=128>
+class ForwardJumpBase {
 private:
-    const int max_jump_size = 1048587;
     Assembler& assembler;
     ConditionCode condition;
     uint8_t* jmp_inst;
     uint8_t* jmp_end;
 
 public:
-    ForwardJump(Assembler& assembler, ConditionCode condition);
-    ~ForwardJump();
+    ForwardJumpBase(Assembler& assembler, ConditionCode condition);
+    ~ForwardJumpBase();
 };
+
+#define ForwardJump ForwardJumpBase<128>
+#define LargeForwardJump ForwardJumpBase<1048576>
 
 uint8_t* initializePatchpoint2(uint8_t* start_addr, uint8_t* slowpath_start, uint8_t* end_addr, StackInfo stack_info,
                                const std::unordered_set<int>& live_outs);

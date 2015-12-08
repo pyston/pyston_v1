@@ -1138,21 +1138,25 @@ void Assembler::skipBytes(int num) {
     addr += num;
 }
 
-ForwardJump::ForwardJump(Assembler& assembler, ConditionCode condition)
+template <int MaxJumpSize>
+ForwardJumpBase<MaxJumpSize>::ForwardJumpBase(Assembler& assembler, ConditionCode condition)
     : assembler(assembler), condition(condition), jmp_inst(assembler.curInstPointer()) {
-    assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + max_jump_size), condition);
+    assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + MaxJumpSize), condition);
     jmp_end = assembler.curInstPointer();
 }
 
-ForwardJump::~ForwardJump() {
+template <int MaxJumpSize>
+ForwardJumpBase<MaxJumpSize>::~ForwardJumpBase() {
     uint8_t* new_pos = assembler.curInstPointer();
     int offset = new_pos - jmp_inst;
-    RELEASE_ASSERT(offset < max_jump_size, "");
+    RELEASE_ASSERT(offset < MaxJumpSize, "");
     assembler.setCurInstPointer(jmp_inst);
     assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + offset), condition);
     while (assembler.curInstPointer() < jmp_end)
         assembler.nop();
     assembler.setCurInstPointer(new_pos);
 }
+template class ForwardJumpBase<128>;
+template class ForwardJumpBase<1048576>;
 }
 }
