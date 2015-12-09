@@ -894,6 +894,14 @@ extern "C" Box* intInt(BoxedInt* self) {
     return boxInt(self->n);
 }
 
+Box* intFloat(BoxedInt* self) {
+    if (!PyInt_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return boxFloat(self->n);
+}
+
 extern "C" Box* intIndex(BoxedInt* v) {
     if (PyInt_CheckExact(v))
         return v;
@@ -1180,6 +1188,7 @@ void setupInt() {
     int_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)intTrunc, BOXED_INT, 1)));
     int_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)intIndex, BOXED_INT, 1)));
     int_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)intInt, BOXED_INT, 1)));
+    int_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)intFloat, BOXED_FLOAT, 1)));
 
     auto int_new = FunctionMetadata::create((void*)intNew<CXX>, UNKNOWN, 3, false, false,
                                             ParamNames({ "", "x", "base" }, "", ""), CXX);

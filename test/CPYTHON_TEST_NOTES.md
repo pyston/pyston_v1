@@ -42,7 +42,6 @@ test_cfgparser          [unknown]
 test_cgi                [unknown]
 test_class              needs ellipsis
 test_cl                 [unknown]
-test_cmath              [unknown]
 test_cmd_line_script    [unknown]
 test_cmd_line           [unknown]
 test_codecencodings_cn  [unknown]

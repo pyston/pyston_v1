@@ -95,7 +95,7 @@ extern "C" Box* abs_(Box* x) {
         return boxInt(n >= 0 ? n : -n);
     } else if (x->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(x)->d;
-        return boxFloat(d >= 0 ? d : -d);
+        return boxFloat(std::abs(d));
     } else if (x->cls == long_cls) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {

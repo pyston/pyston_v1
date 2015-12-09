@@ -760,6 +760,14 @@ Box* floatPos(BoxedFloat* self) {
     return PyFloat_FromDouble(self->d);
 }
 
+Box* floatAbs(BoxedFloat* self) {
+    if (!PyFloat_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__abs__' requires a 'float' object but received a '%s'",
+                       getTypeName(self));
+    double res = std::abs(self->d);
+    return boxFloat(res);
+}
+
 bool floatNonzeroUnboxed(BoxedFloat* self) {
     assert(self->cls == float_cls);
     return self->d != 0.0;
@@ -1614,6 +1622,7 @@ void setupFloat() {
     float_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)floatGt, UNKNOWN, 2)));
     float_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)floatNeg, BOXED_FLOAT, 1)));
     float_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)floatPos, BOXED_FLOAT, 1)));
+    float_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)floatAbs, BOXED_FLOAT, 1)));
 
     FunctionMetadata* nonzero = FunctionMetadata::create((void*)floatNonzeroUnboxed, BOOL, 1);
     nonzero->addVersion((void*)floatNonzero, UNKNOWN);
