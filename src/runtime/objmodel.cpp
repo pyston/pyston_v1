@@ -4157,6 +4157,11 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
     if (!r) {
         assert(S == CAPI);
     } else {
+        // If this assertion is triggered because the type isn't what we expected,
+        // but something that should be allowed (e.g. NotImplementedType), it is
+        // possible that the program has a bad type annotation. For example, an
+        // attribute that we added in C++ should have return type UNKNOWN instead
+        // of BOXED_SOMETHING.
         ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
                g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
                chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);

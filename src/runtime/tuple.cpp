@@ -687,7 +687,9 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)tupleLen, BOXED_INT, 1)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)tupleRepr, STR, 1)));
-    tuple_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)tupleAdd, BOXED_TUPLE, 2)));
+
+    // Return type is UNKNOWN as it could be NotImplemented.
+    tuple_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)tupleAdd, UNKNOWN, 2)));
     tuple_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, BOXED_TUPLE, 2)));
 
