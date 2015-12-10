@@ -502,7 +502,7 @@ void setupGenerator() {
         = new BoxedFunction(FunctionMetadata::create((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
     generator_cls->giveAttr("throw", gthrow);
 
-    generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
+    generator_cls->giveAttrDescriptor("__name__", generatorName, NULL);
 
     generator_cls->freeze();
     generator_cls->tp_iter = PyObject_SelfIter;

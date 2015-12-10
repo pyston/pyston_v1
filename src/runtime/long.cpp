@@ -1705,11 +1705,11 @@ void setupLong() {
     long_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)longIndex, LONG, 1)));
 
     long_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)longBitLength, LONG, 1)));
-    long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longDesc, NULL, NULL));
-    long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
+    long_cls->giveAttrDescriptor("real", longDesc, NULL);
+    long_cls->giveAttrDescriptor("imag", long0, NULL);
     long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)longDesc, UNKNOWN, 1)));
-    long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longDesc, NULL, NULL));
-    long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
+    long_cls->giveAttrDescriptor("numerator", longDesc, NULL);
+    long_cls->giveAttrDescriptor("denominator", long1, NULL);
 
     long_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)long_getnewargs, UNKNOWN, 1,
                                                                                     ParamNames::empty(), CAPI)));

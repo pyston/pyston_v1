@@ -120,13 +120,12 @@ void setupCode() {
 
     code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
 
-    code_cls->giveAttr("co_name", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::name, NULL, NULL));
-    code_cls->giveAttr("co_filename", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::filename, NULL, NULL));
-    code_cls->giveAttr("co_firstlineno",
-                       new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::firstlineno, NULL, NULL));
-    code_cls->giveAttr("co_argcount", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::argcount, NULL, NULL));
-    code_cls->giveAttr("co_varnames", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::varnames, NULL, NULL));
-    code_cls->giveAttr("co_flags", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::flags, NULL, NULL));
+    code_cls->giveAttrDescriptor("co_name", BoxedCode::name, NULL);
+    code_cls->giveAttrDescriptor("co_filename", BoxedCode::filename, NULL);
+    code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::firstlineno, NULL);
+    code_cls->giveAttrDescriptor("co_argcount", BoxedCode::argcount, NULL);
+    code_cls->giveAttrDescriptor("co_varnames", BoxedCode::varnames, NULL);
+    code_cls->giveAttrDescriptor("co_flags", BoxedCode::flags, NULL);
 
     code_cls->freeze();
 }

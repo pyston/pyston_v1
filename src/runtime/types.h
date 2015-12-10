@@ -948,9 +948,16 @@ public:
     Box* (*get)(Box*, void*);
     void (*set)(Box*, Box*, void*);
     void* closure;
+    BoxedString* name;
 
-    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
-        : get(get), set(set), closure(closure) {}
+    BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
+        : get(get), set(set), closure(closure), name(name) {}
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        assert(b->cls == pyston_getset_cls);
+        BoxedGetsetDescriptor* descr = static_cast<BoxedGetsetDescriptor*>(b);
+        v->visit(&descr->name);
+    }
 
     // No DEFAULT_CLASS annotation here -- force callers to explicitly specifiy pyston_getset_cls or capi_getset_cls
 };

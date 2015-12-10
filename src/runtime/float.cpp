@@ -1758,8 +1758,8 @@ void setupFloat() {
     float_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)floatLong, UNKNOWN, 1)));
     float_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)floatHash, BOXED_INT, 1)));
 
-    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatConjugate, NULL, NULL));
-    float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
+    float_cls->giveAttrDescriptor("real", floatConjugate, NULL);
+    float_cls->giveAttrDescriptor("imag", float0, NULL);
     float_cls->giveAttr("conjugate",
                         new BoxedFunction(FunctionMetadata::create((void*)floatConjugate, BOXED_FLOAT, 1)));
 
