@@ -535,6 +535,7 @@ public:
 
     void begin() {
         exc_info = ExcInfo(NULL, NULL, NULL);
+        pystack_extractor = PythonStackExtractor(); // resets skip_next_pythonlike_frame
         t.restart();
 
         static StatCounter stat("unwind_sessions");
