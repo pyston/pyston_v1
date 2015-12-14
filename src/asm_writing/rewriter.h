@@ -200,6 +200,12 @@ class Rewriter;
 class RewriterVar;
 class RewriterAction;
 
+enum class RefType {
+    UNKNOWN,
+    OWNED,
+    BORROWED,
+};
+
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
@@ -216,9 +222,53 @@ public:
     void setAttr(int offset, RewriterVar* other);
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
-    void incref();
-    void decref();
-    void xdecref();
+
+    RewriterVar* setType(RefType type) {
+        assert(this->reftype == RefType::UNKNOWN);
+        assert(type != RefType::UNKNOWN);
+        this->reftype = type;
+        this->vrefcount = 1;
+        return this;
+    }
+
+    RewriterVar* asBorrowed() {
+        if (this->reftype == RefType::UNKNOWN)
+            return setType(RefType::BORROWED);
+
+        assert(this->reftype == RefType::BORROWED);
+        return this->incvref();
+    }
+
+    RewriterVar* incvref() {
+        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
+        assert(vrefcount > 0 || (reftype == RefType::BORROWED && vrefcount >= 0));
+        vrefcount++;
+        return this;
+    }
+
+    RewriterVar* decvref() {
+        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
+        assert(vrefcount > 0);
+        vrefcount--;
+
+        if (reftype == RefType::OWNED && vrefcount == 0)
+            decref();
+        return this;
+    }
+
+    RewriterVar* materializeVref() {
+        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
+        assert(vrefcount > 0);
+        vrefcount--;
+
+        if (reftype == RefType::OWNED && vrefcount == 0) {
+            // handoff, do nothing
+        } else {
+            incref();
+        }
+        return this;
+    }
+
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
@@ -229,6 +279,10 @@ private:
 
     llvm::SmallVector<Location, 4> locations;
     bool isInLocation(Location l);
+
+    void incref();
+    void decref();
+    void xdecref();
 
     // uses is a vector of the indices into the Rewriter::actions vector
     // indicated the actions that use this variable.
@@ -249,6 +303,9 @@ private:
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
     bool is_constant;
+
+    RefType reftype = RefType::UNKNOWN;
+    int vrefcount;
 
     uint64_t constant_value;
     Location arg_loc;
@@ -275,8 +332,19 @@ private:
     RewriterVar& operator=(const RewriterVar&) = delete;
 
 public:
-    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
+    RewriterVar(Rewriter* rewriter)
+        : rewriter(rewriter),
+          next_use(0),
+          is_arg(false),
+          is_constant(false),
+          vrefcount(0) {
         assert(rewriter);
+    }
+
+    // XXX: for testing, reset these on deallocation so that we will see the next time they get set.
+    ~RewriterVar() {
+        reftype = (RefType)-1;
+        vrefcount = -11;
     }
 
     Rewriter* getRewriter() { return rewriter; }

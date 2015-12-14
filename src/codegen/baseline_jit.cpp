@@ -168,7 +168,7 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     /// XXX increase this too much for testing
-    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node);
+    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
@@ -266,8 +266,7 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     auto num = values.size();
     RewriterVar* r;
     if (num == 0) {
-        r = imm(EmptyTuple);
-        r->incref();
+        r = imm(EmptyTuple)->setType(RefType::BORROWED);
     } else if (num == 1)
         r = call(false, (void*)BoxedTuple::create1, values[0]);
     else if (num == 2)
@@ -278,7 +277,7 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
         r = call(false, (void*)createTupleHelper, imm(num), allocArgs(values));
 
     for (auto v : values)
-        v->decref();
+        v->decvref();
 
     return r;
 }
@@ -304,8 +303,7 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end())
         return emitGetLocal(s, vreg);
-    // TODO xincref?
-    it->second->incref();
+    it->second->incvref();
     return it->second;
 }
 
@@ -325,11 +323,14 @@ RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s)
 
 RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
     if (s->s() == "None") {
-        RewriterVar* r = imm(None);
-        r->incref();
+        RewriterVar* r = imm(None)->setType(RefType::BORROWED);
         return r;
     }
-    return emitPPCall((void*)getGlobal, { imm(global), imm(s) }, 2, 512);
+
+    RewriterVar* args[] = { NULL, NULL };
+    args[0] = imm(global)->asBorrowed()->decvref();
+    args[1] = imm(s)->asBorrowed()->decvref();
+    return emitPPCall((void*)getGlobal, args, 2, 512)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice) {
@@ -338,7 +339,7 @@ RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, 
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
     assert(vreg >= 0);
-    RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
+    RewriterVar* val_var = vregs_array->getAttr(vreg * 8)->setType(RefType::OWNED);
     addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
     return val_var;
 }
@@ -405,7 +406,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder);
+    return emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder)->setType(RefType::OWNED);
 #else
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar* keyword_names_var = keyword_names ? imm(keyword_names) : nullptr;
@@ -476,7 +477,7 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     for (auto v : local_syms) {
         if (v.second)
-            v.second->decref(); // xdecref?
+            v.second->decvref(); // xdecref?
     }
 
     RewriterVar* next = imm(b);
@@ -508,8 +509,10 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
 void JitFragmentWriter::emitReturn(RewriterVar* v) {
     for (auto v : local_syms) {
         if (v.second)
-            v.second->decref();
+            v.second->decvref();
     }
+
+    v->materializeVref();
 
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
 }
@@ -523,7 +526,7 @@ void JitFragmentWriter::emitSetBlockLocal(InternedString s, RewriterVar* v) {
     local_syms[s] = v;
     if (prev) {
         // TODO: xdecref?
-        prev->decref();
+        prev->decvref();
     }
 }
 
@@ -559,10 +562,10 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 #endif
              v);
     } else {
-        RewriterVar* prev = vregs_array->getAttr(8 * vreg);
+        RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setType(RefType::OWNED);
         vregs_array->setAttr(8 * vreg, v);
         // XXX: this either needs to be an xdecref or we should check liveness analysis.
-        prev->decref();
+        prev->decvref();
         //prev->xdecref();
     }
 }

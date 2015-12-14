@@ -874,8 +874,8 @@ template <Rewritable rewritable> Box* Box::getattr(BoxedString* attr, GetattrRew
             } else {
                 RewriterVar* r_attrs
                     = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
-                RewriterVar* r_rtn
-                    = r_attrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), Location::any());
+                RewriterVar* r_rtn = r_attrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
+                                                      Location::any())->setType(RefType::BORROWED);
                 rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
         }
@@ -1019,8 +1019,10 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
                     RewriterVar* r_hattrs
                         = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
 
-                    r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))->decref();
-                    rewrite_args->attrval->incref();
+                    r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
+                        ->setType(RefType::OWNED)
+                        ->decvref();
+                    rewrite_args->attrval->materializeVref();
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
 
@@ -1038,6 +1040,7 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
             // make sure we don't need to rearrange the attributes
             assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
 
+            assert(!rewrite_args && "check rewriter refcounting");
             this->appendNewHCAttr(val, rewrite_args);
             attrs->hcls = new_hcls;
 
@@ -1278,8 +1281,12 @@ template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* a
             obj_saved->addAttrGuard(offsetof(BoxedClass, tp_version_tag), (intptr_t)cls->tp_version_tag);
             if (!val)
                 rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
-            else
-                rewrite_args->setReturn(rewrite_args->rewriter->loadConst((int64_t)val), ReturnConvention::HAS_RETURN);
+            else {
+                // typeLookup is special since it doesn't even return a vref
+                rewrite_args->setReturn(
+                    rewrite_args->rewriter->loadConst((int64_t)val)->setType(RefType::BORROWED),
+                    ReturnConvention::HAS_RETURN);
+            }
         }
         return val;
     }
@@ -1376,8 +1383,8 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         } else {
             *bind_obj_out = incref(im_self);
             if (rewrite_args) {
-                r_im_func->incref();
-                r_im_self->incref();
+                r_im_func->incvref();
+                r_im_self->incvref();
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
             }
@@ -2585,6 +2592,10 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     assert(!obj->cls->tp_setattr);
 
     if (rewriter.get()) {
+        rewriter->getArg(0)->setType(RefType::BORROWED);
+        rewriter->getArg(1)->setType(RefType::BORROWED);
+        rewriter->getArg(2)->setType(RefType::BORROWED);
+
         auto r_cls = rewriter->getArg(0)->getAttr(offsetof(Box, cls));
         // rewriter->trap();
         r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
@@ -3218,7 +3229,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
         rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
         if (r_bind_obj)
-            r_bind_obj->decref();
+            r_bind_obj->decvref();
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
         Box* rtn = Helper::call(val, argspec, arg1, arg2, arg3, _args);
@@ -3240,8 +3251,8 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
     Py_DECREF(val);
     if (rewrite_args) {
         if (r_bind_obj)
-            r_bind_obj->decref();
-        r_val->decref();
+            r_bind_obj->decvref();
+        r_val->decvref();
     }
     return r;
 }
@@ -3551,19 +3562,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
             for (int i = 0; i < num_output_args - 3; i++) {
                 Py_INCREF(oargs[i]);
-            }
-        }
-        if (rewrite_args) {
-            if (num_output_args >= 1)
-                rewrite_args->arg1->incref();
-            if (num_output_args >= 2)
-                rewrite_args->arg2->incref();
-            if (num_output_args >= 3)
-                rewrite_args->arg3->incref();
-            if (num_output_args >= 3) {
-                for (int i = 0; i < num_output_args - 3; i++) {
-                    rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
-                }
             }
         }
         return;
@@ -4132,8 +4130,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         Py_DECREF(oargs[i]);
     }
     if (rewrite_args) {
+        RELEASE_ASSERT(num_output_args <= 3, "figure out vrefs for arg array");
         for (int i = 0; i < num_output_args; i++) {
-            getArg(i, rewrite_args)->decref();
+            getArg(i, rewrite_args)->decvref();
         }
     }
 
@@ -4323,7 +4322,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         if (num_output_args >= 4)
             arg_vec.push_back(rewrite_args->args);
 
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, func_ptr, arg_vec);
+        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, func_ptr, arg_vec)->setType(RefType::OWNED);
         if (S == CXX && chosen_cf->exception_style == CAPI)
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
 
@@ -4730,6 +4729,8 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     if (rewrite_args) {
         CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
         srewrite_args.arg1 = rewrite_args->rhs;
+        rewrite_args->lhs->incvref();
+        rewrite_args->rhs->incvref();
         lrtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
         if (!srewrite_args.isSuccessful()) {
@@ -4753,6 +4754,8 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     if (lrtn) {
         if (lrtn != NotImplemented) {
             if (rewrite_args) {
+                rewrite_args->lhs->decvref();
+                rewrite_args->rhs->decvref();
                 assert(rewrite_args->out_rtn);
                 rewrite_args->out_success = true;
             }
@@ -4835,14 +4838,17 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     Box* rtn;
     if (rewriter.get()) {
         // rewriter->trap();
-        BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
+        BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                      rewriter->getArg(1)->setType(RefType::BORROWED),
                                       rewriter->getReturnDestination());
         rtn = binopInternal<REWRITABLE>(lhs, rhs, op_type, false, &rewrite_args);
         assert(rtn);
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
-        } else
+        } else {
+            rewrite_args.out_rtn->materializeVref();
             rewriter->commitReturning(rewrite_args.out_rtn);
+        }
     } else {
         rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, false, NULL);
     }
@@ -6387,7 +6393,7 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 if (r) {
                     if (rewriter.get()) {
                         RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
-                        r_rtn->incref();
+                        r_rtn->materializeVref();
                         rewriter->commitReturning(r_rtn);
                     }
 

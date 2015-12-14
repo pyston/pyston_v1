@@ -270,6 +270,8 @@ void Rewriter::assertArgsInPlace() {
 void RewriterVar::addGuard(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
+
     if (isConstant()) {
         RELEASE_ASSERT(constant_value == val, "added guard which is always false");
         return;
@@ -323,6 +325,8 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
 void RewriterVar::addGuardNotEq(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
+
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
@@ -353,6 +357,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
 
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
@@ -405,6 +411,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
     return result;
@@ -434,6 +442,8 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
 RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, ActionType::NORMAL);
     return result;
@@ -455,6 +465,8 @@ void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset,
 
 RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
 
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, ActionType::NORMAL);
@@ -637,6 +649,9 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 void RewriterVar::setAttr(int offset, RewriterVar* val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    for (auto a : {this, val})
+        assert(a->reftype == RefType::UNKNOWN || a->vrefcount > 0);
+
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
 
@@ -673,6 +688,8 @@ void RewriterVar::dump() {
     printf("RewriterVar at %p: %ld locations:\n", this, locations.size());
     for (Location l : locations)
         l.dump();
+    if (is_constant)
+        printf("Constant value: 0x%lx\n", this->constant_value);
 }
 
 assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
@@ -908,6 +925,9 @@ static const Location caller_save_registers[]{
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {
+    for (auto a : args)
+        assert(a->reftype == RefType::UNKNOWN || a->vrefcount > 0);
+
     RewriterVar* result = createNewVar();
     RewriterVar::SmallVector uses;
     for (RewriterVar* v : args) {
@@ -1255,6 +1275,10 @@ void Rewriter::commit() {
         }
     }
 
+    for (RewriterVar& var : vars) {
+        assert(var.vrefcount == 0);
+    }
+
     assertConsistent();
 
     // Emit assembly for each action, and set done_guarding when
@@ -1480,6 +1504,8 @@ bool Rewriter::finishAssembly(int continue_offset) {
 
 void Rewriter::commitReturning(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    assert(var->vrefcount == 0);
 
     addAction([=]() {
         assembler->comment("commitReturning");

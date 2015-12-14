@@ -417,7 +417,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             if (v.o) {
                 Py_XDECREF(v.o);
                 if (v.var)
-                    v.var->decref();
+                    v.var->decvref();
             }
             v = interpreter.visit_stmt(s);
         }
@@ -467,7 +467,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         setGlobal(globals, name.getBox(), value.o);
         Py_DECREF(value.o);
         if (jit)
-            value.var->decref();
+            value.var->decvref();
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(0 && "check refcounting");
         if (jit)
@@ -554,8 +554,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
 Value ASTInterpreter::getNone() {
     RewriterVar* v = NULL;
     if (jit) {
-        v = jit->imm(None);
-        v->incref();
+        v = jit->imm(None)->setType(RefType::BORROWED);
     }
     return Value(incref(None), v);
 }
@@ -575,8 +574,8 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Py_DECREF(left.o);
     Py_DECREF(right.o);
     if (jit) {
-        left.var->decref();
-        right.var->decref();
+        left.var->decvref();
+        right.var->decvref();
     }
     return r;
 }
@@ -863,8 +862,8 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
     Py_DECREF(right.o);
 
     if (jit) {
-        left.var->decref();
-        right.var->decref();
+        left.var->decvref();
+        right.var->decvref();
     }
     return r;
 }
@@ -877,7 +876,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
         Py_DECREF(val.o);
         if (jit)
-            val.var->decref();
+            val.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -938,7 +937,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
         Py_DECREF(obj.o);
         if (jit)
-            obj.var->decref();
+            obj.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
@@ -965,7 +964,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
         Py_DECREF(obj.o);
         if (jit)
-            obj.var->decref();
+            obj.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
         abortJITing();
         Value obj = visit_expr(node->args[0]);
@@ -1144,8 +1143,8 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
         if (jit) {
             auto prev_func_var = func.var;
             func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
-            decorators[i].var->decref();
-            prev_func_var->decref();
+            decorators[i].var->decvref();
+            prev_func_var->decvref();
         }
     }
     return func;
@@ -1322,8 +1321,8 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
 
     if (jit) {
         if (node->dest)
-            dest.var->decref();
-        var.var->decref();
+            dest.var->decvref();
+        var.var->decvref();
     }
 
     return Value();
@@ -1350,8 +1349,8 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     Py_DECREF(left.o);
     Py_DECREF(right.o);
     if (jit) {
-        left.var->decref();
-        right.var->decref();
+        left.var->decvref();
+        right.var->decvref();
     }
     return r;
 }
@@ -1487,9 +1486,9 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         Py_DECREF(e);
 
     if (jit) {
-        func.var->decref();
+        func.var->decvref();
         for (auto e : args_vars)
-            e->decref();
+            e->decvref();
     }
 
     return v;
@@ -1515,8 +1514,7 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     Py_INCREF(o);
     RewriterVar* v = NULL;
     if (jit) {
-        v = jit->imm(o);
-        v->incref();
+        v = jit->imm(o)->setType(RefType::BORROWED);
     }
     return Value(o, v);
 }
