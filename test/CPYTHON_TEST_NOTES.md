@@ -178,7 +178,7 @@ test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           [unknown]
-test_richcmp            PyObject_Not
+test_richcmp            sefaults
 test_rlcompleter        [unknown]
 test_runpy              [unknown]
 test_sax                [unknown]

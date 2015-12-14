@@ -862,8 +862,14 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
     } else if (PyLong_Check(a)) {
         double a_f = PyLong_AsDouble(a);
         if (a_f == -1.0 && PyErr_Occurred()) {
-            throwCAPIException();
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
         }
+
+        // Make sure that we're not in an error state when we return a non-NULL value.
+        assert(!PyErr_Occurred());
         return new BoxedFloat(a_f);
     } else if (a->cls == str_cls || a->cls == unicode_cls) {
         BoxedFloat* res = (BoxedFloat*)PyFloat_FromString(a, NULL);
@@ -934,6 +940,22 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
     }
 
     return new (cls) BoxedFloat(f->d);
+}
+
+// Roughly analogous to CPython's float_new.
+// The arguments need to be unpacked from args and kwds.
+static Box* floatNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
+    PyObject* x = False;
+    static char* kwlist[2] = { NULL, NULL };
+    kwlist[0] = const_cast<char*>("x");
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:float", kwlist, &x))
+        return NULL;
+
+    if (x == NULL)
+        return floatNew<CAPI>(type, None);
+    else
+        return floatNew<CAPI>(type, x);
 }
 
 PyObject* float_str_or_repr(double v, int precision, char format_code) {
@@ -1656,6 +1678,7 @@ void setupFloat() {
 
     float_cls->tp_str = float_str;
     float_cls->tp_as_number->nb_power = float_pow;
+    float_cls->tp_new = (newfunc)floatNewPacked;
 }
 
 void teardownFloat() {

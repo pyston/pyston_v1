@@ -3568,6 +3568,9 @@ static Box* getsetGet(Box* self, Box* obj, Box* type) {
         return self;
 
     BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+
+    assert(getset_descr->get != NULL);
+
     if (isSubclass(self->cls, pyston_getset_cls)) {
         return getset_descr->get(obj, getset_descr->closure);
     } else {
@@ -3583,6 +3586,10 @@ static Box* getsetSet(Box* self, Box* obj, Box* val) {
     assert(obj != NULL && obj != None);
 
     BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+
+    if (getset_descr->set == NULL)
+        return None;
+
     if (isSubclass(self->cls, pyston_getset_cls)) {
         getset_descr->set(obj, val, getset_descr->closure);
         return None;
@@ -3598,6 +3605,10 @@ static Box* getsetDelete(Box* self, Box* obj) {
     assert(obj != NULL && obj != None);
 
     BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
+
+    if (getset_descr->set == NULL)
+        return None;
+
     if (isSubclass(self->cls, pyston_getset_cls)) {
         getset_descr->set(obj, NULL, getset_descr->closure);
         return None;

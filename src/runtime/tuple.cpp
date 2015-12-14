@@ -156,9 +156,11 @@ template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
         raiseExcHelper(TypeError, "tuple indices must be integers, not %s", getTypeName(slice));
 }
 
+// TODO: duplicate with tupleconcat?
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     if (!PyTuple_Check(rhs)) {
-        return NotImplemented;
+        raiseExcHelper(TypeError, "can only concatenate tuple (not \"%.200s\") to tuple", getTypeName(rhs));
+        return NULL;
     }
 
     BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);
