@@ -174,6 +174,11 @@ template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, 
     return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
 }
 
+template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, md) == 64 + 16, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 8);
+}
+
 void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
                                    llvm::Value* frame_info_arg) {
     /*
@@ -273,9 +278,12 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
+        builder.CreateStore(embedRelocatablePtr(getMD(), g.llvm_functionmetadata_type_ptr), getMDGep(builder, al));
 
         this->frame_info = al;
         this->globals = passed_globals;
+
+        builder.CreateCall(g.funcs.initFrame, this->frame_info);
     }
 
     stmt = getStmtGep(builder, frame_info);
@@ -2126,6 +2134,11 @@ private:
         rtn->ensureGrabbed(emitter);
         val->decvref(emitter);
 
+
+        // Don't call deinitFrame when this is a OSR function because the interpreter will call it
+        if (!irstate->getCurFunction()->entry_descriptor)
+            emitter.createCall(unw_info, g.funcs.deinitFrame, irstate->getFrameInfoVar());
+
         for (auto& p : symbol_table) {
             p.second->decvref(emitter);
         }
@@ -2889,8 +2902,8 @@ public:
             assert(!phi_node);
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
 
-            emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException, phi_node,
-                                              embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+            emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.caughtCapiException,
+                               { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
 
             if (!final_dest) {
                 // Propagate the exception out of the function:
@@ -2898,6 +2911,7 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
+                    emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
             } else {

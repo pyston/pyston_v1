@@ -51,7 +51,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
     } else {
         // This is more like how the parser handles it:
         exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
-        tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None);
+        tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None, getFrame(0));
     }
 
     assert(!PyErr_Occurred());
@@ -299,7 +299,7 @@ bool exceptionAtLineCheck() {
 
 void exceptionAtLine(LineInfo line_info, Box** traceback) {
     if (exceptionAtLineCheck())
-        BoxedTraceback::here(line_info, traceback);
+        BoxedTraceback::here(line_info, traceback, getFrame((FrameInfo*)cur_thread_state.frame_info));
 }
 
 void startReraise() {

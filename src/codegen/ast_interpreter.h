@@ -76,12 +76,8 @@ Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLoca
 Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                        FrameStackState frame_state);
 
-FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
-
-BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg);
-BoxedDict* localsForInterpretedFrame(void* frame_ptr);
 
 // Executes the equivalent of CPython's PRINT_EXPR opcode (call sys.displayhook)
 extern "C" void printExprHelper(Box* b);

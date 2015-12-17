@@ -111,6 +111,8 @@ typedef struct _ts {
 } PyThreadState;
 #endif
 typedef struct _ts {
+    void* frame_info; // This points to top python FrameInfo object
+
     int recursion_depth;
     int gilstate_counter;
 

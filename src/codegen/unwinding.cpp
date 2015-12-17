@@ -279,7 +279,6 @@ struct PythonFrameId {
 class PythonFrameIteratorImpl {
 public:
     PythonFrameId id;
-    FunctionMetadata* md; // always exists
 
     // These only exist if id.type==COMPILED:
     CompiledFunction* cf;
@@ -290,10 +289,8 @@ public:
 
     PythonFrameIteratorImpl() : regs_valid(0) {}
 
-    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, FunctionMetadata* md,
-                            CompiledFunction* cf)
-        : id(PythonFrameId(type, ip, bp)), md(md), cf(cf), regs_valid(0) {
-        assert(md);
+    PythonFrameIteratorImpl(PythonFrameId::FrameType type, uint64_t ip, uint64_t bp, CompiledFunction* cf)
+        : id(PythonFrameId(type, ip, bp)), cf(cf), regs_valid(0) {
         assert((type == PythonFrameId::COMPILED) == (cf != NULL));
     }
 
@@ -302,8 +299,10 @@ public:
         return cf;
     }
 
-    FunctionMetadata* getMD() const {
+    FunctionMetadata* getMD() {
+        FunctionMetadata* md = getFrameInfo()->md;
         assert(md);
+        assert(!cf || cf->md == md);
         return md;
     }
 
@@ -444,16 +443,13 @@ static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
-    FunctionMetadata* md = cf ? cf->md : NULL;
     bool jitted = cf != NULL;
     bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
-    if (interpreted)
-        md = getMDForInterpretedFrame((void*)bp);
 
     if (!jitted && !interpreted)
         return false;
 
-    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, md, cf);
+    *info = PythonFrameIteratorImpl(jitted ? PythonFrameId::COMPILED : PythonFrameId::INTERPRETED, ip, bp, cf);
     if (jitted) {
         // Try getting all the callee-save registers, and save the ones we were able to get.
         // Some of them may be inaccessible, I think because they weren't defined by that
@@ -474,9 +470,9 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
     return true;
 }
 
-static const LineInfo lineInfoForFrame(PythonFrameIteratorImpl* frame_it) {
-    AST_stmt* current_stmt = frame_it->getCurrentStatement();
-    auto* md = frame_it->getMD();
+static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
+    AST_stmt* current_stmt = frame_info->stmt;
+    auto* md = frame_info->md;
     assert(md);
 
     auto source = md->source.get();
@@ -515,20 +511,26 @@ public:
     }
 };
 
+static FrameInfo* getTopFrameInfo() {
+    return (FrameInfo*)cur_thread_state.frame_info;
+}
+
 class PythonUnwindSession : public Box {
     ExcInfo exc_info;
     PythonStackExtractor pystack_extractor;
+    FrameInfo* prev_frame_info;
 
     Timer t;
 
 public:
     DEFAULT_CLASS_SIMPLE(unwind_session_cls);
 
-    PythonUnwindSession() : exc_info(NULL, NULL, NULL), t(/*min_usec=*/10000) {}
+    PythonUnwindSession() : exc_info(NULL, NULL, NULL), prev_frame_info(NULL), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() { return &exc_info; }
 
     void begin() {
+        prev_frame_info = NULL;
         exc_info = ExcInfo(NULL, NULL, NULL);
         pystack_extractor = PythonStackExtractor(); // resets skip_next_pythonlike_frame
         t.restart();
@@ -542,15 +544,25 @@ public:
     }
 
     void handleCFrame(unw_cursor_t* cursor) {
+        if (prev_frame_info) {
+            deinitFrame(prev_frame_info);
+            prev_frame_info = NULL;
+        }
+
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
         if (found_frame) {
             frame_iter.getMD()->propagated_cxx_exceptions++;
+            assert(!prev_frame_info);
+            prev_frame_info = frame_iter.getFrameInfo();
+
+            // make sure that our libunwind based python frame handling and the manual one are the same.
+            assert(prev_frame_info == getTopFrameInfo());
 
             if (exceptionAtLineCheck()) {
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
-                auto line_info = lineInfoForFrame(&frame_iter);
+                auto line_info = lineInfoForFrameInfo(prev_frame_info);
                 exceptionAtLine(line_info, &exc_info.traceback);
             }
         }
@@ -656,16 +668,6 @@ template <typename Func> void unwindPythonStack(Func func) {
     }
 }
 
-static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
-    STAT_TIMER(t0, "us_timer_getTopPythonFrame", 10);
-    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](PythonFrameIteratorImpl* iter) {
-        rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*iter));
-        return true;
-    });
-    return rtn;
-}
-
 // To produce a traceback, we:
 //
 // 1. Use libunwind to produce a cursor into our stack.
@@ -720,10 +722,9 @@ Box* getTraceback() {
     Timer _t("getTraceback", 1000);
 
     Box* tb = None;
-    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        BoxedTraceback::here(lineInfoForFrame(frame_iter), &tb);
-        return false;
-    });
+    for (FrameInfo* frame_info = getTopFrameInfo(); frame_info; frame_info = frame_info->back) {
+        BoxedTraceback::here(lineInfoForFrameInfo(frame_info), &tb, getFrame(frame_info));
+    }
 
     long us = _t.end();
     us_gettraceback.log(us);
@@ -736,20 +737,18 @@ ExcInfo* getFrameExcInfo() {
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
 
-    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        FrameInfo* frame_info = frame_iter->getFrameInfo();
-
+    FrameInfo* frame_info = getTopFrameInfo();
+    while (frame_info) {
         copy_from_exc = &frame_info->exc;
         if (!cur_exc)
             cur_exc = copy_from_exc;
 
-        if (!copy_from_exc->type) {
-            to_update.push_back(copy_from_exc);
-            return false;
-        }
+        if (copy_from_exc->type)
+            break;
 
-        return true;
-    });
+        to_update.push_back(copy_from_exc);
+        frame_info = frame_info->back;
+    };
 
     assert(copy_from_exc); // Only way this could still be NULL is if there weren't any python frames
 
@@ -779,21 +778,24 @@ void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
 }
 
 FunctionMetadata* getTopPythonFunction() {
-    auto rtn = getTopPythonFrame();
-    if (!rtn)
+    FrameInfo* frame_info = getTopFrameInfo();
+    if (!frame_info)
         return NULL;
-    return getTopPythonFrame()->getMD();
+    return frame_info->md;
 }
 
 Box* getGlobals() {
-    auto it = getTopPythonFrame();
-    if (!it)
+    FrameInfo* frame_info = getTopFrameInfo();
+    if (!frame_info)
         return NULL;
-    return it->getGlobals();
+    return frame_info->globals;
 }
 
 Box* getGlobalsDict() {
-    return getTopPythonFrame()->getGlobalsDict();
+    Box* globals = getGlobals();
+    if (globals && PyModule_Check(globals))
+        globals = globals->getAttrWrapper();
+    return globals;
 }
 
 BoxedModule* getCurrentModule() {
@@ -803,17 +805,19 @@ BoxedModule* getCurrentModule() {
     return md->source->parent_module;
 }
 
-PythonFrameIterator getPythonFrame(int depth) {
-    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        if (depth == 0) {
-            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
-            return true;
-        }
-        depth--;
-        return false;
-    });
-    return PythonFrameIterator(std::move(rtn));
+FrameInfo* getPythonFrameInfo(int depth) {
+    FrameInfo* frame_info = getTopFrameInfo();
+    while (depth > 0) {
+        if (!frame_info)
+            return NULL;
+        frame_info = frame_info->back;
+        --depth;
+    }
+    if (!frame_info)
+        return NULL;
+    assert(frame_info->globals);
+    assert(frame_info->md);
+    return frame_info;
 }
 
 PythonFrameIterator::~PythonFrameIterator() {
@@ -927,13 +931,27 @@ DeoptState getDeoptState() {
 }
 
 Box* fastLocalsToBoxedLocals() {
-    return getPythonFrame(0).fastLocalsToBoxedLocals();
+    return getPythonFrameInfo(0)->updateBoxedLocals();
 }
 
-Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
-    assert(impl.get());
+static BoxedDict* localsForFrame(Box** vregs, CFG* cfg) {
+    BoxedDict* rtn = new BoxedDict();
+    rtn->d.grow(cfg->sym_vreg_map_user_visible.size());
+    for (auto& l : cfg->sym_vreg_map_user_visible) {
+        Box* val = vregs[l.second];
+        if (val) {
+            assert(gc::isValidGCObject(val));
+            rtn->d[l.first.getBox()] = val;
+        }
+    }
+    return rtn;
+}
 
-    FunctionMetadata* md = impl->getMD();
+Box* FrameInfo::updateBoxedLocals() {
+    STAT_TIMER(t0, "us_timer_updateBoxedLocals", 0);
+
+    FrameInfo* frame_info = this;
+    FunctionMetadata* md = frame_info->md;
     ScopeInfo* scope_info = md->source->getScopeInfo();
 
     if (scope_info->areLocalsFromModule()) {
@@ -943,24 +961,8 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
         return md->source->parent_module->getAttrWrapper();
     }
 
-    BoxedDict* d;
-    FrameInfo* frame_info = impl->getFrameInfo();
+    BoxedDict* d = localsForFrame(frame_info->vregs, md->source->cfg);
     BoxedClosure* closure = frame_info->passed_closure;
-    if (impl->getId().type == PythonFrameId::COMPILED) {
-        CompiledFunction* cf = impl->getCF();
-        assert(impl->getId().ip > cf->code_start);
-        d = localsForInterpretedFrame(frame_info->vregs, cf->md->source->cfg);
-    } else if (impl->getId().type == PythonFrameId::INTERPRETED) {
-        d = localsForInterpretedFrame((void*)impl->getId().bp);
-    } else {
-        abort();
-    }
-
-    assert(frame_info);
-    if (frame_info->boxedLocals == NULL) {
-        frame_info->boxedLocals = new BoxedDict();
-    }
-    assert(gc::isValidGCObject(frame_info->boxedLocals));
 
     // Add the locals from the closure
     // TODO in a ClassDef scope, we aren't supposed to add these
@@ -981,6 +983,12 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
             d->d.erase(boxedName);
         }
     }
+
+    if (!frame_info->boxedLocals) {
+        frame_info->boxedLocals = d;
+        return d;
+    }
+    assert(gc::isValidGCObject(frame_info->boxedLocals));
 
     // Loop through all the values found above.
     // TODO Right now d just has all the python variables that are *initialized*
@@ -1022,52 +1030,16 @@ FrameInfo* PythonFrameIterator::getFrameInfo() {
     return impl->getFrameInfo();
 }
 
-PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
-    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    auto& impl = this->impl;
-    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        if (frame_iter->pointsToTheSameAs(*impl.get())) {
-            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
-            return true;
-        }
-        return false;
-    });
-    return PythonFrameIterator(std::move(rtn));
-}
-
-PythonFrameIterator PythonFrameIterator::back() {
-    // TODO this is ineffecient: the iterator is no longer valid for libunwind iteration, so
-    // we have to do a full stack crawl again.
-    // Hopefully examination of f_back is uncommon.
-
-    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    auto& impl = this->impl;
-    bool found = false;
-    unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
-        if (found) {
-            rtn = std::unique_ptr<PythonFrameIteratorImpl>(new PythonFrameIteratorImpl(*frame_iter));
-            return true;
-        }
-
-        if (frame_iter->pointsToTheSameAs(*impl.get()))
-            found = true;
-        return false;
-    });
-
-    RELEASE_ASSERT(found, "this wasn't a valid frame?");
-    return PythonFrameIterator(std::move(rtn));
-}
-
 std::string getCurrentPythonLine() {
-    auto frame_iter = getTopPythonFrame();
+    auto frame_info = getTopFrameInfo();
 
-    if (frame_iter.get()) {
+    if (frame_info) {
         std::ostringstream stream;
 
-        auto* md = frame_iter->getMD();
+        auto* md = frame_info->md;
         auto source = md->source.get();
 
-        auto current_stmt = frame_iter->getCurrentStatement();
+        auto current_stmt = frame_info->stmt;
 
         stream << source->getFn()->c_str() << ":" << current_stmt->lineno;
         return stream.str();

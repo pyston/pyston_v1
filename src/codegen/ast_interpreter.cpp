@@ -138,7 +138,6 @@ private:
     CFGBlock* next_block, *current_block;
     FrameInfo frame_info;
 
-    FunctionMetadata* md;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
     PhiAnalysis* phis;
@@ -170,7 +169,7 @@ public:
         return frame_info.globals;
     }
 
-    FunctionMetadata* getMD() { return md; }
+    FunctionMetadata* getMD() { return frame_info.md; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
     Box** getVRegs() { return vregs; }
@@ -217,7 +216,9 @@ void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
 }
 
 void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
+    Box** vregs = this->frame_info.vregs;
     this->frame_info = *frame_info;
+    this->frame_info.vregs = vregs;
 }
 
 void ASTInterpreter::setGlobals(Box* globals) {
@@ -228,7 +229,6 @@ void ASTInterpreter::setGlobals(Box* globals) {
 ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
-      md(md),
       source_info(md->source.get()),
       scope_info(0),
       phis(NULL),
@@ -242,6 +242,7 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
 
     scope_info = source_info->getScopeInfo();
     frame_info.vregs = vregs;
+    frame_info.md = md;
 
     assert(scope_info);
 }
@@ -254,7 +255,7 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
     if (scope_info->createsClosure())
         created_closure = createClosure(_closure, scope_info->getClosureSize());
 
-    const ParamNames& param_names = md->param_names;
+    const ParamNames& param_names = getMD()->param_names;
 
     // make sure the AST_Name nodes are set
     assert(param_names.args.size() == param_names.arg_names.size());
@@ -282,7 +283,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
-    auto& code_blocks = md->code_blocks;
+    auto& code_blocks = getMD()->code_blocks;
     JitCodeBlock* code_block = NULL;
     if (!code_blocks.empty())
         code_block = code_blocks[code_blocks.size() - 1].get();
@@ -325,6 +326,8 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         AST_stmt* stmt = getCurrentStatement();
         if (stmt->type != AST_TYPE::Invoke)
             throw e;
+
+        assert(getPythonFrameInfo(0) == getFrameInfo());
 
         auto source = getMD()->source.get();
         stmt->cxx_exception_count++;
@@ -369,7 +372,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
         interpreter.next_block = start_block;
     }
 
-    if (ENABLE_BASELINEJIT && interpreter.md->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
+    if (ENABLE_BASELINEJIT && interpreter.getMD()->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
         interpreter.should_jit = true;
 
     while (interpreter.next_block) {
@@ -612,7 +615,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
         // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
         // additional blocks ouside of the loop if the function is cold.
-        if (md->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+        if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
             should_jit = false;
     }
 
@@ -643,7 +646,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     ast_osrs.log();
 
     LivenessAnalysis* liveness = source_info->getLiveness();
-    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(md->param_names, source_info->cfg, liveness, scope_info);
+    std::unique_ptr<PhiAnalysis> phis
+        = computeRequiredPhis(getMD()->param_names, source_info->cfg, liveness, scope_info);
 
     llvm::DenseMap<int, InternedString> offset_name_map;
     for (auto&& v : getSymVRegMap()) {
@@ -665,7 +669,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
 
     const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& p : md->osr_versions) {
+    for (auto& p : getMD()->osr_versions) {
         if (p.first->backedge != node)
             continue;
 
@@ -718,7 +722,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
 
     if (found_entry == nullptr) {
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(md, node, CXX);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(getMD(), node, CXX);
 
         for (auto& it : sorted_symbol_table) {
             if (isIsDefinedName(it.first))
@@ -774,6 +778,8 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
         }
     } catch (ExcInfo e) {
         abortJITing();
+
+        assert(getPythonFrameInfo(0) == getFrameInfo());
 
         auto source = getMD()->source.get();
         node->cxx_exception_count++;
@@ -1677,7 +1683,10 @@ const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 
 // small wrapper around executeInner because we can not directly call the member function from asm.
 extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
-    return ASTInterpreter::executeInner(interpreter, start_block, start_at);
+    initFrame(interpreter.getFrameInfo());
+    Box* rtn = ASTInterpreter::executeInner(interpreter, start_block, start_at);
+    deinitFrame(interpreter.getFrameInfo());
+    return rtn;
 }
 
 Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
@@ -1828,6 +1837,9 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
 
     SourceInfo* source_info = md->source.get();
 
+    // We can't reuse the existing vregs from the LLVM tier because they only contain the user visible ones this means
+    // there wouldn't be enough space for the compiler generated ones which the interpreter (+bjit) stores inside the
+    // vreg array.
     Box** vregs = NULL;
     int num_vregs = md->calculateNumVRegs();
     if (num_vregs > 0) {
@@ -1905,6 +1917,11 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
         assert(starting_statement);
     }
 
+    // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
+    // the interpreter will set the new state before executing the first statement.
+    RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
+    cur_thread_state.frame_info = frame_state.frame_info->back;
+
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : None;
 }
@@ -1927,34 +1944,9 @@ static ASTInterpreter* getInterpreterFromFramePtr(void* frame_ptr) {
     return *ptr;
 }
 
-FunctionMetadata* getMDForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
-    assert(interpreter);
-    return interpreter->getMD();
-}
-
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
     assert(interpreter);
     return interpreter->getFrameInfo();
-}
-
-BoxedDict* localsForInterpretedFrame(Box** vregs, CFG* cfg) {
-    BoxedDict* rtn = new BoxedDict();
-    for (auto& l : cfg->sym_vreg_map_user_visible) {
-        Box* val = vregs[l.second];
-        if (val) {
-            assert(gc::isValidGCObject(val));
-            rtn->d[l.first.getBox()] = val;
-        }
-    }
-
-    return rtn;
-}
-
-BoxedDict* localsForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = getInterpreterFromFramePtr(frame_ptr);
-    assert(interpreter);
-    return localsForInterpretedFrame(interpreter->getVRegs(), interpreter->getMD()->source->cfg);
 }
 }
