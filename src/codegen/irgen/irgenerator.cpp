@@ -341,6 +341,10 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
+        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
+                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
+        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
+
         if (target_exception_style == CXX && (unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI)) {
             // Create the invoke:
             llvm::BasicBlock* normal_dest
@@ -414,7 +418,7 @@ private:
 
         pp_args.insert(pp_args.end(), ic_stackmap_args.begin(), ic_stackmap_args.end());
 
-        irgenerator->addFrameStackmapArgs(info, unw_info.current_stmt, pp_args);
+        irgenerator->addFrameStackmapArgs(info, pp_args);
 
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
@@ -428,7 +432,6 @@ private:
             abort();
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-
         llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style);
         return rtn;
     }
@@ -487,10 +490,6 @@ public:
             }
         }
 #endif
-
-        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
-                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
-        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
         return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
     }
 
@@ -2587,23 +2586,8 @@ private:
     }
 
 public:
-    void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
-                              std::vector<llvm::Value*>& stackmap_args) override {
+    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
-
-        assert(UNBOXED_INT->llvmType() == g.i64);
-        if (ENABLE_JIT_OBJECT_CACHE) {
-            llvm::Value* v;
-            if (current_stmt)
-                v = emitter.getBuilder()->CreatePtrToInt(embedRelocatablePtr(current_stmt, g.i8_ptr), g.i64);
-            else
-                v = getConstantInt(0, g.i64);
-            stackmap_args.push_back(v);
-        } else {
-            stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
-        }
-
-        pp->addFrameVar("!current_stmt", UNBOXED_INT);
 
         // For deopts we need to add the compiler created names to the stackmap
         if (ENABLE_FRAME_INTROSPECTION && pp->isDeopt()) {
@@ -2904,6 +2888,7 @@ public:
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
+
             emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException, phi_node,
                                               embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
 
