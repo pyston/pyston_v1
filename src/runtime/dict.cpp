@@ -511,12 +511,11 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
         raiseExcHelper(TypeError, "descriptor 'setdefault' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
-    BoxAndHash k_hash(k);
-    auto it = self->d.find(k_hash);
-    if (it != self->d.end())
-        return it->second;
+    typedef BoxedDict::DictMap::iterator iterator;
 
-    self->d.insert(std::make_pair(k_hash, v));
+    std::pair<iterator, bool> it_flag_pair = self->d.insert(std::make_pair(k, v));
+    if (it_flag_pair.second == false)
+        return it_flag_pair.first->second;
     return v;
 }
 
@@ -559,19 +558,174 @@ Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }
 
-Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
-    auto rtn = new BoxedDict();
+Box* dictFromkeys(Box* _cls, Box* iterable, Box* default_value) {
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    BoxedDict* rtn = (BoxedDict*)PyObject_CallObject(cls, NULL);
+    checkAndThrowCAPIException();
+
+    int status;
     if (PyAnySet_Check(iterable)) {
         for (auto&& elt : ((BoxedSet*)iterable)->s) {
             rtn->d.insert(std::make_pair(elt, default_value));
         }
     } else {
-        for (Box* e : iterable->pyElements()) {
-            dictSetitem(rtn, e, default_value);
+        if (PyDict_CheckExact(rtn)) {
+            for (Box* e : iterable->pyElements()) {
+                status = PyDict_SetItem(rtn, e, default_value);
+                if (status < 0)
+                    throwCAPIException();
+            }
+        } else {
+            for (Box* e : iterable->pyElements()) {
+                status = PyObject_SetItem(rtn, e, default_value);
+                if (status < 0)
+                    throwCAPIException();
+            }
         }
     }
 
     return rtn;
+}
+
+Box* characterize(BoxedDict* lhs, BoxedDict* rhs, Box** pval) {
+    Box* akey = None;
+    Box* aval = None;
+    int cmp;
+
+    for (const auto& p : lhs->d) {
+        Box* thiskey, *thislhsVal, *thisrhsVal;
+        auto it = rhs->d.find(p.first);
+        if (it->second == None)
+            continue;
+
+        thiskey = lhs->d.find(p.first)->first.value;
+        if (akey != None) {
+            cmp = PyObject_RichCompareBool(akey, thiskey, Py_LT);
+
+            if (cmp < 0) {
+                *pval = NULL;
+                return NULL;
+            }
+
+            if (cmp > 0 || it == lhs->d.end() || it->second == None) {
+                /* Not the *smallest* a key; or maybe it is
+                 * but the compare shrunk the dict so we can't
+                 * find its associated value anymore; or
+                 * maybe it is but the compare deleted the
+                 * a[thiskey] entry.
+                 */
+                continue;
+            }
+        }
+        thislhsVal = p.second;
+        thisrhsVal = PyDict_GetItem((PyObject*)rhs, thiskey);
+        if (thisrhsVal == NULL)
+            cmp = 0;
+        else {
+            // both dicts have thiskey, same values?
+            cmp = PyObject_RichCompareBool(thislhsVal, thisrhsVal, Py_EQ);
+            if (cmp < 0) {
+                *pval = NULL;
+                return NULL;
+            }
+        }
+        if (cmp == 0) {
+            // New winner.
+            akey = thiskey;
+            aval = thislhsVal;
+        }
+    }
+
+    *pval = aval;
+    return akey;
+}
+
+static int dict_compare(PyObject* _self, PyObject* _rhs) {
+    if (_rhs->cls == attrwrapper_cls)
+        _rhs = attrwrapperToDict(_rhs);
+
+    BoxedDict* self = static_cast<BoxedDict*>(_self);
+    BoxedDict* rhs = static_cast<BoxedDict*>(_rhs);
+
+    if (self->d.size() < rhs->d.size())
+        return -1;
+    else if (self->d.size() > rhs->d.size())
+        return 1;
+
+    Box* adiff, *bdiff, *aval, *bval;
+    int res = 0;
+    adiff = characterize(self, rhs, &aval);
+    if (adiff == NULL) {
+        assert(!aval);
+        /* Either an error, or a is a subset with the same length so
+         * must be equal.
+         */
+        res = PyErr_Occurred() ? -1 : 0;
+        goto Finished;
+    }
+
+    bdiff = characterize(rhs, self, &bval);
+    if (bdiff == NULL && PyErr_Occurred()) {
+        assert(!bval);
+        res = -1;
+        goto Finished;
+    }
+    if (bdiff) {
+        /* bdiff == NULL "should be" impossible now, but perhaps
+         * the last comparison done by the characterize() on a had
+         * the side effect of making the dicts equal!
+         */
+        res = PyObject_Compare(adiff, bdiff);
+    }
+    if (res == 0 && bval != NULL)
+        res = PyObject_Compare(aval, bval);
+
+Finished:
+    return res;
+}
+
+Box* dictCmp(BoxedDict* self, Box* rhs) {
+    if (!PyDict_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__cmp__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    int res = dict_compare(self, rhs);
+    if (res == -1 && PyErr_Occurred())
+        throwCAPIException();
+
+    return boxInt(res);
+}
+
+Box* dictLt(BoxedDict* self, Box* _rhs) {
+    if (!PyDict_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    return NotImplemented;
+}
+
+Box* dictLe(BoxedDict* self, Box* _rhs) {
+    if (!PyDict_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    return NotImplemented;
+}
+
+Box* dictGt(BoxedDict* self, Box* _rhs) {
+    if (!PyDict_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    return NotImplemented;
+}
+
+Box* dictGe(BoxedDict* self, Box* _rhs) {
+    if (!PyDict_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    return NotImplemented;
 }
 
 Box* dictEq(BoxedDict* self, Box* _rhs) {
@@ -610,6 +764,30 @@ Box* dictNe(BoxedDict* self, Box* _rhs) {
     return True;
 }
 
+static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    int cmp;
+    PyObject* res;
+
+    if (!PyDict_Check(v) || !PyDict_Check(w)) {
+        res = Py_NotImplemented;
+    } else if (op == Py_EQ || op == Py_NE) {
+        Box* result = dictEq((BoxedDict*)v, w);
+        cmp = ((BoxedInt*)result)->n;
+        if (cmp < 0)
+            return NULL;
+        res = (cmp == (op == Py_EQ)) ? Py_True : Py_False;
+    } else {
+        /* Py3K warning if comparison isn't == or !=  */
+        if (PyErr_WarnPy3k("dict inequality comparisons not supported "
+                           "in 3.x",
+                           1) < 0) {
+            return NULL;
+        }
+        res = Py_NotImplemented;
+    }
+    Py_INCREF(res);
+    return res;
+}
 
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!PyType_Check(_cls))
@@ -815,9 +993,16 @@ void setupDict() {
     dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)dictRepr, STR, 1)));
 
+    dict_cls->giveAttr("__cmp__", new BoxedFunction(FunctionMetadata::create((void*)dictCmp, UNKNOWN, 2)));
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
+    dict_cls->giveAttr("__lt__", new BoxedFunction(FunctionMetadata::create((void*)dictLt, UNKNOWN, 2)));
+    dict_cls->giveAttr("__le__", new BoxedFunction(FunctionMetadata::create((void*)dictLe, UNKNOWN, 2)));
+    dict_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)dictGt, UNKNOWN, 2)));
+    dict_cls->giveAttr("__ge__", new BoxedFunction(FunctionMetadata::create((void*)dictGe, UNKNOWN, 2)));
 
+    dict_cls->tp_richcompare = dict_richcompare;
+    dict_cls->tp_compare = dict_compare;
     dict_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterKeys,
                                                                               typeFromClass(dict_iterator_cls), 1)));
 
@@ -843,8 +1028,8 @@ void setupDict() {
     dict_cls->giveAttr("popitem", new BoxedFunction(FunctionMetadata::create((void*)dictPopitem, BOXED_TUPLE, 1)));
 
     auto* fromkeys_func
-        = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, DICT, 3, false, false), { None });
-    dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func, dict_cls));
+        = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, UNKNOWN, 3, false, false), { None });
+    dict_cls->giveAttr("fromkeys", PyClassMethod_New(fromkeys_func));
 
     dict_cls->giveAttr("viewkeys", new BoxedFunction(FunctionMetadata::create((void*)dictViewKeys, UNKNOWN, 1)));
     dict_cls->giveAttr("viewvalues", new BoxedFunction(FunctionMetadata::create((void*)dictViewValues, UNKNOWN, 1)));

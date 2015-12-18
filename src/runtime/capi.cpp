@@ -585,8 +585,11 @@ extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
 
 
 extern "C" int PyObject_Not(PyObject* o) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    int res;
+    res = PyObject_IsTrue(o);
+    if (res < 0)
+        return res;
+    return res == 0;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
