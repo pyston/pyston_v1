@@ -222,8 +222,15 @@ SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedLi
     llvm::SmallString<128> joined_path;
     for (int i = 0; i < path_list->size; i++) {
         Box* _p = path_list->elts->elts[i];
-        if (_p->cls != str_cls)
+        if (isSubclass(_p->cls, unicode_cls)) {
+            _p = PyUnicode_AsEncodedString(_p, Py_FileSystemDefaultEncoding, NULL);
+            if (_p == NULL) {
+                continue;
+            }
+        }
+        if (!isSubclass(_p->cls, str_cls)) {
             continue;
+        }
         BoxedString* p = static_cast<BoxedString*>(_p);
 
         joined_path.clear();
@@ -686,7 +693,7 @@ static int isdir(const char* path) {
 Box* nullImporterInit(Box* self, Box* _path) {
     RELEASE_ASSERT(self->cls == null_importer_cls, "");
 
-    if (_path->cls != str_cls)
+    if (!isSubclass(_path->cls, str_cls))
         raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_path));
 
     BoxedString* path = (BoxedString*)_path;
