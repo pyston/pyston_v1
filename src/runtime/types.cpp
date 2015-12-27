@@ -4018,6 +4018,7 @@ void setupRuntime() {
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, step)));
     slice_cls->freeze();
     slice_cls->tp_compare = (cmpfunc)slice_compare;
+    slice_cls->tp_flags &= ~Py_TPFLAGS_BASETYPE;
 
     static PyMappingMethods attrwrapper_as_mapping;
     attrwrapper_cls->tp_as_mapping = &attrwrapper_as_mapping;
