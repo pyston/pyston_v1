@@ -47,7 +47,7 @@ FILE* trace_fp;
 std::deque<Box*> pending_finalization_list;
 std::deque<PyWeakReference*> weakrefs_needing_callback_list;
 
-std::list<Box*> objects_with_ordered_finalizers;
+std::vector<Box*> objects_with_ordered_finalizers;
 
 static std::unordered_set<void*> roots;
 static std::vector<std::pair<void*, void*>> potential_root_ranges;
@@ -379,18 +379,19 @@ void invalidateOrderedFinalizerList() {
     static StatCounter sc_us("us_gc_invalidate_ordered_finalizer_list");
     Timer _t("invalidateOrderedFinalizerList", /*min_usec=*/10000);
 
-    for (auto iter = objects_with_ordered_finalizers.begin(); iter != objects_with_ordered_finalizers.end();) {
-        Box* box = *iter;
+    auto needToRemove = [](Box* box) -> bool {
         GCAllocation* al = GCAllocation::fromUserData(box);
-
         if (!hasOrderedFinalizer(box->cls) || hasFinalized(al)) {
-            // Cleanup.
             GC_TRACE_LOG("Removing %p from objects_with_ordered_finalizers\n", box);
-            iter = objects_with_ordered_finalizers.erase(iter);
+            return true;
         } else {
-            ++iter;
+            return false;
         }
-    }
+    };
+
+    objects_with_ordered_finalizers.erase(
+        std::remove_if(objects_with_ordered_finalizers.begin(), objects_with_ordered_finalizers.end(), needToRemove),
+        objects_with_ordered_finalizers.end());
 
     long us = _t.end();
     sc_us.log(us);
