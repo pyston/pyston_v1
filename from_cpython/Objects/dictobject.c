@@ -1,3 +1,4 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
 
 /* Dictionary object implementation using a hash table */
 
@@ -9,6 +10,8 @@
 
 #include "Python.h"
 
+// Pyston change: we only use the view type implementation
+#if 0
 
 /* Set a key error with the specified argument, wrapping it in a
  * tuple automatically so that tuple keys are not unpacked as the
@@ -2752,6 +2755,9 @@ PyTypeObject PyDictIterItem_Type = {
     0,
 };
 
+// Pyston change: we only use the view type implementation
+#endif
+
 /***********************************************/
 /* View objects for keys(), items(), values(). */
 /***********************************************/
@@ -2782,12 +2788,15 @@ static Py_ssize_t
 dictview_len(dictviewobject *dv)
 {
     Py_ssize_t len = 0;
-    if (dv->dv_dict != NULL)
-        len = dv->dv_dict->ma_used;
+    if (dv->dv_dict != NULL) {
+        // Pyston change: we sue a different dict implementation
+        // len = dv->dv_dict->ma_used;
+        len = PyDict_Size((PyObject*)dv->dv_dict);
+    }
     return len;
 }
 
-static PyObject *
+PyObject *
 dictview_new(PyObject *dict, PyTypeObject *type)
 {
     dictviewobject *dv;
@@ -2932,6 +2941,9 @@ dictview_repr(dictviewobject *dv)
 
 /*** dict_keys ***/
 
+// Pyston change: we have our own c++ implementation of this function
+PyObject *dictiter_new(PyDictObject *, PyTypeObject *);
+
 static PyObject *
 dictkeys_iter(dictviewobject *dv)
 {
@@ -3058,7 +3070,9 @@ static PyMethodDef dictkeys_methods[] = {
 };
 
 PyTypeObject PyDictKeys_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change:
+    // PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "dict_keys",                                /* tp_name */
     sizeof(dictviewobject),                     /* tp_basicsize */
     0,                                          /* tp_itemsize */
@@ -3143,7 +3157,9 @@ static PyMethodDef dictitems_methods[] = {
 };
 
 PyTypeObject PyDictItems_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change:
+    // PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "dict_items",                               /* tp_name */
     sizeof(dictviewobject),                     /* tp_basicsize */
     0,                                          /* tp_itemsize */
@@ -3209,7 +3225,9 @@ static PyMethodDef dictvalues_methods[] = {
 };
 
 PyTypeObject PyDictValues_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change:
+    // PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "dict_values",                              /* tp_name */
     sizeof(dictviewobject),                     /* tp_basicsize */
     0,                                          /* tp_itemsize */
