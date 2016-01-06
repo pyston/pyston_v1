@@ -44,6 +44,14 @@ print slots_test.SlotsTesterNum(0) == slots_test.SlotsTesterNum(1)
 for i in slots_test.SlotsTesterSeq(6):
     print i
 
+try:
+    # seqiter.tp_new is NULL so we should not be allowed to create an instance
+    slot_tester_seqiter = type(iter(slots_test.SlotsTesterSeq(6)))
+    print slot_tester_seqiter
+    slot_tester_seqiter()
+except Exception as e:
+    print e
+
 su = slots_test.SlotsTesterSub(5)
 print su
 
