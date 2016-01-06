@@ -3843,8 +3843,10 @@ void setupRuntime() {
     attrwrapperiter_cls = BoxedClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                              sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
-    pyston_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));
-    capi_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));
+    pyston_getset_cls->giveAttr("__get__",
+                                new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3), { None }));
+    capi_getset_cls->giveAttr("__get__",
+                              new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3), { None }));
     pyston_getset_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)getsetSet, UNKNOWN, 3)));
     capi_getset_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)getsetSet, UNKNOWN, 3)));
     pyston_getset_cls->giveAttr("__delete__",
