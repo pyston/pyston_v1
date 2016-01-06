@@ -436,11 +436,12 @@ void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
         v->visit(&g->arg2);
     if (num_args >= 3)
         v->visit(&g->arg3);
-    if (g->args)
+    if (g->args) {
         v->visit(&g->args);
-    if (num_args > 3)
-        v->visitPotentialRange(reinterpret_cast<void**>(&g->args->elts[0]),
-                               reinterpret_cast<void**>(&g->args->elts[num_args - 3]));
+        if (num_args > 3)
+            v->visitPotentialRange(reinterpret_cast<void**>(&g->args->elts[0]),
+                                   reinterpret_cast<void**>(&g->args->elts[num_args - 3]));
+    }
     if (g->returnValue)
         v->visit(&g->returnValue);
     if (g->exception.type)
