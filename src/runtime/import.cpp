@@ -870,12 +870,8 @@ static void registerDataSegment(void* dl_handle) {
         gc::registerPotentialRootRange((void*)r.first, (void*)r.second);
     }
 
-    if (should_add_bss) {
-        // only track void* aligned memory
-        bss_start = (bss_start + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
-        bss_end -= bss_end % sizeof(void*);
+    if (should_add_bss)
         gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
-    }
 }
 
 BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path) {
