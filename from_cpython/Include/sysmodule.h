@@ -25,6 +25,9 @@ PyAPI_FUNC(void) PySys_ResetWarnOptions(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PySys_AddWarnOption(char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PySys_HasWarnOptions(void) PYSTON_NOEXCEPT;
 
+// Pyston change: add this API to get sys modules dict
+PyAPI_FUNC(PyObject *) PySys_GetModulesDict(void) PYSTON_NOEXCEPT;
+
 #ifdef __cplusplus
 }
 #endif

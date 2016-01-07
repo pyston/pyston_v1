@@ -149,6 +149,22 @@ Box* getFrame(int depth) {
     return BoxedFrame::boxFrame(std::move(it));
 }
 
+extern "C" int PyFrame_GetLineNumber(PyFrameObject* f) noexcept {
+    BoxedInt* lineno = (BoxedInt*)BoxedFrame::lineno((Box*)f, NULL);
+    return lineno->n;
+}
+
+extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
+    Box* globals = BoxedFrame::globals((Box*)f, NULL);
+    if (globals->cls == attrwrapper_cls)
+        return attrwrapperToDict(globals);
+    return globals;
+}
+
+extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {
+    return (PyFrameObject*)getFrame(stack_level);
+}
+
 void setupFrame() {
     frame_cls
         = BoxedClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false, "frame");
