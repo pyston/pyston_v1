@@ -901,7 +901,7 @@ _PyWarnings_Init(void)
     if (_filters == NULL)
         return;
     // Pyston change: let the GC scan the filters
-    PyGC_AddPotentialRoot(_filters, sizeof(_filters));
+    PyGC_AddPotentialRoot(&_filters, sizeof(_filters));
     Py_INCREF(_filters);
     if (PyModule_AddObject(m, "filters", _filters) < 0)
         return;
@@ -910,7 +910,7 @@ _PyWarnings_Init(void)
     if (_once_registry == NULL)
         return;
     // Pyston change: let the GC scan the registry
-    PyGC_AddPotentialRoot(_once_registry, sizeof(_once_registry));
+    PyGC_AddPotentialRoot(&_once_registry, sizeof(_once_registry));
     Py_INCREF(_once_registry);
     if (PyModule_AddObject(m, "once_registry", _once_registry) < 0)
         return;
@@ -919,7 +919,7 @@ _PyWarnings_Init(void)
     if (_default_action == NULL)
         return;
     // Pyston change: let the GC scan the action
-    PyGC_AddPotentialRoot(_default_action, sizeof(_default_action));
+    PyGC_AddPotentialRoot(&_default_action, sizeof(_default_action));
     Py_INCREF(_default_action);
     if (PyModule_AddObject(m, "default_action", _default_action) < 0)
         return;
