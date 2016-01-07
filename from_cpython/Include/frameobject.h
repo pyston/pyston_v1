@@ -7,6 +7,8 @@
 extern "C" {
 #endif
 
+// Pyston changes: we don't use it for now.
+#if 0
 typedef struct {
     int b_type;			/* what kind of block this is */
     int b_handler;		/* where to jump to find handler */
@@ -79,9 +81,16 @@ PyAPI_FUNC(void) PyFrame_LocalsToFast(PyFrameObject *, int);
 PyAPI_FUNC(void) PyFrame_FastToLocals(PyFrameObject *);
 
 PyAPI_FUNC(int) PyFrame_ClearFreeList(void);
+#endif
+
+typedef struct _PyFrameObject PyFrameObject;
 
 /* Return the line of code the frame is currently executing. */
-PyAPI_FUNC(int) PyFrame_GetLineNumber(PyFrameObject *);
+PyAPI_FUNC(int) PyFrame_GetLineNumber(PyFrameObject *) PYSTON_NOEXCEPT;
+// Pyston changes: add a function to get globals
+PyAPI_FUNC(PyObject *) PyFrame_GetGlobals(PyFrameObject *) PYSTON_NOEXCEPT;
+// Pyston changes: add a function to get frame object by level
+PyAPI_FUNC(PyFrameObject *) PyFrame_ForStackLevel(int stack_level) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

@@ -446,16 +446,26 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
     PyObject *globals;
 
     /* Setup globals and lineno. */
-    PyFrameObject *f = PyThreadState_GET()->frame;
-    while (--stack_level > 0 && f != NULL)
-        f = f->f_back;
-
-    if (f == NULL) {
-        globals = PyThreadState_Get()->interp->sysdict;
-    }
-    else {
-        globals = f->f_globals;
-        *lineno = PyFrame_GetLineNumber(f);
+    // Pyston changes: use Pyston's BoxedFrame instead PyFrameObject
+    // to get globals and lineno.
+    /* PyFrameObject *f = PyThreadState_GET()->frame; */
+    /* while (--stack_level > 0 && f != NULL) */
+    /*     f = f->f_back; */
+    /*  */
+    /* if (f == NULL) { */
+    /*     globals = PyThreadState_Get()->interp->sysdict; */
+    /* } */
+    /* else { */
+    /*     globals = f->f_globals; */
+    /*     *lineno = PyFrame_GetLineNumber(f); */
+    /* } */
+    PyFrameObject* frame = PyFrame_ForStackLevel(stack_level - 1);
+    if (!frame) {
+        globals = PySys_GetModulesDict();
+        *lineno = 1;
+    } else {
+        globals = PyFrame_GetGlobals(frame);
+        *lineno = PyFrame_GetLineNumber(frame);
     }
 
     *module = NULL;
@@ -890,6 +900,8 @@ _PyWarnings_Init(void)
     _filters = init_filters();
     if (_filters == NULL)
         return;
+    // Pyston change: let the GC scan the filters
+    PyGC_AddPotentialRoot(_filters, sizeof(_filters));
     Py_INCREF(_filters);
     if (PyModule_AddObject(m, "filters", _filters) < 0)
         return;
@@ -897,6 +909,8 @@ _PyWarnings_Init(void)
     _once_registry = PyDict_New();
     if (_once_registry == NULL)
         return;
+    // Pyston change: let the GC scan the registry
+    PyGC_AddPotentialRoot(_once_registry, sizeof(_once_registry));
     Py_INCREF(_once_registry);
     if (PyModule_AddObject(m, "once_registry", _once_registry) < 0)
         return;
@@ -904,6 +918,8 @@ _PyWarnings_Init(void)
     _default_action = PyString_FromString("default");
     if (_default_action == NULL)
         return;
+    // Pyston change: let the GC scan the action
+    PyGC_AddPotentialRoot(_default_action, sizeof(_default_action));
     Py_INCREF(_default_action);
     if (PyModule_AddObject(m, "default_action", _default_action) < 0)
         return;
