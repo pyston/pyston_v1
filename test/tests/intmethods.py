@@ -178,3 +178,53 @@ if sys.version_info >= (2, 7, 6):
         print(e.message)
 else:
     print("int() missing string argument")
+
+pow_test_data = [42, 3, 3L, 4.5, "x", 0, -42, None]
+
+for rhs in pow_test_data:
+    for lhs in pow_test_data:
+        for mod in pow_test_data:
+            try:
+                print(int.__rpow__(rhs, lhs, mod))
+            except Exception as e:
+                print(e.message)
+
+unary_test_data = [-42, -0, 0, 42, max_int, min_int]
+
+for i in unary_test_data:
+    print(int.__abs__(i))
+    print(int.__long__(i))
+    print(int.__float__(i))
+
+data = ["-1", "0", "1",
+        "5", "-5",
+        "5.0", "5L", "0L", "5+5j", "0.0",
+        "\"5\"", "None",
+        ]
+
+operations = ["__radd__",
+              "__rand__",
+              "__ror__",
+              "__rxor__",
+              "__rsub__",
+              "__rmul__",
+              "__rdiv__",
+              "__rfloordiv__",
+              "__rpow__",
+              "__rmod__",
+              "__rdivmod__",
+              "__rtruediv__",
+              "__rrshift__",
+              "__rlshift__",
+              "__coerce__",
+              ]
+
+for x in data:
+    for y in data:
+        for operation in operations:
+            try:
+                print(eval("int.{op}({arg1}, {arg2})".format(op=operation,
+                                                               arg1=x,
+                                                               arg2=y)))
+            except Exception as e:
+                print(e.message)
