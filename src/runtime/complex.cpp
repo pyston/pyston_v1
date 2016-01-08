@@ -22,227 +22,162 @@
 #include "runtime/types.h"
 
 extern "C" PyObject* complex_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+extern "C" PyObject* complex_new(PyTypeObject* type, PyObject* r, PyObject* i) noexcept;
+extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) noexcept;
+extern "C" PyObject* complex_format(PyComplexObject* v, int precision, char format_code) noexcept;
+extern "C" PyObject* complex_richcompare(PyObject* v, PyObject* w, int op) noexcept;
+extern "C" PyObject* complex__format__(PyObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
+static Box* toComplex(Box* self) noexcept {
+    BoxedComplex* r;
+    if (self == NULL) {
+        return new BoxedComplex(0.0, 0.0);
+    }
+
+    if (PyComplex_Check(self)) {
+        r = (BoxedComplex*)self;
+    } else if (PyInt_Check(self)) {
+        r = new BoxedComplex(static_cast<BoxedInt*>(self)->n, 0.0);
+    } else if (PyFloat_Check(self)) {
+        r = new BoxedComplex((static_cast<BoxedFloat*>(PyNumber_Float(self)))->d, 0.0);
+    } else if (PyLong_Check(self)) {
+        double real = PyLong_AsDouble(self);
+        if (real == -1 && PyErr_Occurred())
+            throwCAPIException();
+        r = new BoxedComplex(real, 0.0);
+    } else {
+        return NotImplemented;
+    }
+    return r;
+}
+
 static inline void raiseDivZeroExc() {
-    raiseExcHelper(ZeroDivisionError, "complex divide by zero");
+    raiseExcHelper(ZeroDivisionError, "complex division by zero");
 }
 
 extern "C" Box* createPureImaginary(double i) {
     return new BoxedComplex(0.0, i);
 }
 
-static PyObject* try_complex_special_method(PyObject* op) noexcept {
-    PyObject* f;
-    static PyObject* complexstr;
-
-    if (complexstr == NULL) {
-        complexstr = PyString_InternFromString("__complex__");
-        if (complexstr == NULL)
-            return NULL;
-    }
-    if (PyInstance_Check(op)) {
-        f = PyObject_GetAttr(op, complexstr);
-        if (f == NULL) {
-            if (PyErr_ExceptionMatches(PyExc_AttributeError))
-                PyErr_Clear();
-            else
-                return NULL;
-        }
-    } else {
-        f = _PyObject_LookupSpecial(op, "__complex__", &complexstr);
-        if (f == NULL && PyErr_Occurred())
-            return NULL;
-    }
-    if (f != NULL) {
-        PyObject* res = PyObject_CallFunctionObjArgs(f, NULL);
-        Py_DECREF(f);
-        return res;
-    }
-    return NULL;
-}
-
-extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) noexcept {
-    Py_complex cv;
-    PyObject* newop = NULL;
-
-    assert(op);
-    /* If op is already of type PyComplex_Type, return its value */
-    if (PyComplex_Check(op)) {
-        cv.real = ((BoxedComplex*)op)->real;
-        cv.imag = ((BoxedComplex*)op)->imag;
-        return cv;
-    }
-    /* If not, use op's __complex__  method, if it exists */
-
-    /* return -1 on failure */
-    cv.real = -1.;
-    cv.imag = 0.;
-
-    newop = try_complex_special_method(op);
-
-    if (newop) {
-        if (!PyComplex_Check(newop)) {
-            PyErr_SetString(PyExc_TypeError, "__complex__ should return a complex object");
-            Py_DECREF(newop);
-            return cv;
-        }
-        cv.real = ((BoxedComplex*)newop)->real;
-        cv.imag = ((BoxedComplex*)newop)->imag;
-        Py_DECREF(newop);
-        return cv;
-    } else if (PyErr_Occurred()) {
-        return cv;
-    }
-    /* If neither of the above works, interpret op as a float giving the
-       real part of the result, and fill in the imaginary part as 0. */
-    else {
-        /* PyFloat_AsDouble will return -1 on failure */
-        cv.real = PyFloat_AsDouble(op);
-        return cv;
-    }
-}
-
-extern "C" double PyComplex_RealAsDouble(PyObject* op) noexcept {
-    if (PyComplex_Check(op)) {
-        return static_cast<BoxedComplex*>(op)->real;
-    } else {
-        return PyFloat_AsDouble(op);
-    }
-}
-
-extern "C" double PyComplex_ImagAsDouble(PyObject* op) noexcept {
-    if (PyComplex_Check(op)) {
-        return static_cast<BoxedComplex*>(op)->imag;
-    } else {
-        return 0.0;
-    }
-}
-
-extern "C" PyObject* PyComplex_FromDoubles(double real, double imag) noexcept {
-    return new BoxedComplex(real, imag);
-}
-
-extern "C" PyObject* PyComplex_FromCComplex(Py_complex val) noexcept {
-    return new BoxedComplex(val.real, val.imag);
-}
-
-
 // addition
 
 extern "C" Box* complexAddComplex(BoxedComplex* lhs, BoxedComplex* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyComplex_Check(rhs));
     return boxComplex(lhs->real + rhs->real, lhs->imag + rhs->imag);
 }
 
 extern "C" Box* complexAddFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxComplex(lhs->real + rhs->d, lhs->imag);
 }
 
 extern "C" Box* complexAddInt(BoxedComplex* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxComplex(lhs->real + (double)rhs->n, lhs->imag);
 }
 
-extern "C" Box* complexAdd(BoxedComplex* lhs, Box* rhs) {
-    assert(lhs->cls == complex_cls);
-    if (PyInt_Check(rhs)) {
-        return complexAddInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return complexAddFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == complex_cls) {
-        return complexAddComplex(lhs, static_cast<BoxedComplex*>(rhs));
-    } else {
+extern "C" Box* complexAdd(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+    return complexAddComplex(lhs, rhs_complex);
 }
 
 // subtraction
 
 extern "C" Box* complexSubComplex(BoxedComplex* lhs, BoxedComplex* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyComplex_Check(rhs));
     return boxComplex(lhs->real - rhs->real, lhs->imag - rhs->imag);
 }
 
 extern "C" Box* complexSubFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxComplex(lhs->real - rhs->d, lhs->imag);
 }
 
 extern "C" Box* complexSubInt(BoxedComplex* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxComplex(lhs->real - (double)rhs->n, lhs->imag);
 }
 
-extern "C" Box* complexSub(BoxedComplex* lhs, Box* rhs) {
-    assert(lhs->cls == complex_cls);
-    if (PyInt_Check(rhs)) {
-        return complexSubInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return complexSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == complex_cls) {
-        return complexSubComplex(lhs, static_cast<BoxedComplex*>(rhs));
-    } else {
+extern "C" Box* complexSub(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexSubComplex(lhs, rhs_complex);
 }
 
-extern "C" Box* complexRSub(BoxedComplex* _lhs, Box* _rhs) {
-    if (!PyComplex_Check(_lhs))
+extern "C" Box* complexRSub(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__rsub__' requires a 'complex' object but received a '%s'",
-                       getTypeName(_lhs));
-    BoxedComplex* lhs = new BoxedComplex(0.0, 0.0);
-    if (PyInt_Check(_rhs)) {
-        lhs->real = (static_cast<BoxedInt*>(_rhs))->n;
-    } else if (_rhs->cls == float_cls) {
-        lhs->real = (static_cast<BoxedFloat*>(_rhs))->d;
-    } else if (_rhs->cls == complex_cls) {
-        lhs = static_cast<BoxedComplex*>(_rhs);
-    } else {
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
-    return complexSubComplex(lhs, _lhs);
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexSubComplex(rhs_complex, lhs);
 }
 
 // multiplication
 
 extern "C" Box* complexMulComplex(BoxedComplex* lhs, BoxedComplex* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyComplex_Check(rhs));
     return boxComplex(lhs->real * rhs->real - lhs->imag * rhs->imag, lhs->real * rhs->imag + lhs->imag * rhs->real);
 }
 
 extern "C" Box* complexMulFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == complex_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyComplex_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxComplex(lhs->real * rhs->d, lhs->imag * rhs->d);
 }
 
 extern "C" Box* complexMulInt(BoxedComplex* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == complex_cls);
+    assert(PyComplex_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxComplex(lhs->real * (double)rhs->n, lhs->imag * (double)rhs->n);
 }
 
-extern "C" Box* complexMul(BoxedComplex* lhs, Box* rhs) {
-    assert(lhs->cls == complex_cls);
-    if (PyInt_Check(rhs)) {
-        return complexMulInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return complexMulFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == complex_cls) {
-        return complexMulComplex(lhs, static_cast<BoxedComplex*>(rhs));
-    } else {
+extern "C" Box* complexMul(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexMulComplex(lhs, rhs_complex);
 }
 
 // division
@@ -250,7 +185,7 @@ Box* complexDivComplex(BoxedComplex* lhs, BoxedComplex* rhs) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
-    assert(rhs->cls == complex_cls);
+    assert(PyComplex_Check(rhs));
 
     double real_f, imag_f;
     const double abs_breal = rhs->real < 0 ? -rhs->real : rhs->real;
@@ -299,36 +234,72 @@ extern "C" Box* complexDivInt(BoxedComplex* lhs, BoxedInt* rhs) {
     return boxComplex(lhs->real / (double)rhs->n, lhs->imag / (double)rhs->n);
 }
 
-extern "C" Box* complexDiv(BoxedComplex* lhs, Box* rhs) {
+extern "C" Box* complexDiv(BoxedComplex* lhs, Box* _rhs) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexDivComplex(lhs, rhs_complex);
+}
+
+extern "C" Box* complexRDiv(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexDivComplex(rhs_complex, lhs);
+}
+
+Box* complexTruediv(BoxedComplex* lhs, Box* rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
     if (PyInt_Check(rhs)) {
         return complexDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return complexDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == complex_cls) {
+    } else if (PyComplex_Check(rhs)) {
         return complexDivComplex(lhs, static_cast<BoxedComplex*>(rhs));
+    } else if (PyLong_Check(rhs)) {
+        double res = PyLong_AsDouble(rhs);
+        if (res == -1 && PyErr_Occurred())
+            throwCAPIException();
+        return complexDivFloat(lhs, (BoxedFloat*)boxFloat(res));
     } else {
         return NotImplemented;
     }
 }
 
-extern "C" Box* complexRDiv(BoxedComplex* _lhs, Box* _rhs) {
-    if (!PyComplex_Check(_lhs))
-        raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'complex' object but received a '%s'",
-                       getTypeName(_lhs));
-    BoxedComplex* lhs = new BoxedComplex(0.0, 0.0);
-    if (PyInt_Check(_rhs)) {
-        lhs->real = (static_cast<BoxedInt*>(_rhs))->n;
-    } else if (_rhs->cls == float_cls) {
-        lhs->real = (static_cast<BoxedFloat*>(_rhs))->d;
-    } else if (_rhs->cls == complex_cls) {
-        lhs = static_cast<BoxedComplex*>(_rhs);
-    } else {
+Box* complexRTruediv(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+    if (_rhs == None)
         return NotImplemented;
-    }
-    return complexDivComplex(lhs, _lhs);
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexDivComplex(rhs_complex, lhs);
 }
 
 Box* complexPos(BoxedComplex* self) {
@@ -338,65 +309,13 @@ Box* complexPos(BoxedComplex* self) {
     return PyComplex_FromDoubles(self->real, self->imag);
 }
 
-// str and repr
-Box* complex_fmt(double r, double i, int precision, char format_code) noexcept {
-    PyObject* result = NULL;
-
-    /* If these are non-NULL, they'll need to be freed. */
-    char* pre = NULL;
-    char* im = NULL;
-
-    /* These do not need to be freed. re is either an alias
-       for pre or a pointer to a constant.  lead and tail
-       are pointers to constants. */
-    std::string lead = "";
-    std::string tail = "";
-    std::string re = "";
-    std::string result_str;
-
-    if (r == 0. && copysign(1.0, r) == 1.0) {
-        re = "";
-        im = PyOS_double_to_string(i, format_code, precision, 0, NULL);
-        if (!im) {
-            PyErr_NoMemory();
-            goto done;
-        }
-    } else {
-        /* Format imaginary part with signr part without */
-        pre = PyOS_double_to_string(r, format_code, precision, 0, NULL);
-        if (!pre) {
-            PyErr_NoMemory();
-            goto done;
-        }
-        re = std::string(pre);
-
-        im = PyOS_double_to_string(i, format_code, precision, Py_DTSF_SIGN, NULL);
-        if (!im) {
-            PyErr_NoMemory();
-            goto done;
-        }
-        lead = "(";
-        tail = ")";
-    }
-    /* Alloc the final buffer. Add one for the "j" in the format string,
-       and one for the trailing zero. */
-    result_str = lead + std::string(re) + std::string(im) + "j" + tail;
-    result = PyString_FromString(result_str.c_str());
-done:
-    PyMem_Free(im);
-    PyMem_Free(pre);
-
-    return result;
-}
-
-
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* complex_func, void* float_func,
                      void* int_func, void* boxed_func) {
     FunctionMetadata* md = new FunctionMetadata(2, false, false);
     md->addVersion(complex_func, rtn_type, { BOXED_COMPLEX, BOXED_COMPLEX });
     md->addVersion(float_func, rtn_type, { BOXED_COMPLEX, BOXED_FLOAT });
     md->addVersion(int_func, rtn_type, { BOXED_COMPLEX, BOXED_INT });
-    md->addVersion(boxed_func, UNKNOWN, { BOXED_COMPLEX, UNKNOWN });
+    md->addVersion(boxed_func, UNKNOWN, { UNKNOWN, UNKNOWN });
     complex_cls->giveAttr(name, new BoxedFunction(md));
 }
 
@@ -411,21 +330,19 @@ Box* complexPow(BoxedComplex* lhs, Box* _rhs, Box* mod) {
     return res;
 }
 
-Box* complexRpow(BoxedComplex* _lhs, Box* _rhs) {
-    if (!PyComplex_Check(_lhs))
+Box* complexRPow(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__rpow__' requires a 'complex' object but received a '%s'",
-                       getTypeName(_lhs));
-    BoxedComplex* lhs = new BoxedComplex(0.0, 0.0);
-    if (PyInt_Check(_rhs)) {
-        lhs->real = (static_cast<BoxedInt*>(_rhs))->n;
-    } else if (_rhs->cls == float_cls) {
-        lhs->real = (static_cast<BoxedFloat*>(_rhs))->d;
-    } else if (_rhs->cls == complex_cls) {
-        lhs = static_cast<BoxedComplex*>(_rhs);
-    } else {
+                       getTypeName(lhs));
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
-    return complexPow(lhs, _lhs, None);
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexPow(rhs_complex, lhs, None);
 }
 
 Box* complexHash(BoxedComplex* self) {
@@ -517,383 +434,120 @@ Box* complexStr(BoxedComplex* self) {
     if (!PyComplex_Check(self))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'complex' object but received a '%s'",
                        getTypeName(self));
-    Box* r = complex_fmt(self->real, self->imag, 12, 'g');
+
+    Box* r = complex_format((PyComplexObject*)self, 12, 'g');
     if (!r) {
         throwCAPIException();
     }
     return r;
+}
+
+Box* complexInt(BoxedComplex* self) {
+    if (!PyComplex_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__int__' requires a 'complex' object but received a '%s'",
+                       getTypeName(self));
+
+    raiseExcHelper(TypeError, "can't convert complex to int");
+}
+
+Box* complexFloat(BoxedComplex* self) {
+    if (!PyComplex_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'complex' object but received a '%s'",
+                       getTypeName(self));
+
+    raiseExcHelper(TypeError, "can't convert complex to float");
+}
+
+Box* complexLong(BoxedComplex* self) {
+    if (!PyComplex_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__long__' requires a 'complex' object but received a '%s'",
+                       getTypeName(self));
+
+    raiseExcHelper(TypeError, "can't convert complex to long");
 }
 
 Box* complexRepr(BoxedComplex* self) {
     if (!PyComplex_Check(self))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'complex' object but received a '%s'",
                        getTypeName(self));
-    Box* r = complex_fmt(self->real, self->imag, 16, 'g');
+
+    Box* r = complex_format((PyComplexObject*)self, 16, 'g');
     if (!r) {
         throwCAPIException();
     }
     return r;
 }
 
-static PyObject* complex_subtype_from_string(PyObject* v) noexcept {
-    const char* s, *start;
-    char* end;
-    double x = 0.0, y = 0.0, z;
-    int got_bracket = 0;
-#ifdef Py_USING_UNICODE
-    char* s_buffer = NULL;
-#endif
-    Py_ssize_t len;
 
-    if (PyString_Check(v)) {
-        s = PyString_AS_STRING(v);
-        len = PyString_GET_SIZE(v);
+template <ExceptionStyle S> Box* complexNew(BoxedClass* cls, Box* real, Box* imag) noexcept(S == CAPI) {
+    if (real == NULL) {
+        real = Py_False;
+        imag = NULL;
     }
-#ifdef Py_USING_UNICODE
-    else if (PyUnicode_Check(v)) {
-        s_buffer = (char*)PyMem_MALLOC(PyUnicode_GET_SIZE(v) + 1);
-        if (s_buffer == NULL)
-            return PyErr_NoMemory();
-        if (PyUnicode_EncodeDecimal(PyUnicode_AS_UNICODE(v), PyUnicode_GET_SIZE(v), s_buffer, NULL))
-            goto error;
-        s = s_buffer;
-        len = strlen(s);
-    }
-#endif
-    else if (PyObject_AsCharBuffer(v, &s, &len)) {
-        PyErr_SetString(PyExc_TypeError, "complex() arg is not a string");
-        return NULL;
-    }
-
-    /* position on first nonblank */
-    start = s;
-    while (Py_ISSPACE(*s))
-        s++;
-    if (*s == '(') {
-        /* Skip over possible bracket from repr(). */
-        got_bracket = 1;
-        s++;
-        while (Py_ISSPACE(*s))
-            s++;
-    }
-
-    /* a valid complex string usually takes one of the three forms:
-
-         <float>                  - real part only
-         <float>j                 - imaginary part only
-         <float><signed-float>j   - real and imaginary parts
-
-       where <float> represents any numeric string that's accepted by the
-       float constructor (including 'nan', 'inf', 'infinity', etc.), and
-       <signed-float> is any string of the form <float> whose first
-       character is '+' or '-'.
-
-       For backwards compatibility, the extra forms
-
-         <float><sign>j
-         <sign>j
-         j
-
-       are also accepted, though support for these forms may be removed from
-       a future version of Python.
-    */
-
-    /* first look for forms starting with <float> */
-    z = PyOS_string_to_double(s, &end, NULL);
-    if (z == -1.0 && PyErr_Occurred()) {
-        if (PyErr_ExceptionMatches(PyExc_ValueError))
-            PyErr_Clear();
-        else
-            goto error;
-    }
-    if (end != s) {
-        /* all 4 forms starting with <float> land here */
-        s = end;
-        if (*s == '+' || *s == '-') {
-            /* <float><signed-float>j | <float><sign>j */
-            x = z;
-            y = PyOS_string_to_double(s, &end, NULL);
-            if (y == -1.0 && PyErr_Occurred()) {
-                if (PyErr_ExceptionMatches(PyExc_ValueError))
-                    PyErr_Clear();
-                else
-                    goto error;
-            }
-            if (end != s)
-                /* <float><signed-float>j */
-                s = end;
-            else {
-                /* <float><sign>j */
-                y = *s == '+' ? 1.0 : -1.0;
-                s++;
-            }
-            if (!(*s == 'j' || *s == 'J'))
-                goto parse_error;
-            s++;
-        } else if (*s == 'j' || *s == 'J') {
-            /* <float>j */
-            s++;
-            y = z;
-        } else
-            /* <float> */
-            x = z;
-    } else {
-        /* not starting with <float>; must be <sign>j or j */
-        if (*s == '+' || *s == '-') {
-            /* <sign>j */
-            y = *s == '+' ? 1.0 : -1.0;
-            s++;
-        } else
-            /* j */
-            y = 1.0;
-        if (!(*s == 'j' || *s == 'J'))
-            goto parse_error;
-        s++;
-    }
-
-    /* trailing whitespace and closing bracket */
-    while (Py_ISSPACE(*s))
-        s++;
-    if (got_bracket) {
-        /* if there was an opening parenthesis, then the corresponding
-           closing parenthesis should be right here */
-        if (*s != ')')
-            goto parse_error;
-        s++;
-        while (Py_ISSPACE(*s))
-            s++;
-    }
-
-    /* we should now be at the end of the string */
-    if (s - start != len)
-        goto parse_error;
-
-
-#ifdef Py_USING_UNICODE
-    if (s_buffer)
-        PyMem_FREE(s_buffer);
-#endif
-    return new BoxedComplex(x, y);
-
-parse_error:
-    PyErr_SetString(PyExc_ValueError, "complex() arg is a malformed string");
-error:
-#ifdef Py_USING_UNICODE
-    if (s_buffer)
-        PyMem_FREE(s_buffer);
-#endif
-    return NULL;
+    Box* res = complex_new(cls, real, imag);
+    if (S == CXX && res == NULL)
+        throwCAPIException();
+    return res;
 }
 
-
-static Box* to_complex(Box* self) noexcept {
-    BoxedComplex* r;
-    if (self == None || self == NULL) {
-        return new BoxedComplex(0.0, 0.0);
-    }
-    static BoxedString* complex_str = internStringImmortal("__complex__");
-
-    if (PyComplex_Check(self) && !PyObject_HasAttr((PyObject*)self, complex_str)) {
-        r = (BoxedComplex*)self;
-    } else if (PyInt_Check(self)) {
-        r = new BoxedComplex(static_cast<BoxedInt*>(self)->n, 0.0);
-    } else if (PyFloat_Check(self)) {
-        r = new BoxedComplex((static_cast<BoxedFloat*>(PyNumber_Float(self)))->d, 0.0);
-    } else if (self->cls == long_cls) {
-        r = new BoxedComplex(PyLong_AsDouble(self), 0.0);
-    } else {
-        return NotImplemented;
-    }
-    return r;
-}
-
-template <ExceptionStyle S> static Box* try_special_method(Box* self) noexcept(S == CAPI) {
-    if (self == None || self == NULL) {
-        return None;
-    }
-
-    static BoxedString* float_str = internStringImmortal("__float__");
-    if (PyObject_HasAttr((PyObject*)self, float_str)) {
-        Box* r_f = callattrInternal<S, NOT_REWRITABLE>(self, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL,
-                                                       NULL, NULL, NULL);
-        if (!PyFloat_Check(r_f)) {
-            if (S == CAPI) {
-                if (!PyErr_Occurred())
-                    PyErr_Format(PyExc_TypeError, "__float__ returned non-float (type %.200s)", r_f->cls->tp_name);
-                return NULL;
-            } else {
-                raiseExcHelper(TypeError, "__float__ returned non-float (type %.200s)", r_f->cls->tp_name);
-            }
-        }
-        return (BoxedFloat*)r_f;
-    }
-
-    static BoxedString* complex_str = internStringImmortal("__complex__");
-    if (PyObject_HasAttr((PyObject*)self, complex_str)) {
-        Box* r = callattrInternal<S, NOT_REWRITABLE>(self, complex_str, CLASS_OR_INST, NULL, ArgPassSpec(0), NULL, NULL,
-                                                     NULL, NULL, NULL);
-        if (!r) {
-            if (S == CAPI) {
-                if (!PyErr_Occurred())
-                    PyErr_Format(TypeError, "complex() argument must be a string or a number, not '%s'\n",
-                                 getTypeName(self));
-                return NULL;
-            } else {
-                raiseExcHelper(TypeError, "complex() argument must be a string or a number, not '%s'\n",
-                               getTypeName(self));
-            }
-        }
-
-        if (!PyComplex_Check(r)) {
-            if (S == CAPI) {
-                PyErr_Format(TypeError, "__complex__ returned non-complex (type %s)", r->cls->tp_name);
-                return NULL;
-            } else
-                raiseExcHelper(TypeError, "__complex__ returned non-complex (type %s)", r->cls->tp_name);
-        }
-
-        return static_cast<BoxedComplex*>(r);
-    }
-    return None;
-}
-
-template <ExceptionStyle S> Box* _complexNew(Box* real, Box* imag) noexcept(S == CAPI) {
-    // handle str and unicode
-    if (real != None && real != NULL) {
-        if (PyString_Check(real) || PyUnicode_Check(real)) {
-            if (imag != None && imag != NULL) {
-                raiseExcHelper(TypeError, "complex() can't take second arg if first is a string");
-            }
-            Box* res = complex_subtype_from_string(real);
-            if (res == NULL) {
-                throwCAPIException();
-            }
-            return res;
-        }
-    }
-
-    if (real != None && real != NULL && real->cls == complex_cls && (imag == NULL || imag == None)) {
-        return static_cast<BoxedComplex*>(real);
-    }
-
-    Box* _real = try_special_method<S>(real);
-    Box* _imag = try_special_method<S>(imag);
-
-    if (_real != None && _real != NULL) {
-        real = _real;
-    }
-
-    if (_imag != None && _imag != NULL) {
-        imag = _imag;
-    }
-
-    double real_f, imag_f;
-    bool real_is_complex = false, imag_is_complex = false;
-    if (real == None || real == NULL) {
-        real_f = 0.0;
-    } else if (PyComplex_Check(real)) {
-        real_f = ((BoxedComplex*)real)->real;
-        real_is_complex = true;
-    } else {
-        real_f = ((BoxedFloat*)PyNumber_Float(real))->d;
-    }
-    if (imag == None || imag == NULL) {
-        imag_f = 0.0;
-    } else if (PyComplex_Check(imag)) {
-        imag_f = ((BoxedComplex*)imag)->real;
-        imag_is_complex = true;
-    } else {
-        imag_f = ((BoxedFloat*)PyNumber_Float(imag))->d;
-    }
-
-    if (imag_is_complex) {
-        real_f -= ((BoxedComplex*)imag)->imag;
-    }
-
-    if (real_is_complex) {
-        imag_f += ((BoxedComplex*)real)->imag;
-    }
-
-    return new BoxedComplex(real_f, imag_f);
-}
-
-template <ExceptionStyle S> Box* complexNew(BoxedClass* _cls, Box* _real, Box* _imag) noexcept(S == CAPI) {
-    if (!isSubclass(_cls->cls, type_cls)) {
-        if (S == CAPI) {
-            PyErr_Format(TypeError, "complex.__new__(X): X is not a type object (%s)", getTypeName(_cls));
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "complex.__new__(X): X is not a type object (%s)", getTypeName(_cls));
-    }
-
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (PyComplex_Check(cls)) {
-        if (S == CAPI) {
-            PyErr_Format(TypeError, "complex.__new__(%s): %s is not a subtype of complex", getNameOfClass(cls),
-                         getNameOfClass(cls));
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "complex.__new__(%s): %s is not a subtype of complex", getNameOfClass(cls),
-                           getNameOfClass(cls));
-    }
-
-    // check second argument
-    if (_imag != NULL && (PyString_Check(_imag) || PyUnicode_Check(_imag))) {
-        if (S == CAPI) {
-            PyErr_Format(TypeError, "complex() second arg can't be a string");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "complex() second arg can't be a string");
-    }
-
-    // we can't use None as default value, because complex(None) should raise TypeError,
-    // but complex() should return `0j`. So use NULL as default value.
-    // Here check we pass complex(None, None), complex(None)
-    // or complex(imag=None) to the constructor
-    if ((_real == None) && (_imag == None || _imag == NULL)) {
-        raiseExcHelper(TypeError, "complex() argument must be a string or number");
-    }
-
-    if (cls == complex_cls)
-        return _complexNew<S>(_real, _imag);
-
-    BoxedComplex* r = (BoxedComplex*)_complexNew<S>(_real, _imag);
-
-    if (!r) {
-        assert(S == CAPI);
-        return NULL;
-    }
-
-    return new (_cls) BoxedComplex(r->real, r->imag);
-}
-
-extern "C" Box* complexDivmod(BoxedComplex* lhs, BoxedComplex* rhs) {
-    if (!PyComplex_Check(lhs))
-        raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'complex' object but received a '%s'",
-                       getTypeName(lhs));
+Box* complexDivmodComplex(BoxedComplex* lhs, Box* _rhs) {
     if (PyErr_Warn(PyExc_DeprecationWarning, "complex divmod(), // and % are deprecated") < 0)
-        return NULL;
+        throwCAPIException();
 
-    if (rhs->real == 0.0 && rhs->imag == 0.0) {
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    if (rhs_complex->real == 0.0 && rhs_complex->imag == 0.0) {
         raiseExcHelper(ZeroDivisionError, "complex divmod()");
     }
 
-    BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs); /* The raw divisor value. */
-    div->real = floor(div->real);                            /* Use the floor of the real part. */
+    BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs_complex); /* The raw divisor value. */
+    div->real = floor(div->real);                                    /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs, div));
+    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs_complex, div));
     Box* res = BoxedTuple::create({ div, mod });
     return res;
 }
 
-extern "C" Box* complexMod(BoxedComplex* lhs, Box* _rhs) {
+Box* complexDivmod(BoxedComplex* lhs, Box* rhs) {
     if (!PyComplex_Check(lhs))
-        raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'complex' object but received a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
+
+    if (rhs == None)
+        return NotImplemented;
+
+    return complexDivmodComplex(lhs, rhs);
+}
+
+Box* complexRDivmod(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rdivmod__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (_rhs == None)
+        return NotImplemented;
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexDivmodComplex(rhs_complex, lhs);
+}
+
+Box* complexModComplex(BoxedComplex* lhs, Box* _rhs) {
     if (PyErr_Warn(PyExc_DeprecationWarning, "complex divmod(), // and % are deprecated") < 0)
         return NULL;
 
-    Box* res = to_complex(_rhs);
+    Box* res = toComplex(_rhs);
+
     if (res == NotImplemented) {
         return NotImplemented;
     }
@@ -911,73 +565,72 @@ extern "C" Box* complexMod(BoxedComplex* lhs, Box* _rhs) {
     return mod;
 }
 
+Box* complexMod(BoxedComplex* lhs, Box* rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (rhs == None)
+        return NotImplemented;
+
+    return complexModComplex(lhs, rhs);
+}
+
+Box* complexRMod(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rmod__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (_rhs == None)
+        return NotImplemented;
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
+
+    return complexModComplex(rhs_complex, lhs);
+}
+
 extern "C" Box* complexFloordiv(BoxedComplex* lhs, Box* _rhs) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    Box* res = to_complex(_rhs);
-    if (res == NotImplemented) {
+    if (_rhs == None)
+        return NotImplemented;
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented) {
         return NotImplemented;
     }
-    BoxedComplex* rhs = (BoxedComplex*)res;
 
-    BoxedTuple* t = (BoxedTuple*)complexDivmod(lhs, rhs);
+    BoxedComplex* rhs_complex = (BoxedComplex*)rhs;
+
+    BoxedTuple* t = (BoxedTuple*)complexDivmod(lhs, rhs_complex);
     return t->elts[0];
 }
 
-static PyObject* complex_richcompare(PyObject* v, PyObject* w, int op) noexcept {
-    PyObject* res;
-    int equal;
+Box* complexRFloordiv(BoxedComplex* lhs, Box* _rhs) {
+    if (!PyComplex_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rfloordiv__' requires a 'complex' object but received a '%s'",
+                       getTypeName(lhs));
 
-    if (op != Py_EQ && op != Py_NE) {
-        /* for backwards compatibility, comparisons with non-numbers return
-         * NotImplemented.  Only comparisons with core numeric types raise
-         * TypeError.
-         */
-        if (PyInt_Check(w) || PyLong_Check(w) || PyFloat_Check(w) || PyComplex_Check(w)) {
-            PyErr_SetString(PyExc_TypeError, "no ordering relation is defined "
-                                             "for complex numbers");
-            return NULL;
-        }
-        return Py_NotImplemented;
+    if (_rhs == None)
+        return NotImplemented;
+
+    Box* rhs = toComplex(_rhs);
+
+    if (rhs == NotImplemented) {
+        return NotImplemented;
     }
+    BoxedComplex* rhs_complex = (BoxedComplex*)rhs;
 
-    assert(PyComplex_Check(v));
-    BoxedComplex* lhs = static_cast<BoxedComplex*>(v);
-
-    if (PyInt_Check(w) || PyLong_Check(w)) {
-        /* Check for 0->g0 imaginary part first to avoid the rich
-         * comparison when possible->g
-         */
-        if (lhs->imag == 0.0) {
-            PyObject* j, *sub_res;
-            j = PyFloat_FromDouble(lhs->real);
-            if (j == NULL)
-                return NULL;
-
-            sub_res = PyObject_RichCompare(j, w, op);
-            Py_DECREF(j);
-            return sub_res;
-        } else {
-            equal = 0;
-        }
-    } else if (PyFloat_Check(w)) {
-        equal = (lhs->real == PyFloat_AsDouble(w) && lhs->imag == 0.0);
-    } else if (PyComplex_Check(w)) {
-        BoxedComplex* rhs = static_cast<BoxedComplex*>(w);
-        equal = (lhs->real == rhs->real && lhs->imag == rhs->imag);
-    } else {
-        return Py_NotImplemented;
-    }
-
-    if (equal == (op == Py_EQ))
-        res = Py_True;
-    else
-        res = Py_False;
-
-    Py_INCREF(res);
-    return res;
+    BoxedTuple* t = (BoxedTuple*)complexDivmod(rhs_complex, lhs);
+    return t->elts[0];
 }
 
 extern "C" Box* complexEq(BoxedComplex* lhs, Box* rhs) {
@@ -1068,31 +721,6 @@ PyObject* complex_neg(PyComplexObject* v) {
     return PyComplex_FromDoubles(-self->real, -self->imag);
 }
 
-// Pyston change: make not static
-PyObject* complex__format__(PyObject* self, PyObject* args) {
-    PyObject* format_spec;
-
-    if (!PyArg_ParseTuple(args, "O:__format__", &format_spec))
-        return NULL;
-    if (PyBytes_Check(format_spec))
-        return _PyComplex_FormatAdvanced(self, PyBytes_AS_STRING(format_spec), PyBytes_GET_SIZE(format_spec));
-    if (PyUnicode_Check(format_spec)) {
-        /* Convert format_spec to a str */
-        PyObject* result;
-        PyObject* str_spec = PyObject_Str(format_spec);
-
-        if (str_spec == NULL)
-            return NULL;
-
-        result = _PyComplex_FormatAdvanced(self, PyBytes_AS_STRING(str_spec), PyBytes_GET_SIZE(str_spec));
-
-        Py_DECREF(str_spec);
-        return result;
-    }
-    PyErr_SetString(PyExc_TypeError, "__format__ requires str or unicode");
-    return NULL;
-}
-
 static PyMethodDef complex_methods[] = {
     { "__format__", (PyCFunction)complex__format__, METH_VARARGS, NULL },
 };
@@ -1101,10 +729,10 @@ void setupComplex() {
     static PyNumberMethods complex_as_number;
     complex_cls->tp_as_number = &complex_as_number;
 
-    auto complex_new = FunctionMetadata::create((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
-                                                ParamNames({ "", "real", "imag" }, "", ""), CXX);
-    complex_new->addVersion((void*)complexNew<CAPI>, UNKNOWN, CAPI);
-    complex_cls->giveAttr("__new__", new BoxedFunction(complex_new, { NULL, NULL }));
+    auto complex_new_func = FunctionMetadata::create((void*)complexNew<CXX>, UNKNOWN, 3, false, false,
+                                                     ParamNames({ "", "real", "imag" }, "", ""), CXX);
+    complex_new_func->addVersion((void*)complexNew<CAPI>, UNKNOWN, CAPI);
+    complex_cls->giveAttr("__new__", new BoxedFunction(complex_new_func, { NULL, NULL }));
 
     _addFunc("__add__", BOXED_COMPLEX, (void*)complexAddComplex, (void*)complexAddFloat, (void*)complexAddInt,
              (void*)complexAdd);
@@ -1126,16 +754,21 @@ void setupComplex() {
     complex_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)complexRDiv, UNKNOWN, 2)));
     complex_cls->giveAttr(
         "__pow__", new BoxedFunction(FunctionMetadata::create((void*)complexPow, UNKNOWN, 3, false, false), { None }));
-    complex_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)complexRpow, UNKNOWN, 2)));
+    complex_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)complexRPow, UNKNOWN, 2)));
 
     complex_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)complexMod, UNKNOWN, 2)));
-    complex_cls->giveAttr("__divmod__",
-                          new BoxedFunction(FunctionMetadata::create((void*)complexDivmod, BOXED_TUPLE, 2)));
+    complex_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)complexRMod, UNKNOWN, 2)));
+    complex_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)complexDivmod, UNKNOWN, 2)));
+    complex_cls->giveAttr("__rdivmod__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexRDivmod, UNKNOWN, 2)));
     complex_cls->giveAttr("__floordiv__",
                           new BoxedFunction(FunctionMetadata::create((void*)complexFloordiv, UNKNOWN, 2)));
-
+    complex_cls->giveAttr("__rfloordiv__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexRFloordiv, UNKNOWN, 2)));
     complex_cls->giveAttr("__truediv__",
-                          new BoxedFunction(FunctionMetadata::create((void*)complexDivComplex, BOXED_COMPLEX, 2)));
+                          new BoxedFunction(FunctionMetadata::create((void*)complexTruediv, UNKNOWN, 2)));
+    complex_cls->giveAttr("__rtruediv__",
+                          new BoxedFunction(FunctionMetadata::create((void*)complexRTruediv, UNKNOWN, 2)));
     complex_cls->giveAttr("conjugate",
                           new BoxedFunction(FunctionMetadata::create((void*)complexConjugate, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)complexCoerce, UNKNOWN, 2)));
@@ -1154,11 +787,20 @@ void setupComplex() {
     complex_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)complexPos, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)complexHash, BOXED_INT, 1)));
     complex_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)complexStr, STR, 1)));
+    complex_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)complexInt, UNKNOWN, 1)));
+    complex_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)complexFloat, UNKNOWN, 1)));
+    complex_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)complexLong, UNKNOWN, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",
                           new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, real)));
     complex_cls->giveAttr("imag",
                           new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, imag)));
+
+    complex_cls->giveAttr("__doc__",
+                          boxString("complex(real[, imag]) -> complex number\n"
+                                    "\n"
+                                    "Create a complex number from a real part and an optional imaginary part.\n"
+                                    "This is equivalent to (real + imag*1j) where imag defaults to 0."));
     for (auto& md : complex_methods) {
         complex_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, complex_cls));
     }

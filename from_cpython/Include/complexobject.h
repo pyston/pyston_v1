@@ -39,14 +39,10 @@ PyComplexObject represents a complex number with double-precision
 real and imaginary parts.
 */
 
-// Pyston change: this is not our object format
-#if 0
 typedef struct {
     PyObject_HEAD
     Py_complex cval;
 } PyComplexObject;     
-#endif
-typedef struct _PyComplexObject PyComplexObject;
 
 // Pyston change: this is not a static object any more
 // PyAPI_DATA(PyTypeObject) PyComplex_Type;
