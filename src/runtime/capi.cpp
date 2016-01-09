@@ -1231,8 +1231,8 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     assert(PyModule_Check(m));
     bool failed = false;
     try {
-        AST_Module* pyston_module = cpythonToPystonAST(mod, filename);
-        makeModuleInteractive(pyston_module);
+        assert(mod->kind == Interactive_kind);
+        AST_Module* pyston_module = static_cast<AST_Module*>(cpythonToPystonAST(mod, filename));
         compileAndRunModule(pyston_module, static_cast<BoxedModule*>(m));
     } catch (ExcInfo e) {
         setCAPIException(e);

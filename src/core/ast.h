@@ -17,6 +17,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <map>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -33,112 +34,132 @@ namespace pyston {
 namespace AST_TYPE {
 // These are in a pretty random order (started off alphabetical but then I had to add more).
 // These can be changed freely as long as parse_ast.py is also updated
+#define FOREACH_TYPE(X)  \
+    X(alias, 1)  \
+    X(arguments, 2)  \
+    X(Assert, 3)  \
+    X(Assign, 4)  \
+    X(Attribute, 5)  \
+    X(AugAssign, 6)  \
+    X(BinOp, 7)  \
+    X(BoolOp, 8)  \
+    X(Call, 9)  \
+    X(ClassDef, 10)  \
+    X(Compare, 11)  \
+    X(comprehension, 12)  \
+    X(Delete, 13)  \
+    X(Dict, 14)  \
+    X(Exec, 16)  \
+    X(ExceptHandler, 17)  \
+    X(ExtSlice, 18)  \
+    X(Expr, 19)  \
+    X(For, 20)  \
+    X(FunctionDef, 21)  \
+    X(GeneratorExp, 22)  \
+    X(Global, 23)  \
+    X(If, 24)  \
+    X(IfExp, 25)  \
+    X(Import, 26)  \
+    X(ImportFrom, 27)  \
+    X(Index, 28)  \
+    X(keyword, 29)  \
+    X(Lambda, 30)  \
+    X(List, 31)  \
+    X(ListComp, 32)  \
+    X(Module, 33)  \
+    X(Num, 34)  \
+    X(Name, 35)  \
+    X(Pass, 37)  \
+    X(Pow, 38)  \
+    X(Print, 39)  \
+    X(Raise, 40)  \
+    X(Repr, 41)  \
+    X(Return, 42)  \
+    X(Slice, 44)  \
+    X(Str, 45)  \
+    X(Subscript, 46)  \
+    X(TryExcept, 47)  \
+    X(TryFinally, 48)  \
+    X(Tuple, 49)  \
+    X(UnaryOp, 50)  \
+    X(With, 51)  \
+    X(While, 52)  \
+    X(Yield, 53)  \
+    X(Store, 54)  \
+    X(Load, 55)  \
+    X(Param, 56)  \
+    X(Not, 57)  \
+    X(In, 58)  \
+    X(Is, 59)  \
+    X(IsNot, 60)  \
+    X(Or, 61)  \
+    X(And, 62)  \
+    X(Eq, 63)  \
+    X(NotEq, 64)  \
+    X(NotIn, 65)  \
+    X(GtE, 66)  \
+    X(Gt, 67)  \
+    X(Mod, 68)  \
+    X(Add, 69)  \
+    X(Continue, 70)  \
+    X(Lt, 71)  \
+    X(LtE, 72)  \
+    X(Break, 73)  \
+    X(Sub, 74)  \
+    X(Del, 75)  \
+    X(Mult, 76)  \
+    X(Div, 77)  \
+    X(USub, 78)  \
+    X(BitAnd, 79)  \
+    X(BitOr, 80)  \
+    X(BitXor, 81)  \
+    X(RShift, 82)  \
+    X(LShift, 83)  \
+    X(Invert, 84)  \
+    X(UAdd, 85)  \
+    X(FloorDiv, 86)  \
+    X(DictComp, 15)  \
+    X(Set, 43)  \
+    X(Ellipsis, 87)  \
+    /* like Module, but used for eval. */  \
+    X(Expression, 88)  \
+    X(SetComp, 89)  \
+    X(Suite, 90)  \
+    \
+    /* Pseudo-nodes that are specific to this compiler: */  \
+    X(Branch, 200)  \
+    X(Jump, 201)  \
+    X(ClsAttribute, 202)  \
+    X(AugBinOp, 203)  \
+    X(Invoke, 204)  \
+    X(LangPrimitive, 205)  \
+    /* wraps a ClassDef to make it an expr */  \
+    X(MakeClass, 206)  \
+    /* wraps a FunctionDef to make it an expr */  \
+    X(MakeFunction, 207)  \
+    \
+    /* These aren't real AST types, but since we use AST types to represent binexp types */  \
+    /* and divmod+truediv are essentially types of binops, we add them here (at least for now): */ \
+    X(DivMod, 250)  \
+    X(TrueDiv, 251)  \
+
+#define GENERATE_ENUM(ENUM, N) ENUM = N,
+#define GENERATE_STRING(STRING, N) m[N] = #STRING;
+
 enum AST_TYPE {
-    alias = 1,
-    arguments = 2,
-    Assert = 3,
-    Assign = 4,
-    Attribute = 5,
-    AugAssign = 6,
-    BinOp = 7,
-    BoolOp = 8,
-    Call = 9,
-    ClassDef = 10,
-    Compare = 11,
-    comprehension = 12,
-    Delete = 13,
-    Dict = 14,
-    Exec = 16,
-    ExceptHandler = 17,
-    ExtSlice = 18,
-    Expr = 19,
-    For = 20,
-    FunctionDef = 21,
-    GeneratorExp = 22,
-    Global = 23,
-    If = 24,
-    IfExp = 25,
-    Import = 26,
-    ImportFrom = 27,
-    Index = 28,
-    keyword = 29,
-    Lambda = 30,
-    List = 31,
-    ListComp = 32,
-    Module = 33,
-    Num = 34,
-    Name = 35,
-    Pass = 37,
-    Pow = 38,
-    Print = 39,
-    Raise = 40,
-    Repr = 41,
-    Return = 42,
-    Slice = 44,
-    Str = 45,
-    Subscript = 46,
-    TryExcept = 47,
-    TryFinally = 48,
-    Tuple = 49,
-    UnaryOp = 50,
-    With = 51,
-    While = 52,
-    Yield = 53,
-    Store = 54,
-    Load = 55,
-    Param = 56,
-    Not = 57,
-    In = 58,
-    Is = 59,
-    IsNot = 60,
-    Or = 61,
-    And = 62,
-    Eq = 63,
-    NotEq = 64,
-    NotIn = 65,
-    GtE = 66,
-    Gt = 67,
-    Mod = 68,
-    Add = 69,
-    Continue = 70,
-    Lt = 71,
-    LtE = 72,
-    Break = 73,
-    Sub = 74,
-    Del = 75,
-    Mult = 76,
-    Div = 77,
-    USub = 78,
-    BitAnd = 79,
-    BitOr = 80,
-    BitXor = 81,
-    RShift = 82,
-    LShift = 83,
-    Invert = 84,
-    UAdd = 85,
-    FloorDiv = 86,
-    DictComp = 15,
-    Set = 43,
-    Ellipsis = 87,
-    Expression = 88, // like Module, but used for eval.
-    SetComp = 89,
-    Suite = 90,
-
-    // Pseudo-nodes that are specific to this compiler:
-    Branch = 200,
-    Jump = 201,
-    ClsAttribute = 202,
-    AugBinOp = 203,
-    Invoke = 204,
-    LangPrimitive = 205,
-    MakeClass = 206,    // wraps a ClassDef to make it an expr
-    MakeFunction = 207, // wraps a FunctionDef to make it an expr
-
-    // These aren't real AST types, but since we use AST types to represent binexp types
-    // and divmod+truediv are essentially types of binops, we add them here (at least for now):
-    DivMod = 250,
-    TrueDiv = 251,
+    FOREACH_TYPE(GENERATE_ENUM)
 };
+
+static const char *stringify(int n) {
+    static std::map<int, const char*> m;
+    FOREACH_TYPE(GENERATE_STRING)
+    return m[n];
+}
+
+#undef FOREACH_TYPE
+#undef GENERATE_ENUM
+#undef GENERATE_STRING
+
 };
 
 class ASTVisitor;
