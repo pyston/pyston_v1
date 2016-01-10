@@ -1,4 +1,3 @@
-# expected: fail
 import unittest
 from test import test_support
 from contextlib import closing
@@ -80,7 +79,8 @@ class InterProcessSignalTests(unittest.TestCase):
         # don't worry about re-setting the default handlers.
         signal.signal(signal.SIGHUP, self.handlerA)
         signal.signal(signal.SIGUSR1, self.handlerB)
-        signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+        # Pyston change: pyston uses SIGUSR2 internally
+        # signal.signal(signal.SIGUSR2, signal.SIG_IGN)
         signal.signal(signal.SIGALRM, signal.default_int_handler)
 
         # Variables the signals will modify:
@@ -117,9 +117,11 @@ class InterProcessSignalTests(unittest.TestCase):
             if test_support.verbose:
                 print "HandlerBCalled exception caught"
 
-        child = ignoring_eintr(subprocess.Popen, ['kill', '-USR2', str(pid)])
-        if child:
-            self.wait(child)  # Nothing should happen.
+
+        # Pyston change: pyston uses SIGUSR2 internally
+        # child = ignoring_eintr(subprocess.Popen, ['kill', '-USR2', str(pid)])
+        # if child:
+        #    self.wait(child)  # Nothing should happen.
 
         try:
             signal.alarm(1)

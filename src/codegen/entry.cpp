@@ -378,16 +378,6 @@ static void handle_sigprof_investigate_stattimer(int signum) {
 }
 #endif
 
-static void handle_sigint(int signum) {
-    assert(signum == SIGINT);
-    // TODO: this should set a flag saying a KeyboardInterrupt is pending.
-    // For now, just call abort(), so that we get a traceback at least.
-    fprintf(stderr, "SIGINT!\n");
-    joinRuntime();
-    Stats::dump(false);
-    abort();
-}
-
 void initCodegen() {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -481,9 +471,8 @@ void initCodegen() {
 
     setupRuntime();
 
-    // signal(SIGFPE, &handle_sigfpe);
-    signal(SIGUSR1, &handle_sigusr1);
-    signal(SIGINT, &handle_sigint);
+// signal(SIGFPE, &handle_sigfpe);
+// signal(SIGUSR1, &handle_sigusr1);
 
 #if ENABLE_SAMPLING_PROFILER
     struct itimerval prof_timer;
