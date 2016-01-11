@@ -57,3 +57,9 @@ print D.__base__
 
 print type("test", (), {})
 print type("test", (), {"__module__":"fake"})
+
+# test non str attr keys
+t = type("test", (), {u"test" : 2, 1000L : 3, 1.0 : 4})
+print t.__dict__[u"test"], t.test
+print t.__dict__[1000L]
+print t.__dict__[1.0]
