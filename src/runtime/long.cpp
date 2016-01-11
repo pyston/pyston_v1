@@ -781,17 +781,40 @@ Box* longInt(Box* v) {
         return new BoxedInt(n);
 }
 
-Box* longFloat(BoxedLong* v) {
-    if (!PyLong_Check(v))
-        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
-                       getTypeName(v));
+Box* longToLong(Box* self) {
+    if (self->cls == long_cls) {
+        return self;
+    } else {
+        assert(PyLong_Check(self));
+        BoxedLong* l = new BoxedLong();
+        mpz_init_set(l->n, static_cast<BoxedLong*>(self)->n);
+        return l;
+    }
+}
 
+Box* longLong(BoxedLong* self) {
+    if (!PyLong_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__long__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return longToLong(self);
+}
+
+Box* longToFloat(BoxedLong* v) {
     double result = PyLong_AsDouble(v);
 
     if (result == -1.0 && PyErr_Occurred())
         throwCAPIException();
 
     return new BoxedFloat(result);
+}
+
+Box* longFloat(BoxedLong* v) {
+    if (!PyLong_Check(v))
+        raiseExcHelper(TypeError, "descriptor '__float__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
+
+    return longToFloat(v);
 }
 
 Box* longRepr(BoxedLong* v) {
@@ -977,64 +1000,116 @@ static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
     }
 }
 
-Box* longLshift(BoxedLong* v1, Box* _v2) {
-    if (!PyLong_Check(v1))
-        raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1));
-
-    if (PyLong_Check(_v2)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        if (mpz_sgn(v2->n) < 0)
-            raiseExcHelper(ValueError, "negative shift count");
-
-        uint64_t n = asUnsignedLong(v2);
+Box* convertToLong(Box* val) {
+    if (PyLong_Check(val)) {
+        return val;
+    } else if (PyInt_Check(val)) {
+        BoxedInt* val_int = static_cast<BoxedInt*>(val);
         BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-        mpz_mul_2exp(r->n, v1->n, n);
-        return r;
-    } else if (PyInt_Check(_v2)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-        if (v2->n < 0)
-            raiseExcHelper(ValueError, "negative shift count");
-
-        BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-        mpz_mul_2exp(r->n, v1->n, v2->n);
+        mpz_init_set_si(r->n, val_int->n);
         return r;
     } else {
         return NotImplemented;
     }
 }
 
-Box* longRshift(BoxedLong* v1, Box* _v2) {
-    if (!PyLong_Check(v1))
-        raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1));
+Box* longLShiftLong(BoxedLong* lhs, Box* _rhs) {
+    Box* rhs = convertToLong(_rhs);
 
-    if (PyLong_Check(_v2)) {
-        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-        if (mpz_sgn(v2->n) < 0)
-            raiseExcHelper(ValueError, "negative shift count");
-
-        uint64_t n = asUnsignedLong(v2);
-        BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-        mpz_div_2exp(r->n, v1->n, n);
-        return r;
-    } else if (PyInt_Check(_v2)) {
-        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
-        if (v2->n < 0)
-            raiseExcHelper(ValueError, "negative shift count");
-
-        BoxedLong* r = new BoxedLong();
-        mpz_init(r->n);
-        mpz_div_2exp(r->n, v1->n, v2->n);
-        return r;
-    } else {
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    // if (PyLong_Check(_v2)) {
+    //     BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+    if (mpz_sgn(rhs_long->n) < 0)
+        raiseExcHelper(ValueError, "negative shift count");
+
+    uint64_t n = asUnsignedLong(rhs_long);
+    BoxedLong* r = new BoxedLong();
+    mpz_init(r->n);
+    mpz_mul_2exp(r->n, lhs->n, n);
+    return r;
+}
+
+Box* longLShift(BoxedLong* lhs, Box* rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    return longLShiftLong(lhs, rhs);
+}
+
+Box* longRLShift(BoxedLong* lhs, Box* _rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rlshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = convertToLong(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    return longLShiftLong(rhs_long, lhs);
+}
+
+Box* longRShiftLong(BoxedLong* lhs, Box* _rhs) {
+    Box* rhs = convertToLong(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    if (mpz_sgn(rhs_long->n) < 0)
+        raiseExcHelper(ValueError, "negative shift count");
+
+    uint64_t n = asUnsignedLong(rhs_long);
+    BoxedLong* r = new BoxedLong();
+    mpz_init(r->n);
+    mpz_div_2exp(r->n, lhs->n, n);
+    return r;
+}
+
+Box* longRShift(BoxedLong* lhs, Box* rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    return longRShiftLong(lhs, rhs);
+}
+
+Box* longRRShift(BoxedLong* lhs, Box* _rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rrshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = convertToLong(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    return longRShiftLong(rhs_long, lhs);
+}
+
+Box* longCoerce(BoxedLong* lhs, Box* _rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__coerce__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = convertToLong(_rhs);
+
+    if (!PyLong_Check(rhs))
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+    return BoxedTuple::create({ lhs, rhs_long });
 }
 
 Box* longSub(BoxedLong* v1, Box* _v2) {
@@ -1175,38 +1250,50 @@ Box* longRMod(BoxedLong* v1, Box* _v2) {
     }
 }
 
-extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
+Box* longDivmodLong(BoxedLong* lhs, Box* _rhs) {
     if (!PyLong_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (PyLong_Check(_rhs)) {
-        BoxedLong* rhs = static_cast<BoxedLong*>(_rhs);
+    Box* rhs = convertToLong(_rhs);
 
-        if (mpz_sgn(rhs->n) == 0)
-            raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
-
-        BoxedLong* q = new BoxedLong();
-        BoxedLong* r = new BoxedLong();
-        mpz_init(q->n);
-        mpz_init(r->n);
-        mpz_fdiv_qr(q->n, r->n, lhs->n, rhs->n);
-        return BoxedTuple::create({ q, r });
-    } else if (PyInt_Check(_rhs)) {
-        BoxedInt* rhs = static_cast<BoxedInt*>(_rhs);
-
-        if (rhs->n == 0)
-            raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
-
-        BoxedLong* q = new BoxedLong();
-        BoxedLong* r = new BoxedLong();
-        mpz_init(q->n);
-        mpz_init_set_si(r->n, rhs->n);
-        mpz_fdiv_qr(q->n, r->n, lhs->n, r->n);
-        return BoxedTuple::create({ q, r });
-    } else {
+    if (rhs == NotImplemented)
         return NotImplemented;
-    }
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    if (mpz_sgn(rhs_long->n) == 0)
+        raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
+
+    BoxedLong* q = new BoxedLong();
+    BoxedLong* r = new BoxedLong();
+    mpz_init(q->n);
+    mpz_init(r->n);
+    mpz_fdiv_qr(q->n, r->n, lhs->n, rhs_long->n);
+    return BoxedTuple::create({ q, r });
+}
+
+Box* longDivmod(BoxedLong* lhs, Box* rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    return longDivmodLong(lhs, rhs);
+}
+
+Box* longRDivmod(BoxedLong* lhs, Box* _rhs) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = convertToLong(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+
+    return longDivmodLong(rhs_long, lhs);
 }
 
 Box* longRdiv(BoxedLong* v1, Box* _v2) {
@@ -1322,32 +1409,26 @@ extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {
     return boxFloat(pow_float_float(lhs_float, rhs->d));
 }
 
-Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
-    if (!PyLong_Check(lhs))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
-                       getTypeName(lhs));
-
+Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
     BoxedLong* mod_long = nullptr;
-    if (mod != None) {
-        if (PyLong_Check(mod)) {
-            mod_long = static_cast<BoxedLong*>(mod);
-        } else if (PyInt_Check(mod)) {
-            mod_long = boxLong(static_cast<BoxedInt*>(mod)->n);
-        } else {
+    if (_mod != None) {
+        Box* mod = convertToLong(_mod);
+
+        if (mod == NotImplemented)
             return NotImplemented;
-        }
+
+        mod_long = static_cast<BoxedLong*>(mod);
     }
 
     BoxedLong* rhs_long = nullptr;
-    if (PyLong_Check(rhs)) {
-        rhs_long = static_cast<BoxedLong*>(rhs);
-    } else if (PyInt_Check(rhs)) {
-        rhs_long = boxLong(static_cast<BoxedInt*>(rhs)->n);
-    } else {
-        return NotImplemented;
-    }
+    Box* rhs = convertToLong(_rhs);
 
-    if (mod != None) {
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    rhs_long = static_cast<BoxedLong*>(rhs);
+
+    if (_mod != None) {
         if (mpz_sgn(rhs_long->n) < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
@@ -1359,12 +1440,12 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
     mpz_init(r->n);
 
     if (mpz_sgn(rhs_long->n) == -1) {
-        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(longFloat(rhs_long));
-        BoxedFloat* lhs_float = static_cast<BoxedFloat*>(longFloat(lhs));
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(longToFloat(rhs_long));
+        BoxedFloat* lhs_float = static_cast<BoxedFloat*>(longToFloat(lhs));
         return boxFloat(pow_float_float(lhs_float->d, rhs_float->d));
     }
 
-    if (mod != None) {
+    if (_mod != None) {
         mpz_powm(r->n, lhs->n, rhs_long->n, mod_long->n);
         if (mpz_sgn(r->n) == 0)
             return r;
@@ -1388,6 +1469,27 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
         }
     }
     return r;
+}
+Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    return longPowLong(lhs, rhs, mod);
+}
+
+Box* longRPow(BoxedLong* lhs, Box* _rhs, Box* mod) {
+    if (!PyLong_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rpow__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs));
+
+    Box* rhs = convertToLong(_rhs);
+
+    if (rhs == NotImplemented)
+        return NotImplemented;
+
+    BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
+    return longPowLong(rhs_long, lhs, mod);
 }
 
 extern "C" Box* longInvert(BoxedLong* v) {
@@ -1517,15 +1619,8 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     }
 }
 
-static Box* longLong(Box* b, void*) {
-    if (b->cls == long_cls) {
-        return b;
-    } else {
-        assert(PyLong_Check(b));
-        BoxedLong* l = new BoxedLong();
-        mpz_init_set(l->n, static_cast<BoxedLong*>(b)->n);
-        return l;
-    }
+static Box* longDesc(Box* b, void*) {
+    return longToLong(b);
 }
 
 static Box* long0(Box* b, void*) {
@@ -1547,6 +1642,8 @@ void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
+    long_cls->giveAttr(
+        "__rpow__", new BoxedFunction(FunctionMetadata::create((void*)longRPow, UNKNOWN, 3, false, false), { None }));
     auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,
                                              ParamNames({ "", "x", "base" }, "", ""), CXX);
     long_new->addVersion((void*)longNew<CAPI>, UNKNOWN, CAPI);
@@ -1565,6 +1662,7 @@ void setupLong() {
     long_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)longRMod, UNKNOWN, 2)));
 
     long_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)longDivmod, UNKNOWN, 2)));
+    long_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)longRDivmod, UNKNOWN, 2)));
 
     long_cls->giveAttr("__sub__", new BoxedFunction(FunctionMetadata::create((void*)longSub, UNKNOWN, 2)));
     long_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)longRsub, UNKNOWN, 2)));
@@ -1581,8 +1679,11 @@ void setupLong() {
     // Note: CPython implements long comparisons using tp_compare
     long_cls->tp_richcompare = long_richcompare;
 
-    long_cls->giveAttr("__lshift__", new BoxedFunction(FunctionMetadata::create((void*)longLshift, UNKNOWN, 2)));
-    long_cls->giveAttr("__rshift__", new BoxedFunction(FunctionMetadata::create((void*)longRshift, UNKNOWN, 2)));
+    long_cls->giveAttr("__lshift__", new BoxedFunction(FunctionMetadata::create((void*)longLShift, UNKNOWN, 2)));
+    long_cls->giveAttr("__rlshift__", new BoxedFunction(FunctionMetadata::create((void*)longRLShift, UNKNOWN, 2)));
+    long_cls->giveAttr("__rshift__", new BoxedFunction(FunctionMetadata::create((void*)longRShift, UNKNOWN, 2)));
+    long_cls->giveAttr("__rrshift__", new BoxedFunction(FunctionMetadata::create((void*)longRRShift, UNKNOWN, 2)));
+    long_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)longCoerce, UNKNOWN, 2)));
 
     long_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)longInt, UNKNOWN, 1)));
     long_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)longFloat, UNKNOWN, 1)));
@@ -1592,24 +1693,34 @@ void setupLong() {
     long_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)longHex, STR, 1)));
     long_cls->giveAttr("__oct__", new BoxedFunction(FunctionMetadata::create((void*)longOct, STR, 1)));
 
+    long_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)longAbs, UNKNOWN, 1)));
     long_cls->giveAttr("__invert__", new BoxedFunction(FunctionMetadata::create((void*)longInvert, UNKNOWN, 1)));
     long_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)longNeg, UNKNOWN, 1)));
     long_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)longPos, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)longHash, BOXED_INT, 1)));
 
+    long_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)longLong, UNKNOWN, 1)));
     long_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)longTrunc, UNKNOWN, 1)));
     long_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)longIndex, LONG, 1)));
 
     long_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)longBitLength, LONG, 1)));
-    long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
+    long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longDesc, NULL, NULL));
     long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
-    long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)longLong, UNKNOWN, 1)));
-    long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
+    long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)longDesc, UNKNOWN, 1)));
+    long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longDesc, NULL, NULL));
     long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
 
     long_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)long_getnewargs, UNKNOWN, 1,
                                                                                     ParamNames::empty(), CAPI)));
+
+    long_cls->giveAttr("__doc__", boxString("long.bit_length() -> int or long\n"
+                                            "\n"
+                                            "Number of bits necessary to represent self in binary.\n"
+                                            ">>> bin(37L)\n"
+                                            "'0b100101'\n"
+                                            ">>> (37L).bit_length()\n"
+                                            "6"));
 
     add_operators(long_cls);
     long_cls->freeze();

@@ -747,7 +747,8 @@ float_rem(PyObject *v, PyObject *w)
     return PyFloat_FromDouble(mod);
 }
 
-static PyObject *
+// pyston change: make this not static
+PyObject *
 float_divmod(PyObject *v, PyObject *w)
 {
     double vx, wx;
@@ -987,7 +988,8 @@ float_nonzero(PyFloatObject *v)
     return v->ob_fval != 0.0;
 }
 
-static int
+// pyston change: make not static
+int
 float_coerce(PyObject **pv, PyObject **pw)
 {
     if (PyInt_Check(*pw)) {
@@ -1949,7 +1951,8 @@ PyDoc_STRVAR(float_getformat_doc,
 "'unknown', 'IEEE, big-endian' or 'IEEE, little-endian' best describes the\n"
 "format of floating point numbers used by the C type named by typestr.");
 
-static PyObject *
+// pyston change: make not static
+PyObject *
 float_setformat(PyTypeObject *v, PyObject* args)
 {
     char* typestr;
