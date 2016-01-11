@@ -117,3 +117,7 @@ print type(f.at) # should not call __get__
 f.at = 12 # should not call __set__, should print nothing
 #TODO uncomment this:
 #print f.__dict__['at']
+
+
+# test if we support getset.__get__ with default args
+print type(5).__dict__["real"].__get__(42)

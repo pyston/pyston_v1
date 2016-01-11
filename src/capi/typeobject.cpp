@@ -3427,6 +3427,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     // RELEASE_ASSERT(cls->tp_traverse == NULL, "");
     // RELEASE_ASSERT(cls->tp_clear == NULL, "");
 
+    // set this flag early because some function check if it is set pretty early
+    cls->is_user_defined = true;
+
     assert(cls->attrs.hcls == NULL);
     new (&cls->attrs) HCAttrs(HiddenClass::makeSingleton());
 #define INITIALIZE(a) new (&(a)) decltype(a)
@@ -3510,7 +3513,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         cls->gc_visit = &conservativeAndBasesGCHandler;
     else
         cls->gc_visit = &conservativeGCHandler;
-    cls->is_user_defined = true;
 
 
     if (!cls->instancesHaveHCAttrs() && cls->tp_base) {

@@ -72,6 +72,7 @@ except TypeError, e:
 
 print globals().get("not a real variable")
 print globals().get("not a real variable", 1)
+print globals().has_key("C"), globals().has_key("CC")
 
 print hex(12345)
 print oct(234)

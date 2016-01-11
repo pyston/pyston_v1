@@ -2511,6 +2511,12 @@ public:
         return r ? True : False;
     }
 
+    static Box* hasKey(Box* _self, Box* _key) {
+        if (PyErr_WarnPy3k("dict.has_key() not supported in 3.x; use the in operator", 1) < 0)
+            throwCAPIException();
+        return contains<CXX>(_self, _key);
+    }
+
     static int sq_contains(Box* _self, Box* _key) noexcept {
         Box* rtn = contains<CAPI>(_self, _key);
         if (!rtn)
@@ -3837,8 +3843,10 @@ void setupRuntime() {
     attrwrapperiter_cls = BoxedClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                              sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
-    pyston_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));
-    capi_getset_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3)));
+    pyston_getset_cls->giveAttr("__get__",
+                                new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3), { None }));
+    capi_getset_cls->giveAttr("__get__",
+                              new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3), { None }));
     pyston_getset_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)getsetSet, UNKNOWN, 3)));
     capi_getset_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)getsetSet, UNKNOWN, 3)));
     pyston_getset_cls->giveAttr("__delete__",
@@ -4043,7 +4051,9 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__str__",
                               new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr(
-        "__contains__", new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::contains<CXX>, UNKNOWN, 2)));
+        "__contains__", new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::contains<CXX>, BOXED_BOOL, 2)));
+    attrwrapper_cls->giveAttr("has_key",
+                              new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::hasKey, BOXED_BOOL, 2)));
     attrwrapper_cls->giveAttr("__eq__",
                               new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::eq, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__ne__",
