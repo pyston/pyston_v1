@@ -81,7 +81,7 @@ test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
 test_dictcomps          we need to disallow assigning to dictcomps
 test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
-test_dictviews          various unique bugs
+test_dictviews          segfault calling repr on recursive dictview. remove test/tests/test_dictview.py when the orig test passes
 test_difflib            [unknown]
 test_distutils          [unknown]
 test_dis                [unknown]
