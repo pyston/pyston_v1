@@ -51,8 +51,8 @@ Box* longSub(BoxedLong* lhs, Box* rhs);
 Box* longMul(BoxedLong* lhs, Box* rhs);
 Box* longDiv(BoxedLong* lhs, Box* rhs);
 Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod = None);
-Box* longLshift(BoxedLong* lhs, Box* rhs);
-Box* longRshift(BoxedLong* lhs, Box* rhs);
+Box* longLShiftLong(BoxedLong* lhs, Box* _rhs);
+Box* longRShiftLong(BoxedLong* lhs, Box* _rhs);
 
 Box* longHex(BoxedLong* v);
 Box* longOct(BoxedLong* v);
