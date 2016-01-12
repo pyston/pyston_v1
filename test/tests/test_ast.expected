@@ -1,0 +1,32 @@
+test_AST_objects (__main__.AST_Tests) ... ok
+test_arguments (__main__.AST_Tests) ... ok
+test_base_classes (__main__.AST_Tests) ... ok
+test_classattrs (__main__.AST_Tests) ... ok
+test_field_attr_existence (__main__.AST_Tests) ... ok
+test_field_attr_writable (__main__.AST_Tests) ... ok
+test_from_import (__main__.AST_Tests) ... ok
+test_invalid_identitifer (__main__.AST_Tests) ... ok
+test_invalid_string (__main__.AST_Tests) ... ok
+test_module (__main__.AST_Tests) ... ok
+test_no_fields (__main__.AST_Tests) ... ok
+test_nodeclasses (__main__.AST_Tests) ... ok
+test_non_interned_future_from_ast (__main__.AST_Tests) ... ok
+test_pickling (__main__.AST_Tests) ... skipped 'parse error'
+test_slice (__main__.AST_Tests) ... ok
+test_snippets (__main__.AST_Tests) ... skipped 'parse error'
+test_copy_location (__main__.ASTHelpers_Test) ... ok
+test_dump (__main__.ASTHelpers_Test) ... ok
+test_fix_missing_locations (__main__.ASTHelpers_Test) ... ok
+test_get_docstring (__main__.ASTHelpers_Test) ... ok
+test_increment_lineno (__main__.ASTHelpers_Test) ... ok
+test_iter_child_nodes (__main__.ASTHelpers_Test) ... ok
+test_iter_fields (__main__.ASTHelpers_Test) ... ok
+test_literal_eval (__main__.ASTHelpers_Test) ... ok
+test_literal_eval_issue4907 (__main__.ASTHelpers_Test) ... ok
+test_parse (__main__.ASTHelpers_Test) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in TIME
+
+OK (skipped=2)
+
