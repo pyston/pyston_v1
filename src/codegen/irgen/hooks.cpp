@@ -488,26 +488,57 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     RELEASE_ASSERT(iflags == 0, "");
 
     AST* parsed;
+    mod_ty mod;
 
     if (PyAST_Check(source)) {
-        parsed = unboxAst(source);
-    } else {
-        RELEASE_ASSERT(PyString_Check(source), "");
-        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
-
-        if (type_str->s() == "exec") {
-            parsed = parseExec(source_str, future_flags);
-        } else if (type_str->s() == "eval") {
-            parsed = parseEval(source_str, future_flags);
-        } else if (type_str->s() == "single") {
-            parsed = parseExec(source_str, future_flags, true);
-        } else {
+        int mode;
+        ArenaWrapper arena;
+        if (type_str->s() == "exec")
+            mode = 0;
+        else if (type_str->s() == "eval")
+            mode = 1;
+        else if (type_str->s() == "single")
+            mode = 2;
+        else {
             raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
         }
+        mod = PyAST_obj2mod(source, arena, mode);
+        if (PyErr_Occurred())
+            throwCAPIException();
+        parsed = cpythonToPystonAST(mod, filename_str->c_str());
+    } else {
+        RELEASE_ASSERT(PyString_Check(source), "");
+        int mode;
+        if (type_str->s() == "exec")
+            mode = Py_file_input;
+        else if (type_str->s() == "eval")
+            mode = Py_eval_input;
+        else if (type_str->s() == "single")
+            mode = Py_single_input;
+        else {
+            raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+        }
+
+        PyCompilerFlags cf;
+        cf.cf_flags = future_flags;
+        ArenaWrapper arena;
+        const char* code = static_cast<BoxedString*>(source)->s().data();
+        assert(arena);
+        const char* fn = filename_str->c_str();
+        mod = PyParser_ASTFromString(code, fn, mode, &cf, arena);
+        if (!mod)
+            throwCAPIException();
+
+        parsed = cpythonToPystonAST(mod, filename_str->c_str());
     }
 
-    if (only_ast)
-        return boxAst(parsed);
+    if (only_ast) {
+        Box* result = PyAST_mod2obj(mod);
+        if (PyErr_Occurred())
+            throwCAPIException();
+
+        return result;
+    }
 
     PyCompilerFlags pcf;
     pcf.cf_flags = future_flags;
@@ -515,12 +546,14 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     FunctionMetadata* md;
     if (type_str->s() == "exec" || type_str->s() == "single") {
         // TODO: CPython parses execs as Modules
-        if (parsed->type != AST_TYPE::Module)
-            raiseExcHelper(TypeError, "expected Module node, got %s", boxAst(parsed)->cls->tp_name);
+        if (parsed->type != AST_TYPE::Module) {
+            raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
+        }
         md = compileExec(static_cast<AST_Module*>(parsed), filename_str, &pcf);
     } else if (type_str->s() == "eval") {
-        if (parsed->type != AST_TYPE::Expression)
-            raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
+        if (parsed->type != AST_TYPE::Expression) {
+            raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
+        }
         md = compileEval(static_cast<AST_Expression*>(parsed), filename_str, &pcf);
     } else {
         raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");

@@ -256,7 +256,7 @@ private:
         curblock = NULL;
     }
 
-    void doContinue() {
+    void doContinue(AST* value) {
         assert(curblock);
         for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
             if (cont.continue_dest) {
@@ -270,10 +270,10 @@ private:
             }
         }
 
-        raiseExcHelper(SyntaxError, "'continue' not properly in loop");
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
     }
 
-    void doBreak() {
+    void doBreak(AST* value) {
         assert(curblock);
         for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
             if (cont.break_dest) {
@@ -287,7 +287,7 @@ private:
             }
         }
 
-        raiseExcHelper(SyntaxError, "'break' outside loop");
+        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
     }
 
     AST_expr* callNonzero(AST_expr* e) {
@@ -1322,10 +1322,10 @@ private:
                 doReturn(makeLoad(internString(RETURN_NAME), node));
                 break;
             case Why::BREAK:
-                doBreak();
+                doBreak(node);
                 break;
             case Why::CONTINUE:
-                doContinue();
+                doContinue(node);
                 break;
             case Why::FALLTHROUGH:
                 assert(exit_block);
@@ -1973,7 +1973,7 @@ public:
     bool visit_break(AST_Break* node) override {
         assert(curblock);
 
-        doBreak();
+        doBreak(node);
         assert(!curblock);
         return true;
     }
@@ -1981,7 +1981,7 @@ public:
     bool visit_continue(AST_Continue* node) override {
         assert(curblock);
 
-        doContinue();
+        doContinue(node);
         assert(!curblock);
         return true;
     }
