@@ -352,18 +352,22 @@ public:
                     = var->getType()->getattrType(attr, true)->callType(ArgPassSpec(1), { SLICE }, NULL);
                 assert(return_type->getConcreteType() == return_type);
 
-                llvm::Value* cstart, *cstop;
-                cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
-                                         : getNullPtr(g.llvm_value_type_ptr);
-                cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
-                                       : getNullPtr(g.llvm_value_type_ptr);
+                if (return_type != UNDEF) {
+                    llvm::Value* cstart, *cstop;
+                    cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
+                                             : getNullPtr(g.llvm_value_type_ptr);
+                    cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
+                                           : getNullPtr(g.llvm_value_type_ptr);
 
-                llvm::Value* r
-                    = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
-                emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
+                    llvm::Value* r
+                        = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
+                    emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
-
-                return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+                    return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+                } else {
+                    // TODO: we could directly emit an exception if we know getitem is undefined but for now let it just
+                    // call the normal getitem which will raise the exception
+                }
             }
         }
 

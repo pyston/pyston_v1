@@ -63,3 +63,27 @@ try:
         f(i == 9999)
 except TypeError, e:
     print e
+
+
+# make sure we don't abort when calling getitem
+def f(error):
+    i = 1
+    f = 1.0
+    l = 1l
+    
+    if error:
+       i[:]
+       f[:]
+       l[:]
+       i[1]
+       f[1]
+       l[1]
+       i[1:2]
+       f[1:2]
+       l[1:2]
+
+try:
+    for i in range(10000):
+        f(i == 9999)
+except TypeError as e:
+    print e
