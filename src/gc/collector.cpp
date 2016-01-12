@@ -312,12 +312,16 @@ void deregisterPermanentRoot(void* obj) {
 
 void registerPotentialRootRange(void* start, void* end) {
     // only track void* aligned memory
+    uintptr_t start_int = (uintptr_t)start;
     uintptr_t end_int = (uintptr_t)end;
-    end_int = (end_int + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
+    start_int = (start_int + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1);
     end_int -= end_int % sizeof(void*);
 
-    if (end_int > (uintptr_t)start)
-        potential_root_ranges.push_back(std::make_pair(start, (void*)end_int));
+    assert(start_int % sizeof(void*) == 0);
+    assert(end_int % sizeof(void*) == 0);
+
+    if (end_int > start_int)
+        potential_root_ranges.push_back(std::make_pair((void*)start_int, (void*)end_int));
 }
 
 extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
