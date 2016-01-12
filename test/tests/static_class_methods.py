@@ -24,3 +24,21 @@ def g(cls, a, b, c, d):
 
 f.__get__(c, C)(17, 18, 19, 20)
 g.__get__(c, C)(21, 22, 23, 24)
+
+
+class classonlymethod(classmethod):
+    def __get__(self, instance, owner):
+        if instance is not None:
+            raise AttributeError("This method is available only on the class, not on instances.")
+        return super(classonlymethod, self).__get__(instance, owner)
+
+class C(object):
+    @classonlymethod
+    def f(cls):
+        print "f called"
+C.f()
+try:
+    C().f()
+except AttributeError, e:
+    print e
+
