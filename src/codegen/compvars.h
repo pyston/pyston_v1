@@ -141,10 +141,7 @@ public:
     }
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
-                                   const std::vector<BoxedString*>* keyword_names) {
-        printf("call not defined for %s\n", debugName().c_str());
-        abort();
-    }
+                                   const std::vector<BoxedString*>* keyword_names);
     virtual CompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("len not defined for %s\n", debugName().c_str());
         abort();
@@ -172,10 +169,7 @@ public:
         abort();
     }
     CompilerType* callType(struct ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
-                           const std::vector<llvm::StringRef>* keyword_names) override {
-        printf("callType not defined for %s\n", debugName().c_str());
-        abort();
-    }
+                           const std::vector<llvm::StringRef>* keyword_names) override;
     BoxedClass* guaranteedClass() override {
         ASSERT((CompilerType*)getConcreteType() != this, "%s", debugName().c_str());
         return getConcreteType()->guaranteedClass();
@@ -486,6 +480,23 @@ std::vector<CompilerVariable*> _ValuedCompilerType<V>::unpack(IREmitter& emitter
 
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, UNKNOWN);
     auto r = UNKNOWN->unpack(emitter, info, converted, num_into);
+    converted->decvref(emitter);
+    return r;
+}
+
+template <typename V>
+CompilerType* _ValuedCompilerType<V>::callType(struct ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                               const std::vector<llvm::StringRef>* keyword_names) {
+    return UNKNOWN;
+}
+
+template <typename V>
+CompilerVariable* _ValuedCompilerType<V>::call(IREmitter& emitter, const OpInfo& info, VAR* var,
+                                               struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                               const std::vector<BoxedString*>* keyword_names) {
+    assert((CompilerType*)this != UNKNOWN);
+    ConcreteCompilerVariable* converted = makeConverted(emitter, var, UNKNOWN);
+    auto r = UNKNOWN->call(emitter, info, converted, argspec, args, keyword_names);
     converted->decvref(emitter);
     return r;
 }

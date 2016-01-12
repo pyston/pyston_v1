@@ -42,3 +42,24 @@ def f2():
 
 for i in xrange(100):
     f2()
+
+
+# make sure we don't abort when calling a type which is not callable
+def f(call):
+    i = 1
+    f = 1.0
+    l = 1l
+    s = "str"
+    t = (1,)
+    
+    if call:
+       i()
+       f()
+       l()
+       s()
+       t()
+try:
+    for i in range(10000):
+        f(i == 9999)
+except TypeError, e:
+    print e
