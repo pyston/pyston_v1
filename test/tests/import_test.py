@@ -29,3 +29,9 @@ print y
 print __name__
 
 print __import__("import_target") is import_target
+
+import sys
+import _multiprocessing
+del _multiprocessing
+del sys.modules["_multiprocessing"]
+import _multiprocessing
