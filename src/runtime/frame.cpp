@@ -163,10 +163,7 @@ extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {
 }
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
-    Box* globals = BoxedFrame::globals((Box*)f, NULL);
-    if (globals->cls == attrwrapper_cls)
-        return attrwrapperToDict(globals);
-    return globals;
+    return BoxedFrame::globals((Box*)f, NULL);
 }
 
 extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {
