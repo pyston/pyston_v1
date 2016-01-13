@@ -472,7 +472,8 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
 
     /* Setup registry. */
     assert(globals != NULL);
-    assert(PyDict_Check(globals));
+    // Pyston change: PyFrame_GetGlobals returns a attrwrapper object not a real dict
+    // assert(PyDict_Check(globals));
     *registry = PyDict_GetItemString(globals, "__warningregistry__");
     if (*registry == NULL) {
         int rc;

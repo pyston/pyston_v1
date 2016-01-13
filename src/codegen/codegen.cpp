@@ -116,7 +116,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
       ast(ast),
       cfg(NULL),
       body(std::move(body)) {
-    assert(fn->size());
+    assert(fn);
     // TODO: we should track this reference correctly rather than making it a root
     gc::registerPermanentRoot(fn, true);
     this->fn = fn;
