@@ -42,18 +42,29 @@ except ImportError, e:
     # So unfortunately we can't print out the error message.
     print "caught import error 1"
 
+def ImportErrorPathHook(a):
+    print "ImportErrorPathHook", a
+    raise ImportError
+
+sys.path_hooks.insert(0, ImportErrorPathHook)
 sys.path_hooks.append(Finder2)
 try:
     import a.b.test
 except ImportError, e:
     print "caught import error 2"
 
+# this should not call into ImportErrorPathHook
+try:
+    imp.find_module("foobar", ["/"])
+except ImportError, e:
+    print "caught import error 3"
+
 sys.path.append("/my_magic_directory")
 
 try:
     import a.b.test
 except ImportError, e:
-    print "caught import error 3"
+    print "caught import error 4"
 
 sys.meta_path.append(Finder())
 import a
@@ -62,3 +73,11 @@ import a.b.test as test
 print test
 import a.b as b
 print b
+
+class RecursiveLoader(object):
+    def find_module(self, name, path=None):
+        print "RecursiveLoader", name, path
+        imp.find_module(name, path)
+        return Loader()
+sys.meta_path.insert(0, RecursiveLoader())
+import subprocess
