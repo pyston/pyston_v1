@@ -490,9 +490,10 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     AST* parsed;
     mod_ty mod;
 
+    ArenaWrapper arena;
+
     if (PyAST_Check(source)) {
         int mode;
-        ArenaWrapper arena;
         if (type_str->s() == "exec")
             mode = 0;
         else if (type_str->s() == "eval")
@@ -502,10 +503,12 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         else {
             raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
         }
+        if (only_ast) // nothing to do
+            return source;
+
         mod = PyAST_obj2mod(source, arena, mode);
         if (PyErr_Occurred())
             throwCAPIException();
-        parsed = cpythonToPystonAST(mod, filename_str->c_str());
     } else {
         RELEASE_ASSERT(PyString_Check(source), "");
         int mode;
@@ -521,15 +524,12 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
 
         PyCompilerFlags cf;
         cf.cf_flags = future_flags;
-        ArenaWrapper arena;
         const char* code = static_cast<BoxedString*>(source)->s().data();
         assert(arena);
         const char* fn = filename_str->c_str();
         mod = PyParser_ASTFromString(code, fn, mode, &cf, arena);
         if (!mod)
             throwCAPIException();
-
-        parsed = cpythonToPystonAST(mod, filename_str->c_str());
     }
 
     if (only_ast) {
@@ -539,6 +539,10 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
 
         return result;
     }
+
+    // be careful when moving around this function: it does also do some additional syntax checking (=raises exception),
+    // which we should not do when in AST only mode.
+    parsed = cpythonToPystonAST(mod, filename_str->c_str());
 
     PyCompilerFlags pcf;
     pcf.cf_flags = future_flags;
