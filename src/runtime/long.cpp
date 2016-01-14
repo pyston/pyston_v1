@@ -778,7 +778,7 @@ Box* longInt(Box* v) {
         mpz_init_set(rtn->n, ((BoxedLong*)v)->n);
         return rtn;
     } else
-        return new BoxedInt(n);
+        return boxInt(n);
 }
 
 Box* longToLong(Box* self) {
