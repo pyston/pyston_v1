@@ -2728,7 +2728,7 @@ int64_t hashUnboxed(Box* obj) {
 
 extern "C" BoxedInt* hash(Box* obj) {
     int64_t r = hashUnboxed(obj);
-    return new BoxedInt(r);
+    return (BoxedInt*)boxInt(r);
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
