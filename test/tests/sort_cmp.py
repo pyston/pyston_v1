@@ -1,4 +1,3 @@
-# expected: fail
 # - we don't support the cmp= keyword yet
 # (apparently it's removed in Python 3)
 
@@ -17,4 +16,12 @@ def mycmp(x, y):
 
 l = range(9)
 print l.sort(cmp=mycmp, key=lambda x:x%2, reverse=True)
+print l
+
+l = range(9)
+print l.sort(key = lambda x:x%2, reverse=True)
+print l
+
+l = range(9)
+print l.sort(cmp =mycmp, reverse=True)
 print l

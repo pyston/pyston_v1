@@ -832,19 +832,47 @@ extern "C" int PyList_Reverse(PyObject* v) noexcept {
 class PyCmpComparer {
 private:
     Box* cmp;
+    Box* key;
+    bool reverse;
 
 public:
-    PyCmpComparer(Box* cmp) : cmp(cmp) {}
+    PyCmpComparer(Box* cmp, Box* key, bool isReverse) : cmp(cmp), key(key), reverse(isReverse) {}
     bool operator()(Box* lhs, Box* rhs) {
-        Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
-        if (!PyInt_Check(r))
-            raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
-        return static_cast<BoxedInt*>(r)->n < 0;
+        if (cmp && key) {
+            Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+            Box* lk = runtimeCallInternal<CXX, NOT_REWRITABLE>(key, NULL, ArgPassSpec(1), lhs, NULL, NULL, NULL, NULL);
+            Box* rk = runtimeCallInternal<CXX, NOT_REWRITABLE>(key, NULL, ArgPassSpec(1), rhs, NULL, NULL, NULL, NULL);
+            BoxedInt* lki = static_cast<BoxedInt*>(lk);
+            BoxedInt* rki = static_cast<BoxedInt*>(rk);
+
+            if (!PyInt_Check(r))
+                raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
+
+            if (!PyInt_Check(lk))
+                raiseExcHelper(TypeError, "comparison index must return int, not %.200s", lk->cls->tp_name);
+
+            if (!PyInt_Check(rk))
+                raiseExcHelper(TypeError, "comparison index must return int, not %.200s", rk->cls->tp_name);
+
+            if (lki->n == rki->n)
+                return (static_cast<BoxedInt*>(r)->n < 0) != reverse;
+            else
+                return ((lki->n) < (rki->n)) == reverse;
+        } else if (cmp && !key) {
+            Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+            if (!PyInt_Check(r))
+                raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
+            return (static_cast<BoxedInt*>(r)->n < 0) != reverse;
+        } else {
+            RELEASE_ASSERT(!cmp && key, "Specifying'key' keywords is currently not supported in this scope");
+            return false;
+        }
     }
 };
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     assert(PyList_Check(self));
+    bool isReverse = false;
 
     if (cmp == None)
         cmp = NULL;
@@ -852,15 +880,24 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     if (key == None)
         key = NULL;
 
-    RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
+    if (nonzero(reverse)) {
+        isReverse = true;
+        listReverse(self);
+    }
 
     // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
     // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
     // the current list being sorted.
     // I also don't know if std::stable_sort is exception-safe.
+    if (cmp && key) {
+        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size,
+                                               PyCmpComparer(cmp, key, isReverse));
+        if (isReverse)
+            listReverse(self);
 
-    if (cmp) {
-        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size, PyCmpComparer(cmp));
+    } else if (cmp && !key) {
+        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size,
+                                               PyCmpComparer(cmp, NULL, isReverse));
     } else {
         int num_keys_added = 0;
         auto remove_keys = [&]() {
@@ -897,12 +934,10 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
             remove_keys();
             throw e;
         }
-
         remove_keys();
-    }
 
-    if (nonzero(reverse)) {
-        listReverse(self);
+        if (isReverse)
+            listReverse(self);
     }
 }
 
