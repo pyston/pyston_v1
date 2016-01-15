@@ -27,7 +27,6 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
-#include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/list.h"
@@ -309,7 +308,7 @@ Box* open(Box* arg1, Box* arg2, Box* arg3) {
     assert(arg2);
     assert(arg3);
     // This could be optimized quite a bit if it ends up being important:
-    return runtimeCall(file_cls, ArgPassSpec(3), arg1, arg2, arg3, NULL, NULL);
+    return runtimeCall(&PyFile_Type, ArgPassSpec(3), arg1, arg2, arg3, NULL, NULL);
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -2015,7 +2014,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("xrange", xrange_cls);
 
     open_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)open, typeFromClass(file_cls), 3, false, false,
+        FunctionMetadata::create((void*)open, typeFromClass(&PyFile_Type), 3, false, false,
                                  ParamNames({ "name", "mode", "buffering" }, "", "")),
         "open", { boxString("r"), boxInt(-1) }, NULL, open_doc);
     builtins_module->giveAttr("open", open_obj);
@@ -2078,7 +2077,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("list", list_cls);
     builtins_module->giveAttr("slice", slice_cls);
     builtins_module->giveAttr("type", type_cls);
-    builtins_module->giveAttr("file", file_cls);
+    builtins_module->giveAttr("file", &PyFile_Type);
     builtins_module->giveAttr("bool", bool_cls);
     builtins_module->giveAttr("dict", dict_cls);
     builtins_module->giveAttr("set", set_cls);

@@ -89,6 +89,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     dictproxy.c
     exceptions.c
     floatobject.c
+    fileobject.c
     iterobject.c
     memoryobject.c
     stringobject.c

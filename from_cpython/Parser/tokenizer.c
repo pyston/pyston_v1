@@ -783,7 +783,7 @@ tok_stdin_decode(struct tok_state *tok, char **inp)
     if (sysstdin == NULL || !PyFile_Check(sysstdin))
         return 0;
 
-    enc = PyFile_GetEncoding(sysstdin);
+    enc = ((PyFileObject*)sysstdin)->f_encoding;
     if (enc == NULL || !PyString_Check(enc))
         return 0;
     Py_INCREF(enc);

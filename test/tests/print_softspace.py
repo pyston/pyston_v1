@@ -1,6 +1,3 @@
-# expected: fail
-# - I don't feel like implementing this right now
-
 class C(object):
     def write(self, s):
         print "class write", repr(s)

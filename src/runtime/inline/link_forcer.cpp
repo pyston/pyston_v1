@@ -48,7 +48,6 @@ AST_stmt* _asttmt_forcer;
 
 #define FORCE(name) forceLink((void*)name)
 void force() {
-    FORCE(softspace);
     FORCE(my_assert);
 
     FORCE(boxInt);

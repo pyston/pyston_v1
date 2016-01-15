@@ -179,8 +179,6 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.funcs.allowGLReadPreemption = getFunc((void*)threading::allowGLReadPreemption, "allowGLReadPreemption");
 
-    GET(softspace);
-
     GET(createFunctionFromMetadata);
     GET(getFunctionMetadata);
     GET(createUserClass);

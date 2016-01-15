@@ -1,3 +1,5 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
+
 /* File object implementation */
 
 #define PY_SSIZE_T_CLEAN
@@ -138,7 +140,7 @@ dircheck(PyFileObject* f)
 
 
 static PyObject *
-fill_file_fields(PyFileObject *f, FILE *fp, PyObject *name, char *mode,
+fill_file_fields(PyFileObject *f, FILE *fp, PyObject *name, const char *mode,
                  int (*close)(FILE *))
 {
     assert(name != NULL);
@@ -427,7 +429,9 @@ close_the_file(PyFileObject *f)
     if (local_fp != NULL) {
         local_close = f->f_close;
         if (local_close != NULL && f->unlocked_count > 0) {
-            if (f->ob_refcnt > 0) {
+            // Pyston change:
+            // if (f->ob_refcnt > 0) {
+            if (/*f->ob_refcnt*/ 2 > 0) {
                 PyErr_SetString(PyExc_IOError,
                     "close() called during concurrent "
                     "operation on the same file object.");
@@ -466,7 +470,7 @@ close_the_file(PyFileObject *f)
 }
 
 PyObject *
-PyFile_FromFile(FILE *fp, char *name, char *mode, int (*close)(FILE *))
+PyFile_FromFile(FILE *fp, const char *name, const  char *mode, int (*close)(FILE *))
 {
     PyFileObject *f;
     PyObject *o_name;
@@ -1596,7 +1600,9 @@ PyFile_GetLine(PyObject *f, int n)
                             "EOF when reading a line");
         }
         else if (s[len-1] == '\n') {
-            if (result->ob_refcnt == 1) {
+            // Pyston change:
+            // if (result->ob_refcnt == 1) {
+            if (/*result->ob_refcnt*/ 2 == 1) {
                 if (_PyString_Resize(&result, len-1))
                     return NULL;
             }
@@ -1619,7 +1625,9 @@ PyFile_GetLine(PyObject *f, int n)
                             "EOF when reading a line");
         }
         else if (s[len-1] == '\n') {
-            if (result->ob_refcnt == 1)
+            // Pyston change:
+            // if (result->ob_refcnt == 1)
+            if (/*result->ob_refcnt*/ 2 == 1)
                 PyUnicode_Resize(&result, len-1);
             else {
                 PyObject *v;
@@ -2466,7 +2474,9 @@ PyDoc_STR(
 );
 
 PyTypeObject PyFile_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change:
+    // PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "file",
     sizeof(PyFileObject),
     0,
