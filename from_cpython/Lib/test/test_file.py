@@ -1,4 +1,3 @@
-# expected: fail
 # NOTE: this file tests the new `io` library backported from Python 3.x.
 # Similar tests for the builtin file object can be found in test_file2k.py.
 
@@ -27,6 +26,8 @@ class AutoFileTests(unittest.TestCase):
             self.f.close()
         os.remove(TESTFN)
 
+    # pyston change:
+    @unittest.skip("does not work with GC")
     def testWeakRefs(self):
         # verify weak references
         p = proxy(self.f)
