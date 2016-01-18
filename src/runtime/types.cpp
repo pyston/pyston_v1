@@ -1481,6 +1481,12 @@ void BoxedInstanceMethod::gcHandler(GCVisitor* v, Box* b) {
     v->visit(&im->im_class);
 }
 
+void BoxedGetsetDescriptor::gcHandler(GCVisitor* v, Box* b) {
+    assert(isSubclass(b->cls, pyston_getset_cls) || isSubclass(b->cls, capi_getset_cls));
+    BoxedGetsetDescriptor* descr = static_cast<BoxedGetsetDescriptor*>(b);
+    v->visit(&descr->name);
+}
+
 void BoxedProperty::gcHandler(GCVisitor* v, Box* b) {
     Box::gcHandler(v, b);
 
@@ -3835,8 +3841,8 @@ void setupRuntime() {
                                  sizeof(BoxedSet), false, "set");
     frozenset_cls = BoxedClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
                                        sizeof(BoxedSet), false, "frozenset");
-    capi_getset_cls
-        = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    capi_getset_cls = BoxedClass::create(type_cls, object_cls, &BoxedGetsetDescriptor::gcHandler, 0, 0,
+                                         sizeof(BoxedGetsetDescriptor), false, "getset");
     closure_cls = BoxedClass::create(type_cls, object_cls, &BoxedClosure::gcHandler, 0, 0, sizeof(BoxedClosure), false,
                                      "closure");
     property_cls = BoxedClass::create(type_cls, object_cls, &BoxedProperty::gcHandler, 0, 0, sizeof(BoxedProperty),
