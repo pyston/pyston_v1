@@ -58,3 +58,16 @@ def f2():
     type(hd.x).__get__ = get
     print hd.x
 f2()
+
+def f3():
+    print type(max).__dict__['__name__'].__get__(max, 1)
+    try:
+        type(max).__dict__['__name__'].__set__(max, 1)
+    except AttributeError as e:
+        print e
+    try:
+        type(max).__dict__['__name__'].__delete__(max)
+    except AttributeError as e:
+        print e
+
+f3()

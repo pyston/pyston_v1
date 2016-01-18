@@ -95,6 +95,11 @@ print (1, 2, 3) + ()
 print () + (1, 2, 3)
 print (1, 2) + (2, 3)
 
+try:
+    (1, 2) + "a"
+except TypeError as e:
+    print "adding failed"
+
 ## __new__
 print tuple()
 print tuple((1,3,7,42))

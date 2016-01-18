@@ -176,12 +176,12 @@ void setupFrame() {
     frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
     frame_cls->has_safe_tp_dealloc = true;
 
-    frame_cls->giveAttr("f_code", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::code, NULL, NULL));
-    frame_cls->giveAttr("f_locals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::locals, NULL, NULL));
-    frame_cls->giveAttr("f_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::lineno, NULL, NULL));
+    frame_cls->giveAttrDescriptor("f_code", BoxedFrame::code, NULL);
+    frame_cls->giveAttrDescriptor("f_locals", BoxedFrame::locals, NULL);
+    frame_cls->giveAttrDescriptor("f_lineno", BoxedFrame::lineno, NULL);
 
-    frame_cls->giveAttr("f_globals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::globals, NULL, NULL));
-    frame_cls->giveAttr("f_back", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::back, NULL, NULL));
+    frame_cls->giveAttrDescriptor("f_globals", BoxedFrame::globals, NULL);
+    frame_cls->giveAttrDescriptor("f_back", BoxedFrame::back, NULL);
 
     frame_cls->freeze();
 }
