@@ -217,7 +217,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+    if (attr->data()[0] == '_' && attr->data()[1] == '_') {
         if (attr->s() == "__dict__")
             return cls->getAttrWrapper();
 
@@ -448,7 +448,7 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     // These are special cases in CPython as well:
-    if (attr_str->s()[0] == '_' && attr_str->s()[1] == '_') {
+    if (attr_str->data()[0] == '_' && attr_str->data()[1] == '_') {
         if (attr_str->s() == "__dict__")
             return inst->getAttrWrapper();
 
@@ -510,7 +510,7 @@ Box* instanceSetattroInternal(Box* _inst, Box* _attr, Box* value, SetattrRewrite
     assert(value);
 
     // These are special cases in CPython as well:
-    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+    if (attr->data()[0] == '_' && attr->data()[1] == '_') {
         if (attr->s() == "__dict__")
             Py_FatalError("unimplemented");
 
@@ -571,7 +571,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // These are special cases in CPython as well:
-    if (attr->s()[0] == '_' && attr->s()[1] == '_') {
+    if (attr->data()[0] == '_' && attr->data()[1] == '_') {
         if (attr->s() == "__dict__")
             raiseExcHelper(TypeError, "__dict__ must be set to a dictionary");
 

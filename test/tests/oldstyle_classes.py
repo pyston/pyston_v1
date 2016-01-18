@@ -511,3 +511,19 @@ for i in range(500):
     if i == 150:
         C.__bases__ = tuple()
 print s1, s2
+
+# we used to have problems with this
+for i in range(2):
+    try:
+        C._
+    except AttributeError, e:
+        print e
+    try:
+        C()._
+    except AttributeError, e:
+        print e
+    try:
+        print C()._()
+    except AttributeError, e:
+        print e
+    C._ = (lambda s: 42)
