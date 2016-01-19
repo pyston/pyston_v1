@@ -135,12 +135,25 @@ m = mandelbrot(complex(400),complex(400))
 print m
 """
 
+# this is just a small test which checks if numpy is able to manually create a pyston string
+string_test = """
+import numpy as np
+a = np.array([1, 2**16, 2**32], dtype=int)
+s = a.astype(str)
+print s
+assert repr(s) == "array(['1', '65536', '4294967296'], \n      dtype='|S21')"
+"""
+
 numpy_test = "import numpy as np; np.test(verbose=2)"
 
 print_progress_header("Running NumPy linear algebra test...")
 subprocess.check_call([PYTHON_EXE, "-c", script], cwd=CYTHON_DIR)
 
 print_progress_header("Running NumPy mandelbrot test...")
+subprocess.check_call([PYTHON_EXE, "-c", mandelbrot], cwd=CYTHON_DIR)
+
+
+print_progress_header("Running NumPy str test...")
 subprocess.check_call([PYTHON_EXE, "-c", mandelbrot], cwd=CYTHON_DIR)
 
 print_progress_header("Running NumPy test suite...")

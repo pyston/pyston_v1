@@ -3402,13 +3402,13 @@ extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
-    ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
-
     // if this type is already in ready state we are finished.
     if (cls->tp_flags & Py_TPFLAGS_READY) {
         assert(cls->tp_dict != NULL);
         return 0;
     }
+
+    ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
     gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
 
