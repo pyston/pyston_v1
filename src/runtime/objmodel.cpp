@@ -5726,6 +5726,8 @@ Box* getiter(Box* o) {
     Box* r = NULL;
     if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_ITER) && type->tp_iter != slot_tp_iter && type->tp_iter) {
         r = type->tp_iter(o);
+        if (!r && PyErr_Occurred())
+            throwCAPIException();
     } else {
         r = type->callIterIC(o);
     }
