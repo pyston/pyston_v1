@@ -171,8 +171,8 @@ extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {
 }
 
 void setupFrame() {
-    frame_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false, "frame");
+    frame_cls = BoxedClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false,
+                                   "frame", false);
     frame_cls->tp_dealloc = BoxedFrame::simpleDestructor;
     frame_cls->has_safe_tp_dealloc = true;
 

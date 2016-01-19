@@ -399,7 +399,7 @@ void BoxedClass::freeze() {
 }
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
-                       int instance_size, bool is_user_defined, const char* name)
+                       int instance_size, bool is_user_defined, const char* name, bool is_subclassable)
     : attrs(HiddenClass::makeSingleton()),
       gc_visit(gc_visit),
       attrs_offset(attrs_offset),
@@ -418,7 +418,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 
     tp_flags |= Py_TPFLAGS_DEFAULT_CORE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
-    tp_flags |= Py_TPFLAGS_BASETYPE;
+    if (is_subclassable)
+        tp_flags |= Py_TPFLAGS_BASETYPE;
     tp_flags |= Py_TPFLAGS_HAVE_GC;
 
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
@@ -496,10 +497,11 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 }
 
 BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                               int weaklist_offset, int instance_size, bool is_user_defined, const char* name) {
+                               int weaklist_offset, int instance_size, bool is_user_defined, const char* name,
+                               bool is_subclassable) {
     assert(!is_user_defined);
-    BoxedClass* made = new (metaclass, 0)
-        BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
+    BoxedClass* made = new (metaclass, 0) BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size,
+                                                     is_user_defined, name, is_subclassable);
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:

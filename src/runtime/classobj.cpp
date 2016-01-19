@@ -1642,10 +1642,12 @@ extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
 }
 
 void setupClassobj() {
-    classobj_cls = BoxedClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
-                                      offsetof(BoxedClassobj, weakreflist), sizeof(BoxedClassobj), false, "classobj");
-    instance_cls = BoxedClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
-                                      offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
+    classobj_cls
+        = BoxedClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
+                             offsetof(BoxedClassobj, weakreflist), sizeof(BoxedClassobj), false, "classobj", false);
+    instance_cls
+        = BoxedClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
+                             offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance", false);
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(FunctionMetadata::create((void*)classobjNew, UNKNOWN, 4, false, false)));

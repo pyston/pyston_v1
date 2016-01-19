@@ -116,7 +116,8 @@ extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
 }
 
 void setupCode() {
-    code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
+    code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code",
+                                  false);
 
     code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
 

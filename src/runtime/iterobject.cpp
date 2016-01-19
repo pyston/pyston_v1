@@ -210,7 +210,7 @@ llvm_compat_bool calliterHasnextUnboxed(Box* b) {
 
 void setupIter() {
     seqiter_cls = BoxedClass::create(type_cls, object_cls, &BoxedSeqIter::gcHandler, 0, 0, sizeof(BoxedSeqIter), false,
-                                     "iterator");
+                                     "iterator", false);
 
     seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__",

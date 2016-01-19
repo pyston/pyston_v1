@@ -292,10 +292,11 @@ public:
 
     // These should only be used for builtin types:
     static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                              int weaklist_offset, int instance_size, bool is_user_defined, const char* name);
+                              int weaklist_offset, int instance_size, bool is_user_defined, const char* name,
+                              bool is_subclassable = true);
 
     BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
-               bool is_user_defined, const char* name);
+               bool is_user_defined, const char* name, bool is_subclassable = true);
 
 
     DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));

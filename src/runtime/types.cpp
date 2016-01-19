@@ -3705,17 +3705,17 @@ void setupRuntime() {
                                   sizeof(BoxedFile), false, "file");
     int_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false, "int");
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    bool_cls = new (0) BoxedClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, "bool");
+    bool_cls = new (0) BoxedClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, "bool", false);
     complex_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false, "complex");
     long_cls = new (0) BoxedClass(object_cls, &BoxedLong::gchandler, 0, 0, sizeof(BoxedLong), false, "long");
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new (0) BoxedClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false, "float");
     function_cls = new (0)
         BoxedClass(object_cls, &BoxedFunction::gcHandler, offsetof(BoxedFunction, attrs),
-                   offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false, "function");
+                   offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false, "function", false);
     builtin_function_or_method_cls = new (0)
         BoxedClass(object_cls, &BoxedFunction::gcHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
-                   sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
+                   sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method", false);
     function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
@@ -3833,10 +3833,10 @@ void setupRuntime() {
 
     instancemethod_cls = BoxedClass::create(type_cls, object_cls, &BoxedInstanceMethod::gcHandler, 0,
                                             offsetof(BoxedInstanceMethod, in_weakreflist), sizeof(BoxedInstanceMethod),
-                                            false, "instancemethod");
+                                            false, "instancemethod", false);
 
-    slice_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedSlice::gcHandler, 0, 0, sizeof(BoxedSlice), false, "slice");
+    slice_cls = BoxedClass::create(type_cls, object_cls, &BoxedSlice::gcHandler, 0, 0, sizeof(BoxedSlice), false,
+                                   "slice", false);
     set_cls = BoxedClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
                                  sizeof(BoxedSet), false, "set");
     frozenset_cls = BoxedClass::create(type_cls, object_cls, &BoxedSet::gcHandler, 0, offsetof(BoxedSet, weakreflist),
@@ -4036,7 +4036,6 @@ void setupRuntime() {
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, step)));
     slice_cls->freeze();
     slice_cls->tp_compare = (cmpfunc)slice_compare;
-    slice_cls->tp_flags &= ~Py_TPFLAGS_BASETYPE;
 
     static PyMappingMethods attrwrapper_as_mapping;
     attrwrapper_cls->tp_as_mapping = &attrwrapper_as_mapping;

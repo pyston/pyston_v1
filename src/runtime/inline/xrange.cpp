@@ -243,9 +243,9 @@ Box* xrangeReduce(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange");
+    xrange_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange", false);
     xrange_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedXrangeIterator::gcHandler, 0, 0,
-                                             sizeof(BoxedXrangeIterator), false, "rangeiterator");
+                                             sizeof(BoxedXrangeIterator), false, "rangeiterator", false);
 
     static PySequenceMethods xrange_as_sequence;
     xrange_cls->tp_as_sequence = &xrange_as_sequence;
