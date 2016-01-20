@@ -415,7 +415,7 @@ extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->n + rhs->d);
 }
 
@@ -426,7 +426,7 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return add_i64_i64(lhs->n, rhs_int->n);
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
     } else {
@@ -541,7 +541,7 @@ extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
 
     if (rhs->d == 0) {
         raiseExcHelper(ZeroDivisionError, "float divide by zero");
@@ -555,7 +555,7 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return NotImplemented;
@@ -582,7 +582,7 @@ extern "C" Box* intFloordivInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
 
     if (rhs->d == 0) {
         raiseExcHelper(ZeroDivisionError, "float divide by zero");
@@ -597,7 +597,7 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return NotImplemented;
@@ -628,7 +628,7 @@ extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
 
     if (rhs->d == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -643,7 +643,7 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intTruedivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return NotImplemented;
@@ -683,7 +683,7 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs->cls == long_cls)
+    if (PyLong_Check(rhs))
         return longLShiftLong(boxLong(lhs->n), rhs);
 
     if (!PyInt_Check(rhs)) {
@@ -775,7 +775,7 @@ extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->n * rhs->d);
 }
 
@@ -786,7 +786,7 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intMulInt(lhs, rhs_int);
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intMulFloat(lhs, rhs_float);
     } else {
@@ -824,7 +824,7 @@ extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
 
     if (mod != None) {
         raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
@@ -892,7 +892,7 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs->cls == long_cls)
+    if (PyLong_Check(rhs))
         return longRShiftLong(boxLong(lhs->n), rhs);
 
     if (!PyInt_Check(rhs)) {
@@ -922,7 +922,7 @@ extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(PyInt_Check(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->n - rhs->d);
 }
 
@@ -933,7 +933,7 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intSubInt(lhs, rhs_int);
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intSubFloat(lhs, rhs_float);
     } else {

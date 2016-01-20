@@ -115,24 +115,24 @@ extern "C" double floordiv_float_float(double lhs, double rhs) {
 }
 
 extern "C" Box* floatAddFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->d + rhs->d);
 }
 
 extern "C" Box* floatAddInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(lhs->d + rhs->n);
 }
 
 extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatAddInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatAddFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -144,26 +144,26 @@ extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     raiseDivZeroExcIfZero(rhs->d);
     return boxFloat(lhs->d / rhs->d);
 }
 
 extern "C" Box* floatDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(lhs->d / rhs->n);
 }
 
 extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -175,12 +175,12 @@ extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -192,26 +192,26 @@ extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatRDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     raiseDivZeroExcIfZero(lhs->d);
     return boxFloat(rhs->d / lhs->d);
 }
 
 extern "C" Box* floatRDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(lhs->d);
     return boxFloat(rhs->n / lhs->d);
 }
 
 extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatRDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatRDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -245,26 +245,26 @@ Box* floatRTruediv(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatFloorDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     raiseDivZeroExcIfZero(rhs->d);
     return boxFloat(floor(lhs->d / rhs->d));
 }
 
 extern "C" Box* floatFloorDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(floor(lhs->d / rhs->n));
 }
 
 extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatFloorDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatFloorDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -276,16 +276,16 @@ extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatRFloorDiv(BoxedFloat* lhs, Box* _rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(_rhs)) {
         BoxedInt* rhs = (BoxedInt*)_rhs;
         raiseDivZeroExcIfZero(lhs->d);
         return boxFloat(floor(rhs->n / lhs->d));
-    } else if (_rhs->cls == float_cls) {
+    } else if (PyFloat_Check(_rhs)) {
         BoxedFloat* rhs = (BoxedFloat*)_rhs;
         raiseDivZeroExcIfZero(lhs->d);
         return boxFloat(floor(rhs->d / lhs->d));
-    } else if (_rhs->cls == long_cls) {
+    } else if (PyLong_Check(_rhs)) {
         double rhs_f = PyLong_AsDouble(_rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -599,24 +599,24 @@ extern "C" Box* floatGt(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(mod_float_float(lhs->d, rhs->d));
 }
 
 extern "C" Box* floatModInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(mod_float_float(lhs->d, rhs->n));
 }
 
 extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatModInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatModFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -628,24 +628,24 @@ extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatRModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(mod_float_float(rhs->d, lhs->d));
 }
 
 extern "C" Box* floatRModInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(mod_float_float(rhs->n, lhs->d));
 }
 
 extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatRModInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatRModFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -690,14 +690,14 @@ extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
 
 extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None) {
     // TODO to specialize this, need to account for all the special cases in float_pow
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return floatPow(lhs, rhs, mod);
 }
 
 extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
     // TODO to specialize this, need to account for all the special cases in float_pow
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return floatPow(lhs, rhs, mod);
 }
@@ -725,24 +725,24 @@ extern "C" double pow_float_float(double lhs, double rhs) {
 }
 
 extern "C" Box* floatMulFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->d * rhs->d);
 }
 
 extern "C" Box* floatMulInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(lhs->d * rhs->n);
 }
 
 extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatMulInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatMulFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -754,24 +754,24 @@ extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(lhs->d - rhs->d);
 }
 
 extern "C" Box* floatSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(lhs->d - rhs->n);
 }
 
 extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatSubInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -783,24 +783,24 @@ extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
 }
 
 extern "C" Box* floatRSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == float_cls);
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
+    assert(PyFloat_Check(rhs));
     return boxFloat(rhs->d - lhs->d);
 }
 
 extern "C" Box* floatRSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
     return boxFloat(rhs->n - lhs->d);
 }
 
 extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
-    assert(lhs->cls == float_cls);
+    assert(PyFloat_Check(lhs));
     if (PyInt_Check(rhs)) {
         return floatRSubInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
+    } else if (PyFloat_Check(rhs)) {
         return floatRSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
+    } else if (PyLong_Check(rhs)) {
         double rhs_f = PyLong_AsDouble(rhs);
         if (rhs_f == -1.0 && PyErr_Occurred()) {
             throwCAPIException();
@@ -812,12 +812,12 @@ extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
 }
 
 Box* floatNeg(BoxedFloat* self) {
-    assert(self->cls == float_cls);
+    assert(PyFloat_Check(self));
     return boxFloat(-self->d);
 }
 
 Box* floatPos(BoxedFloat* self) {
-    assert(self->cls == float_cls);
+    assert(PyFloat_Check(self));
     return PyFloat_FromDouble(self->d);
 }
 
@@ -830,7 +830,7 @@ Box* floatAbs(BoxedFloat* self) {
 }
 
 bool floatNonzeroUnboxed(BoxedFloat* self) {
-    assert(self->cls == float_cls);
+    assert(PyFloat_Check(self));
     return self->d != 0.0;
 }
 
@@ -1115,18 +1115,18 @@ extern "C" void printFloat(double d) {
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,
                      void* boxed_func) {
-    std::vector<ConcreteCompilerType*> v_ff, v_fi, v_fu;
+    std::vector<ConcreteCompilerType*> v_ff, v_fi, v_uu;
     v_ff.push_back(BOXED_FLOAT);
     v_ff.push_back(BOXED_FLOAT);
     v_fi.push_back(BOXED_FLOAT);
     v_fi.push_back(BOXED_INT);
-    v_fu.push_back(BOXED_FLOAT);
-    v_fu.push_back(UNKNOWN);
+    v_uu.push_back(UNKNOWN);
+    v_uu.push_back(UNKNOWN);
 
     FunctionMetadata* md = new FunctionMetadata(2, false, false);
     md->addVersion(float_func, rtn_type, v_ff);
     md->addVersion(int_func, rtn_type, v_fi);
-    md->addVersion(boxed_func, UNKNOWN, v_fu);
+    md->addVersion(boxed_func, UNKNOWN, v_uu);
     float_cls->giveAttr(name, new BoxedFunction(md));
 }
 
