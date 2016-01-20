@@ -666,7 +666,7 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
                 return NULL;
             }
 
-            if (val == None) {
+            if (val == NULL) {
                 PyErr_SetString(PyExc_TypeError, "long() missing string argument");
                 return NULL;
             }
@@ -679,7 +679,7 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
             if (!PyInt_Check(_base))
                 raiseExcHelper(TypeError, "integer argument expected, got %s", getTypeName(_base));
 
-            if (val == None)
+            if (val == NULL)
                 raiseExcHelper(TypeError, "long() missing string argument");
 
             if (!PyString_Check(val) && !PyUnicode_Check(val))
@@ -687,7 +687,7 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
         }
         base = static_cast<BoxedInt*>(_base)->n;
     } else {
-        if (val == None)
+        if (val == NULL)
             return PyLong_FromLong(0L);
 
         Box* r = PyNumber_Long(val);
@@ -1647,7 +1647,7 @@ void setupLong() {
     auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,
                                              ParamNames({ "", "x", "base" }, "", ""), CXX);
     long_new->addVersion((void*)longNew<CAPI>, UNKNOWN, CAPI);
-    long_cls->giveAttr("__new__", new BoxedFunction(long_new, { boxInt(0), NULL }));
+    long_cls->giveAttr("__new__", new BoxedFunction(long_new, { NULL, NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));

@@ -951,11 +951,10 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
         if (!r) {
             if (S == CAPI) {
                 if (!PyErr_Occurred())
-                    PyErr_Format(TypeError, "float() argument must be a string or a number, not '%s'\n",
-                                 getTypeName(a));
+                    PyErr_SetString(PyExc_TypeError, "float() argument must be a string or a number");
                 return NULL;
             } else {
-                raiseExcHelper(TypeError, "float() argument must be a string or a number, not '%s'\n", getTypeName(a));
+                raiseExcHelper(TypeError, "float() argument must be a string or a number");
             }
         }
 
