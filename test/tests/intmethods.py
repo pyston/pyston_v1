@@ -64,6 +64,10 @@ print type(int(2L))
 print type(int.__new__(int, 2**100))
 print type(int.__new__(int, 2L))
 try:
+    print int(None)
+except TypeError, e:
+    print e
+try:
     print type(int.__new__(C, 2**100))
 except OverflowError, e:
     print e
