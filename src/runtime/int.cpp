@@ -1129,7 +1129,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
                 return NULL;
             }
 
-            if (val == None) {
+            if (val == NULL) {
                 PyErr_SetString(PyExc_TypeError, "int() missing string argument");
                 return NULL;
             }
@@ -1142,7 +1142,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
             if (!PyInt_Check(_base))
                 raiseExcHelper(TypeError, "an integer is required");
 
-            if (val == None)
+            if (val == NULL)
                 raiseExcHelper(TypeError, "int() missing string argument");
 
             if (!PyString_Check(val) && !PyUnicode_Check(val))
@@ -1150,7 +1150,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
         }
         base = static_cast<BoxedInt*>(_base)->n;
     } else {
-        if (val == None)
+        if (val == NULL)
             return PyInt_FromLong(0L);
 
         Box* r = PyNumber_Int(val);
@@ -1441,7 +1441,7 @@ void setupInt() {
     auto int_new = FunctionMetadata::create((void*)intNew<CXX>, UNKNOWN, 3, false, false,
                                             ParamNames({ "", "x", "base" }, "", ""), CXX);
     int_new->addVersion((void*)intNew<CAPI>, UNKNOWN, CAPI);
-    int_cls->giveAttr("__new__", new BoxedFunction(int_new, { None, NULL }));
+    int_cls->giveAttr("__new__", new BoxedFunction(int_new, { NULL, NULL }));
 
 
     int_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)intBitLength, BOXED_INT, 1)));
