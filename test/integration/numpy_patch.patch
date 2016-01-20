@@ -1,26 +1,3 @@
-diff --git a/numpy/__init__.py b/numpy/__init__.py
-index d4ef54d..7a49dbd 100644
---- a/numpy/__init__.py
-+++ b/numpy/__init__.py
-@@ -196,7 +196,7 @@ else:
-     from . import linalg
-     from . import fft
-     from . import polynomial
--    from . import random
-+    # from . import random
-     from . import ctypeslib
-     from . import ma
-     from . import matrixlib as _mat
-@@ -218,7 +218,8 @@ else:
-     __all__.extend(core.__all__)
-     __all__.extend(_mat.__all__)
-     __all__.extend(lib.__all__)
--    __all__.extend(['linalg', 'fft', 'random', 'ctypeslib', 'ma'])
-+    __all__.extend(['linalg', 'fft', 'ctypeslib', 'ma'])
-+    # __all__.extend(['linalg', 'fft', 'random', 'ctypeslib', 'ma'])
- 
-     # Filter annoying Cython warnings that serve no good purpose.
-     import warnings
 diff --git a/numpy/core/include/numpy/ndarrayobject.h b/numpy/core/include/numpy/ndarrayobject.h
 index fbaaeac..cb4adbb 100644
 --- a/numpy/core/include/numpy/ndarrayobject.h
@@ -193,20 +170,6 @@ index 7797731..93edc66 100644
      return NULL;
  }
  
-diff --git a/numpy/core/tests/test_function_base.py b/numpy/core/tests/test_function_base.py
-index 2df7ba3..88fac0a 100644
---- a/numpy/core/tests/test_function_base.py
-+++ b/numpy/core/tests/test_function_base.py
-@@ -113,7 +113,8 @@ class TestLinspace(TestCase):
- 
-         a = PhysicalQuantity(0.0)
-         b = PhysicalQuantity(1.0)
--        assert_equal(linspace(a, b), linspace(0.0, 1.0))
-+        # TODO: Need to support operations on inherited floats like divide.
-+        # assert_equal(linspace(a, b), linspace(0.0, 1.0))
- 
-     def test_denormal_numbers(self):
-         # Regression test for gh-5437. Will probably fail when compiled
 diff --git a/numpy/core/tests/test_records.py b/numpy/core/tests/test_records.py
 index 7a18f29..a8d4e4b 100644
 --- a/numpy/core/tests/test_records.py
@@ -282,40 +245,3 @@ index dba74d3..23cfeed 100644
  
      def test_masked_array_repeat(self, level=rlevel):
          # Ticket #271
-diff --git a/numpy/random/setup.py b/numpy/random/setup.py
-index 9d90590..b3ee24f 100644
---- a/numpy/random/setup.py
-+++ b/numpy/random/setup.py
-@@ -39,18 +39,6 @@ def configuration(parent_package='',top_path=None):
- 
-     libs = []
-     # Configure mtrand
--    config.add_extension('mtrand',
--                         sources=[join('mtrand', x) for x in
--                                  ['mtrand.c', 'randomkit.c', 'initarray.c',
--                                   'distributions.c']]+[generate_libraries],
--                         libraries=libs,
--                         depends=[join('mtrand', '*.h'),
--                                  join('mtrand', '*.pyx'),
--                                  join('mtrand', '*.pxi'),],
--                         define_macros=defs,
--                         )
--
--    config.add_data_files(('.', join('mtrand', 'randomkit.h')))
-     config.add_data_dir('tests')
- 
-     return config
-diff --git a/setup.py b/setup.py
-index 90dcb24..943851a 100755
---- a/setup.py
-+++ b/setup.py
-@@ -245,7 +245,8 @@ def setup_package():
-         cwd = os.path.abspath(os.path.dirname(__file__))
-         if not os.path.exists(os.path.join(cwd, 'PKG-INFO')):
-             # Generate Cython sources, unless building from source release
--            generate_cython()
-+            # generate_cython()
-+            pass
-         metadata['configuration'] = configuration
- 
-     try:
