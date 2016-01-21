@@ -838,82 +838,6 @@ Box* floatNonzero(BoxedFloat* self) {
     return boxBool(floatNonzeroUnboxed(self));
 }
 
-std::string floatFmt(double x, int precision, char code) {
-    char fmt[5] = "%.*g";
-    fmt[3] = code;
-
-    if (isnan(x)) {
-        return "nan";
-    }
-    if (isinf(x)) {
-        if (x > 0)
-            return "inf";
-        return "-inf";
-    }
-
-    char buf[40];
-    int n = snprintf(buf, 40, fmt, precision, x);
-
-    int dot = -1;
-    int exp = -1;
-    int first = -1;
-    for (int i = 0; i < n; i++) {
-        char c = buf[i];
-        if (c == '.') {
-            dot = i;
-        } else if (c == 'e') {
-            exp = i;
-        } else if (first == -1 && c >= '0' && c <= '9') {
-            first = i;
-        }
-    }
-
-    if (dot == -1 && exp == -1) {
-        if (n == precision) {
-            memmove(buf + first + 2, buf + first + 1, (n - first - 1));
-            buf[first + 1] = '.';
-            exp = n + 1;
-            int exp_digs = snprintf(buf + n + 1, 5, "e%+.02d", (n - first - 1));
-            n += exp_digs + 1;
-            dot = 1;
-        } else {
-            buf[n] = '.';
-            buf[n + 1] = '0';
-            n += 2;
-
-            return std::string(buf, n);
-        }
-    }
-
-    if (exp != -1 && dot == -1) {
-        return std::string(buf, n);
-    }
-
-    assert(dot != -1);
-
-    int start, end;
-    if (exp) {
-        start = exp - 1;
-        end = dot;
-    } else {
-        start = n - 1;
-        end = dot + 2;
-    }
-    for (int i = start; i >= end; i--) {
-        if (buf[i] == '0') {
-            memmove(buf + i, buf + i + 1, n - i - 1);
-            n--;
-        } else if (buf[i] == '.') {
-            memmove(buf + i, buf + i + 1, n - i - 1);
-            n--;
-            break;
-        } else {
-            break;
-        }
-    }
-    return std::string(buf, n);
-}
-
 template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == CAPI) {
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
@@ -1105,11 +1029,6 @@ Box* floatHash(BoxedFloat* self) {
                        getTypeName(self));
 
     return boxInt(_Py_HashDouble(self->d));
-}
-
-extern "C" void printFloat(double d) {
-    std::string s = floatFmt(d, 12, 'g');
-    printf("%s", s.c_str());
 }
 
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,

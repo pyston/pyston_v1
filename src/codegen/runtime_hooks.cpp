@@ -241,7 +241,6 @@ void initGlobalFuncs(GlobalState& g) {
     GET(printExprHelper);
     GET(printHelper);
 
-    GET(printFloat);
     GET(listAppendInternal);
     GET(getSysStdout);
 
