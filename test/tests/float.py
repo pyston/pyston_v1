@@ -37,11 +37,14 @@ print type(F2(D(F())))
 
 print type(float(F()))
 
-try:
-    f = float("hello world")
-    print f
-except ValueError as e:
-    print e
+for a in ["hello world", None]:
+    try:
+        f = float(a)
+        print f
+    except ValueError as e:
+        print "ValueError", e
+    except TypeError as e:
+        print "TypeError", e
 
 try:
     f = float("5 hello world")

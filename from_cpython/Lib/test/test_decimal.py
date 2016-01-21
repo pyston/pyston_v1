@@ -1,4 +1,3 @@
-# expected: fail
 # Copyright (c) 2004 Python Software Foundation.
 # All rights reserved.
 
@@ -32,9 +31,8 @@ import pickle, copy
 import unittest
 from decimal import *
 import numbers
-from test.test_support import (run_unittest, run_doctest, requires_unicode, u,
-                               is_resource_enabled, check_py3k_warnings,
-                               run_with_locale)
+from test.test_support import (run_unittest, run_doctest,
+                               is_resource_enabled, check_py3k_warnings)
 import random
 try:
     import threading
@@ -597,12 +595,11 @@ class DecimalExplicitConstructionTest(unittest.TestCase):
         d = nc.create_decimal(prevdec)
         self.assertEqual(str(d), '5.00E+8')
 
-    @requires_unicode
     def test_unicode_digits(self):
         test_values = {
-            u(r'\uff11'): '1',
-            u(r'\u0660.\u0660\u0663\u0667\u0662e-\u0663') : '0.0000372',
-            u(r'-nan\u0c68\u0c6a\u0c66\u0c66') : '-NaN2400',
+            u'\uff11': '1',
+            u'\u0660.\u0660\u0663\u0667\u0662e-\u0663' : '0.0000372',
+            u'-nan\u0c68\u0c6a\u0c66\u0c66' : '-NaN2400',
             }
         for input, expected in test_values.items():
             self.assertEqual(str(Decimal(input)), expected)
@@ -826,11 +823,6 @@ class DecimalFormatTest(unittest.TestCase):
 
             # issue 6850
             ('a=-7.0', '0.12345', 'aaaa0.1'),
-
-            # issue 22090
-            ('<^+15.20%', 'inf', '<<+Infinity%<<<'),
-            ('\x07>,%', 'sNaN1234567', 'sNaN1234567%'),
-            ('=10.10%', 'NaN123', '   NaN123%'),
             ]
         for fmt, d, result in test_values:
             self.assertEqual(format(Decimal(d), fmt), result)
@@ -906,23 +898,6 @@ class DecimalFormatTest(unittest.TestCase):
         self.assertEqual(get_fmt(123456, crazy, '011n'), '0-01-2345-6')
         self.assertEqual(get_fmt(123456, crazy, '012n'), '00-01-2345-6')
         self.assertEqual(get_fmt(123456, crazy, '013n'), '000-01-2345-6')
-
-    @run_with_locale('LC_ALL', 'ps_AF.UTF-8')
-    def test_wide_char_separator_decimal_point(self):
-        # locale with wide char separator and decimal point
-        import locale
-
-        decimal_point = locale.localeconv()['decimal_point']
-        thousands_sep = locale.localeconv()['thousands_sep']
-        if decimal_point != '\xd9\xab':
-            self.skipTest('inappropriate decimal point separator'
-                          '({!r} not {!r})'.format(decimal_point, '\xd9\xab'))
-        if thousands_sep != '\xd9\xac':
-            self.skipTest('inappropriate thousands separator'
-                          '({!r} not {!r})'.format(thousands_sep, '\xd9\xac'))
-
-        self.assertEqual(format(Decimal('100000000.123'), 'n'),
-                         '100\xd9\xac000\xd9\xac000\xd9\xab123')
 
 
 class DecimalArithmeticOperatorsTest(unittest.TestCase):
@@ -1683,10 +1658,9 @@ class DecimalPythonAPItests(unittest.TestCase):
 
     def test_pickle(self):
         d = Decimal('-3.141590000')
-        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-            p = pickle.dumps(d, proto)
-            e = pickle.loads(p)
-            self.assertEqual(d, e)
+        p = pickle.dumps(d)
+        e = pickle.loads(p)
+        self.assertEqual(d, e)
 
     def test_int(self):
         for x in range(-250, 250):
@@ -1770,13 +1744,12 @@ class DecimalPythonAPItests(unittest.TestCase):
 class ContextAPItests(unittest.TestCase):
 
     def test_pickle(self):
-        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-            c = Context()
-            e = pickle.loads(pickle.dumps(c, proto))
-            for k in vars(c):
-                v1 = vars(c)[k]
-                v2 = vars(e)[k]
-                self.assertEqual(v1, v2)
+        c = Context()
+        e = pickle.loads(pickle.dumps(c))
+        for k in vars(c):
+            v1 = vars(c)[k]
+            v2 = vars(e)[k]
+            self.assertEqual(v1, v2)
 
     def test_equality_with_other_types(self):
         self.assertIn(Decimal(10), ['a', 1.0, Decimal(10), (1,2), {}])
@@ -2298,7 +2271,7 @@ class ContextFlags(unittest.TestCase):
                                   "operation raises different flags depending on flags set: " +
                                   "expected %s, got %s" % (expected_flags, new_flags))
 
-def test_main(arith=None, verbose=None, todo_tests=None, debug=None):
+def test_main(arith=False, verbose=None, todo_tests=None, debug=None):
     """ Execute the tests.
 
     Runs all arithmetic tests if arith is True or if the "decimal" resource
@@ -2307,7 +2280,7 @@ def test_main(arith=None, verbose=None, todo_tests=None, debug=None):
 
     init()
     global TEST_ALL, DEBUG
-    TEST_ALL = arith if arith is not None else is_resource_enabled('decimal')
+    TEST_ALL = arith or is_resource_enabled('decimal')
     DEBUG = debug
 
     if todo_tests is None:

@@ -2190,9 +2190,14 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
                         assert(!rtn);
                         rtn = rewriter->loadConst(0, Location::forArg(1));
                     }
-                    rewriter->call(true, (void*)NoexcHelper::call, rtn, rewriter->getArg(0),
-                                   rewriter->loadConst((intptr_t)attr, Location::forArg(2)));
-                    return_convention = (S == CXX) ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN;
+                    if (S == CXX && return_convention == ReturnConvention::CAPI_RETURN) {
+                        rewriter->checkAndThrowCAPIException(rtn);
+                        return_convention = ReturnConvention::HAS_RETURN;
+                    } else {
+                        rewriter->call(true, (void*)NoexcHelper::call, rtn, rewriter->getArg(0),
+                                       rewriter->loadConst((intptr_t)attr, Location::forArg(2)));
+                        return_convention = (S == CXX) ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN;
+                    }
                 }
             }
 

@@ -170,7 +170,6 @@ extern "C" Box* createDict();
 extern "C" Box* createList();
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step);
 extern "C" Box* createTuple(int64_t nelts, Box** elts);
-extern "C" void printFloat(double d);
 
 Box* objectStr(Box*);
 Box* objectRepr(Box*);
