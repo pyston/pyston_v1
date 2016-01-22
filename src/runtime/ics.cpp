@@ -168,7 +168,7 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
     int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
 
     int64_t offset = (int8_t*)func_addr - (int8_t*)offset_ptr;
-    assert(offset >= INT_MIN && offset <= INT_MAX);
+    RELEASE_ASSERT(offset >= INT_MIN && offset <= INT_MAX, "");
     *offset_ptr = offset;
 
     assert(func_size <= UINT_MAX);

@@ -3251,7 +3251,7 @@ static Box* typeName(Box* b, void*) {
 }
 
 static void typeSetName(Box* b, Box* v, void*) {
-    assert(b->cls == type_cls);
+    assert(PyType_Check(b));
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
     // Awkward... in CPython you can only set __name__ for heaptype classes
