@@ -3913,6 +3913,7 @@ void setupRuntime() {
     none_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->giveAttr("__doc__", None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
+    none_cls->tp_new = NULL; // don't allow creating instances
     none_cls->freeze();
     none_cls->tp_repr = none_repr;
 
