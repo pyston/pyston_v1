@@ -35,3 +35,11 @@ def n(s):
     return str(s).replace(".pyc", ".py")
 
 print n(m), n(m.__name__), n(m.__file__), hasattr(m, "__path__")
+
+import sys, types
+name = "json"
+m = sys.modules[name] = types.ModuleType(name)
+print sorted(dir(m))
+s = imp.find_module(name)
+m = imp.load_module(name, *s)
+print name in m.__file__, sorted(dir(m))
