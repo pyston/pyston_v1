@@ -4171,21 +4171,24 @@ BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) {
 
     BoxedDict* d = getSysModulesDict();
 
+    BoxedModule* module = NULL;
+
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
     Box* existing = d->getOrNull(name);
     if (existing && PyModule_Check(existing)) {
-        return static_cast<BoxedModule*>(existing);
+        module = static_cast<BoxedModule*>(existing);
+    } else {
+        module = new BoxedModule();
+        moduleInit(module, name, boxString(doc ? doc : ""));
+        d->d[name] = module;
     }
 
-    BoxedModule* module = new BoxedModule();
-    moduleInit(module, name, boxString(doc ? doc : ""));
     if (fn)
-        module->giveAttr("__file__", boxString(fn));
+        module->setattr(internStringMortal("__file__"), boxString(fn), NULL);
 
-    d->d[name] = module;
     if (name->s() == "__main__")
-        module->giveAttr("__builtins__", builtins_module);
+        module->setattr(internStringMortal("__builtins__"), builtins_module, NULL);
     return module;
 }
 
