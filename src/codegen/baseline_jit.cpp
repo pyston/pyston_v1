@@ -29,6 +29,25 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+// GDB JIT API
+extern "C" {
+typedef enum { JIT_NOACTION = 0, JIT_REGISTER_FN, JIT_UNREGISTER_FN } jit_actions_t;
+struct jit_code_entry {
+    struct jit_code_entry* next_entry;
+    struct jit_code_entry* prev_entry;
+    const char* symfile_addr;
+    uint64_t symfile_size;
+};
+struct jit_descriptor {
+    uint32_t version;
+    uint32_t action_flag;
+    struct jit_code_entry* relevant_entry;
+    struct jit_code_entry* first_entry;
+};
+void __attribute__((noinline)) __jit_debug_register_code();
+extern struct jit_descriptor __jit_debug_descriptor;
+}
+
 namespace pyston {
 
 static llvm::DenseSet<CFGBlock*> blocks_aborted;
@@ -91,7 +110,19 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     registerDynamicEhFrame((uint64_t)code.get(), code_size, (uint64_t)eh_frame_addr, size - 4);
     registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 
-    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code.get(), code_size, NULL);
+    std::string sym_name = ("bjit_" + name).str();
+    for (char& c : sym_name) {
+        if (!isalnum(c))
+            c = '_';
+    }
+    g.func_addr_registry.registerFunction(sym_name.c_str(), code.get(), code_size, NULL);
+
+
+#if 1
+    // Tell GDB the function name and EH table of the jited function
+    // WARNING: this is extremely slow and should only be used for debugging.
+    registerFunctionWithGDB(sym_name);
+#endif
 }
 
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
@@ -128,6 +159,60 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
     is_currently_writing = false;
 }
 
+void JitCodeBlock::registerFunctionWithGDB(const std::string& sym_name) {
+    const char* asm_template = ".text\n"
+                               ".global %s\n"
+                               ".type %s,@function\n"
+                               "%s:\n"
+                               ".cfi_startproc\n"
+                               "pushq	%r14\n"
+                               ".cfi_def_cfa_offset 16\n"
+                               "pushq	%r12\n"
+                               ".cfi_def_cfa_offset 24\n"
+                               "subq	$280, %rsp\n"
+                               ".cfi_def_cfa_offset 304\n"
+                               ".cfi_offset %r12, -24\n"
+                               ".cfi_offset %r14, -16\n"
+                               ".fill %d-11, 1, 0x90\n"
+                               ".size	%s, 32768\n"
+                               ".cfi_endproc\n";
+
+    FILE* asm_file = fopen("__pyston_bjit_tmp.s", "w");
+    RELEASE_ASSERT(asm_file, "");
+    fprintf(asm_file, asm_template, sym_name.c_str(), sym_name.c_str(), sym_name.c_str(), code_size, sym_name.c_str());
+    fclose(asm_file);
+
+    llvm::Twine gcc_cmd = "gcc -static -nostdlib __pyston_bjit_tmp.s -o __pyston_bjit_tmp.o -e 12345 -Wl,-Ttext=0x"
+                          + llvm::Twine::utohexstr((uint64_t)code.get());
+    int ret = system(gcc_cmd.str().c_str());
+    RELEASE_ASSERT(ret == 0, "");
+
+    FILE* elf_file = fopen("__pyston_bjit_tmp.o", "rb");
+    RELEASE_ASSERT(elf_file, "");
+    fseek(elf_file, 0, SEEK_END);
+    int elf_size = ftell(elf_file);
+    RELEASE_ASSERT(elf_size > 0, "");
+    fseek(elf_file, 0, SEEK_SET);
+    char* elf_data = (char*)malloc(elf_size);
+    RELEASE_ASSERT(elf_data, "");
+    int num_bytes = fread(elf_data, 1, elf_size, elf_file);
+    RELEASE_ASSERT(num_bytes == elf_size, "");
+    fclose(elf_file);
+
+    jit_code_entry* entry = new jit_code_entry;
+    memset(entry, 0, sizeof(jit_code_entry));
+    entry->next_entry = __jit_debug_descriptor.first_entry;
+    entry->prev_entry = NULL;
+    entry->symfile_addr = elf_data;
+    entry->symfile_size = elf_size;
+
+    __jit_debug_descriptor.action_flag = JIT_REGISTER_FN;
+    if (__jit_debug_descriptor.first_entry)
+        __jit_debug_descriptor.first_entry->prev_entry = entry;
+    __jit_debug_descriptor.first_entry = entry;
+    __jit_debug_descriptor.relevant_entry = entry;
+    __jit_debug_register_code();
+}
 
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,

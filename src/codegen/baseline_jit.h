@@ -154,6 +154,9 @@ public:
     bool shouldCreateNewBlock() const { return asm_failed || a.bytesLeft() < 128; }
     void fragmentAbort(bool not_enough_space);
     void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start);
+
+private:
+    void registerFunctionWithGDB(const std::string& sym_name);
 };
 
 class JitFragmentWriter : public Rewriter {
