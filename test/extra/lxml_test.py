@@ -32,9 +32,10 @@ def install_and_test_lxml():
     print "Applied lxml patch"
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "-i", "--with-cython"], cwd=LXML_DIR)
-   
-    expected = [{'ran': 1381, 'failures': 28, 'errors': 5}]
-    run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected)
+ 
+    # We currently don't run the objectify tests because the assume that the python impl use refcounting. 
+    expected = [{'ran': 1188, 'failures': 3, 'errors': 1}]
+    run_test([PYTHON_EXE, "test.py", "!.*test_objectify.py"], cwd=LXML_DIR, expected=expected)
     
 create_virtenv(ENV_NAME, None, force_create = True)
 install_and_test_lxml()
