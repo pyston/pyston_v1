@@ -1295,7 +1295,7 @@ void setupList() {
     list_cls->tp_as_mapping = &list_as_mapping;
 
     list_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
-                                           sizeof(BoxedListIterator), false, "listiterator");
+                                           sizeof(BoxedListIterator), false, "listiterator", false);
     list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
                                                    sizeof(BoxedListIterator), false, "listreverseiterator");
     list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
