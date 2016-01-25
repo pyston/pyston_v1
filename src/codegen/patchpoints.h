@@ -129,7 +129,7 @@ public:
     const std::vector<FrameVarInfo>& getFrameVars() { return frame_vars; }
 
     int scratchStackmapArg() { return 0; }
-    int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
+    int scratchSize() { return isDeopt() ? MAX_FRAME_SPILLS * sizeof(void*) : 96; }
     bool isDeopt() const { return icinfo ? icinfo->isDeopt() : false; }
     bool isFrameInfoStackmap() const { return is_frame_info_stackmap; }
     int numFrameSpillsSupported() const { return isDeopt() ? MAX_FRAME_SPILLS : 0; }
