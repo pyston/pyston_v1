@@ -22,24 +22,12 @@ namespace pyston {
 
 class ICInfo;
 
-class EHFrameManager {
-private:
-    void* eh_frame_addr;
-    bool omit_frame_pointer;
-
-public:
-    EHFrameManager(bool omit_frame_pointer) : eh_frame_addr(NULL), omit_frame_pointer(omit_frame_pointer) {}
-    ~EHFrameManager();
-    void writeAndRegister(void* func_addr, uint64_t func_size);
-};
-
 class RuntimeIC {
 private:
-    void* addr;
+    void* addr; // points to function start not the start of the allocated memory block.
 #ifndef NVALGRIND
     size_t total_size;
 #endif
-    EHFrameManager eh_frame;
 
     std::unique_ptr<ICInfo> icinfo;
 

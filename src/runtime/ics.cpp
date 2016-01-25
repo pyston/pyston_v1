@@ -154,7 +154,12 @@ static const char _eh_frame_template_fp[] =
 static constexpr int _eh_frame_template_ofp_size = sizeof(_eh_frame_template_ofp) - 1;
 static constexpr int _eh_frame_template_fp_size = sizeof(_eh_frame_template_fp) - 1;
 
-#define EH_FRAME_SIZE (sizeof(_eh_frame_template) - 1) // omit string-terminating null byte
+#if RUNTIMEICS_OMIT_FRAME_PTR
+#define EH_FRAME_SIZE _eh_frame_template_ofp_size
+#else
+#define EH_FRAME_SIZE _eh_frame_template_fp_size;
+#endif
+
 
 static_assert(sizeof("") == 1, "strings are null-terminated");
 
@@ -175,35 +180,6 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
     *size_ptr = func_size;
 }
 
-void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
-    assert(eh_frame_addr == NULL);
-    const int size = omit_frame_pointer ? _eh_frame_template_ofp_size : _eh_frame_template_fp_size;
-#ifdef NVALGRIND
-    eh_frame_addr = malloc(size);
-#else
-    eh_frame_addr = mmap(NULL, (size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    RELEASE_ASSERT(eh_frame_addr != MAP_FAILED, "");
-#endif
-    writeTrivialEhFrame(eh_frame_addr, func_addr, func_size, omit_frame_pointer);
-    // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
-    // TODO: can we omit the terminator in general?
-    registerDynamicEhFrame((uint64_t)func_addr, func_size, (uint64_t)eh_frame_addr, size - 4);
-    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
-}
-
-EHFrameManager::~EHFrameManager() {
-    if (eh_frame_addr) {
-        const int size = omit_frame_pointer ? _eh_frame_template_ofp_size : _eh_frame_template_fp_size;
-        deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
-#ifdef NVALGRIND
-        free(eh_frame_addr);
-#else
-        munmap(eh_frame_addr, (size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1));
-#endif
-    }
-}
-
 #if RUNTIMEICS_OMIT_FRAME_PTR
 // If you change this, you *must* update the value in _eh_frame_template
 // (set the -9'th byte to this value plus 8)
@@ -212,7 +188,7 @@ EHFrameManager::~EHFrameManager() {
 #define SCRATCH_BYTES 0x30
 #endif
 
-RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(RUNTIMEICS_OMIT_FRAME_PTR) {
+RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
     static StatCounter sc("runtime_ics_num");
     sc.log();
 
@@ -254,15 +230,20 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
 
         int patchable_size = num_slots * slot_size;
 
+        int total_code_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
+
 #ifdef NVALGRIND
-        int total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
+        int total_size = total_code_size + EH_FRAME_SIZE;
         addr = malloc(total_size);
 #else
-        total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
+        total_size = total_code_size + EH_FRAME_SIZE;
         addr = mmap(NULL, (total_size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE | PROT_EXEC,
                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         RELEASE_ASSERT(addr != MAP_FAILED, "");
 #endif
+        // the memory block contains the EH frame directly followed by the generated machine code.
+        void* eh_frame_addr = addr;
+        addr = (char*)addr + EH_FRAME_SIZE;
 
         // printf("Allocated runtime IC at %p\n", addr);
 
@@ -308,9 +289,11 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
         assert(!epilogue_assem.hasFailed());
         assert(epilogue_assem.isExactlyFull());
 
-        // TODO: ideally would be more intelligent about allocation strategies.
-        // The code sections should be together and the eh sections together
-        eh_frame.writeAndRegister(addr, total_size);
+        writeTrivialEhFrame(eh_frame_addr, addr, total_code_size, RUNTIMEICS_OMIT_FRAME_PTR);
+        // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
+        // TODO: can we omit the terminator in general?
+        registerDynamicEhFrame((uint64_t)addr, total_code_size, (uint64_t)eh_frame_addr, EH_FRAME_SIZE - 4);
+        registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
     } else {
         addr = func_addr;
     }
@@ -319,10 +302,12 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) : eh_frame(R
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
         deregisterCompiledPatchpoint(icinfo.get());
+        uint8_t* eh_frame_addr = (uint8_t*)addr - EH_FRAME_SIZE;
+        deregisterEHFrames(eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
 #ifdef NVALGRIND
-        free(addr);
+        free(eh_frame_addr);
 #else
-        munmap(addr, total_size);
+        munmap(eh_frame_addr, total_size);
 #endif
     } else {
     }
