@@ -1,4 +1,4 @@
-SHELL := /bin/bash
+SHELL := /usr/bin/env sh
 
 # prints variables for debugging
 print-%: ; @echo $($*)
