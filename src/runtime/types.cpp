@@ -3732,7 +3732,6 @@ void setupRuntime() {
                                            false, "method-wrapper");
     wrapperdescr_cls = new (0) BoxedClass(object_cls, BoxedWrapperDescriptor::gcHandler, 0, 0,
                                           sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor");
-
     EmptyString = new (0) BoxedString("");
     // Call InternInPlace rather than InternFromString since that will
     // probably try to return EmptyString
