@@ -10,9 +10,9 @@ The custom unwinder is in `src/runtime/cxx_unwind.cpp`.
 
 ### Useful references on C++ exception handling
 
-- [https://monoinfinito.wordpress.com/series/exception-handling-in-c/](): Good overview of C++ exceptions.
-- [http://www.airs.com/blog/archives/460](): Covers dirty details of `.eh_frame`.
-- [http://www.airs.com/blog/archives/464](): Covers dirty details of the personality function and the LSDA.
+- [https://monoinfinito.wordpress.com/series/exception-handling-in-c/](https://monoinfinito.wordpress.com/series/exception-handling-in-c/): Good overview of C++ exceptions.
+- [http://www.airs.com/blog/archives/460](http://www.airs.com/blog/archives/460): Covers dirty details of `.eh_frame`.
+- [http://www.airs.com/blog/archives/464](http://www.airs.com/blog/archives/464): Covers dirty details of the personality function and the LSDA.
 
 # How normal C++ unwinding works
 
