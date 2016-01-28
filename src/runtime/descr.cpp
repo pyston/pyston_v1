@@ -395,7 +395,13 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     return rtn;
 }
-
+static Box* methodGetName(Box* b, void*) {
+    assert(b->cls == method_cls);
+    const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_name;
+    if (s)
+        return boxString(s);
+    return None;
+}
 static Box* methodGetDoc(Box* b, void*) {
     assert(b->cls == method_cls);
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
@@ -579,7 +585,14 @@ void BoxedWrapperDescriptor::gcHandler(GCVisitor* v, Box* _o) {
 
 static Box* wrapperdescrGetDoc(Box* b, void*) {
     assert(b->cls == wrapperdescr_cls);
-    auto s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
+    StringRef s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->doc;
+    assert(s.size());
+    return boxString(s);
+}
+
+static Box* wrapperdescrGetName(Box* b, void*) {
+    assert(b->cls == wrapperdescr_cls);
+    StringRef s = static_cast<BoxedWrapperDescriptor*>(b)->wrapper->name;
     assert(s.size());
     return boxString(s);
 }
@@ -758,12 +771,14 @@ void setupDescr() {
     method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
     method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
     method_cls->giveAttrDescriptor("__doc__", methodGetDoc, NULL);
+    method_cls->giveAttrDescriptor("__name__", methodGetName, NULL);
     method_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)methodRepr, UNKNOWN, 1)));
     method_cls->freeze();
 
     wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(FunctionMetadata::create(
                                                (void*)BoxedWrapperDescriptor::__call__, UNKNOWN, 2, true, true)));
     wrapperdescr_cls->giveAttrDescriptor("__doc__", wrapperdescrGetDoc, NULL);
+    wrapperdescr_cls->giveAttrDescriptor("__name__", wrapperdescrGetName, NULL);
     wrapperdescr_cls->tp_descr_get = BoxedWrapperDescriptor::descr_get;
     wrapperdescr_cls->tpp_call.capi_val = BoxedWrapperDescriptor::tppCall<CAPI>;
     wrapperdescr_cls->tpp_call.cxx_val = BoxedWrapperDescriptor::tppCall<CXX>;
