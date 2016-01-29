@@ -145,7 +145,9 @@ void setupTraceback() {
     NULL));
     */
     traceback_cls->giveAttrDescriptor("tb_next", traceback_tb_next, NULL);
-
+    traceback_cls->giveAttr("tb_lineno",
+                            new BoxedMemberDescriptor(BoxedMemberDescriptor::INT,
+                                                      offsetof(BoxedTraceback, line) + offsetof(LineInfo, line)));
     traceback_cls->freeze();
 }
 }

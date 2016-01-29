@@ -30,7 +30,6 @@ public:
     Box* tb_next;
     LineInfo line;
     Box* py_lines;
-
     BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), line(std::move(line)), py_lines(NULL) {}
 
     DEFAULT_CLASS(traceback_cls);
