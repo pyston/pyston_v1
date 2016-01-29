@@ -93,6 +93,8 @@ void generatorEntry(BoxedGenerator* g) {
         try {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
 
+            g->top_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
+
             // call body of the generator
             BoxedFunctionBase* func = g->function;
 
@@ -109,6 +111,7 @@ void generatorEntry(BoxedGenerator* g) {
         g->entryExited = true;
         threading::popGenerator();
     }
+    assert(g->top_caller_frame_info == cur_thread_state.frame_info);
     swapContext(&g->context, g->returnContext, 0);
 }
 
@@ -155,8 +158,11 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
     else
         self->prev_stack = StatTimer::swapStack(self->prev_stack);
 #endif
-
+    auto* top_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
     swapContext(&self->returnContext, self->context, (intptr_t)self);
+    assert(cur_thread_state.frame_info == top_caller_frame_info
+           && "the generator should reset the frame info before the swapContext");
+
 
 #if STAT_TIMERS
     self->prev_stack = StatTimer::swapStack(self->prev_stack);
@@ -314,7 +320,28 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     self->returnValue = value;
 
     threading::popGenerator();
+
+    FrameInfo* generator_frame_info = (FrameInfo*)cur_thread_state.frame_info;
+    // a generator will only switch back (yield/unhandled exception) to its caller when it is one frame away from the
+    // caller
+    assert(self->top_caller_frame_info == generator_frame_info->back);
+
+    // reset current frame to the caller tops frame --> removes the frame the generator added
+    cur_thread_state.frame_info = self->top_caller_frame_info;
     swapContext(&self->context, self->returnContext, 0);
+    FrameInfo* top_new_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
+
+    // the caller of the generator can change between yield statements that means we can't just restore the top of the
+    // frame to the point before the yield instead we have to update it.
+    if (top_new_caller_frame_info != self->top_caller_frame_info) {
+        // caller changed
+        self->top_caller_frame_info = top_new_caller_frame_info;
+        generator_frame_info->back = top_new_caller_frame_info;
+        if (generator_frame_info->frame_obj)
+            frameInvalidateBack(generator_frame_info->frame_obj);
+    }
+    cur_thread_state.frame_info = generator_frame_info;
+
     threading::pushGenerator(obj, obj->stack_begin, obj->returnContext);
 
     // if the generator receives a exception from the caller we have to throw it
@@ -347,7 +374,8 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       returnValue(nullptr),
       exception(nullptr, nullptr, nullptr),
       context(nullptr),
-      returnContext(nullptr)
+      returnContext(nullptr),
+      top_caller_frame_info(nullptr)
 #if STAT_TIMERS
       ,
       prev_stack(NULL),

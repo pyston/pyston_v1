@@ -893,14 +893,16 @@ struct FrameInfo {
     BoxedClosure* passed_closure;
 
     Box** vregs;
-    // Current statement
-    // Caution the llvm tier only updates this information on direct external calls but not for patchpoints.
-    // This means if a patchpoint "current_stmt" info is available it must be used instead of this field.
-    AST_stmt* stmt;
+    AST_stmt* stmt; // current statement
     // This is either a module or a dict
     Box* globals;
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0), stmt(0), globals(0) {}
+    FrameInfo* back;
+    FunctionMetadata* md;
+
+    Box* updateBoxedLocals();
+
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0), stmt(0), globals(0), back(0), md(0) {}
 
     void gcVisit(GCVisitor* visitor);
 };
