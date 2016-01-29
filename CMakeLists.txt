@@ -21,6 +21,23 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
   message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
 endif()
 
+if(UNIX)
+  find_program(MAKE_PRG NAMES gmake make)
+  if(MAKE_PRG)
+    execute_process(
+      COMMAND "${MAKE_PRG}" --version
+      OUTPUT_VARIABLE MAKE_VERSION_INFO)
+    if(NOT "${OUTPUT_VARIABLE}" MATCHES ".*GNU.*")
+      unset(MAKE_PRG)
+    endif()
+  endif()
+  if(NOT MAKE_PRG)
+    message(FATAL_ERROR "GNU Make is required to build the dependencies.")
+  else()
+    message(STATUS "Found GNU Make at ${MAKE_PRG}")
+  endif()
+endif()
+
 option(ENABLE_CCACHE "enable caching compiler output" ON)
 option(ENABLE_EXTRA_TESTS "pyston extra tests" OFF)
 option(ENABLE_GIL "threading use GIL" ON)
@@ -122,7 +139,8 @@ ExternalProject_Add(libjemalloc
                     DEPENDS gitsubmodules
                     UPDATE_COMMAND autoconf
                     CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof-libunwind
-                    INSTALL_COMMAND make install_bin install_lib
+                    BUILD_COMMAND ${MAKE_PRG}
+                    INSTALL_COMMAND ${MAKE_PRG} install_bin install_lib
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
@@ -197,7 +215,7 @@ ExternalProject_Add(libunwind
                     DEPENDS libunwind_patched
                     UPDATE_COMMAND autoreconf -i
                     CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/build_deps/libunwind --enable-shared=0 --disable-block-signals ${LIBUNWIND_CONSERVATIVE_CHECKS} ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
-                    BUILD_COMMAND make -j${TEST_THREADS}
+                    BUILD_COMMAND ${MAKE_PRG} -j${TEST_THREADS}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
