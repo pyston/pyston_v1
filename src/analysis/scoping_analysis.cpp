@@ -423,16 +423,14 @@ public:
             }
 
             // Sort in order of `num_parents_from_passed_closure`
-            std::sort(allDerefVarsAndInfo.begin(), allDerefVarsAndInfo.end(), derefComparator);
+            std::sort(
+                allDerefVarsAndInfo.begin(), allDerefVarsAndInfo.end(),
+                [](const std::pair<InternedString, DerefInfo>& p1, const std::pair<InternedString, DerefInfo>& p2) {
+                    return p1.second.num_parents_from_passed_closure < p2.second.num_parents_from_passed_closure;
+                });
         }
         return allDerefVarsAndInfo;
     }
-
-private:
-    static bool derefComparator(const std::pair<InternedString, DerefInfo>& p1,
-                                const std::pair<InternedString, DerefInfo>& p2) {
-        return p1.second.num_parents_from_passed_closure < p2.second.num_parents_from_passed_closure;
-    };
 };
 
 static void raiseGlobalAndLocalException(InternedString name, AST* node) {
