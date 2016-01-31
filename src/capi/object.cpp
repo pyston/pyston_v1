@@ -569,23 +569,28 @@ extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
     Py_ssize_t dictoffset;
     PyTypeObject* tp = Py_TYPE(obj);
 
-    dictoffset = tp->tp_dictoffset;
-    if (dictoffset == 0)
-        return NULL;
-    if (dictoffset < 0) {
-        Py_ssize_t tsize;
-        size_t size;
+    if (!tp->instancesHaveHCAttrs()) {
+        dictoffset = tp->tp_dictoffset;
+        if (dictoffset == 0)
+            return NULL;
+        if (dictoffset < 0) {
+            Py_ssize_t tsize;
+            size_t size;
 
-        tsize = ((PyVarObject*)obj)->ob_size;
-        if (tsize < 0)
-            tsize = -tsize;
-        size = _PyObject_VAR_SIZE(tp, tsize);
+            tsize = ((PyVarObject*)obj)->ob_size;
+            if (tsize < 0)
+                tsize = -tsize;
+            size = _PyObject_VAR_SIZE(tp, tsize);
 
-        dictoffset += (long)size;
-        assert(dictoffset > 0);
-        assert(dictoffset % SIZEOF_VOID_P == 0);
+            dictoffset += (long)size;
+            assert(dictoffset > 0);
+            assert(dictoffset % SIZEOF_VOID_P == 0);
+        }
+        return (PyObject**)((char*)obj + dictoffset);
+    } else {
+        fatalOrError(PyExc_NotImplementedError, "unimplemented for hcattrs");
+        return nullptr;
     }
-    return (PyObject**)((char*)obj + dictoffset);
 }
 
 /* These methods are used to control infinite recursion in repr, str, print,
