@@ -1205,6 +1205,8 @@ void RewriterVar::bumpUse() {
         }
 
         this->locations.clear();
+    } else {
+        assert(vrefcount > 0);
     }
 }
 

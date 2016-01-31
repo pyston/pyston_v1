@@ -328,8 +328,8 @@ RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
     }
 
     RewriterVar* args[] = { NULL, NULL };
-    args[0] = imm(global)->asBorrowed()->decvref();
-    args[1] = imm(s)->asBorrowed()->decvref();
+    args[0] = imm(global);
+    args[1] = imm(s);
     return emitPPCall((void*)getGlobal, args, 2, 512)->setType(RefType::OWNED);
 }
 
@@ -550,7 +550,7 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
     emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
-void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v) {
+void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v) {
     assert(vreg >= 0);
     if (set_closure) {
         assert(0 && "check refcounting");
@@ -566,7 +566,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
         vregs_array->setAttr(8 * vreg, v);
         // XXX: this either needs to be an xdecref or we should check liveness analysis.
         prev->decvref();
-        //prev->xdecref();
+        //prev->xdecvref();
     }
 }
 

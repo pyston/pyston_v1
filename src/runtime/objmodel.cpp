@@ -3564,6 +3564,22 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 Py_INCREF(oargs[i]);
             }
         }
+        if (rewrite_args) {
+            // TODO should probably rethink the whole vrefcounting thing here.
+            // which ones actually need new vrefs?
+            if (num_output_args >= 1)
+                rewrite_args->arg1->incvref();
+            if (num_output_args >= 2)
+                rewrite_args->arg2->incvref();
+            if (num_output_args >= 3)
+                rewrite_args->arg3->incvref();
+            if (num_output_args >= 3) {
+                RELEASE_ASSERT(0, "not sure what to do here\n");
+                for (int i = 0; i < num_output_args - 3; i++) {
+                    rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
+                }
+            }
+        }
         return;
     }
 
@@ -4729,8 +4745,6 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     if (rewrite_args) {
         CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
         srewrite_args.arg1 = rewrite_args->rhs;
-        rewrite_args->lhs->incvref();
-        rewrite_args->rhs->incvref();
         lrtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
         if (!srewrite_args.isSuccessful()) {
@@ -4754,8 +4768,6 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     if (lrtn) {
         if (lrtn != NotImplemented) {
             if (rewrite_args) {
-                rewrite_args->lhs->decvref();
-                rewrite_args->rhs->decvref();
                 assert(rewrite_args->out_rtn);
                 rewrite_args->out_success = true;
             }

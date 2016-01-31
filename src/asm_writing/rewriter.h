@@ -251,8 +251,15 @@ public:
         assert(vrefcount > 0);
         vrefcount--;
 
-        if (reftype == RefType::OWNED && vrefcount == 0)
-            decref();
+        if (vrefcount == 0) {
+            // Assert that there are no more uses of the this at the machine-code level.
+            // This is kind of weird to cross this abstraction boundary like this, but
+            // I think it's a good safety net.
+            assert(next_use == uses.size());
+
+            if (reftype == RefType::OWNED)
+                decref();
+        }
         return this;
     }
 
@@ -262,9 +269,16 @@ public:
         vrefcount--;
 
         if (reftype == RefType::OWNED && vrefcount == 0) {
-            // handoff, do nothing
+            // handoff, do nothing;
+            // we skip this incref because we skipped the decref in decvref (by touching vrefcount manually)
         } else {
             incref();
+        }
+
+        if (vrefcount == 0) {
+            // See the comment in decvref.
+            // This is similar, except that we want there to be exactly one more use of this variable:
+            // whatever consumes the vref.  We want that to happen after the materializeVref call.
         }
         return this;
     }
@@ -274,15 +288,16 @@ public:
 
     bool isConstant() { return is_constant; }
 
+protected:
+    void incref();
+    void decref();
+    void xdecref();
+
 private:
     Rewriter* rewriter;
 
     llvm::SmallVector<Location, 4> locations;
     bool isInLocation(Location l);
-
-    void incref();
-    void decref();
-    void xdecref();
 
     // uses is a vector of the indices into the Rewriter::actions vector
     // indicated the actions that use this variable.
