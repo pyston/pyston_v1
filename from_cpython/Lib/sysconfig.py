@@ -7,12 +7,19 @@ from os.path import pardir, realpath
 
 _INSTALL_SCHEMES = {
     'posix_prefix': {
-        'stdlib': '{base}/lib/python{py_version_short}',
-        'platstdlib': '{platbase}/lib/python{py_version_short}',
-        'purelib': '{base}/lib/python{py_version_short}/site-packages',
-        'platlib': '{platbase}/lib/python{py_version_short}/site-packages',
-        'include': '{base}/include/python{py_version_short}',
-        'platinclude': '{platbase}/include/python{py_version_short}',
+        # Pyston changes: changed paths
+        # 'stdlib': '{base}/lib/python{py_version_short}',
+        # 'platstdlib': '{platbase}/lib/python{py_version_short}',
+        # 'purelib': '{base}/lib/python{py_version_short}/site-packages',
+        # 'platlib': '{platbase}/lib/python{py_version_short}/site-packages',
+        # 'include': '{base}/include/python{py_version_short}',
+        # 'platinclude': '{platbase}/include/python{py_version_short}',
+        'stdlib': '{base}/from_cpython/Lib',
+        'platstdlib': '{platbase}/from_cpython/Lib',
+        'purelib': '{base}/site-packages',
+        'platlib': '{platbase}/site-packages',
+        'include': '{base}/from_cpython/Include',
+        'platinclude': '{platbase}/from_cpython/Include',
         'scripts': '{base}/bin',
         'data': '{base}',
         },
