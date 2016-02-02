@@ -139,7 +139,7 @@ public:
 
     AST_TYPE::AST_TYPE convert(boolop_ty op) {
         switch (op) {
-            CASE(Add);
+            CASE(And);
             CASE(Or);
         }
         // GCC wants this:

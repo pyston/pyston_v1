@@ -746,9 +746,11 @@ private:
             if (node->op_type == AST_TYPE::Or) {
                 br->iftrue = crit_break_block;
                 br->iffalse = next_block;
-            } else {
+            } else if (node->op_type == AST_TYPE::And) {
                 br->iffalse = crit_break_block;
                 br->iftrue = next_block;
+            } else {
+                RELEASE_ASSERT(0, "");
             }
 
             curblock = crit_break_block;
