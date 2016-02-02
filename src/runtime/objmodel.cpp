@@ -1708,8 +1708,9 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
 else {
     gotten = getclsattrInternal<NOT_REWRITABLE>(obj, attr, NULL);
 }
-RELEASE_ASSERT(gotten, "%s:%s", getTypeName(obj), attr->data());
 
+if (!gotten)
+    raiseExcHelper(AttributeError, "%s", attr->data());
 return gotten;
 }
 
