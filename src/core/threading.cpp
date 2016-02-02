@@ -30,6 +30,7 @@
 #include "core/thread_utils.h"
 #include "core/util.h"
 #include "runtime/objmodel.h" // _printStacktrace
+#include "runtime/types.h"
 
 namespace pyston {
 namespace threading {
@@ -736,6 +737,24 @@ extern "C" void* PyThread_get_key_value(int) noexcept {
 extern "C" void PyThread_delete_key_value(int key) noexcept {
     Py_FatalError("unimplemented");
 }
+
+
+extern "C" PyObject *_PyThread_CurrentFrames(void) noexcept {
+    try {
+        LOCK_REGION(&threading_lock);
+        BoxedDict* result = new BoxedDict;
+        for (auto& pair : current_threads) {
+            FrameInfo* frame_info = (FrameInfo*)pair.second->public_thread_state->frame_info;
+            Box* frame = getFrame(frame_info);
+            assert(frame);
+            result->d[boxInt(pair.first)] = frame;
+        }
+        return result;
+   } catch (ExcInfo) {
+        RELEASE_ASSERT(0, "not implemented");
+   }
+}
+
 
 } // namespace threading
 } // namespace pyston
