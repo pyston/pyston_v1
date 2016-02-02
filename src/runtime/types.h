@@ -419,6 +419,8 @@ public:
     }
     // int uses a customized allocator, so we can't use DEFAULT_CLASS_SIMPLE (which inlines the default allocator)
     void* operator new(size_t size) __attribute__((visibility("default"))) {
+        return Box::operator new (size, int_cls);
+        /*
         if (free_list == NULL) {
             free_list = fill_free_list();
             RELEASE_ASSERT(free_list, "");
@@ -428,6 +430,7 @@ public:
         free_list = (PyIntObject*)v->ob_type;
         PyObject_INIT((BoxedInt*)v, &PyInt_Type);
         return v;
+        */
     }
 
     static void tp_dealloc(Box* b);

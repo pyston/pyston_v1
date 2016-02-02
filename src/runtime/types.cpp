@@ -3761,7 +3761,7 @@ void setupRuntime() {
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, "file", file_dealloc, NULL, false);
-    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", BoxedInt::tp_dealloc, BoxedInt::tp_free, false);
+    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", BoxedInt::tp_dealloc, /*BoxedInt::tp_free*/NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL, false);
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL, false);

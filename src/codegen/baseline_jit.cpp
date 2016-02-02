@@ -167,6 +167,7 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
 }
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+    printf("lhs is %p\n", lhs);
     /// XXX increase this too much for testing
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node)->setType(RefType::OWNED);
 }

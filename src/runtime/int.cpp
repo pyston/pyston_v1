@@ -88,14 +88,15 @@ PyIntObject* BoxedInt::fill_free_list(void) {
 }
 
 void BoxedInt::tp_dealloc(Box* v) {
-    if (PyInt_CheckExact(v)) {
-        BoxedInt::tp_free(v);
-    } else {
+    //if (PyInt_CheckExact(v)) {
+        //BoxedInt::tp_free(v);
+    //} else {
         v->cls->tp_free(v);
-    }
+    //}
 }
 
 void BoxedInt::tp_free(void* b) {
+    assert(0);
     PyIntObject* v = static_cast<PyIntObject*>(b);
     v->ob_type = (struct _typeobject *)free_list;
     free_list = v;
