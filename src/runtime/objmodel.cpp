@@ -1282,7 +1282,6 @@ template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* a
             if (!val)
                 rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
             else {
-                // typeLookup is special since it doesn't even return a vref
                 rewrite_args->setReturn(
                     rewrite_args->rewriter->loadConst((int64_t)val)->setType(RefType::BORROWED),
                     ReturnConvention::HAS_RETURN);
@@ -1945,7 +1944,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     // Look up the class attribute (called `descr` here because it might
     // be a descriptor).
     Box* descr = NULL;
-    RewriterVar* r_descr = NULL;
+    AutoDecvref r_descr = NULL;
     if (rewrite_args) {
         RewriterVar* r_obj_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, rewrite_args->destination);
@@ -3575,9 +3574,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 rewrite_args->arg3->incvref();
             if (num_output_args >= 3) {
                 RELEASE_ASSERT(0, "not sure what to do here\n");
-                for (int i = 0; i < num_output_args - 3; i++) {
-                    rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
-                }
+                //for (int i = 0; i < num_output_args - 3; i++) {
+                    //rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
+                //}
             }
         }
         return;
@@ -4858,6 +4857,8 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else {
+            rewriter->getArg(0)->decvref();
+            rewriter->getArg(1)->decvref();
             rewrite_args.out_rtn->materializeVref();
             rewriter->commitReturning(rewrite_args.out_rtn);
         }

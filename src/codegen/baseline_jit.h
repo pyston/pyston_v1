@@ -258,7 +258,7 @@ public:
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
     void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr);
-    void emitSetBlockLocal(InternedString s, RewriterVar* v);
+    void emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
     void emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v);

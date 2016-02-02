@@ -1205,8 +1205,6 @@ void RewriterVar::bumpUse() {
         }
 
         this->locations.clear();
-    } else {
-        assert(vrefcount > 0);
     }
 }
 
@@ -1719,6 +1717,33 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
     r->bumpUse();
 
     assertConsistent();
+}
+
+void RewriterVar::addAssertLastActionAction(int num_left) {
+    static int n = 0;
+    n++;
+    // printf("addAssertLastActionAction(); %d\n", n);
+
+    int this_n = n;
+
+    // The rewriter adds a phony use of all constants to keep them alive:
+    if (this->is_constant)
+        num_left++;
+
+    rewriter->addAction([=]() {
+        if (this->next_use + num_left != this->uses.size()) {
+            printf("n: %d\n", this_n);
+            printf("this: %p\n", this);
+            printf("uses: %p\n", &this->uses);
+            // for (auto idx : this->uses) {
+            // printf("Action: %p\n", rewriter->actions[idx].action.func);
+            // }
+            printf("%ld\n", this->uses.size());
+            raise(SIGTRAP);
+        }
+        RELEASE_ASSERT(this->next_use + num_left == this->uses.size(), "%d %d %ld\n", this->next_use, num_left,
+                       this->uses.size());
+    }, {}, ActionType::NORMAL);
 }
 
 assembler::Indirect Rewriter::indirectFor(Location l) {

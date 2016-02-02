@@ -246,19 +246,26 @@ public:
         return this;
     }
 
+    // Assert that there are exactly num_left actions get added after this call.
+    // Meant for debugging.  It's a way to cross between the two rewriter phases.
+    void addAssertLastActionAction(int num_left=0);
+
     RewriterVar* decvref() {
         assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
         assert(vrefcount > 0);
         vrefcount--;
 
         if (vrefcount == 0) {
-            // Assert that there are no more uses of the this at the machine-code level.
-            // This is kind of weird to cross this abstraction boundary like this, but
-            // I think it's a good safety net.
-            assert(next_use == uses.size());
 
             if (reftype == RefType::OWNED)
                 decref();
+
+            // Assert that there are no more uses of the this at the machine-code level.
+            // This is kind of weird to cross this abstraction boundary like this, but
+            // I think it's a good safety net.
+#ifndef NDEBUG
+            addAssertLastActionAction();
+#endif
         }
         return this;
     }
@@ -279,6 +286,9 @@ public:
             // See the comment in decvref.
             // This is similar, except that we want there to be exactly one more use of this variable:
             // whatever consumes the vref.  We want that to happen after the materializeVref call.
+#ifndef NDEBUG
+            addAssertLastActionAction(1);
+#endif
         }
         return this;
     }
@@ -708,6 +718,30 @@ public:
     }
 
     friend class RewriterVar;
+};
+
+struct AutoDecvref {
+private:
+    RewriterVar* var;
+
+public:
+    AutoDecvref(RewriterVar* var) : var(var) {}
+    ~AutoDecvref() {
+        if (var)
+            var->decvref();
+    }
+
+    operator RewriterVar*() {
+        return var;
+    }
+    RewriterVar* operator->() {
+        return var;
+    }
+
+    void operator=(RewriterVar* new_var) {
+        assert(!var);
+        var = new_var;
+    }
 };
 
 void setSlowpathFunc(uint8_t* pp_addr, void* func);

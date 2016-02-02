@@ -163,7 +163,7 @@ RewriterVar* JitFragmentWriter::imm(void* val) {
 }
 
 RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2, 320, node);
+    return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2, 320, node)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
@@ -199,7 +199,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder);
+    return emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder)->setType(RefType::OWNED);
 #else
     // We could make this faster but for now: keep it simple, stupid...
     RewriterVar* attr_var = imm(attr);
@@ -230,7 +230,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
 
 RewriterVar* JitFragmentWriter::emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     // TODO: can directly emit the assembly for Is/IsNot
-    return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240, node);
+    return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240, node)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys,
@@ -296,7 +296,7 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
 }
 
 RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
-    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node));
+    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
@@ -318,7 +318,7 @@ RewriterVar* JitFragmentWriter::emitGetBoxedLocals() {
 }
 
 RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s) {
-    return emitPPCall((void*)getclsattr, { obj, imm(s) }, 2, 512);
+    return emitPPCall((void*)getclsattr, { obj, imm(s) }, 2, 512)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
@@ -334,7 +334,7 @@ RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
 }
 
 RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice) {
-    return emitPPCall((void*)getitem, { value, slice }, 2, 512, node);
+    return emitPPCall((void*)getitem, { value, slice }, 2, 512, node)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
@@ -431,7 +431,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
 }
 
 RewriterVar* JitFragmentWriter::emitUnaryop(RewriterVar* v, int op_type) {
-    return emitPPCall((void*)unaryop, { v, imm(op_type) }, 2, 160);
+    return emitPPCall((void*)unaryop, { v, imm(op_type) }, 2, 160)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v, uint64_t num) {
@@ -445,16 +445,16 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {
-    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512);
+    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitDelGlobal(BoxedString* name) {
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
-    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512);
+    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitDelItem(RewriterVar* target, RewriterVar* slice) {
-    emitPPCall((void*)delitem, { target, slice }, 1, 512);
+    emitPPCall((void*)delitem, { target, slice }, 1, 512)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitDelName(InternedString name) {
@@ -518,7 +518,7 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
-    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
+    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, RewriterVar* v) {
@@ -539,11 +539,11 @@ void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, Re
 }
 
 void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v) {
-    emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512);
+    emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value) {
-    emitPPCall((void*)setitem, { target, slice, value }, 2, 512);
+    emitPPCall((void*)setitem, { target, slice, value }, 2, 512)->setType(RefType::OWNED);
 }
 
 void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
@@ -563,6 +563,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              v);
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setType(RefType::OWNED);
+        v->materializeVref();
         vregs_array->setAttr(8 * vreg, v);
         // XXX: this either needs to be an xdecref or we should check liveness analysis.
         prev->decvref();
@@ -990,7 +991,8 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
     }
 
     {
-        assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
+        // TODO: Figure out if we need a large/small forward based on the number of local syms we will have to decref?
+        assembler::LargeForwardJump jne(*assembler, assembler::COND_EQUAL);
 
         _decref(var);
 
