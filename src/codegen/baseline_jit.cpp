@@ -339,6 +339,8 @@ RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, 
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
     assert(vreg >= 0);
+    // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
+    // from the vregs array.  Safer like this.
     RewriterVar* val_var = vregs_array->getAttr(vreg * 8)->setType(RefType::OWNED);
     addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
     return val_var;
@@ -512,9 +514,9 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
             v.second->decvref();
     }
 
-    v->materializeVref();
-
+    v->stealRef();
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
+    v->decvref();
 }
 
 void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
@@ -563,9 +565,12 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              v);
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setType(RefType::OWNED);
-        v->materializeVref();
+        v->stealRef();
         vregs_array->setAttr(8 * vreg, v);
+        v->decvref();
         // XXX: this either needs to be an xdecref or we should check liveness analysis.
+        // keeping it like this for some performance testing but we need to fix this (will segfault
+        // on non-osr entries to the bjit)
         prev->decvref();
         //prev->xdecvref();
     }

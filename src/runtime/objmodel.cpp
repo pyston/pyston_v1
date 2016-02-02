@@ -1022,9 +1022,10 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
                     r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
                         ->setType(RefType::OWNED)
                         ->decvref();
-                    rewrite_args->attrval->materializeVref();
+                    rewrite_args->attrval->stealRef();
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
+                    rewrite_args->attrval->decvref();
 
                     rewrite_args->out_success = true;
                 }
@@ -4859,7 +4860,6 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
         } else {
             rewriter->getArg(0)->decvref();
             rewriter->getArg(1)->decvref();
-            rewrite_args.out_rtn->materializeVref();
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {
@@ -6406,7 +6406,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 if (r) {
                     if (rewriter.get()) {
                         RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
-                        r_rtn->materializeVref();
                         rewriter->commitReturning(r_rtn);
                     }
 

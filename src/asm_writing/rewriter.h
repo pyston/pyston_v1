@@ -270,19 +270,36 @@ public:
         return this;
     }
 
-    RewriterVar* materializeVref() {
+    // Steal a ref (not a vref) from this object.
+    // If there aren't any owned refs available, one will be created.
+    // Doesn't change the vrefcount, but the vref that stealRef acts on
+    // becomes a borrowed vref.  One can not use this RewriterVar after stealRef
+    // except for the operation that will actually steal the ref.
+    // If that is necessary, an extra vref should be taken out beforehand.
+    //
+    // Typical usage should look like:
+    //   var->stealRef();
+    //   functionThatStealsRef(var);
+    //   var->decvref();
+    //
+    // If you need to use var after functionThatStealsRef, the whole snippet
+    // needs to be surrounded in an incvref/decvref.
+    //
+    // TODO: I still think I can find a better API for this.  Maybe something like
+    // var->materializeRefFor([&](){ functionThatStealsRef(var); });
+    //
+    RewriterVar* stealRef() {
         assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
         assert(vrefcount > 0);
-        vrefcount--;
 
-        if (reftype == RefType::OWNED && vrefcount == 0) {
+        if (reftype == RefType::OWNED && vrefcount == 1) {
             // handoff, do nothing;
-            // we skip this incref because we skipped the decref in decvref (by touching vrefcount manually)
+            reftype = RefType::BORROWED;
         } else {
             incref();
         }
 
-        if (vrefcount == 0) {
+        if (vrefcount == 1) {
             // See the comment in decvref.
             // This is similar, except that we want there to be exactly one more use of this variable:
             // whatever consumes the vref.  We want that to happen after the materializeVref call.

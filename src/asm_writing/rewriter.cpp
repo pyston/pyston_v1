@@ -1505,13 +1505,16 @@ bool Rewriter::finishAssembly(int continue_offset) {
 void Rewriter::commitReturning(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(var->vrefcount == 0);
+    assert(var->vrefcount == 1);
+    var->stealRef();
 
     addAction([=]() {
         assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
     }, { var }, ActionType::NORMAL);
+
+    var->decvref();
 
     commit();
 }
