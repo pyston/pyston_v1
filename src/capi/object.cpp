@@ -479,9 +479,21 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 }
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
-    RELEASE_ASSERT(PyString_Check(name), "");
+    if (!PyString_Check(name)) {
+        if (PyUnicode_Check(name)) {
+            name = PyUnicode_AsEncodedString(name, NULL, NULL);
+            if (name == NULL)
+                return -1;
+        } else {
+            PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
+            return -1;
+        }
+    }
+
     BoxedString* str = static_cast<BoxedString*>(name);
     internStringMortalInplace(str);
+
+    assert(PyString_Check(name));
     try {
         if (value == NULL)
             delattrGeneric(obj, str, NULL);
