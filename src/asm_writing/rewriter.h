@@ -231,6 +231,10 @@ public:
         return this;
     }
 
+    // Due to optimizations, there are some functions that sometimes return a new RewriterVar and
+    // sometimes return an existing one (specifically, loadConst() does this).
+    // asBorrowed() is meant for that kind of case.
+    // I think its presence indicates something fishy about the API though.
     RewriterVar* asBorrowed() {
         if (this->reftype == RefType::UNKNOWN)
             return setType(RefType::BORROWED);
@@ -383,11 +387,13 @@ public:
         assert(rewriter);
     }
 
+#ifndef NDEBUG
     // XXX: for testing, reset these on deallocation so that we will see the next time they get set.
     ~RewriterVar() {
         reftype = (RefType)-1;
         vrefcount = -11;
     }
+#endif
 
     Rewriter* getRewriter() { return rewriter; }
 

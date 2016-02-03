@@ -3585,15 +3585,12 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         return;
     }
 
-    assert(!rewrite_args && "check refcounting");
-    if (rewrite_args)
-        raise(SIGTRAP);
-
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && (!paramspec.takes_kwargs || paramspec.kwargsIndex() < 3)) {
         assert(0 && "check refcounting");
+        assert(!rewrite_args && "check refcounting");
 
         // TODO could also do this for empty varargs
         if (paramspec.takes_kwargs) {
@@ -3667,6 +3664,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
         if (num_output_args > 3 && num_output_args > num_passed_args) {
+            assert(!rewrite_args && "check refcounting");
             int arg_bytes_required = (num_output_args - 3) * sizeof(Box*);
             RewriterVar* new_args = NULL;
 
@@ -3699,6 +3697,12 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     for (int i = 0; i < positional_to_positional; i++) {
         getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
     }
+    if (rewrite_args) {
+        for (int i = 0; i < positional_to_positional; i++) {
+            assert(i < 3 && "figure this out");
+            getArg(i, rewrite_args)->incvref();
+        }
+    }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
@@ -3718,6 +3722,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
+        assert(!rewrite_args && "check refcounting");
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
         if (rewrite_args) {
             if (i == 0)
@@ -3803,6 +3808,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // If you need to access the dict, you should call get_okwargs()
     BoxedDict** _okwargs = NULL;
     if (paramspec.takes_kwargs) {
+        assert(!rewrite_args && "check refcounting");
         int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
         if (rewrite_args) {
             RewriterVar* r_kwargs = rewrite_args->rewriter->loadConst(0);
@@ -3835,6 +3841,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     }
 
     if (argspec.num_keywords) {
+        assert(!rewrite_args && "check refcounting");
         assert(argspec.num_keywords == keyword_names->size());
 
         RewriterVar::SmallVector r_vars;
@@ -3958,19 +3965,23 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         Box* default_obj = defaults[default_idx];
 
         if (rewrite_args) {
-            assert(0 && "check refcounting");
             if (arg_idx == 0)
-                rewrite_args->arg1 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0));
+                rewrite_args->arg1
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0))->asBorrowed();
             else if (arg_idx == 1)
-                rewrite_args->arg2 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1));
+                rewrite_args->arg2
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1))->asBorrowed();
             else if (arg_idx == 2)
-                rewrite_args->arg3 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2));
-            else
+                rewrite_args->arg3
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->asBorrowed();
+            else {
+                assert(0 && "check refcounting");
                 rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*),
                                             rewrite_args->rewriter->loadConst((intptr_t)default_obj));
+            }
         }
 
-        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = default_obj;
+        getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = xincref(default_obj);
     }
 }
 
@@ -4637,15 +4648,16 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
         // or this kind of thing is necessary in a lot more places
         // rewriter->getArg(1).addGuard(npassed_args);
 
-        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                     rewriter->getReturnDestination());
         if (npassed_args >= 1)
-            rewrite_args.arg1 = rewriter->getArg(2);
+            rewrite_args.arg1 = rewriter->getArg(2)->setType(RefType::BORROWED);
         if (npassed_args >= 2)
-            rewrite_args.arg2 = rewriter->getArg(3);
+            rewrite_args.arg2 = rewriter->getArg(3)->setType(RefType::BORROWED);
         if (npassed_args >= 3)
-            rewrite_args.arg3 = rewriter->getArg(4);
+            rewrite_args.arg3 = rewriter->getArg(4)->setType(RefType::BORROWED);
         if (npassed_args >= 4)
-            rewrite_args.args = rewriter->getArg(5);
+            rewrite_args.args = rewriter->getArg(5)->setType(RefType::BORROWED);
         rtn = runtimeCallInternal<S, REWRITABLE>(obj, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         if (!rewrite_args.out_success) {
@@ -4656,6 +4668,11 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
         rtn = runtimeCallInternal<S, NOT_REWRITABLE>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
     assert(rtn || (S == CAPI && PyErr_Occurred()));
+
+    // XXX
+#ifndef NDEBUG
+    rewriter.release();
+#endif
 
     return rtn;
 }
@@ -4865,6 +4882,11 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     } else {
         rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, false, NULL);
     }
+
+    // XXX
+#ifndef NDEBUG
+    rewriter.release();
+#endif
 
     return rtn;
 }
@@ -6444,7 +6466,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
         Box* rtn;
         if (rewriter.get()) {
-            assert(0 && "check refcounting");
             RewriterVar* builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), builtins, rewriter->getReturnDestination());
             rewrite_args.obj_shape_guarded = true; // always builtin module
@@ -6456,12 +6477,18 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 auto r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                 rewriter->commitReturning(r_rtn);
             } else {
+                assert(0 && "check refcounting");
                 rewrite_args.getReturn(); // just to make the asserts happy
                 rewriter.reset(NULL);
             }
         } else {
             rtn = builtins_module->getattr(name);
         }
+
+    // XXX
+#ifndef NDEBUG
+    rewriter.release();
+#endif
 
         assert(rtn->ob_refcnt > 0);
         if (rtn) {
