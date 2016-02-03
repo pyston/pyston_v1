@@ -2709,7 +2709,7 @@ extern "C" bool nonzero(Box* obj) {
         // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
         if (rewriter.get()) {
             RewriterVar* b = r_obj->getAttr(offsetof(BoxedBool, n), rewriter->getReturnDestination());
-            rewriter->commitReturning(b);
+            rewriter->commitReturningNonPython(b);
         }
 
         BoxedBool* bool_obj = static_cast<BoxedBool*>(obj);
@@ -2718,7 +2718,7 @@ extern "C" bool nonzero(Box* obj) {
         if (rewriter.get()) {
             RewriterVar* n = r_obj->getAttr(offsetof(BoxedInt, n), rewriter->getReturnDestination());
             RewriterVar* b = n->toBool(rewriter->getReturnDestination());
-            rewriter->commitReturning(b);
+            rewriter->commitReturningNonPython(b);
         }
 
         BoxedInt* int_obj = static_cast<BoxedInt*>(obj);
@@ -2726,13 +2726,13 @@ extern "C" bool nonzero(Box* obj) {
     } else if (obj->cls == float_cls) {
         if (rewriter.get()) {
             RewriterVar* b = rewriter->call(false, (void*)floatNonzeroUnboxed, r_obj);
-            rewriter->commitReturning(b);
+            rewriter->commitReturningNonPython(b);
         }
         return static_cast<BoxedFloat*>(obj)->d != 0;
     } else if (obj->cls == none_cls) {
         if (rewriter.get()) {
             RewriterVar* b = rewriter->loadConst(0, rewriter->getReturnDestination());
-            rewriter->commitReturning(b);
+            rewriter->commitReturningNonPython(b);
         }
         return false;
     } else if (obj->cls == long_cls) {
@@ -2741,7 +2741,7 @@ extern "C" bool nonzero(Box* obj) {
 
         if (rewriter.get()) {
             RewriterVar* r_rtn = rewriter->call(false, (void*)longNonzeroUnboxed, r_obj);
-            rewriter->commitReturning(r_rtn);
+            rewriter->commitReturningNonPython(r_rtn);
         }
         return r;
     } else if (obj->cls == tuple_cls) {
@@ -2751,7 +2751,7 @@ extern "C" bool nonzero(Box* obj) {
         if (rewriter.get()) {
             RewriterVar* r_rtn
                 = r_obj->getAttr(offsetof(BoxedTuple, ob_size))->toBool(rewriter->getReturnDestination());
-            rewriter->commitReturning(r_rtn);
+            rewriter->commitReturningNonPython(r_rtn);
         }
         return r;
     } else if (obj->cls == list_cls) {
@@ -2760,7 +2760,7 @@ extern "C" bool nonzero(Box* obj) {
 
         if (rewriter.get()) {
             RewriterVar* r_rtn = r_obj->getAttr(offsetof(BoxedList, size))->toBool(rewriter->getReturnDestination());
-            rewriter->commitReturning(r_rtn);
+            rewriter->commitReturningNonPython(r_rtn);
         }
         return r;
     } else if (obj->cls == str_cls) {
@@ -2770,7 +2770,7 @@ extern "C" bool nonzero(Box* obj) {
         if (rewriter.get()) {
             RewriterVar* r_rtn
                 = r_obj->getAttr(offsetof(BoxedString, ob_size))->toBool(rewriter->getReturnDestination());
-            rewriter->commitReturning(r_rtn);
+            rewriter->commitReturningNonPython(r_rtn);
         }
         return r;
     } else if (obj->cls == unicode_cls) {
@@ -2780,7 +2780,7 @@ extern "C" bool nonzero(Box* obj) {
         if (rewriter.get()) {
             RewriterVar* r_rtn
                 = r_obj->getAttr(offsetof(PyUnicodeObject, length))->toBool(rewriter->getReturnDestination());
-            rewriter->commitReturning(r_rtn);
+            rewriter->commitReturningNonPython(r_rtn);
         }
         return r;
     }
@@ -2823,7 +2823,7 @@ extern "C" bool nonzero(Box* obj) {
 
             if (rewriter.get()) {
                 RewriterVar* b = rewriter->loadConst(1, rewriter->getReturnDestination());
-                rewriter->commitReturning(b);
+                rewriter->commitReturningNonPython(b);
             }
             return true;
         }
@@ -2832,7 +2832,7 @@ extern "C" bool nonzero(Box* obj) {
     if (crewrite_args.isSuccessful()) {
         RewriterVar* rtn = crewrite_args.getReturn(ReturnConvention::HAS_RETURN);
         RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, rtn);
-        rewriter->commitReturning(b);
+        rewriter->commitReturningNonPython(b);
     }
     return nonzeroHelper(rtn);
 }

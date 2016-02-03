@@ -722,6 +722,7 @@ public:
     void abort();
     void commit();
     void commitReturning(RewriterVar* rtn);
+    void commitReturningNonPython(RewriterVar* rtn);
 
     void addDependenceOn(ICInvalidator&);
 
