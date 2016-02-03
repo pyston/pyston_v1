@@ -1581,7 +1581,8 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
     } else {
         RELEASE_ASSERT(0, "%d", node->str_type);
     }
-    return Value(o, jit ? jit->imm(o) : NULL);
+    Py_INCREF(o);
+    return Value(o, jit ? jit->imm(o)->setType(RefType::BORROWED) : NULL);
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {

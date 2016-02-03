@@ -2698,7 +2698,7 @@ extern "C" bool nonzero(Box* obj) {
 
     RewriterVar* r_obj = NULL;
     if (rewriter.get()) {
-        r_obj = rewriter->getArg(0);
+        r_obj = rewriter->getArg(0)->setType(RefType::BORROWED);
         r_obj->addAttrGuard(offsetof(Box, cls), (intptr_t)obj->cls);
     }
 
@@ -3317,15 +3317,17 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         // or this kind of thing is necessary in a lot more places
         // rewriter->getArg(3).addGuard(npassed_args);
 
-        CallattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        CallattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED), rewriter->getReturnDestination());
         if (npassed_args >= 1)
-            rewrite_args.arg1 = rewriter->getArg(3);
+            rewrite_args.arg1 = rewriter->getArg(3)->setType(RefType::BORROWED);
         if (npassed_args >= 2)
-            rewrite_args.arg2 = rewriter->getArg(4);
+            rewrite_args.arg2 = rewriter->getArg(4)->setType(RefType::BORROWED);
         if (npassed_args >= 3)
-            rewrite_args.arg3 = rewriter->getArg(5);
-        if (npassed_args >= 4)
+            rewrite_args.arg3 = rewriter->getArg(5)->setType(RefType::BORROWED);
+        if (npassed_args >= 4) {
+            assert(0 && "hmm need to figure out vrefs for this");
             rewrite_args.args = rewriter->getArg(6);
+        }
         rtn = callattrInternal<S, REWRITABLE>(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args,
                                               keyword_names);
 
@@ -3343,7 +3345,7 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
                 rewriter->commitReturning(rtn);
             } else if (return_convention == ReturnConvention::NO_RETURN && flags.null_on_nonexistent) {
                 assert(!rtn);
-                rewriter->commitReturning(rewriter->loadConst(0, rewriter->getReturnDestination()));
+                rewriter->commitReturningNonPython(rewriter->loadConst(0, rewriter->getReturnDestination()));
             }
         }
     } else {
@@ -4858,8 +4860,6 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else {
-            rewriter->getArg(0)->decvref();
-            rewriter->getArg(1)->decvref();
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {

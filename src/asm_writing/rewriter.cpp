@@ -1515,6 +1515,11 @@ void Rewriter::commitReturning(RewriterVar* var) {
     assert(var->vrefcount == 1);
     var->stealRef();
 
+    for (RewriterVar* arg : args) {
+        if (arg->reftype != RefType::UNKNOWN)
+            arg->decvref();
+    }
+
     addAction([=]() {
         if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
@@ -1530,6 +1535,11 @@ void Rewriter::commitReturningNonPython(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     assert(var->reftype == RefType::UNKNOWN);
+
+    for (RewriterVar* arg : args) {
+        if (arg->reftype != RefType::UNKNOWN)
+            arg->decvref();
+    }
 
     addAction([=]() {
         if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
