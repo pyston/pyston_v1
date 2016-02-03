@@ -501,7 +501,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     }
 }
 
-void ASTInterpreter::doStore(AST_expr* node, Value value) {
+void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
     if (node->type == AST_TYPE::Name) {
         AST_Name* name = (AST_Name*)node;
         doStore(name, value);

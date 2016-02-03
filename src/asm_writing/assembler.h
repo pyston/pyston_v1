@@ -96,16 +96,16 @@ public:
 
 #ifndef NDEBUG
     inline void comment(const llvm::Twine& msg) {
-        if (ASSEMBLY_LOGGING) {
-            logger.log_comment(msg, addr - start_addr);
-        }
+        logger.log_comment(msg, addr - start_addr);
     }
     inline std::string dump() {
-        if (ASSEMBLY_LOGGING) {
-            return logger.finalize_log(start_addr, addr);
-        } else {
-            return "";
-        }
+        return logger.finalize_log(start_addr, addr);
+    }
+    // Dumps the assembly but with the start address overridden, so
+    // that we can dump the assembly (with comments) after the code has
+    // been relocated.
+    inline std::string dump(uint8_t* from_addr) {
+        return logger.finalize_log(from_addr, from_addr + (addr - start_addr));
     }
 #else
     inline void comment(const llvm::Twine& msg) {}

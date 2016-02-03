@@ -200,7 +200,7 @@ int handleArg(char code) {
     } else if (code == 'n') {
         ENABLE_INTERPRETER = false;
     } else if (code == 'a') {
-        ASSEMBLY_LOGGING = true;
+        LOG_IC_ASSEMBLY = true;
     } else if (code == 'p') {
         PROFILE = true;
     } else if (code == 'j') {
@@ -379,9 +379,11 @@ static int main(int argc, char** argv) noexcept {
             setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
         }
 
-        if (ASSEMBLY_LOGGING) {
+#ifndef NDEBUG
+        if (LOG_IC_ASSEMBLY || LOG_BJIT_ASSEMBLY) {
             assembler::disassemblyInitialize();
         }
+#endif
 
         {
             Timer _t("for Py_Initialize");

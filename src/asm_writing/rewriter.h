@@ -685,6 +685,12 @@ public:
     // infer these from loadConst calls.
     void addGCReference(void* obj);
 
+#ifndef NDEBUG
+    void comment(const llvm::Twine& msg);
+#else
+    void comment(const llvm::Twine& msg) {}
+#endif
+
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
     // has_side_effects: whether this call could have "side effects".  the exact side effects we've

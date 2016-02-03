@@ -141,6 +141,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       code_block(code_block),
       interp(0),
       ic_info(std::move(ic_info)) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: JitFragmentWriter() start");
     interp = createNewVar();
     addLocationToVar(interp, assembler::R12);
     interp->setAttr(ASTInterpreterJitInterface::getCurrentBlockOffset(), imm(block));
@@ -148,6 +149,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     vregs_array = createNewVar();
     addLocationToVar(vregs_array, assembler::R14);
     addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: JitFragmentWriter() end");
 }
 
 RewriterVar* JitFragmentWriter::getInterp() {
@@ -167,7 +169,6 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
 }
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    printf("lhs is %p\n", lhs);
     /// XXX increase this too much for testing
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node)->setType(RefType::OWNED);
 }
@@ -339,11 +340,13 @@ RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, 
 }
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitGetLocal start");
     assert(vreg >= 0);
     // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
     // from the vregs array.  Safer like this.
     RewriterVar* val_var = vregs_array->getAttr(vreg * 8)->setType(RefType::OWNED);
     addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitGetLocal end");
     return val_var;
 }
 
@@ -478,6 +481,7 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 }
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() start");
     for (auto v : local_syms) {
         if (v.second)
             v.second->decvref(); // xdecref?
@@ -485,12 +489,15 @@ void JitFragmentWriter::emitJump(CFGBlock* b) {
 
     RewriterVar* next = imm(b);
     addAction([=]() { _emitJump(b, next, exit_info); }, { next }, ActionType::NORMAL);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() end");
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitOSRPoint() start");
     RewriterVar* node_var = imm(node);
     RewriterVar* result = createNewVar();
     addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, ActionType::NORMAL);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitOSRPoint() end");
 }
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
@@ -524,13 +531,15 @@ void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedStrin
     emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node)->setType(RefType::OWNED);
 }
 
-void JitFragmentWriter::emitSetBlockLocal(InternedString s, RewriterVar* v) {
+void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() start");
     RewriterVar* prev = local_syms[s];
     local_syms[s] = v;
     if (prev) {
         // TODO: xdecref?
         prev->decvref();
     }
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() end");
 }
 
 void JitFragmentWriter::emitSetCurrentInst(AST_stmt* node) {
@@ -554,6 +563,7 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() start");
     assert(vreg >= 0);
     if (set_closure) {
         assert(0 && "check refcounting");
@@ -575,9 +585,11 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
         prev->decvref();
         //prev->xdecvref();
     }
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() end");
 }
 
 void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSideExit start");
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
 
@@ -592,6 +604,7 @@ void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* n
 
     addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
               ActionType::NORMAL);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSideExit end");
 }
 
 void JitFragmentWriter::emitUncacheExcInfo() {
@@ -637,6 +650,12 @@ int JitFragmentWriter::finishCompilation() {
     block->code = (void*)((uint64_t)entry_code + code_offset);
     block->entry_code = (decltype(block->entry_code))entry_code;
 
+    if (LOG_BJIT_ASSEMBLY) {
+        printf("\n");
+        printf("Successfully bjit'd code for cfg block %d\n", block->idx);
+        printf("Code goes from %p-%p\n", block->code, (char*)block->code + assembler->bytesWritten());
+    }
+
     // if any side exits point to this block patch them to a direct jump to this block
     auto it = block_patch_locations.find(block);
     if (it != block_patch_locations.end()) {
@@ -674,6 +693,11 @@ int JitFragmentWriter::finishCompilation() {
                                          slowpath_rtn_addr, pp_info.ic.get(), pp_info.stack_info, LiveOutSet());
         pp->associateNodeWithICInfo(pp_info.node);
         pp.release();
+    }
+
+    if (LOG_BJIT_ASSEMBLY) {
+        auto s = assembler->dump((uint8_t*)block->code/*, (uint8_t*)block->code + assembler->bytesWritten()*/);
+        printf("%s\n", s.c_str());
     }
 
     void* next_fragment_start = (uint8_t*)block->code + assembler->bytesWritten();
@@ -732,6 +756,7 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                                            int slot_size, AST* ast_node, TypeRecorder* type_recorder) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() start");
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
@@ -752,10 +777,13 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
                   ActionType::NORMAL);
         return result;
     }
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
     return result;
 #else
     assert(args_vec.size() < 7);
-    return call(false, func_addr, args_vec);
+    auto result = call(false, func_addr, args_vec);
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
+    return result;
 #endif
 }
 
