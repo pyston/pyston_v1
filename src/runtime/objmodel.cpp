@@ -5119,7 +5119,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         if (rewrite_args) {
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)lhs->cls->tp_richcompare, rewrite_args->lhs,
-                                               rewrite_args->rhs, rewrite_args->rewriter->loadConst(cpython_op_type));
+                                               rewrite_args->rhs, rewrite_args->rewriter->loadConst(cpython_op_type))
+                      ->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         }
         return r;
