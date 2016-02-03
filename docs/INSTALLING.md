@@ -20,7 +20,7 @@ sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-de
 
 **Ubuntu 14.04/14.10/15.04**
 ```
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev libmpfr-dev autoconf libtool python-dev texlive-extra-utils clang libssl-dev libsqlite3-dev pkg-config libbz2-dev
+sudo apt-get install -yq automake git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev libmpfr-dev autoconf libtool python-dev texlive-extra-utils clang libssl-dev libsqlite3-dev pkg-config libbz2-dev
 ```
 
 **Fedora 21**
