@@ -483,8 +483,14 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() start");
     for (auto v : local_syms) {
-        if (v.second)
+        if (v.second) {
+            if (LOG_BJIT_ASSEMBLY) {
+                // XXX silly but we need to keep this alive
+                std::string s = std::string("BJIT: decvref(") + v.first.c_str() + ")";
+                comment(*new std::string(s));
+            }
             v.second->decvref(); // xdecref?
+        }
     }
 
     RewriterVar* next = imm(b);
@@ -588,7 +594,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() end");
 }
 
-void JitFragmentWriter::emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block) {
+void JitFragmentWriter::emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSideExit start");
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
@@ -1010,7 +1016,7 @@ void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->bumpUse();
 }
 
-void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block,
+void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
                                       RewriterVar* next_block_var) {
     assert(val_constant->is_constant);
     assert(next_block_var->is_constant);
@@ -1024,10 +1030,12 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
+    assert(0 && "the rewriter thinks this section is linear but it's not");
     {
         // TODO: Figure out if we need a large/small forward based on the number of local syms we will have to decref?
         assembler::LargeForwardJump jne(*assembler, assembler::COND_EQUAL);
 
+        //assert(0 && "hmm I think this is the issue");
         _decref(var);
 
         for (auto v : local_syms) {
@@ -1045,7 +1053,11 @@ void JitFragmentWriter::_emitSideExit(RewriterVar* var, RewriterVar* val_constan
         }
     }
 
+    if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var");
+
+    //assert(0 && "hmm I think this is the issue");
     _decref(var);
+    if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var end");
 
     var->bumpUse();
     val_constant->bumpUse();

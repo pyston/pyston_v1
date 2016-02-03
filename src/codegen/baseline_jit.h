@@ -265,6 +265,7 @@ public:
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
     void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);
+    // emitSideExit steals a full ref from v, not just a vref
     void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
 
@@ -305,7 +306,7 @@ private:
                      int slot_size, AST* ast_node);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
-    void _emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
+    void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
 };
 }
 
