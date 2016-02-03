@@ -482,16 +482,6 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() start");
-    for (auto v : local_syms) {
-        if (v.second) {
-            if (LOG_BJIT_ASSEMBLY) {
-                // XXX silly but we need to keep this alive
-                std::string s = std::string("BJIT: decvref(") + v.first.c_str() + ")";
-                comment(*new std::string(s));
-            }
-            v.second->decvref(); // xdecref?
-        }
-    }
 
     RewriterVar* next = imm(b);
     addAction([=]() { _emitJump(b, next, exit_info); }, { next }, ActionType::NORMAL);
@@ -522,12 +512,20 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
     call(false, (void*)raise3, arg0, arg1, arg2);
 }
 
-void JitFragmentWriter::emitReturn(RewriterVar* v) {
+void JitFragmentWriter::emitEndBlock() {
     for (auto v : local_syms) {
-        if (v.second)
-            v.second->decvref();
+        if (v.second) {
+            if (LOG_BJIT_ASSEMBLY) {
+                // XXX silly but we need to keep this alive
+                std::string s = std::string("BJIT: decvref(") + v.first.c_str() + ")";
+                comment(*new std::string(s));
+            }
+            v.second->decvref(); // xdecref?
+        }
     }
+}
 
+void JitFragmentWriter::emitReturn(RewriterVar* v) {
     v->stealRef();
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
     v->decvref();
@@ -603,10 +601,6 @@ void JitFragmentWriter::emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFG
     vars.push_back(v);
     vars.push_back(var);
     vars.push_back(next_block_var);
-    for (auto v : local_syms) {
-        if (v.second)
-            vars.push_back(v.second);
-    }
 
     addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
               ActionType::NORMAL);
@@ -701,10 +695,12 @@ int JitFragmentWriter::finishCompilation() {
         pp.release();
     }
 
+#ifndef NDEBUG
     if (LOG_BJIT_ASSEMBLY) {
         auto s = assembler->dump((uint8_t*)block->code/*, (uint8_t*)block->code + assembler->bytesWritten()*/);
         printf("%s\n", s.c_str());
     }
+#endif
 
     void* next_fragment_start = (uint8_t*)block->code + assembler->bytesWritten();
     if (exit_info.num_bytes)
@@ -1030,18 +1026,11 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
         assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
-    assert(0 && "the rewriter thinks this section is linear but it's not");
     {
         // TODO: Figure out if we need a large/small forward based on the number of local syms we will have to decref?
         assembler::LargeForwardJump jne(*assembler, assembler::COND_EQUAL);
 
-        //assert(0 && "hmm I think this is the issue");
         _decref(var);
-
-        for (auto v : local_syms) {
-            if (v.second)
-                _decref(v.second);
-        }
 
         ExitInfo exit_info;
         _emitJump(next_block, next_block_var, exit_info);
@@ -1055,7 +1044,6 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
 
     if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var");
 
-    //assert(0 && "hmm I think this is the issue");
     _decref(var);
     if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var end");
 

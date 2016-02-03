@@ -25,7 +25,7 @@ int PYSTON_VERSION_MICRO = 0;
 int MAX_OPT_ITERATIONS = 1;
 
 bool LOG_IC_ASSEMBLY = false;
-bool LOG_BJIT_ASSEMBLY = true;
+bool LOG_BJIT_ASSEMBLY = false;
 
 bool CONTINUE_AFTER_FATAL = false;
 bool FORCE_INTERPRETER = true;

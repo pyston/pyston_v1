@@ -632,6 +632,8 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
 
     if (jit) {
+        jit->emitEndBlock();
+
         // Special note: emitSideExit decrefs v for us.
         // TODO: since the value is always True or False, maybe could optimize by putting the decref
         // before the conditional instead of after.
@@ -665,6 +667,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (jit) {
         if (backedge)
             jit->emitOSRPoint(node);
+        jit->emitEndBlock();
         jit->emitJump(node->target);
         finishJITing(node->target);
 
@@ -1036,6 +1039,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     Value s = node->value ? visit_expr(node->value) : getNone();
 
     if (jit) {
+        jit->emitEndBlock();
         jit->emitReturn(s);
         finishJITing();
     }
@@ -1738,8 +1742,10 @@ Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString 
 Box* ASTInterpreterJitInterface::doOSRHelper(void* _interpreter, AST_Jump* node) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     ++interpreter->edgecount;
-    if (interpreter->edgecount >= OSR_THRESHOLD_BASELINE)
+    if (interpreter->edgecount >= OSR_THRESHOLD_BASELINE) {
+        // XXX refcounting here?
         return interpreter->doOSR(node);
+    }
     return NULL;
 }
 
