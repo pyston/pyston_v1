@@ -673,8 +673,8 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
         // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
         // additional blocks ouside of the loop if the function is cold.
-        if (md->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
-            should_jit = false;
+        //if (md->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+            //should_jit = false;
     }
 
     if (backedge)
