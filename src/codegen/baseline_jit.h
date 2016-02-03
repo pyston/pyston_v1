@@ -246,6 +246,7 @@ public:
     void emitExec(RewriterVar* code, RewriterVar* globals, RewriterVar* locals, FutureFlags flags);
     void emitJump(CFGBlock* b);
     void emitOSRPoint(AST_Jump* node);
+    void emitPendingCallsCheck();
     void emitPrint(RewriterVar* dest, RewriterVar* var, bool nl);
     void emitRaise0();
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);

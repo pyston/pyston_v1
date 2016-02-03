@@ -474,6 +474,10 @@ void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
     addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, ActionType::NORMAL);
 }
 
+void JitFragmentWriter::emitPendingCallsCheck() {
+    call(false, (void*)ASTInterpreterJitInterface::pendingCallsCheckHelper);
+}
+
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
     if (!dest)
         dest = call(false, (void*)getSysStdout);
@@ -696,12 +700,17 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
         RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
         addAction([=]() { _emitRecordType(type_recorder_var, obj_cls_var); }, { type_recorder_var, obj_cls_var },
                   ActionType::NORMAL);
+
+        emitPendingCallsCheck();
         return result;
     }
+    emitPendingCallsCheck();
     return result;
 #else
     assert(args_vec.size() < 7);
-    return call(false, func_addr, args_vec);
+    RewriterVar* result = call(false, func_addr, args_vec);
+    emitPendingCallsCheck();
+    return result;
 #endif
 }
 

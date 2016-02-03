@@ -51,6 +51,8 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 void registerMainThread();
 void finishMainThread();
 
+bool isMainThread();
+
 // Hook for the GC; will visit all the threads (including the current one), visiting their
 // stacks and thread-local PyThreadState objects
 void visitAllStacks(gc::GCVisitor* v);

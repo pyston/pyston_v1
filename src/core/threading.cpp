@@ -497,8 +497,12 @@ static void* find_stack() {
     return NULL; /* not found =^P */
 }
 
+static long main_thread_id;
+
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
+
+    main_thread_id = pthread_self();
 
     assert(!current_internal_thread_state);
     current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
@@ -522,6 +526,10 @@ void finishMainThread() {
     current_internal_thread_state->assertNoGenerators();
 
     // TODO maybe this is the place to wait for non-daemon threads?
+}
+
+bool isMainThread() {
+    return pthread_self() == main_thread_id;
 }
 
 
