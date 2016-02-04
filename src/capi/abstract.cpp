@@ -321,7 +321,7 @@ static PyObject* abstract_get_bases(PyObject* cls) noexcept {
 
     static PyObject* __bases__ = NULL;
     if (__bases__ == NULL) {
-        __bases__ = PyString_InternFromString("__bases__");
+        __bases__ = getStaticString("__bases__");
         if (__bases__ == NULL)
             return NULL;
     }
@@ -394,7 +394,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
 
     static PyObject* __class__ = NULL;
     if (__class__ == NULL) {
-        __class__ = PyString_InternFromString("__class__");
+        __class__ = getStaticString("__class__");
         if (__class__ == NULL)
             return -1;
     }
@@ -2156,7 +2156,7 @@ extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const ch
     const char* type_name;
     static PyObject* int_name = NULL;
     if (int_name == NULL) {
-        int_name = PyString_InternFromString("__int__");
+        int_name = getStaticString("__int__");
         if (int_name == NULL)
             return NULL;
     }
@@ -2287,7 +2287,7 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     Py_ssize_t buffer_len;
 
     if (trunc_name == NULL) {
-        trunc_name = PyString_InternFromString("__trunc__");
+        trunc_name = getStaticString("__trunc__");
         if (trunc_name == NULL)
             return NULL;
     }

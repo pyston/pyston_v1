@@ -36,7 +36,7 @@ static PyObject* try_complex_special_method(PyObject* op) noexcept {
     static PyObject* complexstr;
 
     if (complexstr == NULL) {
-        complexstr = PyString_InternFromString("__complex__");
+        complexstr = getStaticString("__complex__");
         if (complexstr == NULL)
             return NULL;
     }

@@ -328,7 +328,7 @@ extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
         /* We're an instance of a classic class */
         /* Try __unicode__ from the instance -- alas we have no type */
         if (!unicodestr) {
-            unicodestr = PyString_InternFromString("__unicode__");
+            unicodestr = getStaticString("__unicode__");
             if (!unicodestr)
                 return NULL;
         }

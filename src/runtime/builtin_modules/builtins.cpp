@@ -173,7 +173,7 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
     Box* extremVal;
 
     if (kwargs && kwargs->d.size()) {
-        static BoxedString* key_str = static_cast<BoxedString*>(PyString_InternFromString("key"));
+        static BoxedString* key_str = static_cast<BoxedString*>(getStaticString("key"));
         auto it = kwargs->d.find(key_str);
         if (it != kwargs->d.end() && kwargs->d.size() == 1) {
             key_func = it->second;

@@ -1044,7 +1044,7 @@ static PyObject* half_binop(PyObject* v, PyObject* w, char* opname, binaryfunc t
     }
 
     if (coerce_obj == NULL) {
-        coerce_obj = PyString_InternFromString("__coerce__");
+        coerce_obj = getStaticString("__coerce__");
         if (coerce_obj == NULL)
             return NULL;
     }
