@@ -90,6 +90,10 @@
 #include "warnings.h"
 #include "weakrefobject.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Pyston additions:
 // These new APIS give access to our fast hidden-class-based attributes implementation.
 // Ideally in the future this will just be "storage strategy" of dicts and all Python
@@ -104,7 +108,7 @@ typedef struct _hcattrs PyHcAttrs;
 namespace pyston {
 class HCAttrs;
 }
-typedef int PyHcAttrs;
+typedef pyston::HCAttrs PyHcAttrs;
 #endif
 PyAPI_FUNC(void) PyObject_InitHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject*) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
@@ -133,6 +137,10 @@ PyAPI_FUNC(PyObject*) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
 // Pyston addition:
 PyAPI_FUNC(void) PyGC_Enable() PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyGC_Disable() PYSTON_NOEXCEPT;
+
+#ifdef __cplusplus
+}
+#endif
 
 #include "codecs.h"
 #include "pyerrors.h"

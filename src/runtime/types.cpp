@@ -1350,7 +1350,7 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
     abort();
 }
 
-extern "C" void PyType_SetDict(PyTypeObject* type, PyObject* dict) {
+extern "C" void PyType_SetDict(PyTypeObject* type, PyObject* dict) noexcept {
     typeSubSetDict(type, dict, NULL);
     type->tp_dict = dict;
 }
@@ -3673,8 +3673,9 @@ int BoxedClosure::clear(Box* _o) noexcept {
 #endif
 
 std::vector<Box*> constants;
-extern "C" void PyGC_RegisterStaticConstant(Box* b) {
+extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
     constants.push_back(b);
+    return b;
 }
 
 extern "C" void _PyUnicode_Fini(void);
