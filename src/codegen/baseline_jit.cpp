@@ -580,15 +580,17 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
 #endif
              v);
     } else {
-        RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setType(RefType::OWNED);
+        RewriterVar* prev = vregs_array->getAttr(8 * vreg);
         v->stealRef();
         vregs_array->setAttr(8 * vreg, v);
         v->decvref();
-        // XXX: this either needs to be an xdecref or we should check liveness analysis.
-        // keeping it like this for some performance testing but we need to fix this (will segfault
-        // on non-osr entries to the bjit)
-        prev->decvref();
-        //prev->xdecvref();
+
+        // TODO With definedness analysis, we could know whether we can skip this check (definitely defined)
+        // or not even load the previous value (definitely undefined).
+        // The issue is that definedness analysis is somewhat expensive to compute, so we don't compute it
+        // for the bjit.  We could try calculating it (which would require some re-plumbing), which might help
+        // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
+        prev->xdecref();
     }
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() end");
 }
