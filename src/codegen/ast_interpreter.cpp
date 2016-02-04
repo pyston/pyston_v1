@@ -518,14 +518,17 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         Box** array = unpackIntoArray(value.o, tuple->elts.size());
 
         RewriterVar* array_var = NULL;
-        if (jit)
+        if (jit) {
+            assert(0 && "check refcounting");
             array_var = jit->emitUnpackIntoArray(value, tuple->elts.size());
+        }
 
         unsigned i = 0;
         for (AST_expr* e : tuple->elts) {
             doStore(e, Value(array[i], jit ? array_var->getAttr(i * sizeof(void*)) : NULL));
             ++i;
         }
+        Py_DECREF(value.o);
     } else if (node->type == AST_TYPE::List) {
         AST_List* list = (AST_List*)node;
         Box** array = unpackIntoArray(value.o, list->elts.size());
@@ -956,6 +959,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         if (jit)
             jit->emitSetExcInfo(type, value, traceback);
         getFrameInfo()->exc = ExcInfo(type.o, value.o, traceback.o);
+        Py_DECREF(type.o);
+        Py_DECREF(value.o);
+        Py_DECREF(traceback.o);
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO) {
         assert(node->args.empty());

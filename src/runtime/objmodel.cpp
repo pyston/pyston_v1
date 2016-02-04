@@ -320,12 +320,16 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
         _checkUnpackingLength(expected_size, t->size());
+        for (auto e : *t)
+            Py_INCREF(e);
         return &t->elts[0];
     }
 
     if (obj->cls == list_cls) {
         BoxedList* l = static_cast<BoxedList*>(obj);
         _checkUnpackingLength(expected_size, l->size);
+        for (size_t i = 0; i < l->size; i++)
+            Py_INCREF(l->elts->elts[i]);
         return &l->elts->elts[0];
     }
 
