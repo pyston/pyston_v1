@@ -191,8 +191,8 @@ extern "C" void printHelper(Box* dest, Box* var, bool nl) {
         // begin code for handling of softspace
         bool new_softspace = !nl;
         if (softspace(dest, new_softspace))
-            callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1), space_str, 0, 0, 0,
-                                                  0);
+            autoDecref(callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
+                                                             space_str, 0, 0, 0, 0));
 
         Box* str_or_unicode_var = (var->cls == unicode_cls) ? incref(var) : str(var);
         Box* write_rtn = callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
@@ -4156,7 +4156,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     Py_XDECREF(arg2);
     Py_XDECREF(arg3);
     for (int i = 0; i < num_output_args - 3; i++) {
-        Py_DECREF(oargs[i]);
+        Py_XDECREF(oargs[i]);
     }
     if (rewrite_args) {
         RELEASE_ASSERT(num_output_args <= 3, "figure out vrefs for arg array");

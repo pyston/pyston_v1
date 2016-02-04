@@ -281,16 +281,18 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
 
     int i = 0;
     for (auto& name : param_names.arg_names) {
-        doStore(name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
+        doStore(name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
     }
 
     if (param_names.vararg_name)
-        doStore(param_names.vararg_name, Value(getArg(i++, arg1, arg2, arg3, args), 0));
+        doStore(param_names.vararg_name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
 
     if (param_names.kwarg_name) {
         Box* val = getArg(i++, arg1, arg2, arg3, args);
         if (!val)
             val = createDict();
+        else
+            Py_INCREF(val);
         doStore(param_names.kwarg_name, Value(val, 0));
     }
     assert(i == param_names.totalParameters());

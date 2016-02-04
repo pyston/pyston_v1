@@ -442,7 +442,7 @@ std::string BoxedModule::name() {
     }
 }
 
-BoxedString* BoxedModule::getStringConstant(llvm::StringRef ast_str, bool intern) {
+BORROWED(BoxedString*) BoxedModule::getStringConstant(llvm::StringRef ast_str, bool intern) {
     BoxedString*& r = str_constants[ast_str];
     if (intern) {
         // If we had previously created a box for this string, we have to create a new
@@ -4413,5 +4413,8 @@ extern "C" void Py_Finalize() noexcept {
     teardownCodegen();
 
     PRINT_TOTAL_REFS();
+#ifdef Py_REF_DEBUG
+    assert(_Py_RefTotal == 0);
+#endif
 }
 }
