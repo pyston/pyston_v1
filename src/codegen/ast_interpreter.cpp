@@ -467,9 +467,6 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         if (jit)
             jit->emitSetGlobal(globals, name.getBox(), value);
         setGlobal(globals, name.getBox(), value.o);
-        Py_DECREF(value.o);
-        if (jit)
-            value.var->decvref();
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(0 && "check refcounting");
         if (jit)
@@ -510,9 +507,12 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
     } else if (node->type == AST_TYPE::Attribute) {
         AST_Attribute* attr = (AST_Attribute*)node;
         Value o = visit_expr(attr->value);
-        if (jit)
+        if (jit) {
             jit->emitSetAttr(node, o, attr->attr.getBox(), value);
+            o.var->decvref();
+        }
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
+        Py_DECREF(o.o);
     } else if (node->type == AST_TYPE::Tuple) {
         AST_Tuple* tuple = (AST_Tuple*)node;
         Box** array = unpackIntoArray(value.o, tuple->elts.size());

@@ -785,7 +785,7 @@ BoxedDict* Box::getDict() {
 
 static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 
-template <Rewritable rewritable> Box* Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -2541,6 +2541,8 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
         }
 
         obj->setattr(attr, val, rewrite_args);
+        // TODO: make setattr() stealing
+        Py_DECREF(val);
     }
 
     // TODO this should be in type_setattro
@@ -2639,10 +2641,8 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
         }
     }
 
-    // We should probably add this as a GC root, but we can cheat a little bit since
-    // we know it's not going to get deallocated:
+    // This is a borrowed reference so we don't need to register it
     static Box* object_setattr = object_cls->getattr(getStaticString("__setattr__"));
-    assert(object_setattr);
 
     // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
     // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
@@ -6494,13 +6494,13 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
             rtn = builtins_module->getattr(name);
         }
 
-    // XXX
+// XXX
 #ifndef NDEBUG
-    rewriter.release();
+        rewriter.release();
 #endif
 
-        assert(rtn->ob_refcnt > 0);
         if (rtn) {
+            assert(rtn->ob_refcnt > 0);
             Py_INCREF(rtn);
             return rtn;
         }
@@ -6529,7 +6529,7 @@ Box* getFromGlobals(Box* globals, BoxedString* name) {
     }
 }
 
-extern "C" void setGlobal(Box* globals, BoxedString* name, Box* value) {
+extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     if (globals->cls == attrwrapper_cls) {
         globals = unwrapAttrWrapper(globals);
         RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);

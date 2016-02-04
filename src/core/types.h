@@ -671,7 +671,6 @@ public:
     }
     void giveAttr(BoxedString* attr, Box* val);
 
-    // for debugging mostly:
     void clearAttrs();
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the

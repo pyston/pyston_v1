@@ -1157,28 +1157,25 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
-    int n;
-
-    if (PyIndex_Check(rhs)) {
-        Box* index = PyNumber_Index(rhs);
-        if (!index) {
-            throwCAPIException();
-        }
-        rhs = index;
-    }
+    Py_ssize_t n;
 
     if (PyInt_Check(rhs))
         n = static_cast<BoxedInt*>(rhs)->n;
-    else if (isSubclass(rhs->cls, long_cls)) {
+    else if (PyLong_Check(rhs)) {
         n = _PyLong_AsInt(rhs);
         if (PyErr_Occurred()) {
             PyErr_Clear();
             raiseExcHelper(OverflowError, "cannot fit 'long' into index-sized integer");
         }
+    } else if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
     } else
-        return NotImplemented;
+        return incref(NotImplemented);
+
     if (n <= 0)
-        return EmptyString;
+        return incref(EmptyString);
 
     // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->size();

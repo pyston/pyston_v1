@@ -395,6 +395,8 @@ static void functionDtor(Box* b) {
     self->dependent_ics.invalidateAll();
     self->dependent_ics.~ICInvalidator();
 
+    self->clearAttrs();
+
     Py_DECREF(self->doc);
     Py_DECREF(self->modname);
     Py_XDECREF(self->name);
