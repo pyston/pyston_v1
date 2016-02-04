@@ -351,41 +351,42 @@ RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
 }
 
 RewriterVar* JitFragmentWriter::emitGetPystonIter(RewriterVar* v) {
-    return call(false, (void*)getPystonIter, v);
+    return call(false, (void*)getPystonIter, v)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
-    return call(false, (void*)hasnextHelper, v);
+    return call(false, (void*)hasnextHelper, v)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
-    return call(false, (void*)importFrom, module, imm(name));
+    return call(false, (void*)importFrom, module, imm(name))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, llvm::StringRef module_name) {
     return call(false, (void*)import, imm(level), from_imports, imm(const_cast<char*>(module_name.data())),
-                imm(module_name.size()));
+                imm(module_name.size()))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
-    return call(false, (void*)importStar, module, globals);
+    return call(false, (void*)importStar, module, globals)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitLandingpad() {
-    return call(false, (void*)ASTInterpreterJitInterface::landingpadHelper, getInterp());
+    return call(false, (void*)ASTInterpreterJitInterface::landingpadHelper, getInterp())->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitNonzero(RewriterVar* v) {
+    // nonzeroHelper returns bool
     return call(false, (void*)nonzeroHelper, v);
 }
 
 RewriterVar* JitFragmentWriter::emitNotNonzero(RewriterVar* v) {
-    return call(false, (void*)notHelper, v);
+    return call(false, (void*)notHelper, v)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
-    return call(false, (void*)repr, v);
+    return call(false, (void*)repr, v)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
@@ -555,11 +556,11 @@ void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, Re
 }
 
 void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v) {
-    emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512)->setType(RefType::OWNED);
+    emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512);
 }
 
 void JitFragmentWriter::emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value) {
-    emitPPCall((void*)setitem, { target, slice, value }, 2, 512)->setType(RefType::OWNED);
+    emitPPCall((void*)setitem, { target, slice, value }, 2, 512);
 }
 
 void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {

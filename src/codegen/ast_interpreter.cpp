@@ -1125,7 +1125,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
         if (!passed_globals_var)
             passed_globals_var = jit->imm(0ul);
         rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(md), closure_var, passed_globals_var,
-                            defaults_var, jit->imm(args->defaults.size()));
+                            defaults_var, jit->imm(args->defaults.size()))->setType(RefType::OWNED);
     }
 
     rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);
@@ -1520,7 +1520,7 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     Py_INCREF(o);
     RewriterVar* v = NULL;
     if (jit) {
-        v = jit->imm(o)->setType(RefType::BORROWED);
+        v = jit->imm(o)->asBorrowed();
     }
     return Value(o, v);
 }
@@ -1683,8 +1683,11 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
     Value v = visit_expr(node->value);
-    return Value(pyston::getattr(v.o, node->attr.getBox()),
-                 jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
+    Value r(pyston::getattr(v.o, node->attr.getBox()), jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
+    Py_DECREF(v.o);
+    if (jit)
+        v.var->decvref();
+    return r;
 }
 }
 

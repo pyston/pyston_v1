@@ -209,6 +209,11 @@ enum class RefType {
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
+#ifndef NDEBUG
+private:
+    int skip_assert_last_action = 0;
+#endif
+
 public:
     typedef llvm::SmallVector<RewriterVar*, 8> SmallVector;
 
@@ -240,19 +245,33 @@ public:
             return setType(RefType::BORROWED);
 
         assert(this->reftype == RefType::BORROWED);
-        return this->incvref();
+
+        // Special case: the rewriter can "resurrect" constants, and produce an existing
+        // RewriterVar even though at the bjit / IC level it's a new variable.
+        if (this->vrefcount == 0) {
+#ifndef NDEBUG
+            skip_assert_last_action++;
+#endif
+            vrefcount++;
+            return this;
+        } else {
+            return this->incvref();
+        }
     }
 
     RewriterVar* incvref() {
         assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
-        assert(vrefcount > 0 || (reftype == RefType::BORROWED && vrefcount >= 0));
+        //assert(vrefcount > 0 || (reftype == RefType::BORROWED && vrefcount >= 0));
+        assert(vrefcount > 0);
         vrefcount++;
         return this;
     }
 
+#ifndef NDEBUG
     // Assert that there are exactly num_left actions get added after this call.
     // Meant for debugging.  It's a way to cross between the two rewriter phases.
     void addAssertLastActionAction(int num_left=0);
+#endif
 
     RewriterVar* decvref() {
         assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
@@ -726,6 +745,10 @@ public:
     void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val = 0);
 
     void abort();
+
+    // note: commitReturning decref all of the args variables, whereas commit() does not.
+    // This should probably be made more consistent, but functions that use commitReturning
+    // usually want this behavior but ones that use
     void commit();
     void commitReturning(RewriterVar* rtn);
     void commitReturningNonPython(RewriterVar* rtn);

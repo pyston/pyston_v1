@@ -104,6 +104,25 @@ void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
     *tb = new BoxedTraceback(std::move(lineInfo), *tb);
 }
 
+void BoxedTraceback::dealloc(Box* b) noexcept {
+    abort();
+}
+
+int BoxedTraceback::traverse(Box* self, visitproc visit, void *arg) noexcept {
+    BoxedTraceback* tb = static_cast<BoxedTraceback*>(self);
+
+    Py_VISIT(tb->tb_next);
+    Py_VISIT(tb->py_lines);
+    Py_VISIT(tb->line.file);
+    Py_VISIT(tb->line.func);
+
+    return 0;
+}
+
+int BoxedTraceback::clear(Box* self) noexcept {
+    abort();
+}
+
 void setupTraceback() {
     traceback_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTraceback), false, "traceback",
                                        (destructor)BoxedTraceback::dealloc, NULL, true,

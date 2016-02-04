@@ -107,7 +107,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
 
 struct SetattrRewriteArgs;
 template <Rewritable rewritable>
-void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewriteArgs* rewrite_args);
 
 struct BinopRewriteArgs;
 template <Rewritable rewritable>

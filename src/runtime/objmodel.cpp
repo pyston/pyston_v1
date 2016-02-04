@@ -2452,7 +2452,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 }
 
 template <Rewritable rewritable>
-void setattrGeneric(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -2608,6 +2608,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
     RewriterVar* r_setattr;
 
     if (tp_setattro == instance_setattro) {
+        assert(0 && "check refcounting");
         if (rewriter.get()) {
             SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
             instanceSetattroInternal(obj, attr, attr_val, &rewrite_args);
@@ -2618,6 +2619,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
 
         return;
     } else if (tp_setattro != PyObject_GenericSetAttr) {
+        assert(0 && "check refcounting");
         static BoxedString* setattr_str = getStaticString("__setattr__");
         if (rewriter.get()) {
             GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
@@ -2650,6 +2652,9 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
             SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
             setattrGeneric<REWRITABLE>(obj, attr, attr_val, &rewrite_args);
             if (rewrite_args.out_success) {
+                rewriter->getArg(0)->decvref();
+                rewriter->getArg(1)->decvref();
+                // arg 2 vref got consumed by setattrGeneric
                 rewriter->commit();
             }
         } else {
@@ -2658,6 +2663,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
         return;
     }
 
+    assert(0 && "check refcounting");
     if (rewriter.get()) {
         assert(setattr);
 
@@ -3550,10 +3556,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         rewrite_success = false; // default case
     }
 
-    // Super fast path:
-    if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
-        && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
-        rewrite_success = true;
+    auto propagate_args = [&]() {
         if (num_output_args >= 1)
             Py_INCREF(oarg1);
         if (num_output_args >= 2)
@@ -3582,6 +3585,13 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 //}
             }
         }
+    };
+
+    // Super fast path:
+    if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
+        && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
+        rewrite_success = true;
+        propagate_args();
         return;
     }
 
@@ -3589,8 +3599,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // django-admin test this covers something like 93% of all calls to callFunc.
     if (argspec.num_keywords == 0 && argspec.has_starargs == paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && (!paramspec.takes_kwargs || paramspec.kwargsIndex() < 3)) {
-        assert(0 && "check refcounting");
-        assert(!rewrite_args && "check refcounting");
 
         // TODO could also do this for empty varargs
         if (paramspec.takes_kwargs) {
@@ -3600,11 +3608,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             getArg(idx, oarg1, oarg2, oarg3, NULL) = NULL; // pass NULL for kwargs
             if (rewrite_args) {
                 if (idx == 0)
-                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0);
+                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
                 else if (idx == 1)
-                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0);
+                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
                 else if (idx == 2)
-                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0);
+                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
                 else
                     abort();
             }
@@ -3624,14 +3632,12 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                         ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
                 }
                 rewrite_success = true;
-                if (num_output_args > 3)
-                    memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+                propagate_args();
                 return;
             }
         } else {
             rewrite_success = true;
-            if (num_output_args > 3)
-                memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
+            propagate_args();
             return;
         }
     }
@@ -4286,10 +4292,11 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
                     arg_vec.push_back(rewrite_args->arg2);
 
                 if (S == CXX)
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretFunction, arg_vec);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretFunction, arg_vec)
+                                                ->setType(RefType::OWNED);
                 else
-                    rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)astInterpretHelper2ArgsCapi, arg_vec);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper2ArgsCapi,
+                                                                         arg_vec)->setType(RefType::OWNED);
             } else {
                 // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
                 // to unpack some of the additional arguments:
@@ -4305,9 +4312,11 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
                     arg_array->setAttr(24, rewrite_args->args);
 
                 if (S == CXX)
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec)
+                                                ->setType(RefType::OWNED);
                 else
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec)
+                                                ->setType(RefType::OWNED);
             }
 
             rewrite_args->out_success = true;

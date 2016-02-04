@@ -31,7 +31,11 @@ public:
     LineInfo line;
     Box* py_lines;
 
-    BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), line(std::move(line)), py_lines(NULL) {}
+    BoxedTraceback(LineInfo line, Box* tb_next) : tb_next(tb_next), line(std::move(line)), py_lines(NULL) {
+        Py_INCREF(tb_next);
+        Py_INCREF(line.file);
+        Py_INCREF(line.func);
+    }
 
     DEFAULT_CLASS(traceback_cls);
 
@@ -42,15 +46,9 @@ public:
     // somewhat equivalent to PyTraceBack_Here
     static void here(LineInfo lineInfo, Box** tb);
 
-    static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
-    }
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
-    }
-    static int clear(Box* self) noexcept {
-        Py_FatalError("unimplemented");
-    }
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 void printTraceback(Box* b);

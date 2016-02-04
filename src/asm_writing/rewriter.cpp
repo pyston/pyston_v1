@@ -1753,6 +1753,7 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
     assertConsistent();
 }
 
+#ifndef NDEBUG
 void RewriterVar::addAssertLastActionAction(int num_left) {
     static int n = 0;
     n++;
@@ -1765,20 +1766,28 @@ void RewriterVar::addAssertLastActionAction(int num_left) {
         num_left++;
 
     rewriter->addAction([=]() {
+        if (this->skip_assert_last_action) {
+            this->skip_assert_last_action--;
+            return;
+        }
         if (this->next_use + num_left != this->uses.size()) {
             printf("n: %d\n", this_n);
             printf("this: %p\n", this);
             printf("uses: %p\n", &this->uses);
-            // for (auto idx : this->uses) {
-            // printf("Action: %p\n", rewriter->actions[idx].action.func);
-            // }
+            for (auto idx : this->uses) {
+                //  hax: reach inside SmallFunction to pull out the function pointer.
+                printf("Action %d: %p\n", idx, *(void**)&rewriter->actions[idx].action);
+            }
             printf("%ld\n", this->uses.size());
+            printf("Error: expected there to be %d uses left, but found %ld\n", num_left,
+                   this->uses.size() - this->next_use);
             raise(SIGTRAP);
         }
         RELEASE_ASSERT(this->next_use + num_left == this->uses.size(), "%d %d %ld\n", this->next_use, num_left,
                        this->uses.size());
     }, {}, ActionType::NORMAL);
 }
+#endif
 
 assembler::Indirect Rewriter::indirectFor(Location l) {
     assert(l.type == Location::Scratch || l.type == Location::Stack);
