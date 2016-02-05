@@ -166,7 +166,6 @@ test_pickle             unknown
 test_pkg                unknown bug
 test_poplib             [unknown]
 test_pprint             [unknown]
-test_print              [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
 test_pyclbr             This test passes but takes a very long time in debug mode (60s vs 5s for release mode).

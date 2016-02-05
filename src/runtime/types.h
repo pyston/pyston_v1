@@ -82,7 +82,6 @@ void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
-extern "C" Box* getSysStdout();
 
 extern "C" BoxedTuple* EmptyTuple;
 extern "C" BoxedString* EmptyString;

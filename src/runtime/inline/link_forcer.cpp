@@ -119,7 +119,6 @@ void force() {
     FORCE(printHelper);
 
     FORCE(listAppendInternal);
-    FORCE(getSysStdout);
 
     FORCE(runtimeCall);
     FORCE(runtimeCallCapi);

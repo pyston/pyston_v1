@@ -480,7 +480,7 @@ void JitFragmentWriter::emitPendingCallsCheck() {
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
     if (!dest)
-        dest = call(false, (void*)getSysStdout);
+        dest = imm(0ul);
     if (!var)
         var = imm(0ul);
     call(false, (void*)printHelper, dest, var, imm(nl));

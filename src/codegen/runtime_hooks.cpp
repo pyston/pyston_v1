@@ -243,7 +243,6 @@ void initGlobalFuncs(GlobalState& g) {
     GET(printHelper);
 
     GET(listAppendInternal);
-    GET(getSysStdout);
 
     GET(exec);
     GET(boxedLocalsSet);

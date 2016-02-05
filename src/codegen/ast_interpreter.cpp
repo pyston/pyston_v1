@@ -1265,7 +1265,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     if (node->dest)
         printHelper(dest.o, var.o, node->nl);
     else
-        printHelper(getSysStdout(), var.o, node->nl);
+        printHelper(NULL, var.o, node->nl);
 
     return Value();
 }

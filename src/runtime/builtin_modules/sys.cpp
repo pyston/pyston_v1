@@ -98,13 +98,6 @@ BoxedList* getSysPath() {
     return static_cast<BoxedList*>(_sys_path);
 }
 
-Box* getSysStdout() {
-    Box* sys_stdout = sys_module->getattr(internStringMortal("stdout"));
-    if (!sys_stdout)
-        raiseExcHelper(RuntimeError, "lost sys.stdout");
-    return sys_stdout;
-}
-
 Box* sysGetFrame(Box* val) {
     int depth = 0;
     if (val) {
