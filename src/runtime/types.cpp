@@ -364,7 +364,7 @@ BoxedFunction::BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> d
     // we don't have yet.
     if (md->source) {
         assert(!this->name);
-        this->name = static_cast<BoxedString*>(md->source->getName());
+        this->name = incref(static_cast<BoxedString*>(md->source->getName()));
     }
 }
 

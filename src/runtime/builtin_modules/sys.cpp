@@ -150,7 +150,7 @@ extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     return 0;
 }
 
-extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
+extern "C" BORROWED(PyObject*) PySys_GetObject(const char* name) noexcept {
     return sys_module->getattr(autoDecref(internStringMortal(name)));
 }
 

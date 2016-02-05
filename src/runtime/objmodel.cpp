@@ -4078,7 +4078,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     AUTO_XDECREF(arg1);
     AUTO_XDECREF(arg2);
     AUTO_XDECREF(arg3);
-    AUTO_XDECREF_ARRAY(args, num_output_args - 3);
+    AUTO_XDECREF_ARRAY(oargs, num_output_args - 3);
 
     if (rewrite_args && !rewrite_success) {
         assert(0 && "check refcounting");

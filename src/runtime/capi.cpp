@@ -1858,6 +1858,11 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     if (!rewrite_success)
         rewrite_args = NULL;
 
+    assert(!oargs);
+    AUTO_XDECREF(arg1);
+    AUTO_XDECREF(arg2);
+    AUTO_XDECREF(arg3);
+
     RewriterVar* r_passthrough = NULL;
     if (rewrite_args)
         r_passthrough = rewrite_args->rewriter->loadConst((intptr_t)self->passthrough, Location::forArg(0));

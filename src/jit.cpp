@@ -456,6 +456,7 @@ static int main(int argc, char** argv) noexcept {
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 PyErr_Print();
+                PyErr_Clear();
                 rtncode = 1;
             }
         } else if (module != NULL) {
@@ -499,6 +500,7 @@ static int main(int argc, char** argv) noexcept {
                 } catch (ExcInfo e) {
                     setCAPIException(e);
                     PyErr_Print();
+                    PyErr_Clear();
                     rtncode = 1;
                 }
             }
