@@ -104,7 +104,7 @@ std::string getInplaceOpSymbol(int op_type) {
     return std::string(getOpSymbol(op_type)) + '=';
 }
 
-BoxedString* getOpName(int op_type) {
+BORROWED(BoxedString*) getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
 

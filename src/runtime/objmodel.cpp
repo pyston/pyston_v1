@@ -3176,6 +3176,8 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         return val;
     }
 
+    AUTO_XDECREF(bind_obj);
+
     if (bind_obj != NULL) {
         Box** new_args = NULL;
         if (npassed_args >= 3) {
@@ -3208,11 +3210,12 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
                     assert(S == CAPI);
                     return NULL;
                 }
+                AUTO_DECREF(val);
+
                 Box** args = (Box**)extra_args[0];
                 const std::vector<BoxedString*>* keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
                 Box* rtn
                     = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
-                Py_DECREF(val);
                 return rtn;
             }
         };
@@ -3243,9 +3246,10 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
         Box* rtn = Helper::call(val, argspec, arg1, arg2, arg3, _args);
-        Py_XDECREF(bind_obj);
         return rtn;
     }
+
+    AUTO_DECREF(val);
 
     Box* r;
     if (rewrite_args) {
@@ -3257,8 +3261,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
     } else {
         r = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
-    Py_XDECREF(bind_obj);
-    Py_DECREF(val);
     if (rewrite_args) {
         if (r_bind_obj)
             r_bind_obj->decvref();
@@ -4073,6 +4075,11 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             throw e;
     }
 
+    AUTO_XDECREF(arg1);
+    AUTO_XDECREF(arg2);
+    AUTO_XDECREF(arg3);
+    AUTO_XDECREF_ARRAY(args, num_output_args - 3);
+
     if (rewrite_args && !rewrite_success) {
         assert(0 && "check refcounting");
 // These are the cases that we weren't able to rewrite.
@@ -4161,12 +4168,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     } else {
         res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
                                         arg3, oargs);
-    }
-    Py_XDECREF(arg1);
-    Py_XDECREF(arg2);
-    Py_XDECREF(arg3);
-    for (int i = 0; i < num_output_args - 3; i++) {
-        Py_XDECREF(oargs[i]);
     }
     if (rewrite_args) {
         RELEASE_ASSERT(num_output_args <= 3, "figure out vrefs for arg array");

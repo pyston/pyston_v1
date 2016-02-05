@@ -417,7 +417,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
             if (v.o) {
-                Py_XDECREF(v.o);
+                Py_DECREF(v.o);
                 if (v.var)
                     v.var->decvref();
             }
@@ -575,9 +575,9 @@ Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
 Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Value left = visit_expr(node->left);
     Value right = visit_expr(node->right);
+    AUTO_DECREF(left.o);
+    AUTO_DECREF(right.o);
     Value r = doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
-    Py_DECREF(left.o);
-    Py_DECREF(right.o);
     if (jit) {
         left.var->decvref();
         right.var->decvref();
@@ -930,7 +930,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Box* value = last_exception.value ? last_exception.value : None;
         Box* traceback = last_exception.traceback ? last_exception.traceback : None;
         v = Value(BoxedTuple::create({ type, value, traceback }), jit ? jit->emitLandingpad() : NULL);
-        last_exception = ExcInfo(NULL, NULL, NULL);
+        Py_CLEAR(last_exception.type);
+        Py_CLEAR(last_exception.value);
+        Py_CLEAR(last_exception.traceback);
     } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
         assert(node->args.size() == 2);
         Value obj = visit_expr(node->args[0]);

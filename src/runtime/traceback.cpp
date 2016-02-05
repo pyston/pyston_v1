@@ -101,11 +101,20 @@ Box* BoxedTraceback::getLines(Box* b) {
 }
 
 void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
+    Box* old_tb = *tb;
     *tb = new BoxedTraceback(std::move(lineInfo), *tb);
+    Py_DECREF(old_tb);
 }
 
 void BoxedTraceback::dealloc(Box* b) noexcept {
-    abort();
+    BoxedTraceback* self = static_cast<BoxedTraceback*>(b);
+
+    Py_DECREF(self->tb_next);
+    Py_XDECREF(self->py_lines);
+    Py_DECREF(self->line.file);
+    Py_DECREF(self->line.func);
+
+    PyObject_GC_Del(b);
 }
 
 int BoxedTraceback::traverse(Box* self, visitproc visit, void *arg) noexcept {

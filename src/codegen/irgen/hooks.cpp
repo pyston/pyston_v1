@@ -107,7 +107,7 @@ InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
 
-BoxedString* SourceInfo::getName() {
+BORROWED(BoxedString*) SourceInfo::getName() {
     assert(ast);
 
     static BoxedString* lambda_name = getStaticString("<lambda>");
@@ -115,15 +115,15 @@ BoxedString* SourceInfo::getName() {
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return incref(ast_cast<AST_ClassDef>(ast)->name.getBox());
+            return ast_cast<AST_ClassDef>(ast)->name.getBox();
         case AST_TYPE::FunctionDef:
-            return incref(ast_cast<AST_FunctionDef>(ast)->name.getBox());
+            return ast_cast<AST_FunctionDef>(ast)->name.getBox();
         case AST_TYPE::Lambda:
-            return incref(lambda_name);
+            return lambda_name;
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
         case AST_TYPE::Suite:
-            return incref(module_name);
+            return module_name;
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
