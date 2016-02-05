@@ -5590,7 +5590,9 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
     }
 
     if (cls->instancesHaveDictAttrs()) {
-        Py_FatalError("unimplemented");
+        BoxedDict* d = getDict();
+        d->d.erase(attr);
+        return;
     }
 
     abort();
