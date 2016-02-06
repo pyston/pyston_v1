@@ -532,8 +532,10 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
     v->decvref();
 }
 
-void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr) {
-    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node)->setType(RefType::OWNED);
+void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
+    attr->stealRef();
+    emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
+    attr->decvref();
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
@@ -555,8 +557,10 @@ void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, Re
     call(false, (void*)ASTInterpreterJitInterface::setExcInfoHelper, getInterp(), type, value, traceback);
 }
 
-void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v) {
+void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v) {
+    v->stealRef();
     emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512);
+    v->decvref();
 }
 
 void JitFragmentWriter::emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value) {

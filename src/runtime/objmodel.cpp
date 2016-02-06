@@ -1026,6 +1026,8 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
                     r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
                         ->setType(RefType::OWNED)
                         ->decvref();
+                    // TODO make this stealing
+                    rewrite_args->attrval->incvref();
                     rewrite_args->attrval->stealRef();
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
@@ -2544,9 +2546,13 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
             raiseAttributeError(obj, attr->s());
         }
 
+        if (rewrite_args)
+            rewrite_args->attrval->stealRef();
         obj->setattr(attr, val, rewrite_args);
         // TODO: make setattr() stealing
         Py_DECREF(val);
+        if (rewrite_args)
+            rewrite_args->attrval->decvref();
     }
 
     // TODO this should be in type_setattro
@@ -2573,7 +2579,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
 template void setattrGeneric<NOT_REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 template void setattrGeneric<REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
-extern "C" void setattr(Box* obj, BoxedString* attr, Box* attr_val) {
+extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
     STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
 
     static StatCounter slowpath_setattr("slowpath_setattr");
@@ -4806,6 +4812,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
             }
             return lrtn;
         }
+        Py_DECREF(lrtn);
     }
 
     // TODO patch these cases
@@ -6536,6 +6543,7 @@ Box* getFromGlobals(Box* globals, BoxedString* name) {
 
 extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     if (globals->cls == attrwrapper_cls) {
+        assert(0 && "check refcounting");
         globals = unwrapAttrWrapper(globals);
         RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
     }

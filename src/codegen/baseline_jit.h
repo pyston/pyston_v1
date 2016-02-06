@@ -257,11 +257,11 @@ public:
     void emitRaise0();
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
-    void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr);
+    void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
     void emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
-    void emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v);
+    void emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
     void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);

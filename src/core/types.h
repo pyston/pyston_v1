@@ -659,6 +659,7 @@ public:
     void setDict(BoxedDict* d);
 
 
+    // Note, setattr does *not* steal a reference, but it probably should
     void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
     // giveAttr consumes a reference to val and attr
     void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
