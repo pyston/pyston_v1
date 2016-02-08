@@ -121,6 +121,13 @@ Box* sysGetFrame(Box* val) {
     return frame;
 }
 
+Box* sysCurrentFrames() {
+    Box* rtn = _PyThread_CurrentFrames();
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
+}
+
 Box* sysGetDefaultEncoding() {
     return boxString(PyUnicode_GetDefaultEncoding());
 }
@@ -674,6 +681,8 @@ void setupSys() {
     sys_module->giveAttr(
         "_getframe",
         new BoxedFunction(FunctionMetadata::create((void*)sysGetFrame, UNKNOWN, 1, false, false), { NULL }));
+    sys_module->giveAttr("_current_frames",
+                         new BoxedFunction(FunctionMetadata::create((void*)sysCurrentFrames, UNKNOWN, 0)));
     sys_module->giveAttr("getdefaultencoding", new BoxedBuiltinFunctionOrMethod(
                                                    FunctionMetadata::create((void*)sysGetDefaultEncoding, STR, 0),
                                                    "getdefaultencoding", getdefaultencoding_doc));

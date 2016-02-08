@@ -67,3 +67,8 @@ def f2(b, C):
 print f2(False, NewC), f2(False, OldC)
 print f2(True, NewC), f2(True, OldC)
 
+try:
+    with None:
+        print "inside"
+except AttributeError as e:
+    assert "__exit__" in str(e)
