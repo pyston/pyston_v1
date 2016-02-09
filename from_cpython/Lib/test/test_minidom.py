@@ -1,4 +1,3 @@
-# expected: fail
 # test for xml.dom.minidom
 
 import pickle

@@ -1,4 +1,3 @@
-# expected: fail
 # This set of tests exercises the backward-compatibility class
 # in mailbox.py (the ones without write support).
 

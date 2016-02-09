@@ -1,4 +1,3 @@
-# expected: fail
 """Unit tests for the with statement specified in PEP 343."""
 
 
