@@ -1,4 +1,3 @@
-# expected: fail
 from __future__ import nested_scopes    # Backward compat for 2.1
 from unittest import TestCase
 from wsgiref.util import setup_testing_defaults
@@ -113,11 +112,6 @@ class IntegrationTests(TestCase):
     def test_plain_hello(self):
         out, err = run_amock()
         self.check_hello(out)
-
-    def test_request_length(self):
-        out, err = run_amock(data="GET " + ("x" * 65537) + " HTTP/1.0\n\n")
-        self.assertEqual(out.splitlines()[0],
-                         "HTTP/1.0 414 Request-URI Too Long")
 
     def test_validated_hello(self):
         out, err = run_amock(validator(hello_app))

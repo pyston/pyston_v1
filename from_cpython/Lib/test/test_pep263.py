@@ -1,4 +1,3 @@
-# expected: fail
 # -*- coding: koi8-r -*-
 
 import unittest

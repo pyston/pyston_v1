@@ -1,4 +1,3 @@
-# expected: fail
 import os
 import sys
 import time
