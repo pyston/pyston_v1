@@ -940,7 +940,7 @@ extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) 
     return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
 }
 
-static inline int list_contains_shared(BoxedList* self, Box* elt) {
+static inline int listContainsShared(BoxedList* self, Box* elt) {
     assert(PyList_Check(self));
 
     int size = self->size;
@@ -962,7 +962,12 @@ static inline int list_contains_shared(BoxedList* self, Box* elt) {
 }
 
 static int list_contains(PyListObject* a, PyObject* el) noexcept {
-    return list_contains_shared((BoxedList*)a, el);
+    try {
+        return listContainsShared((BoxedList*)a, el);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 static PyObject* list_repeat(PyListObject* a, Py_ssize_t n) noexcept {
@@ -1004,7 +1009,7 @@ static PyObject* list_repeat(PyListObject* a, Py_ssize_t n) noexcept {
 }
 
 Box* listContains(BoxedList* self, Box* elt) {
-    return boxBool(list_contains_shared(self, elt));
+    return boxBool(listContainsShared(self, elt));
 }
 
 Box* listCount(BoxedList* self, Box* elt) {
