@@ -26,7 +26,6 @@
 #include "capi/types.h"
 #include "codegen/unwinding.h"
 #include "core/types.h"
-#include "runtime/file.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/inline/list.h"
 #include "runtime/int.h"
@@ -97,12 +96,6 @@ BoxedList* getSysPath() {
 
     assert(_sys_path->cls == list_cls);
     return static_cast<BoxedList*>(_sys_path);
-}
-
-Box* getSysStdout() {
-    Box* sys_stdout = sys_module->getattr(internStringMortal("stdout"));
-    RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");
-    return sys_stdout;
 }
 
 Box* sysGetFrame(Box* val) {
@@ -652,13 +645,6 @@ void setupSys() {
     sys_module->giveAttr("path", sys_path);
 
     sys_module->giveAttr("argv", new BoxedList());
-
-    sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
-    sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
-    sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
-    sys_module->giveAttr("__stdout__", sys_module->getattr(internStringMortal("stdout")));
-    sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
-    sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
 
     sys_module->giveAttr("exc_info",
                          new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExcInfo, BOXED_TUPLE, 0),

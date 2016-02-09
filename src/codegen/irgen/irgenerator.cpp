@@ -2139,9 +2139,7 @@ private:
             dest = d->makeConverted(emitter, d->getBoxType());
             d->decvref(emitter);
         } else {
-            llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout);
-            dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val, true);
-            // TODO: speculate that sys.stdout is a file?
+            dest = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), true);
         }
         assert(dest);
 

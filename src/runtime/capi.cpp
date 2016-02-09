@@ -40,7 +40,6 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
-#include "runtime/file.h"
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
@@ -933,7 +932,7 @@ extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
 }
 
 extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) noexcept {
-    RELEASE_ASSERT(f->cls == file_cls && static_cast<BoxedFile*>(f)->f_fp == stderr,
+    RELEASE_ASSERT(f->cls == &PyFile_Type && ((PyFileObject*)f)->f_fp == stderr,
                    "sorry will only print tracebacks to stderr right now");
     printTraceback(v);
     return 0;

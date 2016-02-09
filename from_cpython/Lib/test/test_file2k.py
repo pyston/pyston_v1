@@ -1,4 +1,3 @@
-# expected: fail
 import sys
 import os
 import unittest
@@ -30,6 +29,8 @@ class AutoFileTests(unittest.TestCase):
             self.f.close()
         os.remove(TESTFN)
 
+    # Pyston change: disabled
+    @unittest.skip("this depends on refcounting")
     def testWeakRefs(self):
         # verify weak references
         p = proxy(self.f)

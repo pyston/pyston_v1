@@ -95,6 +95,7 @@ test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
 test_file2k             we abort when you try to open() a directory
 test_file_eintr         not sure
+test_fileio             [unknown]
 test_fork1              [unknown]
 test_frozen             [unknown]
 test_ftplib             [unknown]
@@ -165,7 +166,6 @@ test_pickle             unknown
 test_pkg                unknown bug
 test_poplib             [unknown]
 test_pprint             [unknown]
-test_print              [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
 test_pyclbr             This test passes but takes a very long time in debug mode (60s vs 5s for release mode).
@@ -186,7 +186,6 @@ test_site               [unknown]
 test_smtpnet            [unknown]
 test_socketserver       [unknown]
 test_socket             [unknown]
-test_softspace          [unknown]
 test_sort               argument specification issue in listSort?
 test_sqlite             [unknown]
 test_ssl                [unknown]

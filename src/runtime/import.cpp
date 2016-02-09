@@ -735,7 +735,7 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     if (sr.type == SearchResult::PY_SOURCE) {
         Box* path = boxString(sr.path);
         Box* mode = boxString("r");
-        Box* f = runtimeCall(file_cls, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
+        Box* f = runtimeCall(&PyFile_Type, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
         return BoxedTuple::create({ f, path, BoxedTuple::create({ boxString(".py"), mode, boxInt(sr.type) }) });
     }
 
@@ -748,7 +748,7 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     if (sr.type == SearchResult::C_EXTENSION) {
         Box* path = boxString(sr.path);
         Box* mode = boxString("rb");
-        Box* f = runtimeCall(file_cls, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
+        Box* f = runtimeCall(&PyFile_Type, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
         return BoxedTuple::create({ f, path, BoxedTuple::create({ boxString(".so"), mode, boxInt(sr.type) }) });
     }
 
@@ -783,7 +783,7 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
         RELEASE_ASSERT(_file == None, "");
         return createAndRunModule(name, (llvm::Twine(pathname->s()) + "/__init__.py").str(), pathname->s());
     } else if (type->n == SearchResult::PY_SOURCE) {
-        RELEASE_ASSERT(_file->cls == file_cls, "");
+        RELEASE_ASSERT(_file->cls == &PyFile_Type, "");
         return createAndRunModule(name, pathname->s());
     }
 

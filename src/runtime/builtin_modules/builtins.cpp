@@ -20,6 +20,7 @@
 #include "llvm/Support/FileSystem.h"
 
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
@@ -27,7 +28,6 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
-#include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/list.h"
@@ -309,7 +309,7 @@ Box* open(Box* arg1, Box* arg2, Box* arg3) {
     assert(arg2);
     assert(arg3);
     // This could be optimized quite a bit if it ends up being important:
-    return runtimeCall(file_cls, ArgPassSpec(3), arg1, arg2, arg3, NULL, NULL);
+    return runtimeCall(&PyFile_Type, ArgPassSpec(3), arg1, arg2, arg3, NULL, NULL);
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -1262,54 +1262,111 @@ Box* powFunc(Box* x, Box* y, Box* z) {
     return rtn;
 }
 
-Box* print(BoxedTuple* args, BoxedDict* kwargs) {
-    assert(args->cls == tuple_cls);
-    assert(!kwargs || kwargs->cls == dict_cls);
+static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    static const char* kwlist[] = { "sep", "end", "file", 0 };
+    static PyObject* dummy_args = NULL;
+    static PyObject* unicode_newline = NULL, * unicode_space = NULL;
+    static PyObject* str_newline = NULL, * str_space = NULL;
+    PyObject* newline, *space;
+    PyObject* sep = NULL, * end = NULL, * file = NULL;
+    int i, err, use_unicode = 0;
 
-    Box* dest, *end;
-
-    static BoxedString* file_str = internStringImmortal("file");
-    static BoxedString* end_str = internStringImmortal("end");
-    static BoxedString* space_str = internStringImmortal(" ");
-
-    BoxedDict::DictMap::iterator it;
-    if (kwargs && ((it = kwargs->d.find(file_str)) != kwargs->d.end())) {
-        dest = it->second;
-        kwargs->d.erase(it);
-    } else {
-        dest = getSysStdout();
+    if (dummy_args == NULL) {
+        if (!(dummy_args = PyTuple_New(0)))
+            return NULL;
     }
-
-    if (kwargs && ((it = kwargs->d.find(end_str)) != kwargs->d.end())) {
-        end = it->second;
-        kwargs->d.erase(it);
-    } else {
-        end = boxString("\n");
-    }
-
-    RELEASE_ASSERT(!kwargs || kwargs->d.size() == 0, "print() got unexpected keyword arguments");
-
-    static BoxedString* write_str = internStringImmortal("write");
-    CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
-
-    // TODO softspace handling?
-    // TODO: duplicates code with ASTInterpreter::visit_print()
-
-    bool first = true;
-    for (auto e : *args) {
-        BoxedString* s = str(e);
-        if (!first) {
-            Box* r = callattr(dest, write_str, callattr_flags, space_str, NULL, NULL, NULL, NULL);
-            RELEASE_ASSERT(r, "");
+    if (str_newline == NULL) {
+        str_newline = PyString_FromString("\n");
+        if (str_newline == NULL)
+            return NULL;
+        str_space = PyString_FromString(" ");
+        if (str_space == NULL) {
+            Py_CLEAR(str_newline);
+            return NULL;
         }
-        first = false;
-        Box* r = callattr(dest, write_str, callattr_flags, s, NULL, NULL, NULL, NULL);
-        RELEASE_ASSERT(r, "");
+#ifdef Py_USING_UNICODE
+        unicode_newline = PyUnicode_FromString("\n");
+        if (unicode_newline == NULL) {
+            Py_CLEAR(str_newline);
+            Py_CLEAR(str_space);
+            return NULL;
+        }
+        unicode_space = PyUnicode_FromString(" ");
+        if (unicode_space == NULL) {
+            Py_CLEAR(str_newline);
+            Py_CLEAR(str_space);
+            Py_CLEAR(unicode_space);
+            return NULL;
+        }
+#endif
     }
-    Box* r = callattr(dest, write_str, callattr_flags, end, NULL, NULL, NULL, NULL);
-    RELEASE_ASSERT(r, "");
+    if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OOO:print", const_cast<char**>(kwlist), &sep, &end, &file))
+        return NULL;
+    if (file == NULL || file == Py_None) {
+        file = PySys_GetObject("stdout");
+        /* sys.stdout may be None when FILE* stdout isn't connected */
+        if (file == Py_None)
+            Py_RETURN_NONE;
+    }
+    if (sep == Py_None) {
+        sep = NULL;
+    } else if (sep) {
+        if (PyUnicode_Check(sep)) {
+            use_unicode = 1;
+        } else if (!PyString_Check(sep)) {
+            PyErr_Format(PyExc_TypeError, "sep must be None, str or unicode, not %.200s", sep->cls->tp_name);
+            return NULL;
+        }
+    }
+    if (end == Py_None)
+        end = NULL;
+    else if (end) {
+        if (PyUnicode_Check(end)) {
+            use_unicode = 1;
+        } else if (!PyString_Check(end)) {
+            PyErr_Format(PyExc_TypeError, "end must be None, str or unicode, not %.200s", end->cls->tp_name);
+            return NULL;
+        }
+    }
 
-    return None;
+    if (!use_unicode) {
+        for (i = 0; i < PyTuple_Size(args); i++) {
+            if (PyUnicode_Check(PyTuple_GET_ITEM(args, i))) {
+                use_unicode = 1;
+                break;
+            }
+        }
+    }
+    if (use_unicode) {
+        newline = unicode_newline;
+        space = unicode_space;
+    } else {
+        newline = str_newline;
+        space = str_space;
+    }
+
+    for (i = 0; i < PyTuple_Size(args); i++) {
+        if (i > 0) {
+            if (sep == NULL)
+                err = PyFile_WriteObject(space, file, Py_PRINT_RAW);
+            else
+                err = PyFile_WriteObject(sep, file, Py_PRINT_RAW);
+            if (err)
+                return NULL;
+        }
+        err = PyFile_WriteObject(PyTuple_GetItem(args, i), file, Py_PRINT_RAW);
+        if (err)
+            return NULL;
+    }
+
+    if (end == NULL)
+        err = PyFile_WriteObject(newline, file, Py_PRINT_RAW);
+    else
+        err = PyFile_WriteObject(end, file, Py_PRINT_RAW);
+    if (err)
+        return NULL;
+
+    Py_RETURN_NONE;
 }
 
 Box* getreversed(Box* o) {
@@ -1861,10 +1918,6 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__debug__", False);
 
-    builtins_module->giveAttr(
-        "print", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)print, NONE, 0, true, true), "print",
-                                                  print_doc));
-
     notimplemented_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
@@ -2015,7 +2068,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("xrange", xrange_cls);
 
     open_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)open, typeFromClass(file_cls), 3, false, false,
+        FunctionMetadata::create((void*)open, typeFromClass(&PyFile_Type), 3, false, false,
                                  ParamNames({ "name", "mode", "buffering" }, "", "")),
         "open", { boxString("r"), boxInt(-1) }, NULL, open_doc);
     builtins_module->giveAttr("open", open_obj);
@@ -2078,7 +2131,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("list", list_cls);
     builtins_module->giveAttr("slice", slice_cls);
     builtins_module->giveAttr("type", type_cls);
-    builtins_module->giveAttr("file", file_cls);
+    builtins_module->giveAttr("file", &PyFile_Type);
     builtins_module->giveAttr("bool", bool_cls);
     builtins_module->giveAttr("dict", dict_cls);
     builtins_module->giveAttr("set", set_cls);
@@ -2118,5 +2171,13 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "format", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinFormat, UNKNOWN, 2), "format",
                                                    format_doc));
+
+
+    static PyMethodDef builtin_methods[] = {
+        { "print", (PyCFunction)builtin_print, METH_VARARGS | METH_KEYWORDS, print_doc },
+    };
+    for (auto& md : builtin_methods) {
+        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, builtins_module));
+    }
 }
 }

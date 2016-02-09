@@ -91,7 +91,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/descr.cpp
 		runtime/dict.cpp
 		runtime/exceptions.cpp
-		runtime/file.cpp
 		runtime/float.cpp
 		runtime/frame.cpp
 		runtime/generator.cpp
