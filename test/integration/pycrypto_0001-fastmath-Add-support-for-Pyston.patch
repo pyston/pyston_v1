@@ -4,11 +4,11 @@ Date: Tue, 28 Apr 2015 11:49:32 +0200
 Subject: [PATCH] fastmath: Add support for Pyston
 
 ---
- src/_fastmath.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ src/_fastmath.c | 30 ++++++++++++++++++++++++++++--
+ 1 file changed, 28 insertions(+), 2 deletions(-)
 
 diff --git a/src/_fastmath.c b/src/_fastmath.c
-index e369f5a..c4cf2aa 100644
+index e369f5a..854a984 100644
 --- a/src/_fastmath.c
 +++ b/src/_fastmath.c
 @@ -29,7 +29,14 @@
@@ -54,6 +54,21 @@ index e369f5a..c4cf2aa 100644
  
  typedef struct
  {
+@@ -1427,8 +1448,13 @@ getStrongPrime (PyObject *self, PyObject *args, PyObject *kwargs)
+ 	Py_BLOCK_THREADS;
+ 	res = 1;
+ 	res &= getRandomRange (X, lower_bound, upper_bound, randfunc);
+-	res &= getRandomNBitInteger (y[0], 101, randfunc);
+-	res &= getRandomNBitInteger (y[1], 101, randfunc);
++	// Pyston change: abort on the first error encountered
++	// res &= getRandomNBitInteger (y[0], 101, randfunc);
++	// res &= getRandomNBitInteger (y[1], 101, randfunc);
++	if (res)
++		res &= getRandomNBitInteger (y[0], 101, randfunc);
++	if (res)
++		res &= getRandomNBitInteger (y[1], 101, randfunc);
+ 	Py_UNBLOCK_THREADS;
+ 	if (!res)
+ 	{
 -- 
-2.1.0
-
+1.9.1

@@ -1,4 +1,6 @@
 import subprocess, sys, os, shutil, StringIO
+sys.path.append(os.path.dirname(__file__) + "/../lib")
+import test_helper
 
 PATCHES = ["pycrypto_0001-fastmath-Add-support-for-Pyston.patch"]
 PATCHES = [os.path.abspath(os.path.join(os.path.dirname(__file__), p)) for p in PATCHES]
@@ -55,6 +57,9 @@ public_key = key.publickey()
 enc_data = public_key.encrypt(test_string, 32)
 assert enc_data != test_string
 assert key.decrypt(enc_data) == test_string
+
+expected = [{'ran': 1891}]
+test_helper.run_test([sys.executable, "setup.py", "test"], pycrypto_dir, expected)
 
 print "-- Tests finished"
 
