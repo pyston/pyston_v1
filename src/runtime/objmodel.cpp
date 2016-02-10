@@ -480,6 +480,11 @@ static void subtype_dealloc(Box* self) noexcept {
         }
     }
 
+    // Pyston addition: same for hcattrs
+    if (type->attrs_offset && !base->attrs_offset) {
+        self->getHCAttrsPtr()->clear();
+    }
+
     /* Extract the type again; tp_del may have changed it */
     type = Py_TYPE(self);
 
@@ -1110,7 +1115,7 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
 template Box* Box::getattr<REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 
-void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
+void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_args) {
     Py_INCREF(new_attr);
 
     assert(cls->instancesHaveHCAttrs());
@@ -1161,7 +1166,7 @@ void Box::giveAttr(BoxedString* attr, Box* val) {
     Py_DECREF(attr);
 }
 
-void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
 
     // Have to guard on the memory layout of this object.

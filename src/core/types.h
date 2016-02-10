@@ -634,7 +634,7 @@ private:
     BoxedDict** getDictPtr();
 
     // Appends a new value to the hcattrs array.
-    void appendNewHCAttr(Box* val, SetattrRewriteArgs* rewrite_args);
+    void appendNewHCAttr(BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
 
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
@@ -660,7 +660,7 @@ public:
 
 
     // Note, setattr does *not* steal a reference, but it probably should
-    void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+    void setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
     // giveAttr consumes a reference to val and attr
     void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
     // giveAttrBorrowed consumes a reference only to attr (but it only has the const char* variant
