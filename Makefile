@@ -420,7 +420,7 @@ run_unittests:: run_$1_unittests
 )
 endef
 
-GDB_CMDS := $(GDB_PRE_CMDS) --ex "set confirm off" --ex "handle SIGUSR2 pass nostop noprint" --ex run --ex "bt 20" $(GDB_POST_CMDS)
+GDB_CMDS := $(GDB_PRE_CMDS) --ex "source pyston_gdbinit.txt" --ex "run" --ex "bt 20" $(GDB_POST_CMDS)
 BR ?=
 ARGS ?=
 ifneq ($(BR),)
