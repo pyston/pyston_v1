@@ -1,4 +1,3 @@
-# expected: fail
 import socket
 import telnetlib
 import time

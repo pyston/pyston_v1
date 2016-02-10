@@ -1,4 +1,3 @@
-# expected: fail
 import asyncore
 import unittest
 import select

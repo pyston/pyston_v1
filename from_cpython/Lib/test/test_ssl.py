@@ -1,4 +1,3 @@
-# expected: fail
 # Test the support for SSL and sockets
 
 import sys
