@@ -1182,6 +1182,13 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
 
+        if (unlikely(hcls == NULL)) {
+            // We could update PyObject_Init and PyObject_INIT to do this, but that has a small compatibility
+            // issue (what if people don't call either of those) and I'm not sure that this check will be that
+            // harmful.  But if it is we might want to try pushing this assignment to allocation time.
+            hcls = attrs->hcls = root_hcls;
+        }
+
         if (hcls->type == HiddenClass::DICT_BACKED) {
             if (rewrite_args)
                 assert(!rewrite_args->out_success);

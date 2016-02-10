@@ -3166,7 +3166,7 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     // but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
     // TODO It does mean that anything not defering to this function will have to call
     // initUserAttrs themselves, though.
-    initUserAttrs(op, tp);
+    //initUserAttrs(op, tp);
 
 #ifndef NDEBUG
     if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {

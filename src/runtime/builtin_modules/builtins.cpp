@@ -60,7 +60,7 @@ const char* Py_FileSystemDefaultEncoding = "UTF-8"; // Pyston change: modified t
 extern "C" Box* trap() {
     raise(SIGTRAP);
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 /* Helper for PyObject_Dir.
