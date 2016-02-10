@@ -1493,7 +1493,7 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     Py_INCREF(o);
     RewriterVar* v = NULL;
     if (jit) {
-        v = jit->imm(o)->asBorrowed();
+        v = jit->imm(o)->setType(RefType::BORROWED);
     }
     return Value(o, v);
 }

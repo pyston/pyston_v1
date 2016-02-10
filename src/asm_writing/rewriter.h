@@ -238,19 +238,6 @@ public:
 
     RewriterVar* setType(RefType type);
 
-    // XXX convert callers back to setType
-    RewriterVar* asBorrowed() {
-        return setType(RefType::BORROWED);
-    }
-
-    RewriterVar* incvref() {
-        assert(0 && "don't call incvref anymore");
-    }
-
-    RewriterVar* decvref() {
-        assert(0 && "don't call decvref anymore");
-    }
-
     // Call this to let the automatic refcount machinery know that a refcount
     // got "consumed", ie passed off.  Such as to a function that steals a reference,
     // or when stored into a memory location that is an owned reference, etc.
@@ -258,10 +245,6 @@ public:
     //   r_array->setAttr(0, r_val);
     //   r_val->refConsumed()
     void refConsumed();
-
-    RewriterVar* stealRef() {
-        assert(0 && "don't call stealref anymore");
-    }
 
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
@@ -698,30 +681,6 @@ public:
     }
 
     friend class RewriterVar;
-};
-
-struct AutoDecvref {
-private:
-    RewriterVar* var;
-
-public:
-    AutoDecvref(RewriterVar* var) : var(var) {}
-    ~AutoDecvref() {
-        if (var)
-            var->decvref();
-    }
-
-    operator RewriterVar*() {
-        return var;
-    }
-    RewriterVar* operator->() {
-        return var;
-    }
-
-    void operator=(RewriterVar* new_var) {
-        assert(!var);
-        var = new_var;
-    }
 };
 
 void setSlowpathFunc(uint8_t* pp_addr, void* func);

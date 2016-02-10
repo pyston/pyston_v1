@@ -795,6 +795,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
+    // TODO: is this ok?  what if new causes init to get freed?
     BORROWED(Box*) init_attr = NULL;
     if (rewrite_args) {
         assert(!argspec.has_starargs);
@@ -830,10 +831,9 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     DecrefHandle<Box, true> new_attr(nullptr);
     static BoxedString* new_str = getStaticString("__new__");
     if (rewrite_args) {
-        assert(0 && "check refcounting");
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
-        new_attr = typeLookup(cls, new_str, &grewrite_args);
+        new_attr = incref(typeLookup(cls, new_str, &grewrite_args));
         assert(new_attr);
 
         if (!grewrite_args.isSuccessful())
@@ -847,6 +847,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (new_attr->cls != function_cls) {
             try {
                 Box* descr_r = processDescriptorOrNull(new_attr, None, cls);
+                // TODO do we need to guard here on the class of new_attr (or that it's a class that can't change classes?)
                 if (descr_r) {
                     new_attr = descr_r;
                     rewrite_args = NULL;

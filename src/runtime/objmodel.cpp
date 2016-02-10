@@ -1176,7 +1176,7 @@ int assign_version_tag(PyTypeObject* type) noexcept {
     return 1;
 }
 
-template <Rewritable rewritable> Box* typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+template <Rewritable rewritable> BORROWED(Box*) typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -2098,7 +2098,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
 
             Box* val;
             if (rewrite_args) {
-                RELEASE_ASSERT(0, "need to check the refcounting for this");
                 GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
                 val = obj->getattr(attr, &hrewrite_args);
 
@@ -3597,11 +3596,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             getArg(idx, oarg1, oarg2, oarg3, NULL) = NULL; // pass NULL for kwargs
             if (rewrite_args) {
                 if (idx == 0)
-                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
+                    rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0)->setType(RefType::BORROWED);
                 else if (idx == 1)
-                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
+                    rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0)->setType(RefType::BORROWED);
                 else if (idx == 2)
-                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0)->asBorrowed();
+                    rewrite_args->arg3 = rewrite_args->rewriter->loadConst(0)->setType(RefType::BORROWED);
                 else
                     abort();
             }
@@ -3693,10 +3692,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
     }
     if (rewrite_args) {
-        for (int i = 0; i < positional_to_positional; i++) {
-            assert(i < 3 && "figure this out");
-            getArg(i, rewrite_args)->incvref();
-        }
+        assert(positional_to_positional < 3 && "figure this out");
     }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
@@ -3962,13 +3958,13 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         if (rewrite_args) {
             if (arg_idx == 0)
                 rewrite_args->arg1
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0))->asBorrowed();
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0))->setType(RefType::BORROWED);
             else if (arg_idx == 1)
                 rewrite_args->arg2
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1))->asBorrowed();
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1))->setType(RefType::BORROWED);
             else if (arg_idx == 2)
                 rewrite_args->arg3
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->asBorrowed();
+                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->setType(RefType::BORROWED);
             else {
                 assert(0 && "check refcounting");
                 rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*),

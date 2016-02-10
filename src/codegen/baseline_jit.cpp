@@ -521,8 +521,8 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
-    attr->stealRef();
     emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
+    attr->refConsumed();
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
