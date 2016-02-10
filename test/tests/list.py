@@ -211,3 +211,11 @@ print l
 """
 
 print repr(list.__hash__)
+
+class RaisingCmp(object):
+    def __eq__(self, other):
+        1/0
+try:
+    RaisingCmp() in [1, 2, 3]
+except ZeroDivisionError as e:
+    print e
