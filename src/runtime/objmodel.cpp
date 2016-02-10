@@ -1023,15 +1023,13 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
                     RewriterVar* r_hattrs
                         = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
 
+                    // Don't need to do anything: just getting it and setting it to OWNED
+                    // will tell the auto-refcount system to decref it.
                     r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
-                        ->setType(RefType::OWNED)
-                        ->decvref();
+                        ->setType(RefType::OWNED);
                     // TODO make this stealing
-                    rewrite_args->attrval->incvref();
-                    rewrite_args->attrval->stealRef();
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
-                    rewrite_args->attrval->decvref();
 
                     rewrite_args->out_success = true;
                 }
@@ -1389,8 +1387,6 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         } else {
             *bind_obj_out = incref(im_self);
             if (rewrite_args) {
-                r_im_func->incvref();
-                r_im_self->incvref();
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
             }
@@ -1951,7 +1947,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
     // Look up the class attribute (called `descr` here because it might
     // be a descriptor).
     Box* descr = NULL;
-    AutoDecvref r_descr = NULL;
+    RewriterVar* r_descr = NULL;
     if (rewrite_args) {
         RewriterVar* r_obj_cls = rewrite_args->obj->getAttr(offsetof(Box, cls), Location::any());
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_obj_cls, rewrite_args->destination);
@@ -2546,13 +2542,11 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
             raiseAttributeError(obj, attr->s());
         }
 
-        if (rewrite_args)
-            rewrite_args->attrval->stealRef();
-        obj->setattr(attr, val, rewrite_args);
         // TODO: make setattr() stealing
-        Py_DECREF(val);
+        obj->setattr(attr, val, rewrite_args);
         if (rewrite_args)
-            rewrite_args->attrval->decvref();
+            rewrite_args->attrval->refConsumed();
+        Py_DECREF(val);
     }
 
     // TODO this should be in type_setattro
@@ -2661,12 +2655,8 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
             // rewriter->trap();
             SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
             setattrGeneric<REWRITABLE>(obj, attr, attr_val, &rewrite_args);
-            if (rewrite_args.out_success) {
-                rewriter->getArg(0)->decvref();
-                rewriter->getArg(1)->decvref();
-                // arg 2 vref got consumed by setattrGeneric
+            if (rewrite_args.out_success)
                 rewriter->commit();
-            }
         } else {
             setattrGeneric<NOT_REWRITABLE>(obj, attr, attr_val, NULL);
         }
@@ -3245,10 +3235,8 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         else
             arg_array->setAttr(8, rewrite_args->rewriter->loadConst(0));
 
-        auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec);
+        auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec)->setType(RefType::OWNED);
         rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
-        if (r_bind_obj)
-            r_bind_obj->decvref();
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
         Box* rtn = Helper::call(val, argspec, arg1, arg2, arg3, _args);
@@ -3266,11 +3254,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
                                     S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
     } else {
         r = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
-    }
-    if (rewrite_args) {
-        if (r_bind_obj)
-            r_bind_obj->decvref();
-        r_val->decvref();
     }
     return r;
 }
@@ -3584,12 +3567,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         if (rewrite_args) {
             // TODO should probably rethink the whole vrefcounting thing here.
             // which ones actually need new vrefs?
-            if (num_output_args >= 1)
-                rewrite_args->arg1->incvref();
-            if (num_output_args >= 2)
-                rewrite_args->arg2->incvref();
-            if (num_output_args >= 3)
-                rewrite_args->arg3->incvref();
             if (num_output_args >= 3) {
                 RELEASE_ASSERT(0, "not sure what to do here\n");
                 //for (int i = 0; i < num_output_args - 3; i++) {
@@ -4177,9 +4154,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
     if (rewrite_args) {
         RELEASE_ASSERT(num_output_args <= 3, "figure out vrefs for arg array");
-        for (int i = 0; i < num_output_args; i++) {
-            getArg(i, rewrite_args)->decvref();
-        }
     }
 
     return res;

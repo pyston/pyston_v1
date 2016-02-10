@@ -270,8 +270,6 @@ void Rewriter::assertArgsInPlace() {
 void RewriterVar::addGuard(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
-
     if (isConstant()) {
         RELEASE_ASSERT(constant_value == val, "added guard which is always false");
         return;
@@ -325,8 +323,6 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
 void RewriterVar::addGuardNotEq(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
-
     RewriterVar* val_var = rewriter->loadConst(val);
     rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
@@ -357,8 +353,6 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
 
     if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
         return; // duplicate guard detected
@@ -411,8 +405,6 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
-
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
     return result;
@@ -442,8 +434,6 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
 RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
-
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, ActionType::NORMAL);
     return result;
@@ -465,8 +455,6 @@ void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset,
 
 RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    assert(this->reftype == RefType::UNKNOWN || this->vrefcount > 0);
 
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, ActionType::NORMAL);
@@ -648,9 +636,6 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 
 void RewriterVar::setAttr(int offset, RewriterVar* val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    for (auto a : {this, val})
-        assert(a->reftype == RefType::UNKNOWN || a->vrefcount > 0);
 
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
@@ -931,9 +916,6 @@ static const Location caller_save_registers[]{
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {
-    for (auto a : args)
-        assert(a->reftype == RefType::UNKNOWN || a->vrefcount > 0);
-
     RewriterVar* result = createNewVar();
     RewriterVar::SmallVector uses;
     for (RewriterVar* v : args) {
@@ -1185,6 +1167,61 @@ void Rewriter::abort() {
     ic_rewrites_aborted.log();
 }
 
+bool RewriterVar::refHandedOff() {
+    return this->reftype == RefType::OWNED && this->num_refs_consumed > 0
+           && this->last_refconsumed_numuses == this->uses.size();
+}
+
+RewriterVar* RewriterVar::setType(RefType type) {
+    assert(type != RefType::UNKNOWN);
+    assert(this->reftype == RefType::UNKNOWN || this->reftype == type);
+
+    if (this->reftype == RefType::UNKNOWN) {
+        rewriter->addAction([=]() {
+            int num_needed_refs = this->num_refs_consumed - (this->refHandedOff() ? 1 : 0);
+            assert(num_needed_refs >= 0);
+            if (num_needed_refs > 0) {
+                // XXX do a single add instead of multiple incs
+                for (int i = 0; i < num_needed_refs; i++) {
+                    this->rewriter->_incref(this);
+                }
+            }
+
+            this->bumpUse();
+        }, { this }, ActionType::MUTATION);
+        this->reftype = type;
+    }
+
+    return this;
+}
+
+void RewriterVar::_release() {
+    if (reftype == RefType::OWNED && !this->refHandedOff())
+        this->rewriter->_decref(this);
+
+    for (Location loc : locations) {
+        rewriter->vars_by_location.erase(loc);
+    }
+
+    // releases allocated scratch space
+    if (hasScratchAllocation()) {
+        for (int i = 0; i < scratch_allocation.second; ++i) {
+            Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
+            assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
+            rewriter->vars_by_location.erase(l);
+        }
+        resetHasScratchAllocation();
+    }
+
+    this->locations.clear();
+}
+
+void RewriterVar::refConsumed() {
+    num_refs_consumed++;
+    last_refconsumed_numuses = uses.size();
+    // Maybe emit an incref here to make debugging more clear?
+}
+
 void RewriterVar::bumpUse() {
     rewriter->assertPhaseEmitting();
 
@@ -1196,46 +1233,17 @@ void RewriterVar::bumpUse() {
             return;
         }
 
-        for (Location loc : locations) {
-            rewriter->vars_by_location.erase(loc);
-        }
-
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
-        this->locations.clear();
+        this->_release();
     }
 }
 
-// Call this on the result at the end of the action in which it's created
-// TODO we should have a better way of dealing with variables that have 0 uses
 void RewriterVar::releaseIfNoUses() {
     rewriter->assertPhaseEmitting();
 
     if (uses.size() == 0) {
         assert(next_use == 0);
-        for (Location loc : locations) {
-            rewriter->vars_by_location.erase(loc);
-        }
 
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
-        this->locations.clear();
+        this->_release();
     }
 }
 
@@ -1281,10 +1289,6 @@ void Rewriter::commit() {
         }
     }
 
-    for (RewriterVar& var : vars) {
-        assert(var.vrefcount == 0);
-    }
-
     assertConsistent();
 
     // Emit assembly for each action, and set done_guarding when
@@ -1301,10 +1305,7 @@ void Rewriter::commit() {
         done_guarding = true;
         for (RewriterVar* arg : args) {
             if (arg->next_use == arg->uses.size()) {
-                for (Location loc : arg->locations) {
-                    vars_by_location.erase(loc);
-                }
-                arg->locations.clear();
+                arg->_release();
             }
         }
         assertConsistent();
@@ -1450,11 +1451,21 @@ void Rewriter::commit() {
         RewriterVar* var = live_outs[i];
         assert(var->isInLocation(ru));
     }
+#endif
 
     for (RewriterVar* live_out : live_outs) {
+        assert(live_out->reftype == RefType::UNKNOWN); // Otherwise the automatic refcounting might get it wrong
         live_out->bumpUse();
     }
 
+#ifndef NDEBUG
+    // Now we should be completely done with calling bumpUse
+    for (RewriterVar& var : vars) {
+        assert(var.next_use == var.uses.size());
+    }
+#endif
+
+#ifndef NDEBUG
     // At this point, all real variables should have been removed. Check that
     // anything left is the fake LOCATION_PLACEHOLDER.
     for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
@@ -1512,13 +1523,6 @@ void Rewriter::commitReturning(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     assert(var->reftype != RefType::UNKNOWN);
-    assert(var->vrefcount == 1);
-    var->stealRef();
-
-    for (RewriterVar* arg : args) {
-        if (arg->reftype != RefType::UNKNOWN)
-            arg->decvref();
-    }
 
     addAction([=]() {
         if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
@@ -1526,7 +1530,7 @@ void Rewriter::commitReturning(RewriterVar* var) {
         var->bumpUse();
     }, { var }, ActionType::NORMAL);
 
-    var->decvref();
+    var->refConsumed();
 
     commit();
 }
@@ -1535,11 +1539,6 @@ void Rewriter::commitReturningNonPython(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     assert(var->reftype == RefType::UNKNOWN);
-
-    for (RewriterVar* arg : args) {
-        if (arg->reftype != RefType::UNKNOWN)
-            arg->decvref();
-    }
 
     addAction([=]() {
         if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
@@ -1752,42 +1751,6 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
 
     assertConsistent();
 }
-
-#ifndef NDEBUG
-void RewriterVar::addAssertLastActionAction(int num_left) {
-    static int n = 0;
-    n++;
-    // printf("addAssertLastActionAction(); %d\n", n);
-
-    int this_n = n;
-
-    // The rewriter adds a phony use of all constants to keep them alive:
-    if (this->is_constant)
-        num_left++;
-
-    rewriter->addAction([=]() {
-        if (this->skip_assert_last_action) {
-            this->skip_assert_last_action--;
-            return;
-        }
-        if (this->next_use + num_left != this->uses.size()) {
-            printf("n: %d\n", this_n);
-            printf("this: %p\n", this);
-            printf("uses: %p\n", &this->uses);
-            for (auto idx : this->uses) {
-                //  hax: reach inside SmallFunction to pull out the function pointer.
-                printf("Action %d: %p\n", idx, *(void**)&rewriter->actions[idx].action);
-            }
-            printf("%ld\n", this->uses.size());
-            printf("Error: expected there to be %d uses left, but found %ld\n", num_left,
-                   this->uses.size() - this->next_use);
-            raise(SIGTRAP);
-        }
-        RELEASE_ASSERT(this->next_use + num_left == this->uses.size(), "%d %d %ld\n", this->next_use, num_left,
-                       this->uses.size());
-    }, {}, ActionType::NORMAL);
-}
-#endif
 
 assembler::Indirect Rewriter::indirectFor(Location l) {
     assert(l.type == Location::Scratch || l.type == Location::Stack);

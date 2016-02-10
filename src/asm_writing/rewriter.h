@@ -201,7 +201,12 @@ class RewriterVar;
 class RewriterAction;
 
 enum class RefType {
-    UNKNOWN,
+    UNKNOWN
+#ifndef NDEBUG
+        // Set this to non-zero to make it possible for the debugger to
+        = 0
+#endif
+        ,
     OWNED,
     BORROWED,
 };
@@ -209,10 +214,13 @@ enum class RefType {
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
-#ifndef NDEBUG
-private:
-    int skip_assert_last_action = 0;
-#endif
+    // Fields for automatic refcounting:
+    int num_refs_consumed = 0; // The number of "refConsumed()" calls on this RewriterVar
+    int last_refconsumed_numuses = 0; // The number of uses in the `uses` array when the last refConsumed() call was made.
+    RefType reftype = RefType::UNKNOWN;
+    // Helper function: whether there is a ref that got consumed but came from the consumption of the
+    // initial (owned) reference.
+    bool refHandedOff();
 
 public:
     typedef llvm::SmallVector<RewriterVar*, 8> SmallVector;
@@ -228,109 +236,31 @@ public:
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
 
-    RewriterVar* setType(RefType type) {
-        assert(this->reftype == RefType::UNKNOWN);
-        assert(type != RefType::UNKNOWN);
-        this->reftype = type;
-        this->vrefcount = 1;
-        return this;
-    }
+    RewriterVar* setType(RefType type);
 
-    // Due to optimizations, there are some functions that sometimes return a new RewriterVar and
-    // sometimes return an existing one (specifically, loadConst() does this).
-    // asBorrowed() is meant for that kind of case.
-    // I think its presence indicates something fishy about the API though.
+    // XXX convert callers back to setType
     RewriterVar* asBorrowed() {
-        if (this->reftype == RefType::UNKNOWN)
-            return setType(RefType::BORROWED);
-
-        assert(this->reftype == RefType::BORROWED);
-
-        // Special case: the rewriter can "resurrect" constants, and produce an existing
-        // RewriterVar even though at the bjit / IC level it's a new variable.
-        if (this->vrefcount == 0) {
-#ifndef NDEBUG
-            skip_assert_last_action++;
-#endif
-            vrefcount++;
-            return this;
-        } else {
-            return this->incvref();
-        }
+        return setType(RefType::BORROWED);
     }
 
     RewriterVar* incvref() {
-        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
-        //assert(vrefcount > 0 || (reftype == RefType::BORROWED && vrefcount >= 0));
-        assert(vrefcount > 0);
-        vrefcount++;
-        return this;
+        assert(0 && "don't call incvref anymore");
     }
-
-#ifndef NDEBUG
-    // Assert that there are exactly num_left actions get added after this call.
-    // Meant for debugging.  It's a way to cross between the two rewriter phases.
-    void addAssertLastActionAction(int num_left=0);
-#endif
 
     RewriterVar* decvref() {
-        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
-        assert(vrefcount > 0);
-        vrefcount--;
-
-        if (vrefcount == 0) {
-
-            if (reftype == RefType::OWNED)
-                decref();
-
-            // Assert that there are no more uses of the this at the machine-code level.
-            // This is kind of weird to cross this abstraction boundary like this, but
-            // I think it's a good safety net.
-#ifndef NDEBUG
-            addAssertLastActionAction();
-#endif
-        }
-        return this;
+        assert(0 && "don't call decvref anymore");
     }
 
-    // Steal a ref (not a vref) from this object.
-    // If there aren't any owned refs available, one will be created.
-    // Doesn't change the vrefcount, but the vref that stealRef acts on
-    // becomes a borrowed vref.  One can not use this RewriterVar after stealRef
-    // except for the operation that will actually steal the ref.
-    // If that is necessary, an extra vref should be taken out beforehand.
-    //
-    // Typical usage should look like:
-    //   var->stealRef();
-    //   functionThatStealsRef(var);
-    //   var->decvref();
-    //
-    // If you need to use var after functionThatStealsRef, the whole snippet
-    // needs to be surrounded in an incvref/decvref.
-    //
-    // TODO: I still think I can find a better API for this.  Maybe something like
-    // var->materializeRefFor([&](){ functionThatStealsRef(var); });
-    //
+    // Call this to let the automatic refcount machinery know that a refcount
+    // got "consumed", ie passed off.  Such as to a function that steals a reference,
+    // or when stored into a memory location that is an owned reference, etc.
+    // This should get called *after* the ref got consumed, ie something like
+    //   r_array->setAttr(0, r_val);
+    //   r_val->refConsumed()
+    void refConsumed();
+
     RewriterVar* stealRef() {
-        assert(reftype == RefType::OWNED || reftype == RefType::BORROWED);
-        assert(vrefcount > 0);
-
-        if (reftype == RefType::OWNED && vrefcount == 1) {
-            // handoff, do nothing;
-            reftype = RefType::BORROWED;
-        } else {
-            incref();
-        }
-
-        if (vrefcount == 1) {
-            // See the comment in decvref.
-            // This is similar, except that we want there to be exactly one more use of this variable:
-            // whatever consumes the vref.  We want that to happen after the materializeVref call.
-#ifndef NDEBUG
-            addAssertLastActionAction(1);
-#endif
-        }
-        return this;
+        assert(0 && "don't call stealref anymore");
     }
 
 
@@ -360,7 +290,12 @@ private:
     llvm::SmallVector<int, 32> uses;
     int next_use;
     void bumpUse();
+    // Call this on the result at the end of the action in which it's created
+    // TODO we should have a better way of dealing with variables that have 0 uses
     void releaseIfNoUses();
+    // Helper funciton to release all the resources that this var is using.
+    // Don't call it directly: call bumpUse and releaseIfNoUses instead.
+    void _release();
     bool isDoneUsing() { return next_use == uses.size(); }
     bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
     void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
@@ -368,9 +303,6 @@ private:
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
     bool is_constant;
-
-    RefType reftype = RefType::UNKNOWN;
-    int vrefcount;
 
     uint64_t constant_value;
     Location arg_loc;
@@ -397,12 +329,7 @@ private:
     RewriterVar& operator=(const RewriterVar&) = delete;
 
 public:
-    RewriterVar(Rewriter* rewriter)
-        : rewriter(rewriter),
-          next_use(0),
-          is_arg(false),
-          is_constant(false),
-          vrefcount(0) {
+    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
         assert(rewriter);
     }
 
@@ -410,7 +337,7 @@ public:
     // XXX: for testing, reset these on deallocation so that we will see the next time they get set.
     ~RewriterVar() {
         reftype = (RefType)-1;
-        vrefcount = -11;
+        num_refs_consumed = -11;
     }
 #endif
 

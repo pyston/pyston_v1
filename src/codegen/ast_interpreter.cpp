@@ -418,8 +418,6 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
                 interpreter.jit->emitSetCurrentInst(s);
             if (v.o) {
                 Py_DECREF(v.o);
-                if (v.var)
-                    v.var->decvref();
             }
             v = interpreter.visit_stmt(s);
         }
@@ -509,7 +507,6 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         Value o = visit_expr(attr->value);
         if (jit) {
             jit->emitSetAttr(node, o, attr->attr.getBox(), value);
-            o.var->decvref();
         }
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
         Py_DECREF(o.o);
@@ -578,10 +575,6 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     AUTO_DECREF(left.o);
     AUTO_DECREF(right.o);
     Value r = doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
-    if (jit) {
-        left.var->decvref();
-        right.var->decvref();
-    }
     return r;
 }
 
@@ -869,10 +862,6 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
     Py_DECREF(left.o);
     Py_DECREF(right.o);
 
-    if (jit) {
-        left.var->decvref();
-        right.var->decvref();
-    }
     return r;
 }
 
@@ -883,8 +872,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value val = visit_expr(node->args[0]);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
         Py_DECREF(val.o);
-        if (jit)
-            val.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -946,8 +933,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
         Py_DECREF(obj.o);
-        if (jit)
-            obj.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
@@ -976,8 +961,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Value obj = visit_expr(node->args[0]);
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
         Py_DECREF(obj.o);
-        if (jit)
-            obj.var->decvref();
     } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
         abortJITing();
         Value obj = visit_expr(node->args[0]);
@@ -1157,8 +1140,6 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
         if (jit) {
             auto prev_func_var = func.var;
             func.var = jit->emitRuntimeCall(NULL, decorators[i], ArgPassSpec(1), { func }, NULL);
-            decorators[i].var->decvref();
-            prev_func_var->decvref();
         }
     }
     return func;
@@ -1333,12 +1314,6 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     else
         printHelper(getSysStdout(), autoXDecref(var.o), node->nl);
 
-    if (jit) {
-        if (node->dest)
-            dest.var->decvref();
-        var.var->decvref();
-    }
-
     return Value();
 }
 
@@ -1362,10 +1337,6 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     Value r = doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
     Py_DECREF(left.o);
     Py_DECREF(right.o);
-    if (jit) {
-        left.var->decvref();
-        right.var->decvref();
-    }
     return r;
 }
 
@@ -1498,12 +1469,6 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     Py_DECREF(func.o);
     for (auto e : args)
         Py_DECREF(e);
-
-    if (jit) {
-        func.var->decvref();
-        for (auto e : args_vars)
-            e->decvref();
-    }
 
     return v;
 }
@@ -1693,8 +1658,6 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
     Value v = visit_expr(node->value);
     Value r(pyston::getattr(v.o, node->attr.getBox()), jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
     Py_DECREF(v.o);
-    if (jit)
-        v.var->decvref();
     return r;
 }
 }

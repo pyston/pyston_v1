@@ -278,9 +278,6 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     else
         r = call(false, (void*)createTupleHelper, imm(num), allocArgs(values));
 
-    for (auto v : values)
-        v->decvref();
-
     return r;
 }
 
@@ -305,7 +302,6 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end())
         return emitGetLocal(s, vreg);
-    it->second->incvref();
     return it->second;
 }
 
@@ -378,7 +374,7 @@ RewriterVar* JitFragmentWriter::emitLandingpad() {
 
 RewriterVar* JitFragmentWriter::emitNonzero(RewriterVar* v) {
     // nonzeroHelper returns bool
-    return call(false, (void*)nonzeroHelper, v);
+    return call(false, (void*)nonzeroHelper, v)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitNotNonzero(RewriterVar* v) {
@@ -498,11 +494,13 @@ void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
 }
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() start");
     if (!dest)
         dest = call(false, (void*)getSysStdout);
     if (!var)
         var = imm(0ul);
     call(false, (void*)printHelper, dest, var, imm(nl));
+    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() end");
 }
 
 void JitFragmentWriter::emitRaise0() {
@@ -514,38 +512,23 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
 }
 
 void JitFragmentWriter::emitEndBlock() {
-    for (auto v : local_syms) {
-        if (v.second) {
-            if (LOG_BJIT_ASSEMBLY) {
-                // XXX silly but we need to keep this alive
-                std::string s = std::string("BJIT: decvref(") + v.first.c_str() + ")";
-                comment(*new std::string(s));
-            }
-            v.second->decvref(); // xdecref?
-        }
-    }
+    // XXX remove
 }
 
 void JitFragmentWriter::emitReturn(RewriterVar* v) {
-    v->stealRef();
     addAction([=]() { _emitReturn(v); }, { v }, ActionType::NORMAL);
-    v->decvref();
+    v->refConsumed();
 }
 
 void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
     attr->stealRef();
     emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
-    attr->decvref();
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() start");
     RewriterVar* prev = local_syms[s];
     local_syms[s] = v;
-    if (prev) {
-        // TODO: xdecref?
-        prev->decvref();
-    }
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() end");
 }
 
@@ -558,9 +541,8 @@ void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, Re
 }
 
 void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v) {
-    v->stealRef();
     emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512);
-    v->decvref();
+    v->refConsumed();
 }
 
 void JitFragmentWriter::emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value) {
@@ -585,9 +567,8 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              v);
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg);
-        v->stealRef();
         vregs_array->setAttr(8 * vreg, v);
-        v->decvref();
+        v->refConsumed();
 
         // TODO With definedness analysis, we could know whether we can skip this check (definitely defined)
         // or not even load the previous value (definitely undefined).
@@ -973,10 +954,6 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
         pp_scratch_location -= 8;
     }
 
-    for (RewriterVar* arg : args) {
-        arg->bumpUse();
-    }
-
     assertConsistent();
 
     StackInfo stack_info(pp_scratch_size, pp_scratch_location);
@@ -987,6 +964,17 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     assertConsistent();
 
     result->releaseIfNoUses();
+
+    // TODO: it would be nice to be able to bumpUse on these earlier so that we could potentially avoid spilling
+    // the args across the call if we don't need to.
+    // This had to get moved to the very end of this function due to the fact that bumpUse can cause refcounting
+    // operations to happen.
+    // I'm not sure though that just moving this earlier is good enough though -- we also might need to teach setupCall
+    // that the args might not be needed afterwards?
+    // Anyway this feels like micro-optimizations at the moment and we can figure it out later.
+    for (RewriterVar* arg : args) {
+        arg->bumpUse();
+    }
 }
 
 void JitFragmentWriter::_emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var) {
@@ -1025,6 +1013,20 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
     assert(next_block_var->is_constant);
     uint64_t val = val_constant->constant_value;
 
+    assert(val == (uint64_t)True || val == (uint64_t)False);
+
+    // HAXX ahead:
+    // Override the automatic refcounting system, to force a decref to happen before the jump.
+    // Really, we should probably do a decref on either side post-jump.
+    // But the automatic refcounter doesn't support that, and since the value is either True or False,
+    // we can get away with doing the decref early.
+    // TODO: better solution is to just make NONZERO return a borrowed ref, so we don't have to decref at all.
+    _decref(var);
+    // Hax: override the automatic refcount system
+    assert(var->reftype == RefType::OWNED);
+    assert(var->num_refs_consumed == 0);
+    var->reftype = RefType::BORROWED;
+
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
@@ -1034,10 +1036,7 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
     }
 
     {
-        // TODO: Figure out if we need a large/small forward based on the number of local syms we will have to decref?
-        assembler::LargeForwardJump jne(*assembler, assembler::COND_EQUAL);
-
-        _decref(var);
+        assembler::ForwardJump jne(*assembler, assembler::COND_EQUAL);
 
         ExitInfo exit_info;
         _emitJump(next_block, next_block_var, exit_info);
@@ -1048,11 +1047,6 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
             side_exit_patch_location = std::make_pair(next_block, assembler->bytesWritten() - exit_info.num_bytes);
         }
     }
-
-    if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var");
-
-    _decref(var);
-    if (LOG_BJIT_ASSEMBLY) assembler->comment("BJIT: decreffing emitSideExit var end");
 
     var->bumpUse();
     val_constant->bumpUse();
