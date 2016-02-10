@@ -1957,7 +1957,7 @@ bool update_slot(BoxedClass* type, llvm::StringRef attr) noexcept {
     }
     if (ptrs[0] == NULL)
         return false; /* Not an attribute that affects any slots */
-    int r = update_subclasses(type, boxString(attr), update_slots_callback, (void*)ptrs);
+    int r = update_subclasses(type, autoDecref(boxString(attr)), update_slots_callback, (void*)ptrs);
 
     // TODO this is supposed to be a CAPI function!
     if (r)

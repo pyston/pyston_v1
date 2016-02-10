@@ -45,9 +45,9 @@ struct ASTInterpreterJitInterface {
     static Box* derefHelper(void* interp, InternedString s);
     static Box* doOSRHelper(void* interp, AST_Jump* node);
     static Box* landingpadHelper(void* interp);
-    static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
+    static void setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
     static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
-    static Box* uncacheExcInfoHelper(void* interp);
+    static void uncacheExcInfoHelper(void* interp);
     static void raise0Helper(void* interp) __attribute__((noreturn));
 };
 

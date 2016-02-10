@@ -333,6 +333,8 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
         return &l->elts->elts[0];
     }
 
+    RELEASE_ASSERT(0, "I don't think this is safe since elts will die");
+
     std::vector<Box*> elts;
     for (auto e : obj->pyElements()) {
         elts.push_back(e);
@@ -2329,7 +2331,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 return val;
             }
         } else {
-            RELEASE_ASSERT(0, "need to check the refcounting for this");
             // More complicated when obj is a type
             // We have to look up the attr in the entire
             // class hierarchy, and we also have to check if it is a descriptor,
@@ -2370,6 +2371,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 if (!local_get) {
                     if (rewrite_args)
                         rewrite_args->setReturn(r_val, ReturnConvention::HAS_RETURN);
+                    Py_INCREF(val);
                     return val;
                 }
 

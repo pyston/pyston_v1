@@ -1094,7 +1094,7 @@ class BoxedStaticmethod : public Box {
 public:
     Box* sm_callable;
 
-    BoxedStaticmethod(Box* callable) : sm_callable(callable){};
+    BoxedStaticmethod(Box* callable) : sm_callable(callable) {}
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls, true);
 
@@ -1107,7 +1107,7 @@ class BoxedClassmethod : public Box {
 public:
     Box* cm_callable;
 
-    BoxedClassmethod(Box* callable) : cm_callable(callable){};
+    BoxedClassmethod(Box* callable) : cm_callable(callable) {}
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls, true);
 
@@ -1125,16 +1125,12 @@ public:
 
     BoxedClosure(BoxedClosure* parent) : parent(parent) {}
 
+    // TODO: convert this to a var-object and use DEFAULT_CLASS_VAR_SIMPLE
     void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
-        /*
-        BoxedClosure* rtn
-            = static_cast<BoxedClosure*>(gc_alloc(_PyObject_VAR_SIZE(closure_cls, nelts), gc::GCKind::PYTHON));
-            */
-        BoxedClosure* rtn
-            = static_cast<BoxedClosure*>(PyObject_MALLOC(sizeof(BoxedClosure) + nelts * sizeof(Box*)));
+        BoxedClosure* rtn = static_cast<BoxedClosure*>(_PyObject_GC_Malloc(sizeof(BoxedClosure) + nelts * sizeof(Box*)));
         rtn->nelts = nelts;
-        rtn->cls = closure_cls;
-        _Py_NewReference(rtn);
+        PyObject_INIT(rtn, closure_cls);                                                                               \
+        _PyObject_GC_TRACK(rtn);                                                                                   \
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }

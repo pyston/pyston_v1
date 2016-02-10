@@ -317,6 +317,9 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
       doc(NULL) {
     assert((!globals) == (!md->source || md->source->scoping->areGlobalsFromModule()));
 
+    Py_XINCREF(closure);
+    Py_XINCREF(globals);
+
     if (defaults.size()) {
         // HAX copy+modify the BoxedTuple constructor so that we can put NULLs into the tuple.
         // We are going to separately be careful to make sure that those NULLs don't escape

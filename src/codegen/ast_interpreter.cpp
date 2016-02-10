@@ -169,6 +169,7 @@ public:
         }
 
         Py_DECREF(this->globals);
+        Py_XDECREF(this->created_closure);
     }
 
     llvm::DenseMap<InternedString, int>& getSymVRegMap() {
@@ -485,15 +486,14 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
                 jit->emitSetLocal(name, node->vreg, closure, value);
         }
 
-        assert(getSymVRegMap().count(name));
-        assert(getSymVRegMap()[name] == node->vreg);
-        Box* prev = vregs[node->vreg];
-        vregs[node->vreg] = value.o;
-        Py_XDECREF(prev);
-
         if (closure) {
-            assert(0 && "check refcounting");
-            created_closure->elts[scope_info->getClosureOffset(name)] = value.o;
+            ASTInterpreterJitInterface::setLocalClosureHelper(this, node->vreg, name, value.o);
+        } else {
+            assert(getSymVRegMap().count(name));
+            assert(getSymVRegMap()[name] == node->vreg);
+            Box* prev = vregs[node->vreg];
+            vregs[node->vreg] = value.o;
+            Py_XDECREF(prev);
         }
     }
 }
@@ -1578,7 +1578,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return v;
         }
         case ScopeInfo::VarScopeType::DEREF: {
-            assert(0 && "check refcounting");
             return Value(ASTInterpreterJitInterface::derefHelper(this, node->id),
                          jit ? jit->emitDeref(node->id) : NULL);
         }
@@ -1610,7 +1609,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
-            assert(0 && "check refcounting");
             Value v;
             if (jit)
                 v.var = jit->emitGetBoxedLocal(node->id.getBox());
@@ -1716,6 +1714,7 @@ Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString 
     if (val == NULL) {
         raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", s.c_str());
     }
+    Py_INCREF(val);
     return val;
 }
 
@@ -1740,10 +1739,9 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     return rtn;
 }
 
-Box* ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {
+void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     interpreter->getFrameInfo()->exc = ExcInfo(type, value, traceback);
-    return None;
 }
 
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
@@ -1751,14 +1749,15 @@ void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long 
 
     assert(interpreter->getSymVRegMap().count(id));
     assert(interpreter->getSymVRegMap()[id] == vreg);
+    Box* prev = interpreter->vregs[vreg];
     interpreter->vregs[vreg] = v;
-    interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = v;
+    interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = incref(v);
+    Py_XDECREF(prev);
 }
 
-Box* ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
+void ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
-    return None;
 }
 
 void ASTInterpreterJitInterface::raise0Helper(void* _interpreter) {

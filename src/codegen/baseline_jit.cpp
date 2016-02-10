@@ -226,7 +226,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    return call(false, (void*)callattrHelper, call_args);
+    return call(false, (void*)callattrHelper, call_args)->setType(RefType::OWNED);
 #endif
 }
 
@@ -239,29 +239,29 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
                                                const llvm::ArrayRef<RewriterVar*> values) {
     assert(keys.size() == values.size());
     if (keys.empty())
-        return call(false, (void*)createDict);
+        return call(false, (void*)createDict)->setType(RefType::OWNED);
     else
-        return call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values));
+        return call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*> values) {
     auto num = values.size();
     if (num == 0)
-        return call(false, (void*)createList);
+        return call(false, (void*)createList)->setType(RefType::OWNED);
     else
-        return call(false, (void*)createListHelper, imm(num), allocArgs(values));
+        return call(false, (void*)createListHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*> values) {
     auto num = values.size();
     if (num == 0)
-        return call(false, (void*)createSet);
+        return call(false, (void*)createSet)->setType(RefType::OWNED);
     else
-        return call(false, (void*)createSetHelper, imm(num), allocArgs(values));
+        return call(false, (void*)createSetHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step) {
-    return call(false, (void*)createSlice, start, stop, step);
+    return call(false, (void*)createSlice, start, stop, step)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values) {
@@ -270,13 +270,13 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     if (num == 0) {
         r = imm(EmptyTuple)->setType(RefType::BORROWED);
     } else if (num == 1)
-        r = call(false, (void*)BoxedTuple::create1, values[0]);
+        r = call(false, (void*)BoxedTuple::create1, values[0])->setType(RefType::OWNED);
     else if (num == 2)
-        r = call(false, (void*)BoxedTuple::create2, values[0], values[1]);
+        r = call(false, (void*)BoxedTuple::create2, values[0], values[1])->setType(RefType::OWNED);
     else if (num == 3)
-        r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2]);
+        r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2])->setType(RefType::OWNED);
     else
-        r = call(false, (void*)createTupleHelper, imm(num), allocArgs(values));
+        r = call(false, (void*)createTupleHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
 
     return r;
 }
@@ -284,14 +284,15 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
 RewriterVar* JitFragmentWriter::emitDeref(InternedString s) {
     return call(false, (void*)ASTInterpreterJitInterface::derefHelper, getInterp(),
 #ifndef NDEBUG
-                imm(asUInt(s).first), imm(asUInt(s).second));
+                imm(asUInt(s).first), imm(asUInt(s).second))
 #else
-                imm(asUInt(s)));
+                imm(asUInt(s)))
 #endif
+        ->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar* cls) {
-    return call(false, (void*)exceptionMatchesHelper, v, cls);
+    return call(false, (void*)exceptionMatchesHelper, v, cls)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
@@ -308,7 +309,7 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
     RewriterVar* boxed_locals = emitGetBoxedLocals();
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
-    return call(false, (void*)boxedLocalsGet, boxed_locals, imm(s), globals);
+    return call(false, (void*)boxedLocalsGet, boxed_locals, imm(s), globals)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocals() {
@@ -429,7 +430,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    return call(false, (void*)runtimeCallHelper, call_args);
+    return call(false, (void*)runtimeCallHelper, call_args)->setType(RefType::OWNED);
 #endif
 }
 
@@ -496,7 +497,7 @@ void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() start");
     if (!dest)
-        dest = call(false, (void*)getSysStdout);
+        dest = call(false, (void*)getSysStdout)->setType(RefType::BORROWED);
     if (!var)
         var = imm(0ul);
     call(false, (void*)printHelper, dest, var, imm(nl));
@@ -557,7 +558,6 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() start");
     assert(vreg >= 0);
     if (set_closure) {
-        assert(0 && "check refcounting");
         call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
 #ifndef NDEBUG
              imm(asUInt(s).first), imm(asUInt(s).second),
@@ -565,6 +565,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              imm(asUInt(s)),
 #endif
              v);
+        v->refConsumed();
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg);
         vregs_array->setAttr(8 * vreg, v);
