@@ -344,41 +344,260 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-// Analoguous to CPython's implementation of subtype_dealloc, but having a GC
-// saves us from complications involving "trashcan macros".
-//
-// This is the default destructor assigned to the tp_dealloc slot, the C/C++
-// implementation of a Python object destructor. It may call the Python-implemented
-// destructor __del__ stored in tp_del, if any.
-//
-// For now, we treat tp_del and tp_dealloc as one unit. In theory, we will only
-// have both if we have a Python class with a __del__ method that subclasses from
-// a C extension with a non-trivial tp_dealloc. We assert on that case for now
-// until we run into actual code with this fairly rare situation.
-//
-// This case (having both tp_del and tp_dealloc) shouldn't be a problem if we
-// remove the assert, except in the exceptional case where the __del__ method
-// does object resurrection. The fix for this would be to spread out tp_del,
-// tp_dealloc and sweeping over 3 GC passes. This would slightly impact the
-// performance of Pyston as a whole for a case that may not exist in any
-// production code, so we decide not to handle that edge case for now.
-static void subtype_dealloc(Box* self) {
-    BoxedClass* type = self->cls;
+static void clear_slots(PyTypeObject* type, PyObject* self) noexcept {
+    Py_ssize_t i, n;
+    PyMemberDef* mp;
 
-    if (type->tp_del) {
-        type->tp_del(self);
+    n = Py_SIZE(type);
+    mp = PyHeapType_GET_MEMBERS((BoxedHeapClass*)type);
+    for (i = 0; i < n; i++, mp++) {
+        if (mp->type == T_OBJECT_EX && !(mp->flags & READONLY)) {
+            char* addr = (char*)self + mp->offset;
+            PyObject* obj = *(PyObject**)addr;
+            if (obj != NULL) {
+                *(PyObject**)addr = NULL;
+                Py_DECREF(obj);
+            }
+        }
+    }
+}
+
+static void subtype_dealloc(Box* self) noexcept {
+    PyTypeObject* type, *base;
+    destructor basedealloc;
+    PyThreadState* tstate = PyThreadState_GET();
+
+    /* Extract the type; we expect it to be a heap type */
+    type = Py_TYPE(self);
+    assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+
+    /* Test whether the type has GC exactly once */
+
+    if (!PyType_IS_GC(type)) {
+        /* It's really rare to find a dynamic type that doesn't have
+           GC; it can only happen when deriving from 'object' and not
+           adding any slots or instance variables.  This allows
+           certain simplifications: there's no need to call
+           clear_slots(), or DECREF the dict, or clear weakrefs. */
+
+        /* Maybe call finalizer; exit early if resurrected */
+        if (type->tp_del) {
+            type->tp_del(self);
+            if (self->ob_refcnt > 0)
+                return;
+        }
+
+        /* Find the nearest base with a different tp_dealloc */
+        base = type;
+        while ((basedealloc = base->tp_dealloc) == subtype_dealloc) {
+            assert(Py_SIZE(base) == 0);
+            base = base->tp_base;
+            assert(base);
+        }
+
+        /* Extract the type again; tp_del may have changed it */
+        type = Py_TYPE(self);
+
+        /* Call the base tp_dealloc() */
+        assert(basedealloc);
+        basedealloc(self);
+
+        /* Can't reference self beyond this point */
+        Py_DECREF(type);
+
+        /* Done */
+        return;
     }
 
-    // Find nearest base with a different tp_dealloc.
-    BoxedClass* base = type;
-    while (base && base->tp_dealloc == subtype_dealloc) {
+    /* We get here only if the type has GC */
+
+    /* UnTrack and re-Track around the trashcan macro, alas */
+    /* See explanation at end of function for full disclosure */
+    PyObject_GC_UnTrack(self);
+    ++_PyTrash_delete_nesting;
+    ++tstate->trash_delete_nesting;
+    Py_TRASHCAN_SAFE_BEGIN(self);
+    --_PyTrash_delete_nesting;
+    --tstate->trash_delete_nesting;
+    /* DO NOT restore GC tracking at this point.  weakref callbacks
+     * (if any, and whether directly here or indirectly in something we
+     * call) may trigger GC, and if self is tracked at that point, it
+     * will look like trash to GC and GC will try to delete self again.
+     */
+
+    /* Find the nearest base with a different tp_dealloc */
+    base = type;
+    while ((basedealloc = base->tp_dealloc) == subtype_dealloc) {
         base = base->tp_base;
+        assert(base);
     }
 
-    if (base && base->tp_dealloc && base->tp_dealloc != dealloc_null) {
-        RELEASE_ASSERT(!type->tp_del, "having both a tp_del and tp_dealloc not supported");
-        base->tp_dealloc(self);
+    /* If we added a weaklist, we clear it.      Do this *before* calling
+       the finalizer (__del__), clearing slots, or clearing the instance
+       dict. */
+
+    if (type->tp_weaklistoffset && !base->tp_weaklistoffset)
+        PyObject_ClearWeakRefs(self);
+
+    /* Maybe call finalizer; exit early if resurrected */
+    if (type->tp_del) {
+        _PyObject_GC_TRACK(self);
+        type->tp_del(self);
+        if (self->ob_refcnt > 0)
+            goto endlabel; /* resurrected */
+        else
+            _PyObject_GC_UNTRACK(self);
+        /* New weakrefs could be created during the finalizer call.
+            If this occurs, clear them out without calling their
+            finalizers since they might rely on part of the object
+            being finalized that has already been destroyed. */
+        if (type->tp_weaklistoffset && !base->tp_weaklistoffset) {
+            /* Modeled after GET_WEAKREFS_LISTPTR() */
+            PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(self);
+            while (*list)
+                _PyWeakref_ClearRef(*list);
+        }
     }
+
+    /*  Clear slots up to the nearest base with a different tp_dealloc */
+    base = type;
+    while (base->tp_dealloc == subtype_dealloc) {
+        if (Py_SIZE(base))
+            clear_slots(base, self);
+        base = base->tp_base;
+        assert(base);
+    }
+
+    /* If we added a dict, DECREF it */
+    if (type->tp_dictoffset && !base->tp_dictoffset) {
+        PyObject** dictptr = _PyObject_GetDictPtr(self);
+        if (dictptr != NULL) {
+            PyObject* dict = *dictptr;
+            if (dict != NULL) {
+                Py_DECREF(dict);
+                *dictptr = NULL;
+            }
+        }
+    }
+
+    /* Extract the type again; tp_del may have changed it */
+    type = Py_TYPE(self);
+
+    /* Call the base tp_dealloc(); first retrack self if
+     * basedealloc knows about gc.
+     */
+    if (PyType_IS_GC(base))
+        _PyObject_GC_TRACK(self);
+    assert(basedealloc);
+    basedealloc(self);
+
+    /* Can't reference self beyond this point */
+    Py_DECREF(type);
+
+endlabel:
+    ++_PyTrash_delete_nesting;
+    ++tstate->trash_delete_nesting;
+    Py_TRASHCAN_SAFE_END(self);
+    --_PyTrash_delete_nesting;
+    --tstate->trash_delete_nesting;
+
+    /* Explanation of the weirdness around the trashcan macros:
+
+       Q. What do the trashcan macros do?
+
+       A. Read the comment titled "Trashcan mechanism" in object.h.
+          For one, this explains why there must be a call to GC-untrack
+          before the trashcan begin macro.      Without understanding the
+          trashcan code, the answers to the following questions don't make
+          sense.
+
+       Q. Why do we GC-untrack before the trashcan and then immediately
+          GC-track again afterward?
+
+       A. In the case that the base class is GC-aware, the base class
+          probably GC-untracks the object.      If it does that using the
+          UNTRACK macro, this will crash when the object is already
+          untracked.  Because we don't know what the base class does, the
+          only safe thing is to make sure the object is tracked when we
+          call the base class dealloc.  But...  The trashcan begin macro
+          requires that the object is *untracked* before it is called.  So
+          the dance becomes:
+
+         GC untrack
+         trashcan begin
+         GC track
+
+       Q. Why did the last question say "immediately GC-track again"?
+          It's nowhere near immediately.
+
+       A. Because the code *used* to re-track immediately.      Bad Idea.
+          self has a refcount of 0, and if gc ever gets its hands on it
+          (which can happen if any weakref callback gets invoked), it
+          looks like trash to gc too, and gc also tries to delete self
+          then.  But we're already deleting self.  Double deallocation is
+          a subtle disaster.
+
+       Q. Why the bizarre (net-zero) manipulation of
+          _PyTrash_delete_nesting around the trashcan macros?
+
+       A. Some base classes (e.g. list) also use the trashcan mechanism.
+          The following scenario used to be possible:
+
+          - suppose the trashcan level is one below the trashcan limit
+
+          - subtype_dealloc() is called
+
+          - the trashcan limit is not yet reached, so the trashcan level
+        is incremented and the code between trashcan begin and end is
+        executed
+
+          - this destroys much of the object's contents, including its
+        slots and __dict__
+
+          - basedealloc() is called; this is really list_dealloc(), or
+        some other type which also uses the trashcan macros
+
+          - the trashcan limit is now reached, so the object is put on the
+        trashcan's to-be-deleted-later list
+
+          - basedealloc() returns
+
+          - subtype_dealloc() decrefs the object's type
+
+          - subtype_dealloc() returns
+
+          - later, the trashcan code starts deleting the objects from its
+        to-be-deleted-later list
+
+          - subtype_dealloc() is called *AGAIN* for the same object
+
+          - at the very least (if the destroyed slots and __dict__ don't
+        cause problems) the object's type gets decref'ed a second
+        time, which is *BAD*!!!
+
+          The remedy is to make sure that if the code between trashcan
+          begin and end in subtype_dealloc() is called, the code between
+          trashcan begin and end in basedealloc() will also be called.
+          This is done by decrementing the level after passing into the
+          trashcan block, and incrementing it just before leaving the
+          block.
+
+          But now it's possible that a chain of objects consisting solely
+          of objects whose deallocator is subtype_dealloc() will defeat
+          the trashcan mechanism completely: the decremented level means
+          that the effective level never reaches the limit.      Therefore, we
+          *increment* the level *before* entering the trashcan block, and
+          matchingly decrement it after leaving.  This means the trashcan
+          code will trigger a little early, but that's no big deal.
+
+       Q. Are there any live examples of code in need of all this
+          complexity?
+
+       A. Yes.  See SF bug 668433 for code that crashed (when Python was
+          compiled in debug mode) before the trashcan level manipulations
+          were added.  For more discussion, see SF patches 581742, 575073
+          and bug 574207.
+    */
 }
 
 bool BoxedClass::hasNonDefaultTpDealloc() {
@@ -612,24 +831,6 @@ static int subtype_traverse(PyObject* self, visitproc visit, void* arg) noexcept
     if (basetraverse)
         return basetraverse(self, visit, arg);
     return 0;
-}
-
-static void clear_slots(BoxedClass* type, PyObject* self) noexcept {
-    Py_ssize_t i, n;
-    PyMemberDef* mp;
-
-    n = Py_SIZE(type);
-    mp = PyHeapType_GET_MEMBERS((BoxedHeapClass*)type);
-    for (i = 0; i < n; i++, mp++) {
-        if (mp->type == T_OBJECT_EX && !(mp->flags & READONLY)) {
-            char* addr = (char*)self + mp->offset;
-            PyObject* obj = *(PyObject**)addr;
-            if (obj != NULL) {
-                *(PyObject**)addr = NULL;
-                Py_DECREF(obj);
-            }
-        }
-    }
 }
 
 static int subtype_clear(PyObject* self) noexcept {
@@ -910,7 +1111,6 @@ template Box* Box::getattr<REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 
 void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
-    assert(!rewrite_args); // need to emit incref
     Py_INCREF(new_attr);
 
     assert(cls->instancesHaveHCAttrs());
@@ -946,6 +1146,7 @@ void Box::appendNewHCAttr(Box* new_attr, SetattrRewriteArgs* rewrite_args) {
 
     if (rewrite_args) {
         r_new_array2->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval);
+        rewrite_args->attrval->refConsumed();
         rewrite_args->obj->setAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), r_new_array2);
 
         rewrite_args->out_success = true;
@@ -1045,7 +1246,6 @@ void Box::setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args)
             // make sure we don't need to rearrange the attributes
             assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
 
-            assert(!rewrite_args && "check rewriter refcounting");
             this->appendNewHCAttr(val, rewrite_args);
             attrs->hcls = new_hcls;
 
@@ -2467,6 +2667,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!cobj->is_user_defined) {
+            Py_DECREF(val);
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
         }
     }
@@ -2538,6 +2739,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
         return;
     } else {
         if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs()) {
+            Py_DECREF(val);
             raiseAttributeError(obj, attr->s());
         }
 

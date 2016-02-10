@@ -312,7 +312,7 @@ RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocals() {
-    return getInterp()->getAttr(ASTInterpreterJitInterface::getBoxedLocalsOffset());
+    return getInterp()->getAttr(ASTInterpreterJitInterface::getBoxedLocalsOffset())->setType(RefType::BORROWED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s) {

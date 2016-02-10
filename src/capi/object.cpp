@@ -1109,6 +1109,9 @@ extern "C" void _Py_NegativeRefcount(const char* fname, int lineno, PyObject* op
 
 #endif /* Py_REF_DEBUG */
 
+extern "C" int _PyTrash_delete_nesting = 0;
+extern "C" PyObject *_PyTrash_delete_later = NULL;
+
 extern "C" void _PyTrash_thread_deposit_object(PyObject* op) noexcept {
     Py_FatalError("unimplemented");
 }

@@ -2036,6 +2036,7 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
     RELEASE_ASSERT(isSubclass(subtype, self), "");
 
     BoxedTuple* new_args = BoxedTuple::create(args->size() - 1, &args->elts[1]);
+    AUTO_DECREF(new_args);
 
     return self->tp_new(subtype, new_args, kwds);
 }

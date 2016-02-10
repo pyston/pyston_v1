@@ -466,11 +466,11 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
             jit->emitSetGlobal(globals, name.getBox(), value);
         setGlobal(globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
-        assert(0 && "check refcounting");
         if (jit)
             jit->emitSetItemName(name.getBox(), value);
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
+        AUTO_DECREF(value.o);
         setitem(frame_info.boxedLocals, name.getBox(), value.o);
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
@@ -508,8 +508,8 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         if (jit) {
             jit->emitSetAttr(node, o, attr->attr.getBox(), value);
         }
+        AUTO_DECREF(o.o);
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
-        Py_DECREF(o.o);
     } else if (node->type == AST_TYPE::Tuple) {
         AST_Tuple* tuple = (AST_Tuple*)node;
         Box** array = unpackIntoArray(value.o, tuple->elts.size());
@@ -927,7 +927,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = Value(boxBool(exceptionMatches(obj.o, cls.o)), jit ? jit->emitExceptionMatches(obj, cls) : NULL);
     } else if (node->opcode == AST_LangPrimitive::LOCALS) {
         assert(frame_info.boxedLocals != NULL);
-        v = Value(frame_info.boxedLocals, jit ? jit->emitGetBoxedLocals() : NULL);
+        v = Value(incref(frame_info.boxedLocals), jit ? jit->emitGetBoxedLocals() : NULL);
     } else if (node->opcode == AST_LangPrimitive::NONZERO) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
@@ -1152,12 +1152,13 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     assert(scope_info);
 
     BoxedTuple* basesTuple = BoxedTuple::create(node->bases.size());
+    AUTO_DECREF(basesTuple);
     int base_idx = 0;
     for (AST_expr* b : node->bases) {
         basesTuple->elts[base_idx++] = visit_expr(b).o;
     }
 
-    std::vector<Box*> decorators;
+    std::vector<DecrefHandle<Box>> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -1174,13 +1175,15 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     Box* passed_globals = NULL;
     if (!getMD()->source->scoping->areGlobalsFromModule())
         passed_globals = globals;
-    Box* attrDict
-        = runtimeCall(createFunctionFromMetadata(md, closure, passed_globals, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
+    DecrefHandle<Box> attrDict = runtimeCall(autoDecref(createFunctionFromMetadata(md, closure, passed_globals, {})),
+                                             ArgPassSpec(0), 0, 0, 0, 0, 0);
 
     Box* classobj = createUserClass(node->name.getBox(), basesTuple, attrDict);
 
-    for (int i = decorators.size() - 1; i >= 0; i--)
+    for (int i = decorators.size() - 1; i >= 0; i--) {
+        AUTO_DECREF(classobj);
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
+    }
 
     return Value(classobj, NULL);
 }

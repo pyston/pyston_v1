@@ -1377,8 +1377,10 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
     assert(_bases->cls == tuple_cls);
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
 
+    static BoxedString* metaclass_str = getStaticString("__metaclass__");
+
     Box* metaclass = NULL;
-    metaclass = attr_dict->getOrNull(boxString("__metaclass__"));
+    metaclass = attr_dict->getOrNull(metaclass_str);
 
     if (metaclass != NULL) {
     } else if (bases->size() > 0) {
@@ -1398,6 +1400,17 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
     try {
         Box* r = runtimeCall(metaclass, ArgPassSpec(3), name, _bases, _attr_dict, NULL, NULL);
         RELEASE_ASSERT(r, "");
+
+        // XXX Hack: the classes vector lists all classes that have untracked references to them.
+        // This is pretty much any class created in C code, since the C code will tend to hold on
+        // to a reference to the created class.  So in the BoxedClass constructor we add the new class to
+        // "classes", which will cause the class to get decref'd at the end.
+        // But for classes created from Python, we don't have this extra untracked reference.
+        // Rather than fix up the plumbing for now, just reach into the other system and remove this
+        // class from the list.
+        RELEASE_ASSERT(classes.back() == r, "");
+        classes.pop_back();
+
         return r;
     } catch (ExcInfo e) {
         RELEASE_ASSERT(e.matches(BaseException), "");
