@@ -349,8 +349,8 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
         } else {
             // This is a compatibility break with CPython, which has their sq_concat method
             // directly throw a TypeError.  Since we're not implementing this as a sq_concat,
-            // return NotImplemented for now.
-            return NotImplemented;
+            // Give NotImplemented for now.
+            return incref(NotImplemented);
         }
     }
 
@@ -1196,7 +1196,7 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
     // statement, rather than out here.  It's functionally equivalent but the
     // generated assembly is somehow quite better:
     // if (unlikely(!PyString_Check(rhs)))
-    // return NotImplemented;
+    // return incref(NotImplemented);
 
     BoxedString* slhs = static_cast<BoxedString*>(lhs);
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1204,27 +1204,27 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
     switch (op) {
         case Py_EQ:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() == srhs->s());
         case Py_NE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() != srhs->s());
         case Py_LT:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() < srhs->s());
         case Py_LE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() <= srhs->s());
         case Py_GT:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() > srhs->s());
         case Py_GE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() >= srhs->s());
         default:
             llvm_unreachable("invalid op");

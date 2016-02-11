@@ -544,6 +544,10 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         Value target = visit_expr(subscript->value);
         Value slice = visit_slice(subscript->slice);
 
+        AUTO_DECREF(target.o);
+        AUTO_DECREF(slice.o);
+        AUTO_DECREF(value.o);
+
         if (jit)
             jit->emitSetItem(target, slice, value);
         setitem(target.o, slice.o, value.o);
@@ -602,6 +606,9 @@ Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();
     Value upper = node->upper ? visit_expr(node->upper) : getNone();
     Value step = node->step ? visit_expr(node->step) : getNone();
+    AUTO_DECREF(lower.o);
+    AUTO_DECREF(upper.o);
+    AUTO_DECREF(step.o);
 
     Value v;
     if (jit)
@@ -877,11 +884,15 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args[1]->type == AST_TYPE::Str);
 
         Value module = visit_expr(node->args[0]);
+        AUTO_DECREF(module.o);
+
         auto ast_str = ast_cast<AST_Str>(node->args[1]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
         BoxedString* name_boxed = source_info->parent_module->getStringConstant(name, true);
+        AUTO_DECREF(name_boxed);
+
         if (jit)
             v.var = jit->emitImportFrom(module, name_boxed);
         v.o = importFrom(module.o, name_boxed);
@@ -1246,6 +1257,8 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
                 Value slice = visit_slice(sub->slice);
+                AUTO_DECREF(value.o);
+                AUTO_DECREF(slice.o);
                 if (jit)
                     jit->emitDelItem(value, slice);
                 delitem(value.o, slice.o);
@@ -1625,6 +1638,9 @@ Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
     Value slice = visit_slice(node->slice);
 
+    AUTO_DECREF(value.o);
+    AUTO_DECREF(slice.o);
+
     return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(node, value, slice) : NULL);
 }
 
@@ -1634,9 +1650,13 @@ Value ASTInterpreter::visit_list(AST_List* node) {
     BoxedList* list = new BoxedList();
     list->ensure(node->elts.size());
     for (AST_expr* e : node->elts) {
-        Value v = visit_expr(e);
-        items.push_back(v);
-        listAppendInternalStolen(list, v.o);
+        try {
+            Value v = visit_expr(e);
+            items.push_back(v);
+            listAppendInternalStolen(list, v.o);
+        } catch (ExcInfo e) {
+            RELEASE_ASSERT(0, "check refcounting");
+        }
     }
 
     return Value(list, jit ? jit->emitCreateList(items) : NULL);

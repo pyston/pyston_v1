@@ -607,7 +607,7 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
         _rhs = attrwrapperToDict(_rhs);
 
     if (!PyDict_Check(_rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedDict* rhs = static_cast<BoxedDict*>(_rhs);
 

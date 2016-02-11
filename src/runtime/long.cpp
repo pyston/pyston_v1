@@ -861,7 +861,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
             mpz_sub_ui(r->n, v1->n, -v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -889,7 +889,7 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
         mpz_and(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
@@ -915,7 +915,7 @@ extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
         mpz_ior(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
@@ -941,7 +941,7 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
         mpz_xor(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
@@ -957,7 +957,7 @@ static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
 
         return convert_3way_to_object(op, mpz_cmp_si(v1->n, v2->n));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -987,7 +987,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
         mpz_mul_2exp(r->n, v1->n, v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1017,7 +1017,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
         mpz_div_2exp(r->n, v1->n, v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1043,7 +1043,7 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
             mpz_add_ui(r->n, v1->n, -v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1074,7 +1074,7 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
         mpz_mul_si(r->n, v1->n, v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1103,7 +1103,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
         mpz_fdiv_q(r->n, v1->n, r->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1139,7 +1139,7 @@ Box* longMod(BoxedLong* v1, Box* _v2) {
         mpz_mmod(r->n, v1->n, r->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1155,7 +1155,7 @@ Box* longRMod(BoxedLong* v1, Box* _v2) {
     } else if (PyInt_Check(lhs)) {
         return longMod(boxLong(((BoxedInt*)lhs)->n), rhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1189,7 +1189,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         mpz_fdiv_qr(q->n, r->n, lhs->n, r->n);
         return BoxedTuple::create({ q, r });
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1216,7 +1216,7 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
         mpz_fdiv_q(r->n, r->n, v1->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1237,10 +1237,10 @@ Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
     int overflow = 0;
     long lhs = PyLong_AsLongAndOverflow(v1, &overflow);
     if (overflow)
-        return NotImplemented;
+        return incref(NotImplemented);
     long rhs = PyLong_AsLongAndOverflow(_v2, &overflow);
     if (overflow)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     if (rhs == 0)
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -1256,10 +1256,10 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     int overflow = 0;
     long lhs = PyLong_AsLongAndOverflow(_v2, &overflow);
     if (overflow)
-        return NotImplemented;
+        return incref(NotImplemented);
     long rhs = PyLong_AsLongAndOverflow(v1, &overflow);
     if (overflow)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     if (rhs == 0)
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -1295,7 +1295,7 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
         } else if (PyInt_Check(mod)) {
             mod_long = boxLong(static_cast<BoxedInt*>(mod)->n);
         } else {
-            return NotImplemented;
+            return incref(NotImplemented);
         }
     }
 
@@ -1305,7 +1305,7 @@ Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod) {
     } else if (PyInt_Check(rhs)) {
         rhs_long = boxLong(static_cast<BoxedInt*>(rhs)->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     if (mod != None) {

@@ -156,7 +156,7 @@ extern "C" Box* complexAdd(BoxedComplex* lhs, Box* rhs) {
     } else if (rhs->cls == complex_cls) {
         return complexAddComplex(lhs, static_cast<BoxedComplex*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -189,7 +189,7 @@ extern "C" Box* complexSub(BoxedComplex* lhs, Box* rhs) {
     } else if (rhs->cls == complex_cls) {
         return complexSubComplex(lhs, static_cast<BoxedComplex*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -205,7 +205,7 @@ extern "C" Box* complexRSub(BoxedComplex* _lhs, Box* _rhs) {
     } else if (_rhs->cls == complex_cls) {
         lhs = static_cast<BoxedComplex*>(_rhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return complexSubComplex(lhs, _lhs);
 }
@@ -239,7 +239,7 @@ extern "C" Box* complexMul(BoxedComplex* lhs, Box* rhs) {
     } else if (rhs->cls == complex_cls) {
         return complexMulComplex(lhs, static_cast<BoxedComplex*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -308,7 +308,7 @@ extern "C" Box* complexDiv(BoxedComplex* lhs, Box* rhs) {
     } else if (rhs->cls == complex_cls) {
         return complexDivComplex(lhs, static_cast<BoxedComplex*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -324,7 +324,7 @@ extern "C" Box* complexRDiv(BoxedComplex* _lhs, Box* _rhs) {
     } else if (_rhs->cls == complex_cls) {
         lhs = static_cast<BoxedComplex*>(_rhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return complexDivComplex(lhs, _lhs);
 }
@@ -584,7 +584,7 @@ Box* complexCoerce(Box* lhs, Box* rhs) {
         cval.real = PyFloat_AsDouble(rhs);
         rhs = PyComplex_FromCComplex(cval);
     } else if (!PyComplex_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return BoxedTuple::create({ lhs, rhs });
 }
@@ -830,7 +830,7 @@ static Box* to_complex(Box* self) noexcept {
     } else if (self->cls == long_cls) {
         r = new BoxedComplex(PyLong_AsDouble(self), 0.0);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return r;
 }
@@ -1023,7 +1023,7 @@ extern "C" Box* complexMod(BoxedComplex* lhs, Box* _rhs) {
 
     Box* res = to_complex(_rhs);
     if (res == NotImplemented) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     BoxedComplex* rhs = (BoxedComplex*)res;
@@ -1046,7 +1046,7 @@ extern "C" Box* complexFloordiv(BoxedComplex* lhs, Box* _rhs) {
 
     Box* res = to_complex(_rhs);
     if (res == NotImplemented) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedComplex* rhs = (BoxedComplex*)res;
 

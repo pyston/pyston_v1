@@ -2694,7 +2694,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
 }
 
 Box* objectSubclasshook(Box* cls, Box* a) {
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 static PyObject* import_copyreg(void) noexcept {

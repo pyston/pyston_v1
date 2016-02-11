@@ -913,7 +913,7 @@ static int instance_compare(PyObject* v, PyObject* w) noexcept {
 Box* instanceCompare(Box* _inst, Box* other) {
     int rtn = instance_compare(_inst, other);
     if (rtn == 2)
-        return NotImplemented;
+        return incref(NotImplemented);
     if (rtn == -2)
         throwCAPIException();
     return boxInt(rtn);
@@ -1212,7 +1212,7 @@ static Box* _instanceBinary(Box* _inst, Box* other, BoxedString* attr) {
 
     Box* func = _instanceGetattribute(inst, attr, false);
     if (!func)
-        return NotImplemented;
+        return incref(NotImplemented);
     return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 

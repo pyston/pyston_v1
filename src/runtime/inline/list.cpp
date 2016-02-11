@@ -23,6 +23,7 @@
 namespace pyston {
 
 BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
+    Py_INCREF(l);
 }
 
 Box* listIterIter(Box* s) {
@@ -45,6 +46,7 @@ Box* listiterHasnext(Box* s) {
 
     bool ans = (self->pos < self->l->size);
     if (!ans) {
+        Py_DECREF(self->l);
         self->l = NULL;
     }
     return boxBool(ans);
@@ -60,6 +62,7 @@ i1 listiterHasnextUnboxed(Box* s) {
 
     bool ans = (self->pos < self->l->size);
     if (!ans) {
+        Py_DECREF(self->l);
         self->l = NULL;
     }
     return ans;
@@ -73,6 +76,7 @@ Box* listiter_next(Box* s) noexcept {
         return NULL;
 
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        Py_DECREF(self->l);
         self->l = NULL;
         return NULL;
     }
@@ -162,6 +166,10 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 
     assert(self->size <= self->capacity);
     self->ensure(nelts);
+
+    for (int i = 0; i < nelts; i++) {
+        Py_INCREF(v[i]);
+    }
 
     assert(self->size <= self->capacity);
     memcpy(&self->elts->elts[self->size], &v[0], nelts * sizeof(Box*));

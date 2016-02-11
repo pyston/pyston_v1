@@ -3460,6 +3460,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
             arg_array->setAttr(8, rewrite_args->rewriter->loadConst(0));
 
         auto r_rtn = rewrite_args->rewriter->call(true, (void*)Helper::call, arg_vec)->setType(RefType::OWNED);
+        rewrite_args->obj->refConsumed();
         rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
 
         void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
@@ -5948,6 +5949,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target));
     }
+    Py_DECREF(rtn);
 
     if (rewriter.get())
         rewriter->commit();
@@ -5983,6 +5985,8 @@ extern "C" void delitem(Box* target, Box* slice) {
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "'%s' object does not support item deletion", getTypeName(target));
     }
+
+    Py_DECREF(rtn);
 
     if (rewriter.get())
         rewriter->commit();

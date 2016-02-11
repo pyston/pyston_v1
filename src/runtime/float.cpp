@@ -127,7 +127,7 @@ extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(lhs->d + PyLong_AsDouble(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -154,7 +154,7 @@ extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(lhs->d / PyLong_AsDouble(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -167,7 +167,7 @@ extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(lhs->d / PyLong_AsDouble(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -194,7 +194,7 @@ extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(PyLong_AsDouble(rhs) / lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -219,7 +219,7 @@ extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == float_cls) {
         return floatFloorDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -546,7 +546,7 @@ extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(mod_float_float(lhs->d, PyLong_AsDouble(rhs)));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -571,7 +571,7 @@ extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(mod_float_float(PyLong_AsDouble(rhs), lhs->d));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -628,7 +628,7 @@ extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(lhs->d * PyLong_AsDouble(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -653,7 +653,7 @@ extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(lhs->d - PyLong_AsDouble(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -678,7 +678,7 @@ extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
     } else if (rhs->cls == long_cls) {
         return boxFloat(PyLong_AsDouble(rhs) - lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 

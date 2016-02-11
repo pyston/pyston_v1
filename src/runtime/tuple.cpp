@@ -47,6 +47,9 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
     auto rtn = BoxedTuple::create(length);
     if (length > 0)
         copySlice(&rtn->elts[0], &self->elts[0], start, step, length);
+    for (int i = 0; i < length; i++) {
+        Py_INCREF(rtn->elts[i]);
+    }
     return rtn;
 }
 
@@ -157,7 +160,7 @@ template <ExceptionStyle S> Box* tupleGetitem(BoxedTuple* self, Box* slice) {
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     if (!PyTuple_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);

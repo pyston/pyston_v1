@@ -515,7 +515,7 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -530,7 +530,7 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
@@ -547,7 +547,7 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n | rhs_int->n);
@@ -564,7 +564,7 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n ^ rhs_int->n);
@@ -595,7 +595,7 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
     } else if (rhs->cls == float_cls) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -625,7 +625,7 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
     } else if (rhs->cls == float_cls) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -659,7 +659,7 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
     } else if (rhs->cls == float_cls) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -688,7 +688,7 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         return longLshift(boxLong(lhs->n), rhs);
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intLShiftInt(lhs, rhs_int);
@@ -705,7 +705,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
@@ -719,13 +719,13 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
     Box* divResult = intDiv(lhs, rhs);
 
     if (divResult == NotImplemented) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     Box* modResult = intMod(lhs, rhs);
 
     if (modResult == NotImplemented) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     Box* arg[2] = { divResult, modResult };
@@ -756,7 +756,7 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intMulFloat(lhs, rhs_float);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -796,7 +796,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     else if (PyFloat_Check(rhs))
         return intPowFloat(lhs, static_cast<BoxedFloat*>(rhs), mod);
     else if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     BoxedInt* mod_int = static_cast<BoxedInt*>(mod);
@@ -806,7 +806,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
         if (!PyInt_Check(mod)) {
-            return NotImplemented;
+            return incref(NotImplemented);
         } else if (mod_int->n == 0) {
             raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
         }
@@ -837,7 +837,7 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
         return longRshift(boxLong(lhs->n), rhs);
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intRShiftInt(lhs, rhs_int);
@@ -866,7 +866,7 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intSubFloat(lhs, rhs_float);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 

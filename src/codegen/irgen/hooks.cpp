@@ -331,7 +331,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         static BoxedString* builtins_str = getStaticString("__builtins__");
         if (!bm->hasattr(builtins_str))
-            bm->giveAttr(incref(builtins_str), PyModule_GetDict(builtins_module));
+            bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
 
         md = new FunctionMetadata(0, false, false, std::move(si));
     }

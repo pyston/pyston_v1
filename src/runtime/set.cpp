@@ -274,7 +274,7 @@ static Box* setIntersectionUpdate2(BoxedSet* self, Box* other) {
 Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     // TODO just [write and] call setUnionUpdate2
     for (auto&& elt : rhs->s) {
@@ -286,7 +286,7 @@ Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
     return setIOr(rtn, rhs);
@@ -295,7 +295,7 @@ Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     setIntersectionUpdate2(lhs, rhs);
     return lhs;
@@ -304,7 +304,7 @@ Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setAnd(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return setIntersection2(lhs, rhs);
 }
@@ -312,7 +312,7 @@ Box* setAnd(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     // TODO: write and call setDifferenceUpdate2
     for (auto&& elt : rhs->s) {
@@ -324,7 +324,7 @@ Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
     return setISub(rtn, rhs);
@@ -333,7 +333,7 @@ Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setIXor(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     _setSymmetricDifferenceUpdate(lhs, rhs);
 
@@ -343,7 +343,7 @@ Box* setIXor(BoxedSet* lhs, BoxedSet* rhs) {
 Box* setXor(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
     return setIXor(rtn, rhs);

@@ -32,7 +32,7 @@ public:
 
     static void dealloc(BoxedListIterator* o) noexcept {
         PyObject_GC_UnTrack(o);
-        Py_DECREF(o->l);
+        Py_XDECREF(o->l);
         o->cls->tp_free(o);
     }
 
