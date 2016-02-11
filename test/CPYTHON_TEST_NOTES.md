@@ -128,8 +128,6 @@ test_kqueue             Not really a failure, but it tries to skip itself and we
 test_lib2to3            [unknown]
 test_linuxaudiodev      [unknown]
 test_list               longs as slice indices
-test__locale            No module named _locale
-test_locale             [unknown]
 test_long_future        [unknown]
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that

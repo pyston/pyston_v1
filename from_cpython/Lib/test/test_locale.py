@@ -1,4 +1,3 @@
-# expected: fail
 from test.test_support import run_unittest, verbose
 import unittest
 import locale

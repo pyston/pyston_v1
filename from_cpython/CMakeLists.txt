@@ -176,6 +176,7 @@ add_custom_command(OUTPUT ${STDMODULES}
 		       Modules/termios.c
 		       Modules/_cursesmodule.c
 		       Modules/mmapmodule.c
+		       Modules/_localemodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so)
 

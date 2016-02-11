@@ -146,6 +146,13 @@ def elementtree_ext():
                         sources = [relpath('Modules/_elementtree.c')],
                         depends = pyexpat.depends,
                       )
+
+@unique
+def locale_ext():
+    return Extension("_locale", sources = map(relpath, [
+            "Modules/_localemodule.c",
+            ]))
+
 ext_modules = [future_builtins_ext(),
                multiprocessing_ext(),
                pyexpat_ext(),
@@ -159,7 +166,9 @@ ext_modules = [future_builtins_ext(),
                readline_ext(),
                termios_ext(),
                mmap_ext(),
+               locale_ext()
                ]
+
 
 builtin_headers = map(relpath, glob.glob("Include/*.h"))
 

@@ -1,4 +1,3 @@
-# expected: fail
 from test.test_support import run_unittest
 from _locale import (setlocale, LC_NUMERIC, localeconv, Error)
 try:
