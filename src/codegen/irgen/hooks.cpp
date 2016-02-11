@@ -331,7 +331,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         static BoxedString* builtins_str = getStaticString("__builtins__");
         if (!bm->hasattr(builtins_str))
-            bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
+            bm->giveAttr(incref(builtins_str), PyModule_GetDict(builtins_module));
 
         md = new FunctionMetadata(0, false, false, std::move(si));
     }
@@ -565,16 +565,20 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
 
     if (globals) {
         // From CPython (they set it to be f->f_builtins):
-        Box* globals_dict = globals;
+        Box* globals_dict;
         if (globals->cls == module_cls)
             globals_dict = globals->getAttrWrapper();
+        else
+            globals_dict = incref(globals);
+
+        AUTO_DECREF(globals_dict);
 
         auto requested_builtins = PyDict_GetItemString(globals_dict, "__builtins__");
         if (requested_builtins == NULL)
             PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
         else
             RELEASE_ASSERT(requested_builtins == builtins_module
-                               || requested_builtins == builtins_module->getAttrWrapper(),
+                               || requested_builtins == autoDecref(builtins_module->getAttrWrapper()),
                            "we don't support overriding __builtins__");
     }
 }

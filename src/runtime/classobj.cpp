@@ -31,7 +31,7 @@ BoxedClass* classobj_cls, *instance_cls;
 }
 
 template <Rewritable rewritable>
-static Box* classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+static BORROWED(Box*) classLookup(BoxedClassobj* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -162,7 +162,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     BoxedClassobj* made = new (cls) BoxedClassobj(name, bases);
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));
-    made->giveAttr("__doc__", None);
+    made->giveAttr("__doc__", incref(None));
 
     for (const auto& p : *dict) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
@@ -184,13 +184,16 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     assert(!_kwargs || _kwargs->cls == dict_cls);
     BoxedDict* kwargs = static_cast<BoxedDict*>(_kwargs);
 
-    BoxedInstance* made = new BoxedInstance(cls);
 
     static BoxedString* init_str = getStaticString("__init__");
     Box* init_func = classLookup(cls, init_str);
 
+    BoxedInstance* made = new BoxedInstance(cls);
+    Py_DECREF(made);
+    Py_RETURN_NONE;
     if (init_func) {
         Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
+        AUTO_DECREF(init_rtn);
         if (init_rtn != None)
             raiseExcHelper(TypeError, "__init__() should return None");
     } else {
@@ -210,6 +213,7 @@ extern "C" PyObject* PyInstance_New(PyObject* klass, PyObject* arg, PyObject* kw
 }
 
 static Box* classobjGetattribute(Box* _cls, Box* _attr) {
+    assert(0 && "check refcounting");
     RELEASE_ASSERT(_cls->cls == classobj_cls, "");
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
 
@@ -379,6 +383,7 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
         rewrite_args = NULL;
 
     if (r) {
+        assert(0 && "erf this was supposed to return a borrowed ref");
         Box* rtn = processDescriptor(r, inst, inst->inst_cls);
         if (rewrite_args) {
             RewriterVar* r_rtn = rewrite_args->rewriter->call(
@@ -439,6 +444,7 @@ static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* a
 template <Rewritable rewritable>
 static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing,
                                   GetattrRewriteArgs* rewrite_args) {
+    assert(0 && "check refcounting");
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -498,7 +504,7 @@ Box* instanceGetattroInternal(Box* cls, Box* _attr, GetattrRewriteArgs* rewrite_
 template Box* instanceGetattroInternal<CAPI>(Box*, Box*, GetattrRewriteArgs*) noexcept;
 template Box* instanceGetattroInternal<CXX>(Box*, Box*, GetattrRewriteArgs*);
 
-Box* instanceSetattroInternal(Box* _inst, Box* _attr, Box* value, SetattrRewriteArgs* rewrite_args) {
+void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, SetattrRewriteArgs* rewrite_args) {
     STAT_TIMER(t0, "us_timer_instance_setattro", 0);
 
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
@@ -519,7 +525,7 @@ Box* instanceSetattroInternal(Box* _inst, Box* _attr, Box* value, SetattrRewrite
                 raiseExcHelper(TypeError, "__class__ must be set to a class");
 
             inst->inst_cls = static_cast<BoxedClassobj*>(value);
-            return None;
+            return;
         }
     }
 
@@ -539,28 +545,30 @@ Box* instanceSetattroInternal(Box* _inst, Box* _attr, Box* value, SetattrRewrite
 
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
-            return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            return;
         }
 
         if (rewrite_args)
             grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
 
         _inst->setattr(attr, value, rewrite_args);
-        return None;
+        return;
     } else {
         Box* setattr = classLookup(inst->inst_cls, setattr_str);
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
-            return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            return;
         }
 
         _inst->setattr(attr, value, NULL);
-        return None;
+        return;
     }
 }
 
-Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
-    return instanceSetattroInternal(_inst, _attr, value, NULL);
+void instanceSetattr(Box* _inst, Box* _attr, Box* value) {
+    instanceSetattroInternal(_inst, _attr, value, NULL);
 }
 
 Box* instanceDelattr(Box* _inst, Box* _attr) {
@@ -1198,20 +1206,6 @@ static PyObject* instance_index(PyObject* self) noexcept {
     return res;
 }
 
-static void instance_dealloc(Box* _inst) noexcept {
-    RELEASE_ASSERT(_inst->cls == instance_cls, "");
-    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-
-    // Note that trying to call __del__ as a finalizer does not fallback to
-    // __getattr__ unlike other attributes (like __index__). This is CPython's behavior.
-    static BoxedString* del_str = getStaticString("__del__");
-
-    // TODO: any exceptions here should get caught + printed, instead of causing a std::terminate:
-    Box* func = instanceGetattributeSimple<NOT_REWRITABLE>(inst, del_str, NULL);
-    if (func)
-        runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-}
-
 static Box* _instanceBinary(Box* _inst, Box* other, BoxedString* attr) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -1640,6 +1634,128 @@ extern "C" int PyMethod_ClearFreeList(void) noexcept {
     return 0; // number of entries cleared
 }
 
+void BoxedInstance::dealloc(Box* b) noexcept {
+    RELEASE_ASSERT(b->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(b);
+
+    PyObject* error_type, *error_value, *error_traceback;
+    PyObject* del;
+    static PyObject* delstr;
+
+    _PyObject_GC_UNTRACK(inst);
+    if (inst->weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject*)inst);
+
+    /* Temporarily resurrect the object. */
+    assert(inst->cls == &PyInstance_Type);
+    assert(inst->ob_refcnt == 0);
+    inst->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+    /* Execute __del__ method, if any. */
+    if (delstr == NULL) {
+        delstr = getStaticString("__del__");
+        if (delstr == NULL)
+            PyErr_WriteUnraisable((PyObject*)inst);
+    }
+    // if (delstr && (del = instance_getattr2(inst, delstr)) != NULL) {
+    // TODO: not sure if this is the same as cpython's getattr2 (and the exception style might be different too?)
+    if (delstr
+        && (del = instanceGetattributeSimple<NOT_REWRITABLE>(inst, static_cast<BoxedString*>(delstr), NULL)) != NULL) {
+        PyObject* res = PyEval_CallObject(del, (PyObject*)NULL);
+        if (res == NULL)
+            PyErr_WriteUnraisable(del);
+        else
+            Py_DECREF(res);
+        Py_DECREF(del);
+    }
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(inst->ob_refcnt > 0);
+    if (--inst->ob_refcnt == 0) {
+
+        /* New weakrefs could be created during the finalizer call.
+            If this occurs, clear them out without calling their
+            finalizers since they might rely on part of the object
+            being finalized that has already been destroyed. */
+        while (inst->weakreflist != NULL) {
+            _PyWeakref_ClearRef((PyWeakReference*)(inst->weakreflist));
+        }
+
+        Py_DECREF(inst->inst_cls);
+        inst->attrs.clear();
+        PyObject_GC_Del(inst);
+    } else {
+        Py_ssize_t refcnt = inst->ob_refcnt;
+        /* __del__ resurrected it!  Make it look like the original
+         * Py_DECREF never happened.
+         */
+        _Py_NewReference((PyObject*)inst);
+        inst->ob_refcnt = refcnt;
+        _PyObject_GC_TRACK(inst);
+        /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+         * we need to undo that. */
+        _Py_DEC_REFTOTAL;
+/* If Py_TRACE_REFS, _Py_NewReference re-added self to the
+ * object chain, so no more to do there.
+ * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+ * _Py_NewReference bumped tp_allocs: both of those need to be
+ * undone.
+ */
+#ifdef COUNT_ALLOCS
+        --inst->cls->tp_frees;
+        --inst->cls->tp_allocs;
+#endif
+    }
+}
+
+int BoxedInstance::traverse(Box* o, visitproc visit, void* arg) noexcept {
+    BoxedInstance* self = static_cast<BoxedInstance*>(o);
+
+    Py_VISIT_HCATTRS(self->attrs);
+    Py_VISIT(self->inst_cls);
+
+    return 0;
+}
+
+int BoxedInstance::clear(Box* self) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+void BoxedClassobj::dealloc(Box* b) noexcept {
+    _PyObject_GC_UNTRACK(b);
+
+    BoxedClassobj* cl = static_cast<BoxedClassobj*>(b);
+
+    Py_DECREF(cl->bases);
+    Py_DECREF(cl->name);
+
+    if (cl->weakreflist)
+        PyObject_ClearWeakRefs(cl);
+
+    cl->clearAttrs();
+
+    cl->cls->tp_free(cl);
+}
+
+int BoxedClassobj::traverse(Box* o, visitproc visit, void* arg) noexcept {
+    BoxedClassobj* cl = static_cast<BoxedClassobj*>(o);
+
+    Py_VISIT(cl->bases);
+    Py_VISIT(cl->name);
+    Py_VISIT_HCATTRS(cl->attrs);
+    return 0;
+}
+
+int BoxedClassobj::clear(Box* self) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 void setupClassobj() {
     classobj_cls
         = BoxedClass::create(type_cls, object_cls, offsetof(BoxedClassobj, attrs), offsetof(BoxedClassobj, weakreflist),
@@ -1791,7 +1907,6 @@ void setupClassobj() {
     instance_cls->tp_as_number->nb_index = instance_index;
     instance_cls->tp_as_number->nb_power = instance_pow;
     instance_cls->tp_as_number->nb_inplace_power = instance_ipow;
-    instance_cls->tp_dealloc = instance_dealloc;
     instance_cls->has_safe_tp_dealloc = false;
 }
 }

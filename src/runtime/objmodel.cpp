@@ -779,7 +779,7 @@ BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attr
 
 void BoxedClass::finishInitialization() {
     assert(!this->tp_dict);
-    this->tp_dict = incref(this->getAttrWrapper());
+    this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
     tp_flags |= Py_TPFLAGS_READY;
@@ -992,7 +992,7 @@ BoxedDict* Box::getDict() {
     }
 
     assert(d->cls == dict_cls);
-    return d;
+    return incref(d);
 }
 
 static StatCounter box_getattr_slowpath("slowpath_box_getattr");
@@ -2838,7 +2838,6 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
     RewriterVar* r_setattr;
 
     if (tp_setattro == instance_setattro) {
-        assert(0 && "check refcounting");
         if (rewriter.get()) {
             SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
             instanceSetattroInternal(obj, attr, attr_val, &rewrite_args);

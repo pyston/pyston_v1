@@ -1305,7 +1305,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
 
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
-        return PyDictProxy_New(obj->getAttrWrapper());
+        return PyDictProxy_New(autoDecref(obj->getAttrWrapper()));
     abort();
 }
 
@@ -1392,6 +1392,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         metaclass = bases->elts[0]->cls;
     } else {
         Box* gl = getGlobalsDict();
+        AUTO_DECREF(gl);
         metaclass = PyDict_GetItemString(gl, "__metaclass__");
 
         if (!metaclass) {
@@ -1411,8 +1412,10 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         // But for classes created from Python, we don't have this extra untracked reference.
         // Rather than fix up the plumbing for now, just reach into the other system and remove this
         // class from the list.
-        RELEASE_ASSERT(classes.back() == r, "");
-        classes.pop_back();
+        if (isSubclass(r->cls, type_cls)) {
+            RELEASE_ASSERT(classes.back() == r, "");
+            classes.pop_back();
+        }
 
         return r;
     } catch (ExcInfo e) {
@@ -2559,7 +2562,7 @@ Box* Box::getAttrWrapper() {
     HiddenClass* hcls = attrs->hcls;
 
     if (hcls->type == HiddenClass::DICT_BACKED) {
-        return attrs->attr_list->attrs[0];
+        return incref(attrs->attr_list->attrs[0]);
     }
 
     int offset = hcls->getAttrwrapperOffset();
@@ -2569,17 +2572,15 @@ Box* Box::getAttrWrapper() {
             auto new_hcls = hcls->getAttrwrapperChild();
             appendNewHCAttr(aw, NULL);
             attrs->hcls = new_hcls;
-            Py_DECREF(aw);
             return aw;
         } else {
             assert(hcls->type == HiddenClass::SINGLETON);
             appendNewHCAttr(aw, NULL);
             hcls->appendAttrwrapper();
-            Py_DECREF(aw);
             return aw;
         }
     }
-    return attrs->attr_list->attrs[offset];
+    return incref(attrs->attr_list->attrs[offset]);
 }
 
 extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {

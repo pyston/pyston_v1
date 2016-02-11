@@ -1067,7 +1067,7 @@ public:
     static Box* __reduce__(Box* self) {
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
-        return BoxedTuple::create({ self->cls, EmptyTuple, self->getAttrWrapper() });
+        return BoxedTuple::create({ self->cls, EmptyTuple, autoDecref(self->getAttrWrapper()) });
     }
 };
 

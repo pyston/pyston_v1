@@ -369,7 +369,7 @@ public:
             auto locations = findLocations(PASSED_GLOBALS_NAME);
             assert(locations.size() == 1);
             Box* r = (Box*)readLocation(locations[0]);
-            return r;
+            return incref(r);
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getGlobalsForInterpretedFrame((void*)id.bp);
         }
@@ -381,8 +381,10 @@ public:
         if (!globals)
             return NULL;
 
-        if (PyModule_Check(globals))
+        if (PyModule_Check(globals)) {
+            AUTO_DECREF(globals);
             return globals->getAttrWrapper();
+        }
         return globals;
     }
 
@@ -785,7 +787,6 @@ Box* getGlobals() {
     auto it = getTopPythonFrame();
     if (!it)
         return NULL;
-    RELEASE_ASSERT(0, "check refcounting");
     return it->getGlobals();
 }
 

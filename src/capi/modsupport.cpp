@@ -431,11 +431,11 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     return module;
 }
 
-extern "C" PyObject* PyModule_GetDict(PyObject* _m) noexcept {
+extern "C" PyObject* PyModule_GetDict(BORROWED(PyObject*) _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    return m->getAttrWrapper();
+    return autoDecref(m->getAttrWrapper());
 }
 
 extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) noexcept {

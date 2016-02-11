@@ -184,7 +184,7 @@ public:
 
     Box* getGlobals() {
         assert(globals);
-        return globals;
+        return incref(globals);
     }
 
     FunctionMetadata* getMD() { return md; }

@@ -670,7 +670,7 @@ public:
         Py_INCREF(val);
         giveAttr(internStringMortal(attr), val);
     }
-    void giveAttr(BoxedString* attr, Box* val);
+    void giveAttr(STOLEN(BoxedString*) attr, STOLEN(Box*) val);
 
     void clearAttrs();
 
@@ -685,7 +685,8 @@ public:
     void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
-    BORROWED(Box*) getAttrWrapper();
+    // Maybe this should return a borrowed reference?
+    Box* getAttrWrapper();
 
     Box* reprIC();
     BoxedString* reprICAsString();
