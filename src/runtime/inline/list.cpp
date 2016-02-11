@@ -83,7 +83,7 @@ Box* listiter_next(Box* s) noexcept {
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
-    return rtn;
+    return incref(rtn);
 }
 
 template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {

@@ -4938,6 +4938,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
 
     Box* irtn = NULL;
     if (inplace) {
+        assert(0 && "check refcounting");
         // XXX I think we need to make sure that we keep these strings alive?
         DecrefHandle<BoxedString> iop_name(getInplaceOpName(op_type));
         if (rewrite_args) {
@@ -4976,7 +4977,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
         }
     }
 
-    BoxedString* op_name = getOpName(op_type);
+    BORROWED(BoxedString*) op_name = getOpName(op_type);
     Box* lrtn;
     if (rewrite_args) {
         CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
@@ -5022,6 +5023,8 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     }
 
     BoxedString* rop_name = getReverseOpName(op_type);
+    AUTO_DECREF(rop_name);
+
     Box* rrtn = callattrInternal1<CXX, REWRITABLE>(rhs, rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
     if (rrtn != NULL && rrtn != NotImplemented)
         return rrtn;
