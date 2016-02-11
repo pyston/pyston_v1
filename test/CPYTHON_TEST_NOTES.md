@@ -164,7 +164,6 @@ test_resource           [unknown]
 test_richcmp            PyObject_Not
 test_rlcompleter        [unknown]
 test_runpy              [unknown]
-test_sax                [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
