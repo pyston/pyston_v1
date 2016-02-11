@@ -94,7 +94,7 @@ Box* noneIfNull(Box* b) {
 
 template <ExceptionStyle S> Box* coerceUnicodeToStr(Box* unicode) noexcept(S == CAPI) {
     if (!isSubclass(unicode->cls, unicode_cls))
-        return unicode;
+        return incref(unicode);
 
     Box* r = PyUnicode_AsASCIIString(unicode);
     if (!r) {

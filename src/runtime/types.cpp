@@ -2158,7 +2158,9 @@ public:
 
         assert(_key->cls == str_cls);
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key); // TODO should be able to avoid this (if we change the refcount contract around interning)
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         self->b->setattr(key, value, NULL);
         Py_RETURN_NONE;
@@ -2197,7 +2199,9 @@ public:
 
         assert(_key->cls == str_cls);
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         Box* cur = self->b->getattr(key);
         if (cur)
@@ -2215,6 +2219,7 @@ public:
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
         if (!r)
@@ -2233,6 +2238,7 @@ public:
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
         if (!r) {
@@ -2253,6 +2259,7 @@ public:
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
         if (r) {
@@ -2274,6 +2281,7 @@ public:
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         if (self->b->getattr(key))
             self->b->delattr(key, NULL);
@@ -2317,6 +2325,7 @@ public:
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         internStringMortalInplace(key);
+        AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
         return r ? True : False;
@@ -3384,6 +3393,9 @@ void HiddenClass::dump() noexcept {
 void HCAttrs::clear() noexcept {
     HiddenClass* hcls = this->hcls;
 
+    if (!hcls)
+        return;
+
     if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
         Box* d = this->attr_list->attrs[0];
         Py_DECREF(d);
@@ -3396,7 +3408,9 @@ void HCAttrs::clear() noexcept {
     for (int i = 0; i < hcls->attributeArraySize(); i++) {
         Py_DECREF(this->attr_list->attrs[i]);
     }
-    // TODO need to free the attrs memory
+
+    if (this->attr_list)
+        PyMem_FREE(this->attr_list);
     new ((void*)this) HCAttrs(root_hcls);
 }
 

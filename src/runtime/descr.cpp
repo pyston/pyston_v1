@@ -610,11 +610,18 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
     rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
                        arg2, arg3, args, oargs, keyword_names);
 
+    AUTO_XDECREF(arg1);
+    AUTO_XDECREF(arg2);
+    AUTO_XDECREF(arg3);
+    assert(!oargs);
+
     if (paramspec.takes_varargs)
         assert(arg2 && arg2->cls == tuple_cls);
 
     if (!rewrite_success)
         rewrite_args = NULL;
+
+    assert(!rewrite_args && "check refcounting");
 
     Box* rtn;
     if (flags == PyWrapperFlag_KEYWORDS) {

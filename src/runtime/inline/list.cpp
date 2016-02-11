@@ -176,6 +176,6 @@ extern "C" Box* listAppend(Box* s, Box* v) {
 
     listAppendInternal(self, v);
 
-    return None;
+    Py_RETURN_NONE;
 }
 }

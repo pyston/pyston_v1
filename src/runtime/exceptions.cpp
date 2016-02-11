@@ -26,7 +26,7 @@
 
 namespace pyston {
 
-void raiseExc(Box* exc_obj) {
+void raiseExc(STOLEN(Box*) exc_obj) {
     assert(!PyErr_Occurred());
     throw ExcInfo(incref(exc_obj->cls), exc_obj, incref(None));
 }

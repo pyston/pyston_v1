@@ -516,13 +516,12 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
 
         RewriterVar* array_var = NULL;
         if (jit) {
-            assert(0 && "check refcounting");
             array_var = jit->emitUnpackIntoArray(value, tuple->elts.size());
         }
 
         unsigned i = 0;
         for (AST_expr* e : tuple->elts) {
-            doStore(e, Value(array[i], jit ? array_var->getAttr(i * sizeof(void*)) : NULL));
+            doStore(e, Value(array[i], jit ? array_var->getAttr(i * sizeof(void*))->setType(RefType::OWNED) : NULL));
             ++i;
         }
         Py_DECREF(value.o);
@@ -923,7 +922,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
         assert(node->args.size() == 2);
         Value obj = visit_expr(node->args[0]);
+        AUTO_DECREF(obj.o);
         Value cls = visit_expr(node->args[1]);
+        AUTO_DECREF(cls.o);
         v = Value(boxBool(exceptionMatches(obj.o, cls.o)), jit ? jit->emitExceptionMatches(obj, cls) : NULL);
     } else if (node->opcode == AST_LangPrimitive::LOCALS) {
         assert(frame_info.boxedLocals != NULL);
@@ -1420,6 +1421,8 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         func = visit_expr(node->func);
     }
 
+    AUTO_DECREF(func.o);
+
     std::vector<Box*> args;
     llvm::SmallVector<RewriterVar*, 8> args_vars;
     for (AST_expr* e : node->args) {
@@ -1450,6 +1453,8 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         args_vars.push_back(v);
     }
 
+    AUTO_DECREF_ARRAY(&args[0], args.size());
+
     ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs, node->kwargs);
 
     if (is_callattr) {
@@ -1468,10 +1473,6 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         v.o = runtimeCall(func.o, argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
                           args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, keyword_names);
     }
-
-    Py_DECREF(func.o);
-    for (auto e : args)
-        Py_DECREF(e);
 
     return v;
 }
@@ -1657,8 +1658,8 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
     Value v = visit_expr(node->value);
+    AUTO_DECREF(v.o);
     Value r(pyston::getattr(v.o, node->attr.getBox()), jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
-    Py_DECREF(v.o);
     return r;
 }
 }

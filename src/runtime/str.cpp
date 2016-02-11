@@ -390,9 +390,12 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
         return;
 
     auto& entry = interned_strings[s->s()];
-    if (entry)
+    if (entry) {
+        Py_INCREF(entry);
+        Py_DECREF(*p);
         *p = entry;
-    else {
+    } else {
+        // TODO: do CPython's refcounting here
         num_interned_strings.log();
         entry = s;
 

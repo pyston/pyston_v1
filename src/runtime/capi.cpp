@@ -797,36 +797,31 @@ void checkAndThrowCAPIException() {
     static StatCounter num_checkAndThrowCAPIException("num_checkAndThrowCAPIException");
     num_checkAndThrowCAPIException.log();
 
-    Box* _type = cur_thread_state.curexc_type;
+    Box* _type, *value, *tb;
+    PyErr_Fetch(&_type, &value, &tb);
+
     if (!_type)
-        assert(!cur_thread_state.curexc_value);
+        assert(!value);
 
     if (_type) {
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(PyType_Check(_type) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
 
-        Box* value = cur_thread_state.curexc_value;
         if (!value)
-            value = None;
+            value = incref(None);
 
-        Box* tb = cur_thread_state.curexc_traceback;
         if (!tb)
-            tb = None;
-
-        // Make sure to call PyErr_Clear() *before* normalizing the exception, since otherwise
-        // the normalization can think that it had raised an exception, resulting to a call
-        // to checkAndThrowCAPIException, and boom.
-        PyErr_Clear();
+            tb = incref(None);
 
         // This is similar to PyErr_NormalizeException:
         if (!isSubclass(value->cls, type)) {
             if (value->cls == tuple_cls) {
-                value = runtimeCall(type, ArgPassSpec(0, 0, true, false), value, NULL, NULL, NULL, NULL);
+                value = runtimeCall(type, ArgPassSpec(0, 0, true, false), autoDecref(value), NULL, NULL, NULL, NULL);
             } else if (value == None) {
                 value = runtimeCall(type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
             } else {
-                value = runtimeCall(type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
+                value = runtimeCall(type, ArgPassSpec(1), autoDecref(value), NULL, NULL, NULL, NULL);
             }
         }
 
@@ -834,6 +829,8 @@ void checkAndThrowCAPIException() {
 
         if (tb != None)
             throw ExcInfo(value->cls, value, tb);
+        Py_DECREF(type);
+        Py_DECREF(tb);
         raiseExc(value);
     }
 }

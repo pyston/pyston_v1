@@ -396,20 +396,24 @@ template <typename B> DecrefHandle<B, true> autoXDecref(B* b) {
 #define AUTO_DECREF(x) DecrefHandle<Box, false> CAT(_autodecref_, __LINE__)((x))
 #define AUTO_XDECREF(x) DecrefHandle<Box, true> CAT(_autodecref_, __LINE__)((x))
 
-class AutoXDecrefArray {
+template <bool Nullable = false> class AutoDecrefArray {
 private:
     Box** array;
     int size;
 
 public:
-    AutoXDecrefArray(Box** array, int size) : array(array), size(size) {}
-    ~AutoXDecrefArray() {
+    AutoDecrefArray(Box** array, int size) : array(array), size(size) {}
+    ~AutoDecrefArray() {
         for (int i = 0; i < size; i++) {
-            Py_XDECREF(array[i]);
+            if (Nullable)
+                Py_XDECREF(array[i]);
+            else
+                Py_DECREF(array[i]);
         }
     }
 };
-#define AUTO_XDECREF_ARRAY(x, size) AutoXDecrefArray CAT(_autodecref_, __LINE__)((x), (size))
+#define AUTO_DECREF_ARRAY(x, size) AutoDecrefArray<false> CAT(_autodecref_, __LINE__)((x), (size))
+#define AUTO_XDECREF_ARRAY(x, size) AutoDecrefArray<true> CAT(_autodecref_, __LINE__)((x), (size))
 
 template <typename B> B* incref(B* b) {
     Py_INCREF(b);

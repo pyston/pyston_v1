@@ -1042,7 +1042,7 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
 
-        if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
+        if (unlikely(hcls && hcls->type == HiddenClass::DICT_BACKED)) {
             if (rewrite_args)
                 assert(!rewrite_args->isSuccessful());
             rewrite_args = NULL;
@@ -1054,7 +1054,7 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
             return r;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+        assert(!hcls || hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
         if (unlikely(rewrite_args)) {
             if (!rewrite_args->obj_hcls_guarded) {
@@ -1066,10 +1066,16 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
                           && static_cast<BoxedClass*>(this)->is_constant)) {
                         rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
                     }
-                    if (hcls->type == HiddenClass::SINGLETON)
+                    if (hcls && hcls->type == HiddenClass::SINGLETON)
                         hcls->addDependence(rewrite_args->rewriter);
                 }
             }
+        }
+
+        if (!hcls) {
+            if (rewrite_args)
+                rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
+            return NULL;
         }
 
         int offset = hcls->getOffset(attr);
@@ -1677,6 +1683,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             // This is assuming that r_descr was passed in as a valid object
             rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
+        Py_INCREF(descr);
         return descr;
     }
 
@@ -1690,6 +1697,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             // This is assuming that r_descr was passed in as a valid object
             rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
+        Py_INCREF(descr);
         return descr;
     }
 
@@ -2445,6 +2453,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         if (rewrite_args) {
             rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
         }
+        Py_INCREF(descr);
         return descr;
     }
 
@@ -3224,6 +3233,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
     }
 
     if (rtn->cls != int_cls) {
+        Py_DECREF(rtn);
         if (S == CAPI) {
             PyErr_Format(TypeError, "an integer is required");
             return NULL;
@@ -4126,6 +4136,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
         for (const auto& p : *d_kwargs) {
             auto k = coerceUnicodeToStr<CXX>(p.first);
+            AUTO_DECREF(k);
 
             if (k->cls != str_cls)
                 raiseExcHelper(TypeError, "%s() keywords must be strings", func_name_cb());
@@ -6439,6 +6450,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         RELEASE_ASSERT(k->cls == str_cls, "%s", k->cls->tp_name);
         BoxedString* s = static_cast<BoxedString*>(k);
         internStringMortalInplace(s);
+        AUTO_DECREF(s);
         made->setattr(s, p.second, NULL);
     }
 
@@ -6789,11 +6801,14 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
 
             attr_name = coerceUnicodeToStr<CXX>(attr_name);
 
-            if (attr_name->cls != str_cls)
+            if (attr_name->cls != str_cls) {
+                Py_DECREF(attr_name);
                 raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));
+            }
 
             BoxedString* casted_attr_name = static_cast<BoxedString*>(attr_name);
             internStringMortalInplace(casted_attr_name);
+            AUTO_DECREF(casted_attr_name);
             Box* attr_value = from_module->getattr(casted_attr_name);
 
             if (!attr_value)
