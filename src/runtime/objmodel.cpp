@@ -4356,7 +4356,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     // the call to function containing a yield should just create a new generator object.
     Box* res;
     if (md->isGenerator()) {
-        assert(0 && "check refcounting");
         // TODO: we might not have a lot to gain by rewriting into createGenerator, but we could at least
         // rewrite up to the call to it:
         res = createGenerator(func, arg1, arg2, arg3, oargs);

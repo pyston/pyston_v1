@@ -354,12 +354,19 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       my_timer(generator_timer_counter, 0, true)
 #endif
 {
+    Py_INCREF(function);
+    Py_XINCREF(arg1);
+    Py_XINCREF(arg2);
+    Py_XINCREF(arg3);
 
     int numArgs = function->md->numReceivedArgs();
     if (numArgs > 3) {
         numArgs -= 3;
         this->args = new (numArgs) GCdArray();
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
+        for (int i = 0; i < numArgs; i++) {
+            Py_INCREF(args[i]);
+        }
     }
 
     static StatCounter generator_stack_reused("generator_stack_reused");
@@ -446,9 +453,34 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 
 static void generator_dealloc(BoxedGenerator* self) noexcept {
     assert(isSubclass(self->cls, generator_cls));
+
+    PyObject_GC_UnTrack(self);
+
     freeGeneratorStack(self);
 
-    Py_FatalError("unimplemented");
+    int numArgs = self->function->md->numReceivedArgs();
+    if (numArgs > 3) {
+        numArgs -= 3;
+        for (int i= 0; i < numArgs; i++) {
+            Py_CLEAR(self->args->elts[i]);
+        }
+    }
+
+    Py_CLEAR(self->arg1);
+    Py_CLEAR(self->arg2);
+    Py_CLEAR(self->arg3);
+
+    Py_CLEAR(self->function);
+
+    Py_CLEAR(self->returnValue);
+
+    Py_CLEAR(self->exception.type);
+    Py_CLEAR(self->exception.value);
+    Py_CLEAR(self->exception.traceback);
+
+    PyObject_ClearWeakRefs(self);
+
+    self->cls->tp_free(self);
 }
 
 static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) noexcept {
