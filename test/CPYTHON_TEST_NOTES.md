@@ -63,9 +63,7 @@ test_collections        assertion failed when doing vars(collections.namedtuple(
 test_compileall         [unknown]
 test_compiler           [unknown]
 test_compile            [unknown]
-test_cookie             [unknown]
 test_copy               Please debug this test in VM.
-test_cpickle            [unknown]
 test_cprofile           [unknown]
 test_crypt              [unknown]
 test_csv                [unknown]
@@ -148,8 +146,6 @@ test_parser             [unknown]
 test_pdb                [unknown]
 test_peepholer          [unknown]
 test_pep352             various unique bugs
-test_pickletools        [unknown]
-test_pickle             unknown
 test_pkg                unknown bug
 test_poplib             SSLError (but only on CI)
 test_pprint             [unknown]

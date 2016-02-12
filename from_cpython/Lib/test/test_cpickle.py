@@ -1,4 +1,3 @@
-# expected: fail
 import cPickle
 import cStringIO
 import io

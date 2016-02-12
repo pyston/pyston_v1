@@ -153,6 +153,12 @@ def locale_ext():
             "Modules/_localemodule.c",
             ]))
 
+@unique
+def cPickle_ext():
+    return Extension("cPickle", sources = map(relpath, [
+            "Modules/cPickle.c",
+            ]))
+
 ext_modules = [future_builtins_ext(),
                multiprocessing_ext(),
                pyexpat_ext(),
@@ -166,7 +172,8 @@ ext_modules = [future_builtins_ext(),
                readline_ext(),
                termios_ext(),
                mmap_ext(),
-               locale_ext()
+               locale_ext(),
+               cPickle_ext()
                ]
 
 

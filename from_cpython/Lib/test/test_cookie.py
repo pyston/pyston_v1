@@ -1,4 +1,3 @@
-# expected: fail
 # Simple test suite for Cookie.py
 
 from test.test_support import run_unittest, run_doctest, check_warnings
