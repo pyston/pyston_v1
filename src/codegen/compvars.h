@@ -93,14 +93,6 @@ public:
         printf("getBoxType not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void drop(IREmitter& emmitter, VAR* var) {
-        printf("drop not defined for %s\n", debugName().c_str());
-        abort();
-    }
-    virtual void grab(IREmitter& emmitter, VAR* var) {
-        printf("grab not defined for %s\n", debugName().c_str());
-        abort();
-    }
     bool canConvertTo(CompilerType* other_type) override {
         printf("canConvertTo not defined for %s\n", debugName().c_str());
         abort();
@@ -216,52 +208,10 @@ public:
 };
 
 class CompilerVariable {
-private:
-    int vrefs;
-    bool grabbed;
-
-protected:
-    virtual void drop(IREmitter& emitter) = 0;
-    virtual void grab(IREmitter& emmitter) = 0;
-
 public:
-    CompilerVariable(bool grabbed) : vrefs(1), grabbed(grabbed) {}
+    CompilerVariable() {}
     virtual ~CompilerVariable() {}
 
-    bool isGrabbed() { return grabbed; }
-    void incvref() {
-        assert(vrefs);
-        vrefs++;
-    }
-    void decvrefNodrop() {
-        assert(vrefs > 0 && vrefs < (1 << 20));
-        // It'd be nice to print out the type of the variable, but this is all happening
-        // after the object got deleted so it's pretty precarious, and the getType()
-        // debugging call will probably segfault:
-        // ASSERT(vrefs, "%s", getType()->debugName().c_str());
-        vrefs--;
-        if (vrefs == 0) {
-            delete this;
-        }
-    }
-    void decvref(IREmitter& emitter) {
-        ASSERT(vrefs > 0 && vrefs < (1 << 20), "%d", vrefs);
-        // ASSERT(vrefs, "%s", getType()->debugName().c_str());
-        vrefs--;
-        if (vrefs == 0) {
-            if (grabbed)
-                drop(emitter);
-            delete this;
-        }
-    }
-    int getVrefs() { return vrefs; }
-    void ensureGrabbed(IREmitter& emitter) {
-        if (!grabbed) {
-            grab(emitter);
-            grabbed = true;
-        }
-    }
-    virtual CompilerVariable* split(IREmitter& emitter) = 0;
     virtual CompilerVariable* dup(DupCache& cache) = 0;
 
     virtual CompilerType* getType() = 0;
@@ -302,12 +252,8 @@ private:
     T* type;
     V value;
 
-protected:
-    void drop(IREmitter& emitter) override { type->drop(emitter, this); }
-    void grab(IREmitter& emitter) override { type->grab(emitter, this); }
-
 public:
-    ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
+    ValuedCompilerVariable(T* type, V value) : CompilerVariable(), type(type), value(value) {
 #ifndef NDEBUG
         type->assertMatches(value);
 #endif
@@ -318,21 +264,9 @@ public:
     ConcreteCompilerType* getConcreteType() override { return type->getConcreteType(); }
     ConcreteCompilerType* getBoxType() override { return type->getBoxType(); }
 
-    ValuedCompilerVariable<V>* split(IREmitter& emitter) override {
-        ValuedCompilerVariable<V>* rtn;
-        if (getVrefs() == 1) {
-            rtn = this;
-        } else {
-            rtn = new ValuedCompilerVariable<V>(type, value, false);
-            this->decvref(emitter);
-        }
-        rtn->ensureGrabbed(emitter);
-        return rtn;
-    }
     CompilerVariable* dup(DupCache& cache) override {
         CompilerVariable* rtn = type->dup(this, cache);
 
-        ASSERT(rtn->getVrefs() == getVrefs(), "%d %s", rtn->getVrefs(), type->debugName().c_str());
         return rtn;
     }
 
@@ -402,12 +336,6 @@ public:
     }
 };
 
-// template <>
-// inline ConcreteCompilerVariable::ValuedCompilerVariable(ConcreteCompilerType *type, llvm::Value* value, bool grabbed)
-// : CompilerVariable(grabbed), type(type), value(value) {
-// assert(value->getType() == type->llvmType());
-//}
-
 // Emit the test for whether one variable 'is' another one.
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate);
 
@@ -457,7 +385,6 @@ template <typename V>
 CompilerVariable* _ValuedCompilerType<V>::getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) {
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
     auto r = UNKNOWN->getPystonIter(emitter, info, converted);
-    converted->decvref(emitter);
     return r;
 }
 
@@ -466,7 +393,6 @@ CompilerVariable* _ValuedCompilerType<V>::contains(IREmitter& emitter, const OpI
                                                    CompilerVariable* rhs) {
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
     auto r = UNKNOWN->contains(emitter, info, converted, rhs);
-    converted->decvref(emitter);
     return r;
 }
 
@@ -475,7 +401,6 @@ CompilerVariable* _ValuedCompilerType<V>::unaryop(IREmitter& emitter, const OpIn
                                                   AST_TYPE::AST_TYPE op_type) {
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
     auto r = UNKNOWN->unaryop(emitter, info, converted, op_type);
-    converted->decvref(emitter);
     return r;
 }
 
@@ -486,7 +411,6 @@ std::vector<CompilerVariable*> _ValuedCompilerType<V>::unpack(IREmitter& emitter
 
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, UNKNOWN);
     auto r = UNKNOWN->unpack(emitter, info, converted, num_into);
-    converted->decvref(emitter);
     return r;
 }
 

@@ -117,9 +117,7 @@ public:
 
     static CompilerVariable* makeIM(CompilerVariable* obj, CompilerVariable* func, CompilerVariable* im_class) {
         CompilerVariable* rtn = new ValuedCompilerVariable<RawInstanceMethod*>(
-            InstanceMethodType::get(obj->getType(), func->getType()), new RawInstanceMethod(obj, func, im_class), true);
-        obj->incvref();
-        func->incvref();
+            InstanceMethodType::get(obj->getType(), func->getType()), new RawInstanceMethod(obj, func, im_class));
         return rtn;
     }
 
@@ -134,14 +132,6 @@ public:
 
     std::string debugName() override {
         return "instanceMethod(" + obj_type->debugName() + " ; " + function_type->debugName() + ")";
-    }
-
-    void drop(IREmitter& emitter, VAR* var) override {
-        checkVar(var);
-        RawInstanceMethod* val = var->getValue();
-        val->obj->decvref(emitter);
-        val->func->decvref(emitter);
-        delete val;
     }
 
     CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ValuedCompilerVariable<RawInstanceMethod*>* var,
@@ -172,10 +162,7 @@ public:
         llvm::Value* boxed = emitter.getBuilder()->CreateCall3(g.funcs.boxInstanceMethod, obj->getValue(),
                                                                func->getValue(), im_class->getValue());
 
-        obj->decvref(emitter);
-        func->decvref(emitter);
-
-        return new ConcreteCompilerVariable(other_type, boxed, true);
+        return new ConcreteCompilerVariable(other_type, boxed);
     }
     CompilerVariable* dup(VAR* var, DupCache& cache) override {
         checkVar(var);
@@ -185,9 +172,7 @@ public:
             RawInstanceMethod* im = var->getValue();
             RawInstanceMethod* new_im
                 = new RawInstanceMethod(im->obj->dup(cache), im->func->dup(cache), im->im_class->dup(cache));
-            rtn = new VAR(this, new_im, var->isGrabbed());
-            while (rtn->getVrefs() < var->getVrefs())
-                rtn->incvref();
+            rtn = new VAR(this, new_im);
         }
         return rtn;
     }
@@ -209,7 +194,6 @@ std::unordered_map<std::pair<CompilerType*, CompilerType*>, InstanceMethodType*>
 ConcreteCompilerVariable* ConcreteCompilerType::makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                                               ConcreteCompilerType* other_type) {
     if (other_type == this) {
-        var->incvref();
         return var;
     }
     printf("makeConverted not defined for %s\n", debugName().c_str());
@@ -218,9 +202,7 @@ ConcreteCompilerVariable* ConcreteCompilerType::makeConverted(IREmitter& emitter
 CompilerVariable* ConcreteCompilerType::dup(ConcreteCompilerVariable* v, DupCache& cache) {
     auto& rtn = cache[v];
     if (rtn == NULL) {
-        rtn = new ConcreteCompilerVariable(this, v->getValue(), v->isGrabbed());
-        while (rtn->getVrefs() < v->getVrefs())
-            rtn->incvref();
+        rtn = new ConcreteCompilerVariable(this, v->getValue());
     }
     return rtn;
 }
@@ -230,9 +212,6 @@ public:
     llvm::Type* llvmType() override { return g.llvm_value_type_ptr; }
 
     std::string debugName() override { return "AnyBox"; }
-
-    void drop(IREmitter& emitter, VAR* var) override { emitter.getGC()->dropPointer(emitter, var->getValue()); }
-    void grab(IREmitter& emitter, VAR* var) override { emitter.getGC()->grabPointer(emitter, var->getValue()); }
 
     bool isFitBy(BoxedClass* c) override { return true; }
 
@@ -270,7 +249,6 @@ public:
         } else {
             emitter.createCall3(info.unw_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
         }
-        converted->decvref(emitter);
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr) override {
@@ -317,7 +295,6 @@ public:
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                             ConcreteCompilerType* other_type) override {
         if (other_type == this) {
-            var->incvref();
             return var;
         }
         fprintf(stderr, "Can't convert unknown to %s...\n", other_type->debugName().c_str());
@@ -363,7 +340,7 @@ public:
                 emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
 
-                return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+                return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
             }
         }
 
@@ -389,12 +366,11 @@ public:
                                       target_exception_style == CAPI ? g.funcs.getitem_capi : g.funcs.getitem,
                                       var->getValue(), converted_slice->getValue(), target_exception_style);
         }
-        converted_slice->decvref(emitter);
 
         if (target_exception_style == CAPI)
             emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
 
-        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+        return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
 
     CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
@@ -407,7 +383,6 @@ public:
         // If the type analysis could determine the iter type is a valid pyston iter (has 'hasnext') we are finished.
         CompilerType* iter_type = var->getType()->getPystonIterType();
         if (iter_type != UNKNOWN) {
-            iter_call->decvref(emitter);
             return converted_iter_call;
         }
 
@@ -444,10 +419,7 @@ public:
         phi->addIncoming(value_has_iter, value_has_iter_bb);
         phi->addIncoming(value_no_iter, value_no_iter_bb);
 
-        converted_iter_call->decvref(emitter);
-        iter_call->decvref(emitter);
-
-        return new ConcreteCompilerVariable(UNKNOWN, phi, true);
+        return new ConcreteCompilerVariable(UNKNOWN, phi);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -485,15 +457,13 @@ public:
                                       getConstantInt(op_type, g.i32));
         }
 
-        converted_rhs->decvref(emitter);
-
         if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn || op_type == AST_TYPE::Is
             || op_type == AST_TYPE::IsNot) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn);
             return boolFromI1(emitter, unboxed);
         }
 
-        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+        return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
@@ -516,7 +486,7 @@ public:
             llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
             assert(val->getType() == g.llvm_value_type_ptr);
 
-            rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val, true));
+            rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val));
         }
         return rtn;
     }
@@ -569,7 +539,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     if (target_exception_style == CAPI)
         emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
 
-    return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
+    return new ConcreteCompilerVariable(UNKNOWN, rtn_val);
 }
 
 static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func,
@@ -669,17 +639,13 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         rtn = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
     }
 
-    for (int i = 0; i < args.size(); i++) {
-        converted_args[i]->decvref(emitter);
-    }
-
     assert(rtn->getType() == rtn_type->llvmType());
 
     if (target_exception_style == CAPI) {
         emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
     }
 
-    return new ConcreteCompilerVariable(rtn_type, rtn, true);
+    return new ConcreteCompilerVariable(rtn_type, rtn);
 }
 
 CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -787,9 +753,7 @@ ConcreteCompilerVariable* UnknownType::unaryop(IREmitter& emitter, const OpInfo&
                                   getConstantInt(op_type, g.i32));
     }
 
-    converted->decvref(emitter);
-
-    return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    return new ConcreteCompilerVariable(UNKNOWN, rtn);
 }
 
 ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
@@ -848,9 +812,7 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
         std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure_v, globals,
                                    scratch, getConstantInt(defaults.size(), g.i64) });
 
-    if (convertedClosure)
-        convertedClosure->decvref(emitter);
-    return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
+    return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed);
 }
 
 class AbstractFunctionType : public CompilerType {
@@ -965,21 +927,11 @@ public:
     // Subclasses need to implement:
     //   _makeConverted
     //   _dup
-    //   _drop
     //   _numFrameArgs
     //   _serializeToFrame
     //   _deserializeFromFrame
     typedef UnboxedVal<T> Unboxed;
     typedef typename ValuedCompilerType<std::shared_ptr<UnboxedVal<T>>>::VAR VAR;
-
-    void drop(IREmitter& emitter, VAR* var) override final {
-        auto v = var->getValue();
-        if (v->boxed)
-            v->boxed->decvref(emitter);
-        static_cast<D*>(this)->_drop(emitter, v->val);
-    }
-
-    void grab(IREmitter& emitter, VAR* var) override final { RELEASE_ASSERT(0, ""); }
 
     void assertMatches(std::shared_ptr<Unboxed> val) override final {
         static_cast<D*>(this)->_assertMatches(val->val);
@@ -999,9 +951,7 @@ public:
 
             auto val
                 = std::make_shared<Unboxed>(std::move(val_duped), static_cast<ConcreteCompilerVariable*>(box_duped));
-            rtn = new VAR(this, val, var->isGrabbed());
-            while (rtn->getVrefs() < var->getVrefs())
-                rtn->incvref();
+            rtn = new VAR(this, val);
         }
         return rtn;
     }
@@ -1032,7 +982,6 @@ public:
             return boxed->makeConverted(emitter, other_type);
         }
 
-        boxed->incvref();
         return boxed;
     }
 
@@ -1081,8 +1030,6 @@ public:
 class IntType : public UnboxedType<llvm::Value*, IntType> {
 public:
     IntType() {}
-
-    void _drop(IREmitter& emitter, llvm::Value* v) {}
 
     llvm::Value* _dup(llvm::Value* v, DupCache& cache) { return v; }
 
@@ -1145,7 +1092,6 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1153,7 +1099,6 @@ public:
                               bool cls_only) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1180,13 +1125,12 @@ public:
         } else {
             boxed = emitter.getBuilder()->CreateCall(g.funcs.boxInt, unboxed);
         }
-        return new ConcreteCompilerVariable(other_type, boxed, true);
+        return new ConcreteCompilerVariable(other_type, boxed);
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
         CompilerVariable* rtn = converted->getitem(emitter, info, slice);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1218,7 +1162,6 @@ public:
 
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
         auto rtn = converted->unaryop(emitter, info, op_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1238,7 +1181,6 @@ public:
 
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
             CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-            converted->decvref(emitter);
             return rtn;
         }
 
@@ -1326,7 +1268,7 @@ public:
         llvm::CallSite call
             = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("int", g.i8_ptr));
         call.setDoesNotReturn();
-        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()));
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_INT; }
@@ -1350,7 +1292,7 @@ CompilerType* INT = &_INT;
 
 CompilerVariable* makeInt(llvm::Value* n) {
     assert(n->getType() == g.i64);
-    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(n, nullptr), true);
+    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(n, nullptr));
 }
 
 CompilerVariable* makeInt(int64_t n) {
@@ -1360,12 +1302,12 @@ CompilerVariable* makeInt(int64_t n) {
 CompilerVariable* makeUnboxedInt(IREmitter& emitter, ConcreteCompilerVariable* v) {
     assert(v->getType() == BOXED_INT);
     llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v->getValue());
-    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(unboxed, v), true);
+    return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(unboxed, v));
 }
 
 CompilerVariable* makeUnboxedInt(IREmitter& emitter, llvm::Value* v) {
     assert(v->getType() == g.llvm_value_type_ptr);
-    return makeUnboxedInt(emitter, new ConcreteCompilerVariable(BOXED_INT, v, false));
+    return makeUnboxedInt(emitter, new ConcreteCompilerVariable(BOXED_INT, v));
 }
 
 class FloatType : public UnboxedType<llvm::Value*, FloatType> {
@@ -1373,10 +1315,6 @@ public:
     FloatType() {}
 
     std::string debugName() override { return "float"; }
-
-    void _drop(IREmitter& emitter, llvm::Value* v) {
-        // pass
-    }
 
     void _assertMatches(llvm::Value* v) { assert(v->getType() == g.double_); }
 
@@ -1420,7 +1358,6 @@ public:
                               bool cls_only) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1429,7 +1366,6 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1458,7 +1394,7 @@ public:
         } else {
             boxed = emitter.getBuilder()->CreateCall(g.funcs.boxFloat, unboxed);
         }
-        return new ConcreteCompilerVariable(other_type, boxed, true);
+        return new ConcreteCompilerVariable(other_type, boxed);
     }
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) override {
@@ -1470,14 +1406,12 @@ public:
     CompilerVariable* unaryop(IREmitter& emitter, const OpInfo& info, VAR* var, AST_TYPE::AST_TYPE op_type) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         auto rtn = converted->unaryop(emitter, info, op_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->getitem(emitter, info, slice);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1488,7 +1422,6 @@ public:
         if (rhs->getType() != INT && rhs->getType() != FLOAT) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
             CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-            converted->decvref(emitter);
             return rtn;
         }
 
@@ -1585,7 +1518,6 @@ public:
         // TODO duplication with top of function, other functions, etc
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1593,7 +1525,7 @@ public:
         llvm::CallSite call
             = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("float", g.i8_ptr));
         call.setDoesNotReturn();
-        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()));
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_FLOAT; }
@@ -1633,7 +1565,7 @@ ConcreteCompilerType* UNBOXED_FLOAT = new PhonyUnboxedType(llvm::Type::getDouble
 
 CompilerVariable* makeFloat(llvm::Value* n) {
     assert(n->getType() == g.double_);
-    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(n, nullptr), true);
+    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(n, nullptr));
 }
 
 CompilerVariable* makeFloat(double n) {
@@ -1643,21 +1575,21 @@ CompilerVariable* makeFloat(double n) {
 CompilerVariable* makeUnboxedFloat(IREmitter& emitter, ConcreteCompilerVariable* v) {
     assert(v->getType() == BOXED_FLOAT);
     llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v->getValue());
-    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(unboxed, v), true);
+    return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(unboxed, v));
 }
 
 CompilerVariable* makeUnboxedFloat(IREmitter& emitter, llvm::Value* v) {
     assert(v->getType() == g.llvm_value_type_ptr);
-    return makeUnboxedFloat(emitter, new ConcreteCompilerVariable(BOXED_FLOAT, v, false));
+    return makeUnboxedFloat(emitter, new ConcreteCompilerVariable(BOXED_FLOAT, v));
 }
 
 
 ConcreteCompilerVariable* makeLong(Box* v) {
-    return new ConcreteCompilerVariable(LONG, embedRelocatablePtr(v, g.llvm_value_type_ptr), true);
+    return new ConcreteCompilerVariable(LONG, embedRelocatablePtr(v, g.llvm_value_type_ptr));
 }
 
 ConcreteCompilerVariable* makePureImaginary(Box* v) {
-    return new ConcreteCompilerVariable(BOXED_COMPLEX, embedRelocatablePtr(v, g.llvm_value_type_ptr), true);
+    return new ConcreteCompilerVariable(BOXED_COMPLEX, embedRelocatablePtr(v, g.llvm_value_type_ptr));
 }
 
 class KnownClassobjType : public ValuedCompilerType<BoxedClass*> {
@@ -1726,16 +1658,11 @@ public:
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                             ConcreteCompilerType* other_type) override {
         if (other_type == this) {
-            var->incvref();
             return var;
         }
         ASSERT(other_type == UNKNOWN, "%s", other_type->debugName().c_str());
-        return new ConcreteCompilerVariable(UNKNOWN, var->getValue(), false);
-        // return (new ConcreteCompilerVariable(UNKNOWN, var->getValue(), false))->split(emitter);
+        return new ConcreteCompilerVariable(UNKNOWN, var->getValue());
     }
-
-    void drop(IREmitter& emitter, VAR* var) override { emitter.getGC()->dropPointer(emitter, var->getValue()); }
-    void grab(IREmitter& emitter, VAR* var) override { emitter.getGC()->grabPointer(emitter, var->getValue()); }
 
     bool isFitBy(BoxedClass* c) override {
         // I don't think it's ok to accept subclasses
@@ -1795,11 +1722,11 @@ public:
             ASSERT(rtattr, "%s.%s", debugName().c_str(), attr->data());
             if (rtattr->cls == function_cls) {
                 CompilerVariable* clattr = new ConcreteCompilerVariable(
-                    typeFromClass(function_cls), embedRelocatablePtr(rtattr, g.llvm_value_type_ptr), false);
+                    typeFromClass(function_cls), embedRelocatablePtr(rtattr, g.llvm_value_type_ptr));
 
                 return InstanceMethodType::makeIM(
                     var, clattr,
-                    new ConcreteCompilerVariable(UNKNOWN, embedRelocatablePtr(cls, g.llvm_value_type_ptr), false));
+                    new ConcreteCompilerVariable(UNKNOWN, embedRelocatablePtr(cls, g.llvm_value_type_ptr)));
             }
         }
 
@@ -1821,7 +1748,6 @@ public:
                            const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->call(emitter, info, argspec, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -1949,7 +1875,7 @@ public:
             else
                 llvm_value = getNullPtr(g.llvm_value_type_ptr);
 
-            new_args.push_back(new ConcreteCompilerVariable(UNKNOWN, llvm_value, true));
+            new_args.push_back(new ConcreteCompilerVariable(UNKNOWN, llvm_value));
         }
 
         std::vector<llvm::Value*> other_args;
@@ -1993,7 +1919,6 @@ public:
 
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2021,20 +1946,17 @@ public:
 
                     // Kind of hacky, but just call into getitem like normal.  except...
                     auto r = UNKNOWN->binexp(emitter, info, var, converted_rhs, op_type, exp_type);
-                    r->decvref(emitter);
                     // ... return the undef value, since that matches what the type analyzer thought we would do.
                     return called_constant;
                 }
 
                 if (called_constant) {
-                    converted_rhs->decvref(emitter);
                     return called_constant;
                 }
             }
         }
 
         auto rtn = UNKNOWN->binexp(emitter, info, var, converted_rhs, op_type, exp_type);
-        converted_rhs->decvref(emitter);
         return rtn;
     }
 
@@ -2087,7 +2009,7 @@ public:
                         var->getValue(), start, stop);
                     emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
-                    return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r, true);
+                    return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
                 }
             }
         }
@@ -2106,7 +2028,6 @@ public:
 
                 // Kind of hacky, but just call into getitem like normal.  except...
                 auto r = UNKNOWN->getitem(emitter, info, var, slice);
-                r->decvref(emitter);
                 // ... return the undef value, since that matches what the type analyzer thought we would do.
                 return called_constant;
             }
@@ -2227,9 +2148,6 @@ public:
     ConcreteCompilerType* getConcreteType() override { return this; }
     ConcreteCompilerType* getBoxType() override { return this; }
 
-    void drop(IREmitter& emitter, VAR* var) override {}
-    void grab(IREmitter& emitter, VAR* var) override {}
-
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
         return reinterpret_cast<Box*>(vals[0]);
@@ -2245,13 +2163,6 @@ public:
     ConcreteCompilerType* getConcreteType() override { return this; }
     ConcreteCompilerType* getBoxType() override { return GENERATOR; }
 
-    void drop(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-    void grab(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == numFrameArgs());
         return reinterpret_cast<Box*>(vals[0]);
@@ -2266,13 +2177,6 @@ public:
 
     ConcreteCompilerType* getConcreteType() override { return this; }
     ConcreteCompilerType* getBoxType() override { return FRAME_INFO; }
-
-    void drop(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-    void grab(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         RELEASE_ASSERT(false, "should not be called"); // This function shouldn't be called.
@@ -2290,18 +2194,10 @@ public:
 
     ConcreteCompilerType* getBoxType() override { return STR; }
 
-    void drop(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-
-    void grab(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
         assert(other_type == STR || other_type == UNKNOWN);
         llvm::Value* boxed = embedRelocatablePtr(var->getValue(), g.llvm_value_type_ptr);
-        return new ConcreteCompilerVariable(other_type, boxed, true);
+        return new ConcreteCompilerVariable(other_type, boxed);
     }
 
     bool canConvertTo(CompilerType* other) override { return (other == STR || other == UNKNOWN); }
@@ -2310,7 +2206,6 @@ public:
                               bool cls_only) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2319,14 +2214,12 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->getitem(emitter, info, slice);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2334,14 +2227,12 @@ public:
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* contains(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* lhs) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->contains(emitter, info, lhs);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2353,9 +2244,7 @@ public:
         CompilerVariable*& rtn = cache[var];
 
         if (rtn == NULL) {
-            rtn = new VAR(this, var->getValue(), var->isGrabbed());
-            while (rtn->getVrefs() < var->getVrefs())
-                rtn->incvref();
+            rtn = new VAR(this, var->getValue());
         }
         return rtn;
     }
@@ -2385,7 +2274,7 @@ public:
 static ValuedCompilerType<BoxedString*>* STR_CONSTANT = new StrConstantType();
 
 CompilerVariable* makeStr(BoxedString* s) {
-    return new ValuedCompilerVariable<BoxedString*>(STR_CONSTANT, s, true);
+    return new ValuedCompilerVariable<BoxedString*>(STR_CONSTANT, s);
 }
 
 ConcreteCompilerType* typeFromClass(BoxedClass* c) {
@@ -2405,15 +2294,7 @@ public:
 
     bool isFitBy(BoxedClass* c) override { return false; }
 
-    void drop(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-    void grab(IREmitter& emitter, VAR* var) override {
-        // pass
-    }
-
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        var->incvref();
         return var;
     }
 
@@ -2424,7 +2305,6 @@ public:
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                             ConcreteCompilerType* other_type) override {
         if (other_type == BOOL) {
-            var->incvref();
             return var;
         }
 
@@ -2432,7 +2312,7 @@ public:
         llvm::Value* boxed = emitter.getBuilder()->CreateSelect(i1FromBool(emitter, var),
                                                                 embedConstantPtr(True, g.llvm_value_type_ptr),
                                                                 embedConstantPtr(False, g.llvm_value_type_ptr));
-        return new ConcreteCompilerVariable(other_type, boxed, true);
+        return new ConcreteCompilerVariable(other_type, boxed);
     }
 
     CompilerType* getattrType(BoxedString* attr, bool cls_only) override {
@@ -2443,7 +2323,6 @@ public:
                               bool cls_only) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2452,7 +2331,6 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, args, keyword_names);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2460,7 +2338,6 @@ public:
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2468,7 +2345,7 @@ public:
         llvm::CallSite call
             = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, embedConstantPtr("bool", g.i8_ptr));
         call.setDoesNotReturn();
-        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()));
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_BOOL; }
@@ -2482,7 +2359,7 @@ public:
 };
 ConcreteCompilerType* BOOL = new BoolType();
 ConcreteCompilerVariable* makeBool(bool b) {
-    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false), true);
+    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false));
 }
 
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate) {
@@ -2495,9 +2372,6 @@ ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, Compil
         cmp = emitter.getBuilder()->CreateICmpEQ(converted_left->getValue(), converted_right->getValue());
     else
         cmp = emitter.getBuilder()->CreateICmpNE(converted_left->getValue(), converted_right->getValue());
-
-    converted_left->decvref(emitter);
-    converted_right->decvref(emitter);
 
     return boolFromI1(emitter, cmp);
 }
@@ -2532,12 +2406,6 @@ public:
     }
 
     std::string debugName() override { return name; }
-
-    void _drop(IREmitter& emitter, const VEC& val) {
-        for (int i = 0; i < val.size(); i++) {
-            val[i]->decvref(emitter);
-        }
-    }
 
     VEC _dup(const VEC& orig_elts, DupCache& cache) {
         std::vector<CompilerVariable*> elts;
@@ -2576,10 +2444,7 @@ public:
 
         llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
 
-        for (int i = 0; i < converted_args.size(); i++) {
-            converted_args[i]->decvref(emitter);
-        }
-        return new ConcreteCompilerVariable(other_type, rtn, true);
+        return new ConcreteCompilerVariable(other_type, rtn);
     }
 
     ConcreteCompilerType* getBoxType() override { return BOXED_TUPLE; }
@@ -2597,11 +2462,9 @@ public:
                 const VEC* elts = &v->val;
                 if (i >= 0 && i < elts->size()) {
                     CompilerVariable* rtn = (*elts)[i];
-                    rtn->incvref();
                     return rtn;
                 } else if (i < 0 && -i <= elts->size()) {
                     CompilerVariable* rtn = (*elts)[elts->size() + i];
-                    rtn->incvref();
                     return rtn;
                 } else {
                     ExceptionStyle target_exception_style = info.preferredExceptionStyle();
@@ -2623,7 +2486,6 @@ public:
 
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_TUPLE);
         CompilerVariable* rtn = converted->getitem(emitter, info, slice);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2639,7 +2501,6 @@ public:
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
-        converted->decvref(emitter);
         return rtn;
     }
 
@@ -2690,8 +2551,6 @@ public:
             phi->addIncoming(p.second, p.first);
         }
 
-        converted_lhs->decvref(emitter);
-
         return boolFromI1(emitter, phi);
     }
 
@@ -2739,10 +2598,6 @@ public:
             return ValuedCompilerType::unpack(emitter, info, var, num_into);
         }
 
-        // Not sure if this is right:
-        for (auto e : var->getValue()->val)
-            e->incvref();
-
         return var->getValue()->val;
     }
 
@@ -2762,21 +2617,17 @@ CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types) {
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts) {
     std::vector<CompilerType*> elt_types;
     for (int i = 0; i < elts.size(); i++) {
-        elts[i]->incvref();
         elt_types.push_back(elts[i]->getType());
     }
     TupleType* type = TupleType::make(elt_types);
 
     auto alloc_var = std::make_shared<TupleType::Unboxed>(elts, nullptr);
-    return new TupleType::VAR(type, alloc_var, true);
+    return new TupleType::VAR(type, alloc_var);
 }
 
 class UnboxedSliceType : public ValuedCompilerType<UnboxedSlice> {
 public:
     std::string debugName() override { return "slice"; }
-
-    void drop(IREmitter& emitter, VAR* var) override {}
-    void grab(IREmitter& emitter, VAR* var) override {}
 
     void assertMatches(UnboxedSlice slice) {}
 
@@ -2811,16 +2662,13 @@ public:
         args.push_back(cstep->getValue());
         llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.createSlice, args);
 
-        cstart->decvref(emitter);
-        cstop->decvref(emitter);
-        cstep->decvref(emitter);
-        return new ConcreteCompilerVariable(SLICE, rtn, true);
+        return new ConcreteCompilerVariable(SLICE, rtn);
     }
 } _UNBOXED_SLICE;
 CompilerType* UNBOXED_SLICE = &_UNBOXED_SLICE;
 
 CompilerVariable* makeSlice(CompilerVariable* start, CompilerVariable* stop, CompilerVariable* step) {
-    return new UnboxedSliceType::VAR(&_UNBOXED_SLICE, UnboxedSlice{ start, stop, step }, true);
+    return new UnboxedSliceType::VAR(&_UNBOXED_SLICE, UnboxedSlice{ start, stop, step });
 }
 
 UnboxedSlice extractSlice(CompilerVariable* slice) {
@@ -2830,7 +2678,7 @@ UnboxedSlice extractSlice(CompilerVariable* slice) {
 
 ConcreteCompilerVariable* getNone() {
     llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
-    return new ConcreteCompilerVariable(typeFromClass(none_cls), none, false);
+    return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
 }
 
 class UndefType : public ConcreteCompilerType {
@@ -2848,21 +2696,17 @@ public:
                            const std::vector<BoxedString*>* keyword_names) override {
         return undefVariable();
     }
-    void drop(IREmitter& emitter, VAR* var) override {}
-    void grab(IREmitter& emitter, VAR* var) override {}
     CompilerVariable* dup(VAR* v, DupCache& cache) override {
         // TODO copied from UnknownType
         auto& rtn = cache[v];
         if (rtn == NULL) {
-            rtn = new VAR(this, v->getValue(), v->isGrabbed());
-            while (rtn->getVrefs() < v->getVrefs())
-                rtn->incvref();
+            rtn = new VAR(this, v->getValue());
         }
         return rtn;
     }
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
         llvm::Value* v = llvm::UndefValue::get(other_type->llvmType());
-        return new ConcreteCompilerVariable(other_type, v, true);
+        return new ConcreteCompilerVariable(other_type, v);
     }
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
                               bool cls_only) override {
@@ -2881,7 +2725,7 @@ public:
     }
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) override {
-        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()));
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -2916,7 +2760,7 @@ public:
 CompilerType* UNDEF = &_UNDEF;
 
 ConcreteCompilerVariable* undefVariable() {
-    return new ConcreteCompilerVariable(&_UNDEF, llvm::UndefValue::get(_UNDEF.llvmType()), true);
+    return new ConcreteCompilerVariable(&_UNDEF, llvm::UndefValue::get(_UNDEF.llvmType()));
 }
 
 ConcreteCompilerVariable* boolFromI1(IREmitter& emitter, llvm::Value* v) {
@@ -2924,9 +2768,9 @@ ConcreteCompilerVariable* boolFromI1(IREmitter& emitter, llvm::Value* v) {
         assert(v->getType() == g.i1);
         assert(BOOL->llvmType() == g.i64);
         llvm::Value* v2 = emitter.getBuilder()->CreateZExt(v, BOOL->llvmType());
-        return new ConcreteCompilerVariable(BOOL, v2, true);
+        return new ConcreteCompilerVariable(BOOL, v2);
     } else {
-        return new ConcreteCompilerVariable(BOOL, v, true);
+        return new ConcreteCompilerVariable(BOOL, v);
     }
 }
 

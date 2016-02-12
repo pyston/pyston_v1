@@ -452,7 +452,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             ConcreteCompilerType* phi_type;
             phi_type = getTypeAtBlockStart(types, p.first, target_block);
 
-            ConcreteCompilerVariable* var = new ConcreteCompilerVariable(p.second, from_arg, true);
+            ConcreteCompilerVariable* var = new ConcreteCompilerVariable(p.second, from_arg);
             (*initial_syms)[p.first] = var;
 
             // It's possible to OSR into a version of the function with a higher speculation level;
@@ -477,7 +477,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (VERBOSITY("irgen") >= 2)
                 v->setName("prev_" + p.first.s());
 
-            (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
+            (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v);
         }
 
         entry_emitter->getBuilder()->CreateBr(osr_unbox_block);
@@ -624,7 +624,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
                                                                       block->predecessors.size() + 1, p.first.s());
-                ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi, true);
+                ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
                 generator->giveLocalSymbol(p.first, var);
                 (*phis)[p.first] = std::make_pair(analyzed_type, phi);
             }
@@ -661,7 +661,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
-                ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi, true);
+                ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi);
                 generator->giveLocalSymbol(s, var);
 
                 (*phis)[s] = std::make_pair(type, phi);
@@ -761,7 +761,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
                                                                           block->predecessors.size(), name.s());
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
-                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi, true);
+                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi);
                     generator->giveLocalSymbol(name, var);
 
                     (*phis)[name] = std::make_pair(cv->getType(), phi);
@@ -851,7 +851,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[bpred])[it->first];
                 assert(v);
-                assert(v->isGrabbed());
 
                 // Make sure they all prepared for the same type:
                 ASSERT(it->second.first == v->getType(), "%d %d: %s %s %s", b->idx, bpred->idx, it->first.c_str(),
@@ -864,7 +863,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (this_is_osr_entry) {
                 ConcreteCompilerVariable* v = (*osr_syms)[it->first];
                 assert(v);
-                assert(v->isGrabbed());
 
                 ASSERT(it->second.first == v->getType(), "");
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block_end);
@@ -880,14 +878,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (ending_symbol_tables[b] == NULL)
             continue;
 
-        for (SymbolTable::iterator it = ending_symbol_tables[b]->begin(); it != ending_symbol_tables[b]->end(); ++it) {
-            it->second->decvrefNodrop();
-        }
-        for (ConcreteSymbolTable::iterator it = phi_ending_symbol_tables[b]->begin();
-             it != phi_ending_symbol_tables[b]->end(); ++it) {
-            it->second->decvrefNodrop();
-        }
-        delete phi_ending_symbol_tables[b];
         delete ending_symbol_tables[b];
         delete created_phis[b];
     }

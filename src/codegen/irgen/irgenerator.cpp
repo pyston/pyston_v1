@@ -645,14 +645,12 @@ private:
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), false);
-        value->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), true);
-        value->decvref(emitter);
         return rtn;
     }
 
@@ -665,8 +663,6 @@ private:
 
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
-                obj->decvref(emitter);
-                cls->decvref(emitter);
 
                 llvm::Value* v = emitter.createCall(unw_info, g.funcs.exceptionMatches,
                                                     { converted_obj->getValue(), converted_cls->getValue() });
@@ -696,9 +692,9 @@ private:
                             phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
                             phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
                         }
-                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type, true);
-                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value, true);
-                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb, true);
+                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type);
+                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value);
+                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb);
                     }
                 } else {
                     // There can be no incoming exception if the irgenerator was able to prove that
@@ -717,13 +713,12 @@ private:
                 return makeTuple({ exc_type, exc_value, exc_tb });
             }
             case AST_LangPrimitive::LOCALS: {
-                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar(), true);
+                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar());
             }
             case AST_LangPrimitive::GET_ITER: {
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
                 auto rtn = obj->getPystonIter(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::IMPORT_FROM: {
@@ -733,7 +728,6 @@ private:
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
-                module->decvref(emitter);
 
                 auto ast_str = ast_cast<AST_Str>(node->args[1]);
                 assert(ast_str->str_type == AST_Str::STR);
@@ -746,9 +740,7 @@ private:
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
 
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
-
-                converted_module->decvref(emitter);
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
             }
             case AST_LangPrimitive::IMPORT_STAR: {
@@ -760,13 +752,10 @@ private:
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
-                module->decvref(emitter);
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
                                                      irstate->getGlobals());
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
-
-                converted_module->decvref(emitter);
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
             }
             case AST_LangPrimitive::IMPORT_NAME: {
@@ -780,7 +769,6 @@ private:
                 // TODO this could be a constant Box* too
                 CompilerVariable* froms = evalExpr(node->args[1], unw_info);
                 ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
-                froms->decvref(emitter);
 
                 auto ast_str = ast_cast<AST_Str>(node->args[2]);
                 assert(ast_str->str_type == AST_Str::STR);
@@ -790,9 +778,7 @@ private:
                                                            { getConstantInt(level, g.i32), converted_froms->getValue(),
                                                              embedRelocatablePtr(module_name.c_str(), g.i8_ptr),
                                                              getConstantInt(module_name.size(), g.i64) });
-                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
-
-                converted_froms->decvref(emitter);
+                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
                 return v;
             }
             case AST_LangPrimitive::NONE: {
@@ -803,7 +789,6 @@ private:
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
                 CompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::HASNEXT: {
@@ -811,7 +796,6 @@ private:
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
                 CompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::SET_EXC_INFO: {
@@ -828,14 +812,11 @@ private:
 
                 ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
                 builder->CreateStore(converted_type->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
-                converted_type->decvref(emitter);
                 ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
                 builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
-                converted_value->decvref(emitter);
                 ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
                 builder->CreateStore(converted_traceback->getValue(),
                                      builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
-                converted_traceback->decvref(emitter);
 
                 return getNone();
             }
@@ -899,8 +880,6 @@ private:
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
         CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -911,8 +890,6 @@ private:
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
         CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -930,8 +907,6 @@ private:
         }
 
         CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -992,17 +967,12 @@ private:
             rtn = func->call(emitter, getOpInfoForNode(node, unw_info), argspec, args, keyword_names);
         }
 
-        func->decvref(emitter);
-        for (int i = 0; i < args.size(); i++) {
-            args[i]->decvref(emitter);
-        }
-
         return rtn;
     }
 
     CompilerVariable* evalDict(AST_Dict* node, const UnwindInfo& unw_info) {
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v);
         if (node->keys.size()) {
             static BoxedString* setitem_str = getStaticString("__setitem__");
             CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
@@ -1017,12 +987,7 @@ private:
                 args.push_back(value);
                 // TODO should use callattr
                 CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(2), args, NULL);
-                rtn->decvref(emitter);
-
-                key->decvref(emitter);
-                value->decvref(emitter);
             }
-            setitem->decvref(emitter);
         }
         return rtn;
     }
@@ -1044,7 +1009,6 @@ private:
         std::vector<AST_stmt*> body = { expr };
         CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
         ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
-        func->decvref(emitter);
 
         return converted;
     }
@@ -1058,7 +1022,7 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createList);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(LIST, v, true);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(LIST, v);
 
         llvm::Value* f = g.funcs.listAppendInternal;
         llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(
@@ -1068,10 +1032,8 @@ private:
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
             ConcreteCompilerVariable* converted = elt->makeConverted(emitter, elt->getBoxType());
-            elt->decvref(emitter);
 
             emitter.createCall2(unw_info, f, bitcast, converted->getValue());
-            converted->decvref(emitter);
         }
         return rtn;
     }
@@ -1079,7 +1041,7 @@ private:
     ConcreteCompilerVariable* getEllipsis() {
         llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
         auto ellipsis_cls = Ellipsis->cls;
-        return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis, false);
+        return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis);
     }
 
     llvm::Constant* embedParentModulePtr() {
@@ -1101,11 +1063,11 @@ private:
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
                                                  embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         }
     }
 
@@ -1135,7 +1097,6 @@ private:
             // Where the parent lookup is done `deref_info.num_parents_from_passed_closure` times
             CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
             llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
-            closure->decvref(emitter);
             for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
                 closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
             }
@@ -1167,13 +1128,13 @@ private:
             curblock = success_bb;
             emitter.getBuilder()->SetInsertPoint(curblock);
 
-            return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
+            return new ConcreteCompilerVariable(UNKNOWN, lookupResult);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
             llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             // vst is one of {FAST, CLOSURE}
             if (symbol_table.find(node->id) == symbol_table.end()) {
@@ -1204,8 +1165,6 @@ private:
             CompilerVariable* rtn = symbol_table[node->id];
             if (is_kill)
                 symbol_table.erase(node->id);
-            else
-                rtn->incvref();
             return rtn;
         }
     }
@@ -1227,14 +1186,12 @@ private:
     CompilerVariable* evalRepr(AST_Repr* node, const UnwindInfo& unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
-        var->decvref(emitter);
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
         llvm::Value* rtn = emitter.createCall(unw_info, g.funcs.repr, args);
-        cvar->decvref(emitter);
         rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
 
-        return new ConcreteCompilerVariable(STR, rtn, true);
+        return new ConcreteCompilerVariable(STR, rtn);
     }
 
     CompilerVariable* evalSet(AST_Set* node, const UnwindInfo& unw_info) {
@@ -1245,7 +1202,7 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v);
 
         static BoxedString* add_str = getStaticString("add");
 
@@ -1254,8 +1211,6 @@ private:
             CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
             CompilerVariable* r
                 = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags, { elt }, NULL);
-            r->decvref(emitter);
-            elt->decvref(emitter);
         }
 
         return rtn;
@@ -1276,11 +1231,7 @@ private:
             elts.push_back(evalSlice(e, unw_info));
         }
 
-        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
         CompilerVariable* rtn = makeTuple(elts);
-        for (auto* e : elts) {
-            e->decvref(emitter);
-        }
         return rtn;
     }
 
@@ -1290,12 +1241,12 @@ private:
                 = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data, true),
                                       g.llvm_value_type_ptr);
 
-            return new ConcreteCompilerVariable(STR, rtn, true);
+            return new ConcreteCompilerVariable(STR, rtn);
         } else if (node->str_type == AST_Str::UNICODE) {
             llvm::Value* rtn = embedRelocatablePtr(
                 irstate->getSourceInfo()->parent_module->getUnicodeConstant(node->str_data), g.llvm_value_type_ptr);
 
-            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn, true);
+            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
         } else {
             RELEASE_ASSERT(0, "%d", node->str_type);
         }
@@ -1306,8 +1257,6 @@ private:
         CompilerVariable* slice = evalSlice(node->slice, unw_info);
 
         CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
-        value->decvref(emitter);
-        slice->decvref(emitter);
         return rtn;
     }
 
@@ -1318,11 +1267,7 @@ private:
             elts.push_back(value);
         }
 
-        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
         CompilerVariable* rtn = makeTuple(elts);
-        for (int i = 0; i < node->elts.size(); i++) {
-            elts[i]->decvref(emitter);
-        }
         return rtn;
     }
 
@@ -1331,18 +1276,15 @@ private:
 
         if (node->op_type == AST_TYPE::Not) {
             CompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, unw_info));
-            operand->decvref(emitter);
 
             assert(rtn->getType() == BOOL);
             llvm::Value* v = i1FromBool(emitter, static_cast<ConcreteCompilerVariable*>(rtn));
             assert(v->getType() == g.i1);
 
             llvm::Value* negated = emitter.getBuilder()->CreateNot(v);
-            rtn->decvref(emitter);
             return boolFromI1(emitter, negated);
         } else {
             CompilerVariable* rtn = operand->unaryop(emitter, getOpInfoForNode(node, unw_info), node->op_type);
-            operand->decvref(emitter);
             return rtn;
         }
     }
@@ -1355,14 +1297,11 @@ private:
 
         CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
-        value->decvref(emitter);
 
         llvm::Value* rtn
             = emitter.createCall2(unw_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
-        convertedGenerator->decvref(emitter);
-        convertedValue->decvref(emitter);
 
-        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+        return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
 
     CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, const UnwindInfo& unw_info) {
@@ -1378,12 +1317,7 @@ private:
         }
 
         CompilerVariable* _bases_tuple = makeTuple(bases);
-        for (auto b : bases) {
-            b->decvref(emitter);
-        }
-
         ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
-        _bases_tuple->decvref(emitter);
 
         std::vector<CompilerVariable*> decorators;
         for (auto d : node->decorator_list) {
@@ -1413,24 +1347,19 @@ private:
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
-        func->decvref(emitter);
-
         ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
-        attr_dict->decvref(emitter);
 
         llvm::Value* classobj = emitter.createCall3(
             unw_info, g.funcs.createUserClass, embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr),
             bases_tuple->getValue(), converted_attr_dict->getValue());
 
         // Note: createuserClass is free to manufacture non-class objects
-        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
+        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             cls = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { cls }, NULL);
-            decorators[i]->decvref(emitter);
         }
 
-        // do we need to decvref this?
         return cls;
     }
 
@@ -1442,7 +1371,6 @@ private:
         for (auto d : args->defaults) {
             CompilerVariable* e = evalExpr(d, unw_info);
             ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
-            e->decvref(emitter);
             defaults.push_back(converted);
         }
 
@@ -1474,10 +1402,6 @@ private:
 
         CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), defaults);
 
-        for (auto d : defaults) {
-            d->decvref(emitter);
-        }
-
         return func;
     }
 
@@ -1492,14 +1416,13 @@ private:
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
-            decorators[i]->decvref(emitter);
         }
 
         return func;
     }
 
     // Note: the behavior of this function must match type_analysis.cpp:unboxedType()
-    CompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
+    CompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v) {
         if (t == BOXED_INT) {
             return makeUnboxedInt(emitter, v);
         }
@@ -1510,7 +1433,7 @@ private:
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
         }
-        return new ConcreteCompilerVariable(t, v, grabbed);
+        return new ConcreteCompilerVariable(t, v);
     }
 
     template <typename AstType>
@@ -1546,13 +1469,12 @@ private:
 #endif
 
             ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
-            rtn->decvref(emitter);
 
             llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
             assert(guard_check->getType() == g.i1);
             createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
 
-            rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+            rtn = unboxVar(speculated_type, old_rtn->getValue());
         }
 
         assert(rtn);
@@ -1714,15 +1636,13 @@ private:
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             if (irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
                 auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
-                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
+                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module);
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
-                module->decvref(emitter);
             } else {
                 auto converted = val->makeConverted(emitter, val->getBoxType());
                 emitter.createCall3(unw_info, g.funcs.setGlobal, irstate->getGlobals(),
                                     embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr),
                                     converted->getValue());
-                converted->decvref(emitter);
             }
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient
@@ -1734,11 +1654,7 @@ private:
             // FAST or CLOSURE
 
             CompilerVariable*& prev = symbol_table[name];
-            if (prev != NULL) {
-                prev->decvref(emitter);
-            }
             prev = val;
-            val->incvref();
 
             // Clear out the is_defined name since it is now definitely defined:
             assert(!isIsDefinedName(name.s()));
@@ -1751,7 +1667,6 @@ private:
                 // This is basically `closure->elts[offset] = val;`
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
-                closure->decvref(emitter);
                 llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
                 emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
             }
@@ -1761,7 +1676,6 @@ private:
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         CompilerVariable* t = evalExpr(target->value, unw_info);
         t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
-        t->decvref(emitter);
     }
 
     void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -1770,8 +1684,6 @@ private:
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-        tget->decvref(emitter);
-        slice->decvref(emitter);
 
         ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
 
@@ -1792,10 +1704,6 @@ private:
             emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
                                 converted_val->getValue());
         }
-
-        converted_target->decvref(emitter);
-        converted_slice->decvref(emitter);
-        converted_val->decvref(emitter);
     }
 
     void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -1813,7 +1721,6 @@ private:
         for (int i = 0; i < ntargets; i++) {
             CompilerVariable* thisval = unpacked[i];
             _doSet(target->elts[i], thisval, unw_info);
-            thisval->decvref(emitter);
         }
     }
 
@@ -1857,7 +1764,6 @@ private:
         if (node->msg) {
             CompilerVariable* msg = evalExpr(node->msg, unw_info);
             converted_msg = msg->makeConverted(emitter, msg->getBoxType());
-            msg->decvref(emitter);
             llvm_args.push_back(converted_msg->getValue());
         } else {
             llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
@@ -1872,7 +1778,6 @@ private:
         for (int i = 0; i < node->targets.size(); i++) {
             _doSet(node->targets[i], val, unw_info);
         }
-        val->decvref(emitter);
     }
 
     void doDelete(AST_Delete* node, const UnwindInfo& unw_info) {
@@ -1901,8 +1806,6 @@ private:
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-        tget->decvref(emitter);
-        slice->decvref(emitter);
 
         bool do_patchpoint = ENABLE_ICDELITEMS;
         if (do_patchpoint) {
@@ -1916,9 +1819,6 @@ private:
         } else {
             emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
         }
-
-        converted_target->decvref(emitter);
-        converted_slice->decvref(emitter);
     }
 
     void _doDelAttr(AST_Attribute* node, const UnwindInfo& unw_info) {
@@ -1974,13 +1874,11 @@ private:
     void doExec(AST_Exec* node, const UnwindInfo& unw_info) {
         CompilerVariable* body = evalExpr(node->body, unw_info);
         llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
-        body->decvref(emitter);
 
         llvm::Value* vglobals;
         if (node->globals) {
             CompilerVariable* globals = evalExpr(node->globals, unw_info);
             vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
-            globals->decvref(emitter);
         } else {
             vglobals = getNullPtr(g.llvm_value_type_ptr);
         }
@@ -1989,7 +1887,6 @@ private:
         if (node->locals) {
             CompilerVariable* locals = evalExpr(node->locals, unw_info);
             vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
-            locals->decvref(emitter);
         } else {
             vlocals = getNullPtr(g.llvm_value_type_ptr);
         }
@@ -2004,10 +1901,9 @@ private:
         if (node->dest) {
             auto d = evalExpr(node->dest, unw_info);
             dest = d->makeConverted(emitter, d->getBoxType());
-            d->decvref(emitter);
         } else {
             llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout);
-            dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val, true);
+            dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val);
             // TODO: speculate that sys.stdout is a file?
         }
         assert(dest);
@@ -2018,16 +1914,12 @@ private:
         if (node->values.size() == 1) {
             CompilerVariable* var = evalExpr(node->values[0], unw_info);
             converted = var->makeConverted(emitter, var->getBoxType());
-            var->decvref(emitter);
         } else {
-            converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), true);
+            converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
         }
 
         emitter.createCall3(unw_info, g.funcs.printHelper, dest->getValue(), converted->getValue(),
                             getConstantInt(node->nl, g.i1));
-
-        dest->decvref(emitter);
-        converted->decvref(emitter);
     }
 
     void doReturn(AST_Return* node, const UnwindInfo& unw_info) {
@@ -2041,30 +1933,16 @@ private:
         }
         assert(val);
 
-        // If we ask the return variable to become UNKNOWN (the typical return type),
-        // it will be forced to split a copy of itself and incref.
-        // But often the return variable will already be in the right shape, so in
-        // that case asking it to convert to itself ends up just being an incvref
-        // and doesn't end up emitting an incref+decref pair.
-        // This could also be handled by casting from the CompilerVariable to
-        // ConcreteCompilerVariable, but this way feels a little more robust to me.
         ConcreteCompilerType* opt_rtn_type = irstate->getReturnType();
         if (irstate->getReturnType()->llvmType() == val->getConcreteType()->llvmType())
             opt_rtn_type = val->getConcreteType();
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
-        rtn->ensureGrabbed(emitter);
-        val->decvref(emitter);
 
-        for (auto& p : symbol_table) {
-            p.second->decvref(emitter);
-        }
         symbol_table.clear();
 
         endBlock(DEAD);
 
-        // This is tripping in test/tests/return_selfreferential.py. kmod says it should be removed.
-        // ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
         assert(rtn->getValue());
         emitter.getBuilder()->CreateRet(rtn->getValue());
     }
@@ -2094,8 +1972,6 @@ private:
 
     void doExpr(AST_Expr* node, const UnwindInfo& unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
-
-        var->decvref(emitter);
     }
 
     void doOSRExit(llvm::BasicBlock* normal_target, AST_Jump* osr_key) {
@@ -2137,11 +2013,11 @@ private:
         SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
 
         sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
-            = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
+            = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar());
 
         if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
             sorted_symbol_table[internString(PASSED_GLOBALS_NAME)]
-                = new ConcreteCompilerVariable(UNKNOWN, irstate->getGlobals(), true);
+                = new ConcreteCompilerVariable(UNKNOWN, irstate->getGlobals());
         }
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
@@ -2191,12 +2067,6 @@ private:
             assert(var->getType() != BOXED_INT);
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
-
-            // This line can never get hit right now for the same reason that the variables must already be
-            // concrete,
-            // because we're over-generating phis.
-            ASSERT(var->isGrabbed(), "%s", p.first.c_str());
-            // var->ensureGrabbed(emitter);
 
             llvm::Value* val = var->getValue();
 
@@ -2260,10 +2130,6 @@ private:
             emitter.getBuilder()->CreateCall(l_free, malloc_save);
         }
 
-        for (int i = 0; i < converted_args.size(); i++) {
-            converted_args[i]->decvref(emitter);
-        }
-
         emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
@@ -2317,7 +2183,6 @@ private:
             if (a) {
                 CompilerVariable* v = evalExpr(a, unw_info);
                 ConcreteCompilerVariable* converted = v->makeConverted(emitter, v->getBoxType());
-                v->decvref(emitter);
                 args.push_back(converted->getValue());
             } else {
                 args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone"));
@@ -2414,15 +2279,13 @@ private:
 
     void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         assert(name.s() != FRAME_INFO_PTR_NAME);
-        CompilerVariable* var = unboxVar(t, v, false);
+        CompilerVariable* var = unboxVar(t, v);
         _doSet(name, var, unw_info);
-        var->decvref(emitter);
     }
 
     void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
-        CompilerVariable* var = unboxVar(t, v, false);
+        CompilerVariable* var = unboxVar(t, v);
         _doSet(name, var, unw_info);
-        var->decvref(emitter);
     }
 
     bool allowableFakeEndingSymbol(InternedString name) {
@@ -2451,10 +2314,6 @@ private:
             // symbol table? '%s'", p.first.c_str());
 
             if (!irstate->getLiveness()->isLiveAtEnd(p.first, myblock)) {
-                // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", p.first.c_str(), myblock->idx,
-                //        p.second->isGrabbed(), p.second->getVrefs());
-
-                p.second->decvref(emitter);
                 symbol_table.erase(getIsDefinedName(p.first));
                 symbol_table.erase(p.first);
             } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
@@ -2466,8 +2325,7 @@ private:
                 // printf("have to convert %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
                 ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
-                p.second->decvref(emitter);
-                symbol_table[p.first] = v->split(emitter);
+                symbol_table[p.first] = v;
             } else {
 #ifndef NDEBUG
                 if (myblock->successors.size()) {
@@ -2512,7 +2370,7 @@ private:
                 // printf("no st entry, setting undefined\n");
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
                 assert(phi_type->isUsable());
-                cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()), true);
+                cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()));
                 _setFake(defined_name, makeBool(0));
             }
         }
@@ -2567,10 +2425,6 @@ public:
     EndingState getEndingSymbolTable() override {
         assert(state == FINISHED || state == DEAD);
 
-        // for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end(); ++it) {
-        // printf("%s %p %d\n", it->first.c_str(), it->second, it->second->getVrefs());
-        //}
-
         SourceInfo* source = irstate->getSourceInfo();
 
         SymbolTable* st = new SymbolTable(symbol_table);
@@ -2584,9 +2438,6 @@ public:
         }
 
         if (myblock->successors.size() == 0) {
-            for (auto& p : *st) {
-                p.second->decvref(emitter);
-            }
             st->clear();
             symbol_table.clear();
             return EndingState(st, phi_st, curblock, outgoing_exc_state);
@@ -2610,8 +2461,6 @@ public:
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
             if (allowableFakeEndingSymbol(it->first) || irstate->getPhis()->isRequiredAfter(it->first, myblock)) {
-                ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
-                assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
                 if (isIsDefinedName(it->first.s())) {
@@ -2630,8 +2479,7 @@ public:
                 }
                 assert(ending_type->isUsable());
                 //(*phi_st)[it->first] = it->second->makeConverted(emitter, it->second->getConcreteType());
-                // printf("%s %p %d\n", it->first.c_str(), it->second, it->second->getVrefs());
-                (*phi_st)[it->first] = it->second->split(emitter)->makeConverted(emitter, ending_type);
+                (*phi_st)[it->first] = it->second->makeConverted(emitter, ending_type);
                 it = st->erase(it);
             } else {
                 ++it;
@@ -2657,11 +2505,9 @@ public:
         assert(st);
         DupCache cache;
         for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
-            // printf("Copying in %s: %p, %d\n", it->first.c_str(), it->second, it->second->getVrefs());
             // printf("Copying in %s, a %s\n", it->first.c_str(), it->second->getType()->debugName().c_str());
             symbol_table[it->first] = it->second->dup(cache);
             assert(symbol_table[it->first]->getType()->isUsable());
-            // printf("got: %p, %d\n", symbol_table[it->first], symbol_table[it->first]->getVrefs());
         }
     }
 
@@ -2686,7 +2532,7 @@ public:
         if (scope_info->takesClosure()) {
             passed_closure = AI;
             symbol_table[internString(PASSED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getPassedClosureType(), AI, true);
+                = new ConcreteCompilerVariable(getPassedClosureType(), AI);
             ++AI;
         }
 
@@ -2697,11 +2543,11 @@ public:
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
                 g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
             symbol_table[internString(CREATED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
+                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure);
         }
 
         if (irstate->getSourceInfo()->is_generator) {
-            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI, true);
+            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI);
             ++AI;
         }
 
@@ -2857,9 +2703,9 @@ public:
                 llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
 
                 addOutgoingExceptionState(
-                    IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                                new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                                new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+                    IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_value),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
                 emitter.getBuilder()->CreateBr(final_dest);
             }
@@ -2916,9 +2762,9 @@ public:
         if (final_dest) {
             // Catch the exception and forward to final_dest:
             addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
             builder->CreateBr(final_dest);
         } else {
