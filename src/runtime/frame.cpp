@@ -21,7 +21,9 @@
 
 namespace pyston {
 
+extern "C" {
 BoxedClass* frame_cls;
+}
 
 // Issues:
 // - breaks gdb backtraces
@@ -196,6 +198,9 @@ extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
     return BoxedFrame::globals((Box*)f, NULL);
+}
+extern "C" PyObject* PyFrame_GetCode(PyFrameObject* f) noexcept {
+    return BoxedFrame::code((Box*)f, NULL);
 }
 
 extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {

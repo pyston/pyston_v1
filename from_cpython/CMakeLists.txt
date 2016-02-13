@@ -94,6 +94,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     memoryobject.c
     stringobject.c
     structseq.c
+    traceback.c
     unicodectype.c
     unicodeobject.c
     weakrefobject.c

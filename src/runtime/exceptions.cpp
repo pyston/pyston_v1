@@ -20,7 +20,6 @@
 #include "core/ast.h"
 #include "core/options.h"
 #include "runtime/objmodel.h"
-#include "runtime/traceback.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -35,8 +34,6 @@ void raiseExc(Box* exc_obj) {
 // of the syntax error in the traceback, even though it is not part of the execution:
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func,
                       bool compiler_error) {
-    Box* exc;
-    Box* tb = None;
     if (compiler_error) {
         // This is how CPython's compiler_error() works:
         assert(file.data()[file.size()] == '\0');
@@ -47,15 +44,14 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
         }
 
         auto args = BoxedTuple::create({ boxString(file), boxInt(lineno), None, loc });
-        exc = runtimeCall(SyntaxError, ArgPassSpec(2), boxString(msg), args, NULL, NULL, NULL);
+        Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), boxString(msg), args, NULL, NULL, NULL);
+        assert(!PyErr_Occurred());
+        throw ExcInfo(exc->cls, exc, None);
     } else {
-        // This is more like how the parser handles it:
-        exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxString(msg), NULL, NULL, NULL, NULL);
-        tb = new BoxedTraceback(LineInfo(lineno, col_offset, boxString(file), boxString(func)), None, getFrame(0));
+        PyErr_SetString(SyntaxError, msg);
+        PyErr_SyntaxLocation(file.str().c_str(), lineno);
+        throwCAPIException();
     }
-
-    assert(!PyErr_Occurred());
-    throw ExcInfo(exc->cls, exc, tb);
 }
 
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...) {
@@ -257,12 +253,9 @@ void logException(ExcInfo* exc_info) {
 #endif
 }
 
-extern "C" void caughtCapiException(AST_stmt* stmt, void* _source_info) {
-    SourceInfo* source = static_cast<SourceInfo*>(_source_info);
+extern "C" void caughtCapiException() {
     PyThreadState* tstate = PyThreadState_GET();
-
-    exceptionAtLine(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()),
-                    &tstate->curexc_traceback);
+    exceptionAtLine(&tstate->curexc_traceback);
 }
 
 extern "C" void reraiseCapiExcAsCxx() {
@@ -275,11 +268,11 @@ extern "C" void reraiseCapiExcAsCxx() {
     throw e;
 }
 
-void caughtCxxException(LineInfo line_info, ExcInfo* exc_info) {
+void caughtCxxException(ExcInfo* exc_info) {
     static StatCounter frames_unwound("num_frames_unwound_python");
     frames_unwound.log();
 
-    exceptionAtLine(line_info, &exc_info->traceback);
+    exceptionAtLine(&exc_info->traceback);
 }
 
 
@@ -297,9 +290,11 @@ bool exceptionAtLineCheck() {
     return true;
 }
 
-void exceptionAtLine(LineInfo line_info, Box** traceback) {
-    if (exceptionAtLineCheck())
-        BoxedTraceback::here(line_info, traceback, getFrame((FrameInfo*)cur_thread_state.frame_info));
+void exceptionAtLine(Box** traceback) {
+    if (exceptionAtLineCheck()) {
+        PyTraceBack_Here_Tb((struct _frame*)getFrame((FrameInfo*)cur_thread_state.frame_info),
+                            (PyTracebackObject**)traceback);
+    }
 }
 
 void startReraise() {

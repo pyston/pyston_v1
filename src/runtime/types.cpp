@@ -46,7 +46,6 @@
 #include "runtime/rewrite_args.h"
 #include "runtime/set.h"
 #include "runtime/super.h"
-#include "runtime/traceback.h"
 #include "runtime/util.h"
 
 extern "C" void initerrno();
@@ -3962,7 +3961,6 @@ void setupRuntime() {
     _PyWarnings_Init();
     _string_init();
     setupDescr();
-    setupTraceback();
     setupCode();
     setupFrame();
 
@@ -4130,6 +4128,7 @@ void setupRuntime() {
 
     PyType_Ready(&PyCObject_Type);
     PyType_Ready(&PyDictProxy_Type);
+    PyType_Ready(&PyTraceBack_Type);
 
 
     initerrno();

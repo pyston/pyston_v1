@@ -329,9 +329,8 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        auto source = getMD()->source.get();
         stmt->cxx_exception_count++;
-        caughtCxxException(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()), &e);
+        caughtCxxException(&e);
 
         next_block = ((AST_Invoke*)stmt)->exc_dest;
         last_exception = e;
@@ -777,13 +776,13 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
             finishJITing(next_block);
         }
     } catch (ExcInfo e) {
+        assert(node == getCurrentStatement());
         abortJITing();
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        auto source = getMD()->source.get();
         node->cxx_exception_count++;
-        caughtCxxException(LineInfo(node->lineno, node->col_offset, source->getFn(), source->getName()), &e);
+        caughtCxxException(&e);
 
         next_block = node->exc_dest;
         last_exception = e;
