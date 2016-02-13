@@ -538,4 +538,63 @@ extern "C" PyObject* PyErr_ProgramText(const char* filename, int lineno) noexcep
     }
     return NULL;
 }
+
+/* Set file and line information for the current exception.
+   If the exception is not a SyntaxError, also sets additional attributes
+   to make printing of exceptions believe it is a syntax error. */
+
+extern "C" void PyErr_SyntaxLocation(const char* filename, int lineno) noexcept {
+    PyObject* exc, *v, *tb, *tmp;
+
+    /* add attributes for the line number and filename for the error */
+    PyErr_Fetch(&exc, &v, &tb);
+    PyErr_NormalizeException(&exc, &v, &tb);
+    /* XXX check that it is, indeed, a syntax error. It might not
+     * be, though. */
+    tmp = PyInt_FromLong(lineno);
+    if (tmp == NULL)
+        PyErr_Clear();
+    else {
+        if (PyObject_SetAttrString(v, "lineno", tmp))
+            PyErr_Clear();
+        Py_DECREF(tmp);
+    }
+    if (filename != NULL) {
+        tmp = PyString_FromString(filename);
+        if (tmp == NULL)
+            PyErr_Clear();
+        else {
+            if (PyObject_SetAttrString(v, "filename", tmp))
+                PyErr_Clear();
+            Py_DECREF(tmp);
+        }
+
+        tmp = PyErr_ProgramText(filename, lineno);
+        if (tmp) {
+            if (PyObject_SetAttrString(v, "text", tmp))
+                PyErr_Clear();
+            Py_DECREF(tmp);
+        }
+    }
+    if (PyObject_SetAttrString(v, "offset", Py_None)) {
+        PyErr_Clear();
+    }
+    if (exc != PyExc_SyntaxError) {
+        if (!PyObject_HasAttrString(v, "msg")) {
+            tmp = PyObject_Str(v);
+            if (tmp) {
+                if (PyObject_SetAttrString(v, "msg", tmp))
+                    PyErr_Clear();
+                Py_DECREF(tmp);
+            } else {
+                PyErr_Clear();
+            }
+        }
+        if (!PyObject_HasAttrString(v, "print_file_and_line")) {
+            if (PyObject_SetAttrString(v, "print_file_and_line", Py_None))
+                PyErr_Clear();
+        }
+    }
+    PyErr_Restore(exc, v, tb);
+}
 }

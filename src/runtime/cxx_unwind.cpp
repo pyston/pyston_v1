@@ -27,7 +27,6 @@
 #include "core/types.h"        // for ExcInfo
 #include "core/util.h"         // Timer
 #include "runtime/generator.h" // generatorEntry
-#include "runtime/traceback.h" // BoxedTraceback::addLine
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>

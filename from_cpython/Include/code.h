@@ -93,6 +93,8 @@ PyAPI_FUNC(int) PyCode_Addr2Line(PyCodeObject *, int) PYSTON_NOEXCEPT;
 
 // Pyston addition:
 PyAPI_FUNC(int) PyCode_GetArgCount(PyCodeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject*) PyCode_GetFilename(PyCodeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject*) PyCode_GetName(PyCodeObject *) PYSTON_NOEXCEPT;
 
 /* for internal use only */
 #define _PyCode_GETCODEPTR(co, pp) \

@@ -2957,8 +2957,7 @@ public:
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
 
             emitter.emitSetCurrentStmt(current_stmt);
-            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException,
-                                             { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
+            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException);
 
             if (!final_dest) {
                 // Propagate the exception out of the function:

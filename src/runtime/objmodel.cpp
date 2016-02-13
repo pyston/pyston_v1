@@ -2639,7 +2639,7 @@ extern "C" bool nonzero(Box* obj) {
             }
             ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
                        || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == &PyFile_Type
-                       || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
+                       || obj->cls == &PyTraceBack_Type || obj->cls == instancemethod_cls || obj->cls == module_cls
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
                        || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
                        || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls

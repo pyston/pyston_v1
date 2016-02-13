@@ -83,12 +83,18 @@ PyAPI_FUNC(void) PyFrame_FastToLocals(PyFrameObject *);
 PyAPI_FUNC(int) PyFrame_ClearFreeList(void);
 #endif
 
-typedef struct _PyFrameObject PyFrameObject;
+typedef struct _frame PyFrameObject;
+
+PyAPI_DATA(PyTypeObject*) frame_cls;
+#define PyFrame_Type (*frame_cls)
+#define PyFrame_Check(op) (((PyObject*)op)->ob_type == &PyFrame_Type)
 
 /* Return the line of code the frame is currently executing. */
 PyAPI_FUNC(int) PyFrame_GetLineNumber(PyFrameObject *) PYSTON_NOEXCEPT;
 // Pyston changes: add a function to get globals
 PyAPI_FUNC(PyObject *) PyFrame_GetGlobals(PyFrameObject *) PYSTON_NOEXCEPT;
+// Pyston changes: add a function to get the code object
+PyAPI_FUNC(PyObject *) PyFrame_GetCode(PyFrameObject *) PYSTON_NOEXCEPT;
 // Pyston changes: add a function to get frame object by level
 PyAPI_FUNC(PyFrameObject *) PyFrame_ForStackLevel(int stack_level) PYSTON_NOEXCEPT;
 

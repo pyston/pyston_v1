@@ -1,3 +1,4 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
 
 /* Traceback implementation */
 
@@ -46,11 +47,15 @@ tb_clear(PyTracebackObject *tb)
 }
 
 PyTypeObject PyTraceBack_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change:
+    // PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "traceback",
     sizeof(PyTracebackObject),
     0,
-    (destructor)tb_dealloc, /*tp_dealloc*/
+    // Pyston change:
+    //(destructor)tb_dealloc, /*tp_dealloc*/
+    (destructor)0,
     0,                  /*tp_print*/
     0,              /*tp_getattr*/
     0,                  /*tp_setattr*/
@@ -94,8 +99,10 @@ newtracebackobject(PyTracebackObject *next, PyFrameObject *frame)
         Py_XINCREF(next);
         tb->tb_next = next;
         Py_XINCREF(frame);
-        tb->tb_frame = frame;
-        tb->tb_lasti = frame->f_lasti;
+        tb->tb_frame = (struct _frame *)frame;
+        // Pyston change: we don't have tb_lasti
+        // tb->tb_lasti = frame->f_lasti;
+        tb->tb_lasti = -1;
         tb->tb_lineno = PyFrame_GetLineNumber(frame);
         PyObject_GC_Track(tb);
     }
@@ -112,6 +119,18 @@ PyTraceBack_Here(PyFrameObject *frame)
         return -1;
     tstate->curexc_traceback = (PyObject *)tb;
     Py_XDECREF(oldtb);
+    return 0;
+}
+
+// Pyston change: this function does not modify curexc_traceback but instead sets the supplied tb
+int
+PyTraceBack_Here_Tb(PyFrameObject *frame, PyTracebackObject** tb)
+{
+    if ((PyObject*)*tb == Py_None)
+        *tb = NULL;
+    *tb = newtracebackobject(*tb, frame);
+    if (*tb == NULL)
+        return -1;
     return 0;
 }
 
@@ -244,11 +263,19 @@ tb_printinternal(PyTracebackObject *tb, PyObject *f, long limit)
     }
     while (tb != NULL && err == 0) {
         if (depth <= limit) {
+            /*
+            // Pyston change: we can't directly access the fields
             err = tb_displayline(f,
                 PyString_AsString(
                     tb->tb_frame->f_code->co_filename),
                 tb->tb_lineno,
                 PyString_AsString(tb->tb_frame->f_code->co_name));
+            */
+            PyCodeObject* code = (PyCodeObject*)PyFrame_GetCode(tb->tb_frame);
+            err = tb_displayline(f,
+                PyString_AsString(PyCode_GetFilename(code)),
+                tb->tb_lineno,
+                PyString_AsString(PyCode_GetName(code)));
         }
         depth--;
         tb = tb->tb_next;
