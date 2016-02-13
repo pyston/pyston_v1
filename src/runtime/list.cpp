@@ -1244,11 +1244,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     ASSERT(PyList_Check(l), "%s", l->cls->tp_name);
 
     try {
-        BoxedSlice* slice = (BoxedSlice*)createSlice(boxInt(ilow), boxInt(ihigh), None);
-        if (v)
-            listSetitemSlice(l, slice, v);
-        else
-            listDelitemSlice(l, slice);
+        adjustNegativeIndicesOnObject(l, &ilow, &ihigh);
+        listSetitemSliceInt64(l, ilow, ihigh, 1, v);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);

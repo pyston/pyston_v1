@@ -30,8 +30,10 @@ public:
     Box* module;
 
 public:
-    BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module = NULL)
-        : method_def(method_def), passthrough(passthrough), module(module) {}
+    BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module_name)
+        : method_def(method_def), passthrough(passthrough), module(module_name) {
+        assert(!module || PyString_Check(module_name));
+    }
 
     DEFAULT_CLASS(capifunc_cls);
 

@@ -63,9 +63,7 @@ test_collections        assertion failed when doing vars(collections.namedtuple(
 test_compileall         [unknown]
 test_compiler           [unknown]
 test_compile            [unknown]
-test_cookie             [unknown]
 test_copy               Please debug this test in VM.
-test_cpickle            [unknown]
 test_cprofile           [unknown]
 test_crypt              [unknown]
 test_csv                [unknown]
@@ -128,8 +126,6 @@ test_kqueue             Not really a failure, but it tries to skip itself and we
 test_lib2to3            [unknown]
 test_linuxaudiodev      [unknown]
 test_list               longs as slice indices
-test__locale            No module named _locale
-test_locale             [unknown]
 test_long_future        [unknown]
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that
@@ -150,8 +146,6 @@ test_parser             [unknown]
 test_pdb                [unknown]
 test_peepholer          [unknown]
 test_pep352             various unique bugs
-test_pickletools        [unknown]
-test_pickle             unknown
 test_pkg                unknown bug
 test_poplib             SSLError (but only on CI)
 test_pprint             [unknown]
@@ -166,7 +160,6 @@ test_resource           [unknown]
 test_richcmp            PyObject_Not
 test_rlcompleter        [unknown]
 test_runpy              [unknown]
-test_sax                [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
