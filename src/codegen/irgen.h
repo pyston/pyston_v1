@@ -21,6 +21,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/ValueMap.h"
 
 #include "core/options.h"
 #include "core/types.h"
@@ -29,6 +30,7 @@ namespace pyston {
 
 class AST_expr;
 class AST_stmt;
+class CFGBlock;
 class GCBuilder;
 class IREmitter;
 
@@ -102,8 +104,11 @@ public:
     virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
                                                 llvm::Value* exc_val, bool double_check = false) = 0;
 
-    virtual Box* getIntConstant(int64_t n) = 0;
-    virtual Box* getFloatConstant(double d) = 0;
+    virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
+    virtual BORROWED(Box*) getFloatConstant(double d) = 0;
+
+    virtual void setType(llvm::Value* v, RefType reftype) = 0;
+    virtual ConcreteCompilerVariable* getNone() = 0;
 };
 
 extern const std::string CREATED_CLOSURE_NAME;
@@ -183,6 +188,24 @@ public:
     void calculateModuleHash(const llvm::Module* M, EffortLevel effort);
     bool haveCacheFileForHash();
 };
+
+class IRGenState;
+
+class RefcountTracker {
+private:
+    struct RefcountState {
+        RefType reftype;
+
+        llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
+    };
+    llvm::ValueMap<llvm::Value*, RefcountState> vars;
+public:
+
+    void setType(llvm::Value* v, RefType reftype);
+    void refConsumed(llvm::Value* v, llvm::Instruction*);
+    static void addRefcounts(IRGenState* state);
+};
+
 }
 
 #endif

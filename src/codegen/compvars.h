@@ -339,8 +339,6 @@ public:
 // Emit the test for whether one variable 'is' another one.
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate);
 
-ConcreteCompilerVariable* getNone();
-
 // These functions all return an INT variable, from either an unboxed representation (makeInt) or
 // a boxed representation (makeUnboxedInt)
 CompilerVariable* makeInt(int64_t);

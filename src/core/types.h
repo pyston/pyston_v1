@@ -72,6 +72,17 @@ enum Rewritable {
     REWRITABLE,
 };
 
+enum class RefType {
+    UNKNOWN
+#ifndef NDEBUG
+        // Set this to non-zero to make it possible for the debugger to
+        = 0
+#endif
+        ,
+    OWNED,
+    BORROWED,
+};
+
 template <typename T> struct ExceptionSwitchable {
 public:
     T capi_val;

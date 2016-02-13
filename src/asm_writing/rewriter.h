@@ -27,6 +27,7 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
+#include "core/types.h"
 #include "core/threading.h"
 
 namespace pyston {
@@ -199,17 +200,6 @@ public:
 class Rewriter;
 class RewriterVar;
 class RewriterAction;
-
-enum class RefType {
-    UNKNOWN
-#ifndef NDEBUG
-        // Set this to non-zero to make it possible for the debugger to
-        = 0
-#endif
-        ,
-    OWNED,
-    BORROWED,
-};
 
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/

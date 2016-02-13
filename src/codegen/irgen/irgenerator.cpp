@@ -46,7 +46,7 @@ extern "C" void dumpLLVM(void* _v) {
 
 IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info,
                        std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
-                       llvm::MDNode* func_dbg_info)
+                       llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
     : md(md),
       cf(cf),
       source_info(source_info),
@@ -54,6 +54,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       param_names(param_names),
       gc(gc),
       func_dbg_info(func_dbg_info),
+      refcount_tracker(refcount_tracker),
       scratch_space(NULL),
       frame_info(NULL),
       frame_info_arg(NULL),
@@ -494,9 +495,23 @@ public:
         setCurrentBasicBlock(normal_dest);
     }
 
-    Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
+    Box* getIntConstant(int64_t n) override {
+        return autoDecref(irstate->getSourceInfo()->parent_module->getIntConstant(n));
+    }
 
-    Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
+    Box* getFloatConstant(double d) override {
+        return autoDecref(irstate->getSourceInfo()->parent_module->getFloatConstant(d));
+    }
+
+    void setType(llvm::Value* v, RefType reftype) {
+        irstate->getRefcounts()->setType(v, reftype);
+    }
+
+    ConcreteCompilerVariable* getNone() {
+        llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
+        setType(none, RefType::BORROWED);
+        return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
+    }
 };
 
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator) {
@@ -579,6 +594,10 @@ public:
           myblock(myblock),
           types(types),
           state(RUNNING) {}
+
+    virtual CFGBlock* getCFGBlock() {
+        return myblock;
+    }
 
 private:
     OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {
@@ -782,7 +801,7 @@ private:
                 return v;
             }
             case AST_LangPrimitive::NONE: {
-                return getNone();
+                return emitter.getNone();
             }
             case AST_LangPrimitive::NONZERO: {
                 assert(node->args.size() == 1);
@@ -818,7 +837,7 @@ private:
                 builder->CreateStore(converted_traceback->getValue(),
                                      builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
 
-                return getNone();
+                return emitter.getNone();
             }
             case AST_LangPrimitive::UNCACHE_EXC_INFO: {
                 assert(node->args.empty());
@@ -834,7 +853,7 @@ private:
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
 
-                return getNone();
+                return emitter.getNone();
             }
             case AST_LangPrimitive::PRINT_EXPR: {
                 assert(node->args.size() == 1);
@@ -844,7 +863,7 @@ private:
 
                 emitter.createCall(unw_info, g.funcs.printExprHelper, converted->getValue());
 
-                return getNone();
+                return emitter.getNone();
             }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
@@ -1051,7 +1070,7 @@ private:
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, const UnwindInfo& unw_info) {
         if (node->id.s() == "None")
-            return getNone();
+            return emitter.getNone();
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS;
         if (do_patchpoint) {
@@ -1295,7 +1314,7 @@ private:
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
 
 
-        CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : getNone();
+        CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
 
         llvm::Value* rtn
@@ -1903,6 +1922,7 @@ private:
             dest = d->makeConverted(emitter, d->getBoxType());
         } else {
             llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout);
+            emitter.setType(sys_stdout_val, RefType::BORROWED);
             dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val);
             // TODO: speculate that sys.stdout is a file?
         }
@@ -1927,7 +1947,7 @@ private:
 
         CompilerVariable* val;
         if (node->value == NULL) {
-            val = getNone();
+            val = emitter.getNone();
         } else {
             val = evalExpr(node->value, unw_info);
         }
@@ -1939,12 +1959,14 @@ private:
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
 
+        assert(rtn->getValue());
+        auto ret_inst = emitter.getBuilder()->CreateRet(rtn->getValue());
+
+        irstate->getRefcounts()->refConsumed(rtn->getValue(), ret_inst);
+
         symbol_table.clear();
 
         endBlock(DEAD);
-
-        assert(rtn->getValue());
-        emitter.getBuilder()->CreateRet(rtn->getValue());
     }
 
     void doBranch(AST_Branch* node, const UnwindInfo& unw_info) {

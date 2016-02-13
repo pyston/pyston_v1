@@ -1083,9 +1083,13 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
     else
         phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
 
-    IRGenState irstate(md, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo);
+    RefcountTracker refcounter;
+
+    IRGenState irstate(md, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
+
+    RefcountTracker::addRefcounts(&irstate);
 
     // De-opt handling:
 

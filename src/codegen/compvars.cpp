@@ -1122,8 +1122,10 @@ public:
         llvm::Value* boxed;
         if (llvm::ConstantInt* llvm_val = llvm::dyn_cast<llvm::ConstantInt>(unboxed)) {
             boxed = embedRelocatablePtr(emitter.getIntConstant(llvm_val->getSExtValue()), g.llvm_value_type_ptr);
+            emitter.setType(boxed, RefType::BORROWED);
         } else {
             boxed = emitter.getBuilder()->CreateCall(g.funcs.boxInt, unboxed);
+            emitter.setType(boxed, RefType::OWNED);
         }
         return new ConcreteCompilerVariable(other_type, boxed);
     }
@@ -2652,9 +2654,9 @@ public:
         auto slice = var->getValue();
 
         ConcreteCompilerVariable* cstart, *cstop, *cstep;
-        cstart = slice.start ? slice.start->makeConverted(emitter, slice.start->getBoxType()) : getNone();
-        cstop = slice.stop ? slice.stop->makeConverted(emitter, slice.stop->getBoxType()) : getNone();
-        cstep = slice.step ? slice.step->makeConverted(emitter, slice.step->getBoxType()) : getNone();
+        cstart = slice.start ? slice.start->makeConverted(emitter, slice.start->getBoxType()) : emitter.getNone();
+        cstop = slice.stop ? slice.stop->makeConverted(emitter, slice.stop->getBoxType()) : emitter.getNone();
+        cstep = slice.step ? slice.step->makeConverted(emitter, slice.step->getBoxType()) : emitter.getNone();
 
         std::vector<llvm::Value*> args;
         args.push_back(cstart->getValue());
@@ -2674,11 +2676,6 @@ CompilerVariable* makeSlice(CompilerVariable* start, CompilerVariable* stop, Com
 UnboxedSlice extractSlice(CompilerVariable* slice) {
     assert(slice->getType() == UNBOXED_SLICE);
     return static_cast<UnboxedSliceType::VAR*>(slice)->getValue();
-}
-
-ConcreteCompilerVariable* getNone() {
-    llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
-    return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
 }
 
 class UndefType : public ConcreteCompilerType {

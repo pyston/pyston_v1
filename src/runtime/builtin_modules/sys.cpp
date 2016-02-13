@@ -100,7 +100,7 @@ BoxedList* getSysPath() {
     return static_cast<BoxedList*>(_sys_path);
 }
 
-Box* getSysStdout() {
+BORROWED(Box*) getSysStdout() {
     auto stdout_str = getStaticString("stdout");
     Box* sys_stdout = sys_module->getattr(stdout_str);
     RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");

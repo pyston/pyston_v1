@@ -45,6 +45,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		codegen/irgen/future.cpp
 		codegen/irgen/hooks.cpp
 		codegen/irgen/irgenerator.cpp
+		codegen/irgen/refcounts.cpp
 		codegen/irgen/util.cpp
 		codegen/memmgr.cpp
 		codegen/opt/aa.cpp
