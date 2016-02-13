@@ -24,8 +24,6 @@ test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
 test_argparse           [unknown]
 test_ascii_formatd      segfault in ctypes (but only on CI)
-test_asynchat           [unknown]
-test_asyncore           [unknown]
 test_atexit             [unknown]
 test_audioop            [unknown]
 test_bigmem             [unknown]
@@ -92,7 +90,6 @@ test_extcall            f(**kw) crashes if kw isn't a dict
 test_fileio             [unknown]
 test_fork1              [unknown]
 test_frozen             [unknown]
-test_ftplib             [unknown]
 test_funcattrs          we don't allow changing numing of function defaults
 test_functools          unknown errors
 test_future5            [unknown]
@@ -108,7 +105,6 @@ test_gl                 [unknown]
 test_grammar            bug in our tokenizer
 test_heapq              [unknown]
 test_hotshot            [unknown]
-test_httplib            [unknown]
 test_httpservers        [unknown]
 test_idle               [unknown]
 test_imageop            [unknown]
@@ -147,7 +143,6 @@ test_pdb                [unknown]
 test_peepholer          [unknown]
 test_pep352             various unique bugs
 test_pkg                unknown bug
-test_poplib             SSLError (but only on CI)
 test_pprint             [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
@@ -164,11 +159,10 @@ test_scope              eval of code object from existing function (not currentl
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
 test_site               [unknown]
-test_socketserver       [unknown]
+test_socketserver       missing imp.lock_held, otherwise works
 test_socket             [unknown]
 test_sort               argument specification issue in listSort?
 test_sqlite             [unknown]
-test_ssl                [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]
@@ -185,7 +179,6 @@ test_sys_settrace       [unknown]
 test_sys                [unknown]
 test_tarfile            [unknown]
 test_tcl                [unknown]
-test_telnetlib          [unknown]
 test_tempfile           [unknown]
 test_threaded_import    [unknown]
 test_threading_local    [unknown]
@@ -208,8 +201,6 @@ test_unicode_file       exit code 139, no error message
 test_unittest           serialize_ast assert
 test_univnewlines2k     [unknown]
 test_univnewlines       [unknown]
-test_urllib2net         [unknown]
-test_urllibnet          [unknown]
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace

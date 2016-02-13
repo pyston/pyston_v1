@@ -132,6 +132,9 @@ typedef struct {
                                         sets a Python exception */
     double sock_timeout;                 /* Operation timeout in seconds;
                                         0.0 means non-blocking */
+
+    // Pyston change: socket close: add refcounting similar to pypys approach
+    int close_ref_count;
 } PySocketSockObject;
 
 /* --- C API ----------------------------------------------------*/
