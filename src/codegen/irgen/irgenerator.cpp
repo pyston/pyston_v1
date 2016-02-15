@@ -257,6 +257,7 @@ llvm::Value* IRGenState::getGlobals() {
     if (!globals) {
         assert(source_info->scoping->areGlobalsFromModule());
         this->globals = embedRelocatablePtr(source_info->parent_module, g.llvm_value_type_ptr);
+        this->getRefcounts()->setType(this->globals, RefType::BORROWED);
     }
     return this->globals;
 }
@@ -276,7 +277,12 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
-        if (target_exception_style == CXX && (unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI)) {
+        bool needs_refcounting_fixup = true;
+        bool needs_cxx_interception
+            = (target_exception_style == CXX
+               && (needs_refcounting_fixup || unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI));
+
+        if (needs_cxx_interception) {
             // Create the invoke:
             llvm::BasicBlock* normal_dest
                 = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
@@ -285,8 +291,6 @@ private:
             if (unw_info.hasHandler()) {
                 final_exc_dest = unw_info.exc_dest;
             } else {
-                assert(irstate->getExceptionStyle() == CAPI && "shoudn't have bothered creating an invoke");
-
                 final_exc_dest = NULL; // signal to reraise as a capi exception
             }
 
@@ -503,8 +507,9 @@ public:
         return autoDecref(irstate->getSourceInfo()->parent_module->getFloatConstant(d));
     }
 
-    void setType(llvm::Value* v, RefType reftype) {
+    llvm::Value* setType(llvm::Value* v, RefType reftype) {
         irstate->getRefcounts()->setType(v, reftype);
+        return v;
     }
 
     ConcreteCompilerVariable* getNone() {
@@ -574,7 +579,7 @@ private:
     llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
     // These are the values that are outgoing of an invoke block:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
-    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
+    //llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::PHINode*> capi_phis;
 
@@ -1078,14 +1083,17 @@ private:
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(irstate->getGlobals());
-            llvm_args.push_back(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
+            llvm_args.push_back(emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED));
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
                                                  embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
+            emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         }
     }
@@ -1921,7 +1929,7 @@ private:
             auto d = evalExpr(node->dest, unw_info);
             dest = d->makeConverted(emitter, d->getBoxType());
         } else {
-            llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout);
+            llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout, NOEXC);
             emitter.setType(sys_stdout_val, RefType::BORROWED);
             dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val);
             // TODO: speculate that sys.stdout is a file?
@@ -2673,7 +2681,7 @@ public:
     void doSafePoint(AST_stmt* next_statement) override {
         // Unwind info is always needed in allowGLReadPreemption if it has any chance of
         // running arbitrary code like finalizers.
-        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption);
+        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption, NOEXC);
     }
 
     // Create a (or reuse an existing) block that will catch a CAPI exception, and then forward
@@ -2683,6 +2691,7 @@ public:
     // instead propagate the exception out of the function.
     llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
                                      AST_stmt* current_stmt) override {
+        assert(0 && "check refcounting");
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         llvm::PHINode*& phi_node = capi_phis[final_dest];
 
@@ -2745,13 +2754,13 @@ public:
     }
 
     llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) override {
-        llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
-        if (cxx_exc_dest)
-            return cxx_exc_dest;
+        //llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
+        //if (cxx_exc_dest)
+            //return cxx_exc_dest;
 
         llvm::BasicBlock* orig_block = curblock;
 
-        cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        llvm::BasicBlock* cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
 
         emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
 
@@ -2780,7 +2789,11 @@ public:
         llvm::Value* exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
         llvm::Value* exc_traceback
             = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+        emitter.setType(exc_type, RefType::OWNED);
+        emitter.setType(exc_value, RefType::OWNED);
+        emitter.setType(exc_traceback, RefType::OWNED);
 
+        // final_dest==NULL => propagate the exception out of the function.
         if (final_dest) {
             // Catch the exception and forward to final_dest:
             addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
@@ -2789,13 +2802,19 @@ public:
                                                      new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
             builder->CreateBr(final_dest);
-        } else {
-            // Propagate the exception out of the function.
-            // We shouldn't be hitting this case if the current function is CXX-style; then we should have
-            // just not created an Invoke and let the exception machinery propagate it for us.
-            assert(irstate->getExceptionStyle() == CAPI);
-            builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+        } else if (irstate->getExceptionStyle() == CAPI) {
+            auto call_inst = builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            irstate->getRefcounts()->refConsumed(exc_type, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_value, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+        } else {
+            auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
+            irstate->getRefcounts()->refConsumed(exc_type, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_value, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
+
+            builder->CreateUnreachable();
         }
 
         emitter.setCurrentBasicBlock(orig_block);

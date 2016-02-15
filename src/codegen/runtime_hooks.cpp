@@ -315,6 +315,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raise0_capi);
     GET(raise3);
     GET(raise3_capi);
+    GET(rawThrow);
     GET(PyErr_Fetch);
     GET(PyErr_NormalizeException);
     GET(PyErr_Restore);

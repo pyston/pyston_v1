@@ -55,9 +55,12 @@ enum class EffortLevel {
 // determine when to emit code in one style or the other.
 // Many runtime functions support being called in either style, and can get passed one of these enum values
 // as a template parameter to switch between them.
+// "NOEXC" is a special exception style that says that no exception (of either type) will get thrown.
 enum ExceptionStyle {
     CAPI,
     CXX,
+
+    NOEXC,
 };
 
 // Much of our runtime supports "rewriting" aka tracing itself.  Our tracing JIT requires support from the

@@ -275,6 +275,10 @@ extern "C" void reraiseCapiExcAsCxx() {
     throw e;
 }
 
+extern "C" void rawThrow(Box* type, Box* value, Box* tb) {
+    throw ExcInfo(type, value, tb);
+}
+
 void caughtCxxException(LineInfo line_info, ExcInfo* exc_info) {
     static StatCounter frames_unwound("num_frames_unwound_python");
     frames_unwound.log();

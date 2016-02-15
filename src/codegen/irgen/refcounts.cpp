@@ -109,6 +109,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         if (rt->vars.count(v) == 0) {
             num_untracked++;
             printf("missed a refcounted object: ");
+            fflush(stdout);
             v->dump();
             //abort();
         }

@@ -107,7 +107,7 @@ public:
     virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;
 
-    virtual void setType(llvm::Value* v, RefType reftype) = 0;
+    virtual llvm::Value* setType(llvm::Value* v, RefType reftype) = 0;
     virtual ConcreteCompilerVariable* getNone() = 0;
 };
 
