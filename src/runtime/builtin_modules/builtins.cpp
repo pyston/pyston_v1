@@ -1132,42 +1132,6 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     return cls;
 }
 
-extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* dict) noexcept {
-    if (_base == NULL)
-        _base = Exception;
-    if (dict == NULL)
-        dict = new BoxedDict();
-
-    try {
-        char* dot_pos = strchr(name, '.');
-        RELEASE_ASSERT(dot_pos, "");
-        int n = strlen(name);
-        BoxedString* boxedName = boxString(llvm::StringRef(dot_pos + 1, n - (dot_pos - name) - 1));
-
-        // It can also be a tuple of bases
-        RELEASE_ASSERT(PyType_Check(_base), "");
-        BoxedClass* base = static_cast<BoxedClass*>(_base);
-
-        if (PyDict_GetItemString(dict, "__module__") == NULL) {
-            PyDict_SetItemString(dict, "__module__", boxString(llvm::StringRef(name, dot_pos - name)));
-        }
-        checkAndThrowCAPIException();
-
-        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
-        return cls;
-    } catch (ExcInfo e) {
-        // PyErr_NewException isn't supposed to fail, and callers sometimes take advantage of that
-        // by not checking the return value.  Since failing probably indicates a bug anyway,
-        // to be safe just print the traceback and die.
-        e.printExcAndTraceback();
-        RELEASE_ASSERT(0, "PyErr_NewException failed");
-
-        // The proper way of handling it:
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
 BoxedClass* enumerate_cls;
 class BoxedEnumerate : public Box {
 private:
