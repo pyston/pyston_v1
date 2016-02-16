@@ -1470,7 +1470,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             if (!crewrite_args.out_success) {
                 rewrite_args = NULL;
             } else {
-                rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::HAS_RETURN);
+                rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::MAYBE_EXC);
             }
             return rtn;
         }
@@ -1498,6 +1498,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             rewrite_args = NULL;
         }
 
+        Box* rtn = getset_descr->get(obj, getset_descr->closure);
+
         if (rewrite_args) {
             // hmm, maybe we should write assembly which can look up the function address and call any function
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
@@ -1507,10 +1509,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
             rewrite_args->setReturn(r_rtn, descr->cls == capi_getset_cls ? ReturnConvention::CAPI_RETURN
-                                                                         : ReturnConvention::HAS_RETURN);
+                                                                         : ReturnConvention::MAYBE_EXC);
         }
-
-        return getset_descr->get(obj, getset_descr->closure);
+        return rtn;
     }
 
     return NULL;
@@ -1693,7 +1694,12 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
         gotten = getclsattrInternal<REWRITABLE>(obj, attr, &rewrite_args);
 
         if (rewrite_args.isSuccessful() && gotten) {
-            RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            RewriterVar* r_rtn;
+            ReturnConvention return_convention;
+            std::tie(r_rtn, return_convention) = rewrite_args.getReturn();
+
+            assert(return_convention == ReturnConvention::HAS_RETURN
+                   || return_convention == ReturnConvention::MAYBE_EXC);
             rewriter->commitReturning(r_rtn);
         }
 #endif

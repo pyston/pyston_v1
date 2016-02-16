@@ -49,6 +49,7 @@ enum class ReturnConvention {
     NO_RETURN,
     CAPI_RETURN,
     NOEXC_POSSIBLE,
+    MAYBE_EXC,
 };
 
 class _ReturnConventionBase {
@@ -99,6 +100,8 @@ public:
                     assert(!PyErr_Occurred());
                 } else if (r == ReturnConvention::CAPI_RETURN) {
                     assert((bool)b ^ (bool)PyErr_Occurred());
+                } else if (r == ReturnConvention::MAYBE_EXC) {
+                    assert(b);
                 } else {
                     assert(r == ReturnConvention::NOEXC_POSSIBLE);
                 }
