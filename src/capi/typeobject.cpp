@@ -1013,6 +1013,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     return res;
                 } else if (return_convention == ReturnConvention::NO_RETURN) {
                     assert(!res);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    rewrite_args = NULL;
                 } else if (return_convention == ReturnConvention::CAPI_RETURN
                            || return_convention == ReturnConvention::NOEXC_POSSIBLE) {
                     // If we get a CAPI return, we probably did a function call, and these guards
