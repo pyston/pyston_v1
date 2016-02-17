@@ -50,16 +50,16 @@ llvm::Value* RefcountTracker::setType(llvm::Value* v, RefType reftype) {
 }
 
 void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
-    auto& var = this->vars[v];
+    assert(this->vars[v].reftype != RefType::UNKNOWN);
 
-    assert(var.reftype != RefType::UNKNOWN);
-    var.ref_consumers.push_back(inst);
-
-    // Make sure that this instruction actually references v:
-    assert(std::find(inst->op_begin(), inst->op_end(), v) != inst->op_end());
+    this->refs_consumed[inst].push_back(v);
+    //var.ref_consumers.push_back(inst);
 }
 
 llvm::Instruction* findIncrefPt(llvm::BasicBlock* BB) {
+    ASSERT(pred_begin(BB) == pred_end(BB) || pred_end(BB) == ++pred_begin(BB),
+           "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors");
+
     llvm::Instruction* incref_pt;// = BB->getFirstInsertionPt();
     if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
         // Don't split up the landingpad+extract+cxa_begin_catch
@@ -240,6 +240,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
     }
 
+    // Don't actually insert any decrefs initially, since they require changing the control flow of the
+    // function.  Instead just make a note of them and we will add them all at the end.
+    // This is a list of <val to decref, num_decrefs, instruction to insert before> pairs.
+    std::vector<std::tuple<llvm::Value*, int, llvm::Instruction*>> pending_decrefs;
+
     while (!block_queue.empty()) {
         llvm::BasicBlock& BB = *block_queue.front();
         block_queue.pop_front();
@@ -258,6 +263,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         assert(!states.count(&BB));
         RefState& state = states[&BB];
 
+        // Compute the incoming refstate based on the refstate of any successor nodes
         llvm::SmallVector<llvm::BasicBlock*, 4> successors;
         successors.insert(successors.end(), llvm::succ_begin(&BB), llvm::succ_end(&BB));
         if (successors.size()) {
@@ -298,7 +304,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                         //llvm::outs() << "Need to incref " << *v << " at beginning of " << SBB->getName() << "\n";
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        addDecrefs(v, min_refs - this_refs, findIncrefPt(SBB));
+                        pending_decrefs.push_back(std::make_tuple(v, min_refs - this_refs, findIncrefPt(SBB)));
                     }
                 }
 
@@ -322,29 +328,23 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
-        // A place to store any decrefs we might have to do, since those will split the basic block:
-        llvm::SmallVector<std::pair<llvm::Value*, llvm::Instruction*>, 4> last_uses;
-
+        // Then, iterate backwards through the instructions in this BB, updating the ref states
         for (auto &I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
             llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
             llvm::DenseMap<llvm::Value*, int> num_times_as_op;
+
+            for (auto v : rt->refs_consumed[&I]) {
+                num_consumed_by_inst[v]++;
+                assert(rt->vars[v].reftype != RefType::UNKNOWN);
+                num_times_as_op[v]; // just make sure it appears in there
+            }
 
             for (llvm::Value* op : I.operands()) {
                 auto it = rt->vars.find(op);
                 if (it == rt->vars.end())
                     continue;
 
-                int& nops = num_times_as_op[op];
-                nops++;
-
-                if (nops > 1)
-                    continue;
-
-                auto&& var_state = it->second;
-                for (auto consuming_inst : var_state.ref_consumers) {
-                    if (consuming_inst == &I)
-                        num_consumed_by_inst[op]++;
-                }
+                num_times_as_op[op]++;
             }
 
             for (auto&& p : num_times_as_op) {
@@ -360,7 +360,18 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                         if (state.refs[op] == 0) {
                             // Don't do any updates now since we are iterating over the bb
                             llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
-                            last_uses.push_back(std::make_pair(op, &I));
+
+                            if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
+                                pending_decrefs.push_back(std::make_tuple(op, 1, findIncrefPt(invoke->getNormalDest())));
+                                pending_decrefs.push_back(std::make_tuple(op, 1, findIncrefPt(invoke->getUnwindDest())));
+                            } else {
+                                assert(&I != I.getParent()->getTerminator());
+                                auto next = I.getNextNode();
+                                //while (llvm::isa<llvm::PHINode>(next))
+                                    //next = next->getNextNode();
+                                ASSERT(!llvm::isa<llvm::UnreachableInst>(next), "Can't add decrefs after this function...");
+                                pending_decrefs.push_back(std::make_tuple(op, 1, next));
+                            }
                             state.refs[op] = 1;
                         }
                     }
@@ -379,9 +390,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (state.refs[inst] != starting_refs) {
                     llvm::Instruction* insertion_pt = inst->getNextNode();
                     assert(insertion_pt);
+                    while (llvm::isa<llvm::PHINode>(insertion_pt)) {
+                        insertion_pt = insertion_pt->getNextNode();
+                        assert(insertion_pt);
+                    }
+
                     if (state.refs[inst] < starting_refs) {
                         assert(p.second.reftype == RefType::OWNED);
-                        addDecrefs(inst, starting_refs - state.refs[inst], insertion_pt);
+                        pending_decrefs.push_back(std::make_tuple(inst, starting_refs - state.refs[inst], insertion_pt));
                     } else {
                         addIncrefs(inst, state.refs[inst] - starting_refs, insertion_pt);
                     }
@@ -390,18 +406,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
-        for (auto& p : last_uses) {
-            if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(p.second)) {
-                addDecrefs(p.first, 1, findIncrefPt(invoke->getNormalDest()));
-                addDecrefs(p.first, 1, findIncrefPt(invoke->getUnwindDest()));
-            } else {
-                assert(p.second != p.second->getParent()->getTerminator());
-                auto next = p.second->getNextNode();
-                ASSERT(!llvm::isa<llvm::UnreachableInst>(next), "Can't add decrefs after this function...");
-                addDecrefs(p.first, 1, next);
-            }
-        }
-
+        // If this is the entry block, finish dealing with the ref state rather than handing off to a predecessor
         if (&BB == &BB.getParent()->front()) {
             for (auto&& p : state.refs) {
                 llvm::outs() << *p.first << " " << p.second << '\n';
@@ -426,6 +431,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             state.refs.clear();
         }
 
+        // Look for any new blocks that are ready to be processed:
         for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(&BB), llvm::pred_end(&BB))) {
             bool all_succ_done = true;
             for (auto&& SBB : llvm::iterator_range<llvm::succ_iterator>(llvm::succ_begin(PBB), llvm::succ_end(PBB))) {
@@ -440,6 +446,18 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 block_queue.push_back(PBB);
             }
         }
+    }
+
+    // TODO need to do something about loops
+    ASSERT(states.size() == f->size(), "We didn't process all nodes... backedges??");
+
+    // Add any decrefs that we put off earlier:
+    for (auto& p : pending_decrefs) {
+        llvm::Value* v;
+        int num_refs;
+        llvm::Instruction* insertion_pt;
+        std::tie(v, num_refs, insertion_pt) = p;
+        addDecrefs(v, num_refs, insertion_pt);
     }
 
     fprintf(stderr, "After refcounts:\n");

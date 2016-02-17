@@ -661,6 +661,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
+                if (phi->getType() == g.llvm_value_type_ptr)
+                    irstate->getRefcounts()->setType(phi, RefType::OWNED);
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi);
                 generator->giveLocalSymbol(s, var);
 
@@ -760,6 +762,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
                                                                           block->predecessors.size(), name.s());
+                    if (phi->getType() == g.llvm_value_type_ptr)
+                        irstate->getRefcounts()->setType(phi, RefType::OWNED);
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi);
                     generator->giveLocalSymbol(name, var);
@@ -838,7 +842,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
         // Can't always add the phi incoming value right away, since we may have to create more
         // basic blocks as part of type coercion.
-        // Intsead, just make a record of the phi node, value, and the location of the from-BB,
+        // Instead, just make a record of the phi node, value, and the location of the from-BB,
         // which we won't read until after all new BBs have been added.
         std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&>> phi_args;
 
@@ -858,9 +862,14 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 llvm::Value* val = v->getValue();
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
+
+                llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
+                irstate->getRefcounts()->setType(llvm_phi, RefType::OWNED);
+                irstate->getRefcounts()->refConsumed(v->getValue(), llvm_exit_blocks[b->predecessors[j]]->getTerminator());
             }
 
             if (this_is_osr_entry) {
+                assert(0 && "check refcounting");
                 ConcreteCompilerVariable* v = (*osr_syms)[it->first];
                 assert(v);
 
@@ -869,6 +878,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
         }
         for (auto t : phi_args) {
+            assert(0 && "check refcounting");
             std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
         }
     }

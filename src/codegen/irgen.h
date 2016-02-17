@@ -197,8 +197,9 @@ private:
     struct RefcountState {
         RefType reftype;
 
-        llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
+        //llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
     };
+    llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_consumed;
     llvm::ValueMap<llvm::Value*, RefcountState> vars;
 public:
 
