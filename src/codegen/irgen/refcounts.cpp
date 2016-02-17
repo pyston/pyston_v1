@@ -140,6 +140,94 @@ void addDecrefs(llvm::Value* v, int num_refs, llvm::Instruction* decref_pt) {
     builder.SetInsertPoint(continue_block);
 }
 
+static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
+    std::vector<llvm::BasicBlock*> ordering;
+    llvm::DenseSet<llvm::BasicBlock*> added;
+    llvm::DenseMap<llvm::BasicBlock*, int> num_successors_added;
+
+    for (auto&& BB : *f) {
+        if (llvm::succ_begin(&BB) == llvm::succ_end(&BB)) {
+            llvm::outs() << "Adding " << BB.getName() << " since it is an exit node.\n";
+            ordering.push_back(&BB);
+            added.insert(&BB);
+        }
+    }
+
+    int check_predecessors_idx = 0;
+    int num_bb = f->size();
+    while (ordering.size() < num_bb) {
+        if (check_predecessors_idx < ordering.size()) {
+            // Case 1: look for any blocks whose successors have already been traversed.
+
+            llvm::BasicBlock* bb = ordering[check_predecessors_idx];
+            check_predecessors_idx++;
+
+            for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(bb), llvm::pred_end(bb))) {
+                if (added.count(PBB))
+                    continue;
+
+                num_successors_added[PBB]++;
+                int num_successors = std::distance(llvm::succ_begin(PBB), llvm::succ_end(PBB));
+                if (num_successors_added[PBB] == num_successors) {
+                    ordering.push_back(PBB);
+                    added.insert(PBB);
+                    llvm::outs() << "Adding " << PBB->getName() << " since it has all of its successors added.\n";
+                }
+            }
+        } else {
+            // Case 2: we hit a cycle.  Try to pick a good node to add.
+            // The heuristic here is just to make sure to pick one in 0-successor component of the SCC
+
+            std::vector<std::pair<llvm::BasicBlock*, int>> num_successors;
+            for (auto&& p : num_successors_added) {
+                if (added.count(p.first))
+                    continue;
+                num_successors.push_back(p);
+            }
+
+            std::sort(num_successors.begin(), num_successors.end(),
+                      [](const std::pair<llvm::BasicBlock*, int>& p1, const std::pair<llvm::BasicBlock*, int>& p2) {
+                          return p1.second > p2.second;
+                      });
+
+            std::deque<llvm::BasicBlock*> visit_queue;
+            llvm::DenseSet<llvm::BasicBlock*> visited;
+            llvm::BasicBlock* best = NULL;
+
+            for (auto&& p : num_successors) {
+                if (visited.count(p.first))
+                    continue;
+
+                best = p.first;
+                visit_queue.push_back(p.first);
+                visited.insert(p.first);
+
+                while (visit_queue.size()) {
+                    llvm::BasicBlock* bb = visit_queue.front();
+                    visit_queue.pop_front();
+
+                    for (auto&& SBB : llvm::successors(bb)) {
+                        if (!visited.count(SBB)) {
+                            visited.insert(SBB);
+                            visit_queue.push_back(SBB);
+                        }
+                    }
+
+                }
+            }
+
+            assert(best);
+            ordering.push_back(best);
+            added.insert(best);
+            llvm::outs() << "Adding " << best->getName() << " since it is the best provisional node.\n";
+        }
+    }
+
+    assert(ordering.size() == num_bb);
+    assert(added.size() == num_bb);
+    return ordering;
+}
+
 void RefcountTracker::addRefcounts(IRGenState* irstate) {
     llvm::Function* f = irstate->getLLVMFunction();
     RefcountTracker* rt = irstate->getRefcounts();
@@ -227,27 +315,23 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     ASSERT(num_untracked == 0, "");
 #endif
 
-    std::deque<llvm::BasicBlock*> block_queue;
+    std::vector<llvm::BasicBlock*> block_queue = computeTraversalOrder(f);
+
     struct RefState {
         llvm::DenseMap<llvm::Value*, int> refs;
+        bool is_provisional = false;
+        llvm::SmallVector<llvm::Value*, 4> provisionally_dead;
         //llvm::Instruction* 
     };
     llvm::DenseMap<llvm::BasicBlock*, RefState> states;
-
-    for (auto&& BB : *f) {
-        if (llvm::succ_begin(&BB) == llvm::succ_end(&BB)) {
-            block_queue.push_back(&BB);
-        }
-    }
 
     // Don't actually insert any decrefs initially, since they require changing the control flow of the
     // function.  Instead just make a note of them and we will add them all at the end.
     // This is a list of <val to decref, num_decrefs, instruction to insert before> pairs.
     std::vector<std::tuple<llvm::Value*, int, llvm::Instruction*>> pending_decrefs;
 
-    while (!block_queue.empty()) {
-        llvm::BasicBlock& BB = *block_queue.front();
-        block_queue.pop_front();
+    for (auto&& bb : block_queue) {
+        llvm::BasicBlock& BB = *bb;
 
 #if 0
         llvm::Instruction* term_inst = BB.getTerminator();
@@ -265,6 +349,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         // Compute the incoming refstate based on the refstate of any successor nodes
         llvm::SmallVector<llvm::BasicBlock*, 4> successors;
+        for (auto SBB : llvm::successors(&BB)) {
+        }
         successors.insert(successors.end(), llvm::succ_begin(&BB), llvm::succ_end(&BB));
         if (successors.size()) {
             llvm::DenseSet<llvm::Value*> tracked_values;
@@ -430,26 +516,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
             state.refs.clear();
         }
-
-        // Look for any new blocks that are ready to be processed:
-        for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(&BB), llvm::pred_end(&BB))) {
-            bool all_succ_done = true;
-            for (auto&& SBB : llvm::iterator_range<llvm::succ_iterator>(llvm::succ_begin(PBB), llvm::succ_end(PBB))) {
-                if (!states.count(SBB)) {
-                    all_succ_done = false;
-                    break;
-                }
-            }
-
-            if (all_succ_done) {
-                llvm::outs() << PBB->getName() << " is now ready to be processed\n";
-                block_queue.push_back(PBB);
-            }
-        }
     }
 
-    // TODO need to do something about loops
-    ASSERT(states.size() == f->size(), "We didn't process all nodes... backedges??");
+    ASSERT(states.size() == f->size(), "We didn't process all nodes...");
 
     // Add any decrefs that we put off earlier:
     for (auto& p : pending_decrefs) {
