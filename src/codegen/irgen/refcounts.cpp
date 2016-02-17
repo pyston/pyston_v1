@@ -23,6 +23,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 
 #include "codegen/codegen.h"
 #include "codegen/gcbuilder.h"
@@ -56,6 +57,90 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
 
     // Make sure that this instruction actually references v:
     assert(std::find(inst->op_begin(), inst->op_end(), v) != inst->op_end());
+}
+
+llvm::Instruction* findIncrefPt(llvm::BasicBlock* BB) {
+    llvm::Instruction* incref_pt;// = BB->getFirstInsertionPt();
+    if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
+        // Don't split up the landingpad+extract+cxa_begin_catch
+        auto it = BB->begin();
+        ++it;
+        ++it;
+        ++it;
+        incref_pt = &*it;
+    } else {
+        incref_pt = BB->getFirstInsertionPt();
+    }
+    return incref_pt;
+}
+
+void addIncrefs(llvm::Value* v, int num_refs, llvm::Instruction* incref_pt) {
+    assert(num_refs > 0);
+#ifdef Py_REF_DEBUG
+    auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
+    auto reftotal = new llvm::LoadInst(reftotal_gv, "", incref_pt);
+    auto new_reftotal = llvm::BinaryOperator::Create(
+        llvm::BinaryOperator::BinaryOps::Add, reftotal,
+        getConstantInt(num_refs, g.i64), "", incref_pt);
+    new llvm::StoreInst(new_reftotal, reftotal_gv, incref_pt);
+#endif
+
+    llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
+    auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", incref_pt);
+    auto refcount = new llvm::LoadInst(refcount_ptr, "", incref_pt);
+    auto new_refcount = llvm::BinaryOperator::Create(
+        llvm::BinaryOperator::BinaryOps::Add, refcount,
+        getConstantInt(num_refs, g.i64), "", incref_pt);
+    new llvm::StoreInst(new_refcount, refcount_ptr, incref_pt);
+}
+
+void addDecrefs(llvm::Value* v, int num_refs, llvm::Instruction* decref_pt) {
+    assert(num_refs > 0);
+    llvm::IRBuilder<true> builder(decref_pt);
+#ifdef Py_REF_DEBUG
+    auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
+    auto reftotal = new llvm::LoadInst(reftotal_gv, "", decref_pt);
+    auto new_reftotal = llvm::BinaryOperator::Create(
+        llvm::BinaryOperator::BinaryOps::Sub, reftotal,
+        getConstantInt(num_refs, g.i64), "", decref_pt);
+    new llvm::StoreInst(new_reftotal, reftotal_gv, decref_pt);
+#endif
+
+    llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
+    auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", decref_pt);
+    auto refcount = new llvm::LoadInst(refcount_ptr, "", decref_pt);
+    auto new_refcount = llvm::BinaryOperator::Create(
+        llvm::BinaryOperator::BinaryOps::Sub, refcount,
+        getConstantInt(num_refs, g.i64), "", decref_pt);
+    new llvm::StoreInst(new_refcount, refcount_ptr, decref_pt);
+
+    llvm::BasicBlock* cur_block = decref_pt->getParent();
+    llvm::BasicBlock* dealloc_block = llvm::BasicBlock::Create(g.context, "", decref_pt->getParent()->getParent());
+    llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(decref_pt);
+
+    assert(llvm::isa<llvm::BranchInst>(cur_block->getTerminator()));
+    cur_block->getTerminator()->eraseFromParent();
+
+    builder.SetInsertPoint(cur_block);
+    auto iszero = builder.CreateICmpEQ(new_refcount, getConstantInt(0, g.i64));
+    builder.CreateCondBr(iszero, dealloc_block, continue_block);
+
+    builder.SetInsertPoint(dealloc_block);
+
+    auto cls_ptr = builder.CreateConstInBoundsGEP2_32(v, 0, 1);
+    auto cls = builder.CreateLoad(cls_ptr);
+    auto dtor_ptr = builder.CreateConstInBoundsGEP2_32(cls, 0, 4);
+
+#ifndef NDEBUG
+    llvm::APInt offset(64, 0, true);
+    assert(llvm::cast<llvm::GetElementPtrInst>(dtor_ptr)->accumulateConstantOffset(*g.tm->getDataLayout(), offset));
+    assert(offset.getZExtValue() == offsetof(BoxedClass, tp_dealloc));
+#endif
+    auto dtor = builder.CreateLoad(dtor_ptr);
+    builder.CreateCall(dtor, v);
+    builder.CreateBr(continue_block);
+
+    builder.SetInsertPoint(continue_block);
 }
 
 void RefcountTracker::addRefcounts(IRGenState* irstate) {
@@ -160,37 +245,6 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
     }
 
-    auto addRefcountsToBlock = [](llvm::BasicBlock* BB, llvm::Value* v, int num_refs) {
-        llvm::Instruction* incref_pt;// = BB->getFirstInsertionPt();
-        if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
-            // Don't split up the landingpad+extract+cxa_begin_catch
-            auto it = BB->begin();
-            ++it;
-            ++it;
-            ++it;
-            incref_pt = &*it;
-        } else {
-            incref_pt = BB->getFirstInsertionPt();
-        }
-
-#ifdef Py_REF_DEBUG
-        auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
-        auto reftotal = new llvm::LoadInst(reftotal_gv, "", incref_pt);
-        auto new_reftotal = llvm::BinaryOperator::Create(
-            llvm::BinaryOperator::BinaryOps::Add, reftotal,
-            getConstantInt(num_refs, g.i64), "", incref_pt);
-        new llvm::StoreInst(new_reftotal, reftotal_gv, "", incref_pt);
-#endif
-
-        llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
-        auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", incref_pt);
-        auto refcount = new llvm::LoadInst(refcount_ptr, "", incref_pt);
-        auto new_refcount = llvm::BinaryOperator::Create(
-            llvm::BinaryOperator::BinaryOps::Add, refcount,
-            getConstantInt(num_refs, g.i64), "", incref_pt);
-        new llvm::StoreInst(new_refcount, refcount_ptr, "", incref_pt);
-    };
-
     while (!block_queue.empty()) {
         llvm::BasicBlock& BB = *block_queue.front();
         block_queue.pop_front();
@@ -241,13 +295,16 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                             this_refs = it->second;
                         }
                         if (this_refs > min_refs) {
-                            addRefcountsToBlock(SBB, v, this_refs - min_refs);
+                            addIncrefs(v, this_refs - min_refs, findIncrefPt(SBB));
                             //llvm::outs() << *incref_pt << '\n';
                             //llvm::outs() << "Need to incref " << *v << " at beginning of " << SBB->getName() << "\n";
                         }
                     }
 
-                    state.refs[v] = min_refs;
+                    if (min_refs)
+                        state.refs[v] = min_refs;
+                    else
+                        assert(state.refs.count(v) == 0);
                 } else {
                     assert(0 && "finish implementing");
                 }
@@ -287,7 +344,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (num_times_as_op[op] > num_consumed) {
                     if (rt->vars[op].reftype == RefType::BORROWED) {
                     } else {
-                        assert(0 && "handle this case");
+                        assert(state.refs.count(op) && "handle this case (last reference of an owned var)");
                     }
                 }
 
@@ -297,14 +354,21 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 
         // Handle variables that were defined in this BB:
-        for (auto it = state.refs.begin(), end = state.refs.end(); it != end; ) {
-            llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(it->first);
+        for (auto&& p : rt->vars) {
+            llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
             if (inst && inst->getParent() == &BB) {
-                assert(it->second == 1 && rt->vars[it->first].reftype == RefType::OWNED);
-                state.refs.erase(it);
-                ++it;
-            } else {
-                ++it;
+                int starting_refs = (p.second.reftype == RefType::OWNED ? 1 : 0);
+                if (state.refs[inst] != starting_refs) {
+                    llvm::Instruction* insertion_pt = inst->getNextNode();
+                    assert(insertion_pt);
+                    if (state.refs[inst] < starting_refs) {
+                        assert(p.second.reftype == RefType::OWNED);
+                        addDecrefs(inst, starting_refs - state.refs[inst], insertion_pt);
+                    } else {
+                        addIncrefs(inst, state.refs[inst] - starting_refs, insertion_pt);
+                    }
+                }
+                state.refs.erase(inst);
             }
         }
 
@@ -313,7 +377,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 llvm::outs() << *p.first << " " << p.second << '\n';
                 assert(llvm::isa<llvm::GlobalVariable>(p.first));
                 assert(rt->vars[p.first].reftype == RefType::BORROWED);
-                addRefcountsToBlock(&BB, p.first, p.second);
+                addIncrefs(p.first, p.second, findIncrefPt(&BB));
             }
             state.refs.clear();
         }
@@ -342,7 +406,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     fprintf(stderr, "After refcounts:\n");
     fprintf(stderr, "\033[35m");
-    dumpPrettyIR(f);
+    f->dump();
+    //dumpPrettyIR(f);
     fprintf(stderr, "\033[0m");
 }
 
