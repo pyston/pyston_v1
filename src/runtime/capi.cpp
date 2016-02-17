@@ -1443,17 +1443,6 @@ extern "C" void makePendingCalls() {
         throwCAPIException();
 }
 
-extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexcept {
-    // Don't have to do anything here, since we will error in _PyImport_FindExtension
-    // TODO is this ok?
-    return NULL;
-}
-
-extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
-}
-
 static PyObject* listmethodchain(PyMethodChain* chain) noexcept {
     PyMethodChain* c;
     PyMethodDef* ml;

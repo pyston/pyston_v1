@@ -88,6 +88,7 @@ extern "C" void init_sqlite3();
 extern "C" void PyMarshal_Init();
 extern "C" void initstrop();
 extern "C" void init_ast();
+extern "C" void initimp();
 
 namespace pyston {
 
@@ -1566,8 +1567,8 @@ void BoxedClosure::gcHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *member_descriptor_cls, *closure_cls, *generator_cls, *null_importer_cls, *complex_cls, *basestring_cls,
-      *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
+      *member_descriptor_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
+      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
       *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
@@ -3546,6 +3547,10 @@ static void setTypeGCNone(BoxedClass* cls) {
 }
 
 static void setupDefaultClassGCParticipation() {
+    // we need to make sure this types are initalized
+    init_sre();
+    inititertools();
+
     // some additional setup to ensure weakrefs participate in our GC
     setTypeGCProxy(&_PyWeakref_RefType);
     setTypeGCProxy(&_PyWeakref_ProxyType);
@@ -3630,6 +3635,60 @@ static Box* getsetDelete(Box* self, Box* obj) {
 static int _check_and_flush(FILE* stream) {
     int prev_fail = ferror(stream);
     return fflush(stream) || prev_fail ? EOF : 0;
+}
+
+extern "C" {
+struct _inittab _PyImport_Inittab[] = { { "array", initarray },
+                                        { "_ast", init_ast },
+                                        { "binascii", initbinascii },
+                                        { "_codecs", init_codecs },
+                                        { "_collections", init_collections },
+                                        { "cStringIO", initcStringIO },
+                                        { "_csv", init_csv },
+                                        { "datetime", initdatetime },
+                                        { "errno", initerrno },
+                                        { "fcntl", initfcntl },
+                                        { "_functools", init_functools },
+                                        { "imp", initimp },
+                                        { "_io", init_io },
+                                        { "itertools", inititertools },
+                                        { "marshal", PyMarshal_Init },
+                                        { "math", initmath },
+                                        { "_md5", init_md5 },
+                                        { "operator", initoperator },
+                                        { "posix", initposix },
+                                        { "pwd", initpwd },
+                                        { "_random", init_random },
+                                        { "resource", initresource },
+                                        { "select", initselect },
+                                        { "_sha", init_sha },
+                                        { "_sha256", init_sha256 },
+                                        { "_sha512", init_sha512 },
+                                        { "signal", initsignal },
+                                        { "_socket", init_socket },
+                                        { "_sqlite3", init_sqlite3 },
+                                        { "_sre", init_sre },
+                                        { "_ssl", init_ssl },
+                                        { "strop", initstrop },
+                                        { "_struct", init_struct },
+                                        { "time", inittime },
+                                        { "unicodedata", initunicodedata },
+                                        { "_warnings", _PyWarnings_Init },
+                                        { "_weakref", init_weakref },
+                                        { "zipimport", initzipimport },
+                                        { "zlib", initzlib },
+
+                                        { "gc", setupGC },
+                                        { "__pyston__", setupPyston },
+                                        { "thread", setupThread },
+
+                                        { "__main__", NULL },
+                                        { "__builtin__", NULL },
+                                        { "sys", NULL },
+                                        { "exceptions", NULL },
+
+
+                                        { 0, 0 } };
 }
 
 bool TRACK_ALLOCATIONS = false;
@@ -4115,10 +4174,8 @@ void setupRuntime() {
 
     setupBuiltins();
     _PyExc_Init();
-    setupThread();
-    setupGC();
-    setupImport();
-    setupPyston();
+    _PyImport_Init();
+    _PyImportHooks_Init();
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
@@ -4129,44 +4186,6 @@ void setupRuntime() {
     PyType_Ready(&PyCObject_Type);
     PyType_Ready(&PyDictProxy_Type);
     PyType_Ready(&PyTraceBack_Type);
-
-
-    initerrno();
-    init_sha();
-    init_sha256();
-    init_sha512();
-    init_md5();
-    init_random();
-    init_sre();
-    initmath();
-    initoperator();
-    initbinascii();
-    initpwd();
-    initposix();
-    init_struct();
-    initdatetime();
-    init_functools();
-    init_collections();
-    inititertools();
-    initresource();
-    initsignal();
-    initselect();
-    initfcntl();
-    inittime();
-    initarray();
-    initzlib();
-    init_codecs();
-    init_socket();
-    initunicodedata();
-    initcStringIO();
-    init_io();
-    initzipimport();
-    init_csv();
-    init_ssl();
-    init_sqlite3();
-    PyMarshal_Init();
-    initstrop();
-    init_ast();
 
     setupDefaultClassGCParticipation();
 

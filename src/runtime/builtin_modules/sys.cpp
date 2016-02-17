@@ -681,10 +681,6 @@ void setupSys() {
                                                   FunctionMetadata::create((void*)sysGetRecursionLimit, UNKNOWN, 0),
                                                   "getrecursionlimit", getrecursionlimit_doc));
 
-    sys_module->giveAttr("meta_path", new BoxedList());
-    sys_module->giveAttr("path_hooks", new BoxedList());
-    sys_module->giveAttr("path_importer_cache", new BoxedDict());
-
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
     sys_module->giveAttr("dont_write_bytecode", True);
 
@@ -742,15 +738,30 @@ void setupSys() {
 
 void setupSysEnd() {
     std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
-    for (const auto& p : *sys_modules_dict) {
-        builtin_module_names.push_back(p.first);
-    }
+    for (int i = 0; PyImport_Inittab[i].name != NULL; i++)
+        builtin_module_names.push_back(boxString(PyImport_Inittab[i].name));
 
     std::sort<decltype(builtin_module_names)::iterator, PyLt>(builtin_module_names.begin(), builtin_module_names.end(),
                                                               PyLt());
 
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
+
+#ifndef NDEBUG
+    for (const auto& p : *sys_modules_dict) {
+        assert(PyString_Check(p.first));
+
+        bool found = false;
+        for (int i = 0; PyImport_Inittab[i].name != NULL; i++) {
+            if (((BoxedString*)p.first)->s() == PyImport_Inittab[i].name) {
+                found = true;
+            }
+        }
+        if (!found)
+            assert(0 && "found a module which is inside sys.modules but not listed inside PyImport_Inittab!");
+    }
+#endif
+
     sys_flags_cls->finishInitialization();
 
     /* version_info */

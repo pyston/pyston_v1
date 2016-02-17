@@ -1,3 +1,4 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
 
 /* Module definition and import implementation */
 
@@ -81,6 +82,19 @@ typedef unsigned short mode_t;
 */
 #define MAGIC (62211 | ((long)'\r'<<16) | ((long)'\n'<<24))
 
+// Pyston change: add this definitions
+const struct filedescr _PyImport_DynLoadFiletab[] = {
+    {".pyston.so", "rb", C_EXTENSION},
+    {0, 0}
+};
+static struct _frozen _PyImport_FrozenModules[] = {
+    {0, 0, 0}
+};
+struct _frozen *PyImport_FrozenModules = _PyImport_FrozenModules;
+
+// Pyston change: add this static variable instead of storing it inside the interpreter state
+static PyObject *modules_reloading = NULL;
+
 /* Magic word as global; note that _PyImport_Init() can change the
    value of this global to accommodate for alterations of how the
    compiler works which are enabled by command line switches. */
@@ -106,10 +120,13 @@ static const struct filedescr _PyImport_StandardFiletab[] = {
 #else
 static const struct filedescr _PyImport_StandardFiletab[] = {
     {".py", "U", PY_SOURCE},
+// Pyston change: disable the other file extensions
+/*
 #ifdef MS_WINDOWS
     {".pyw", "U", PY_SOURCE},
 #endif
     {".pyc", "rb", PY_COMPILED},
+*/
     {0, 0}
 };
 #endif
@@ -174,6 +191,9 @@ _PyImport_Init(void)
     filetab[countD + countS].suffix = NULL;
 
     _PyImport_Filetab = filetab;
+
+    // Pyston change:
+    PyGC_AddPotentialRoot(&_PyImport_Filetab, sizeof(void*));
 
     if (Py_OptimizeFlag) {
         /* Replace ".pyc" with ".pyo" in _PyImport_Filetab */
@@ -382,13 +402,17 @@ imp_release_lock(PyObject *self, PyObject *noargs)
 static void
 imp_modules_reloading_clear(void)
 {
-    PyInterpreterState *interp = PyThreadState_Get()->interp;
-    if (interp->modules_reloading != NULL)
-        PyDict_Clear(interp->modules_reloading);
+    // Pyston change: use static variable instead of storing it inside the interpreter state
+    // PyInterpreterState *interp = PyThreadState_Get()->interp;
+    // if (interp->modules_reloading != NULL)
+    //    PyDict_Clear(interp->modules_reloading);
+    if (modules_reloading != NULL)
+        PyDict_Clear(modules_reloading);
 }
 
 /* Helper for sys */
-
+// Pyston change: use diferent implementation from import.cpp
+#if 0
 PyObject *
 PyImport_GetModuleDict(void)
 {
@@ -397,7 +421,7 @@ PyImport_GetModuleDict(void)
         Py_FatalError("PyImport_GetModuleDict: no module dictionary!");
     return interp->modules;
 }
-
+#endif
 
 /* List of names to clear in sys */
 static char* sys_deletes[] = {
@@ -419,7 +443,8 @@ static char* sys_files[] = {
 
 
 /* Un-initialize things, as good as we can */
-
+// Pyston change: we don't support calling cleanup currently
+#if 0
 void
 PyImport_Cleanup(void)
 {
@@ -559,7 +584,7 @@ PyImport_GetMagicNumber(void)
 {
     return pyc_magic;
 }
-
+#endif
 
 /* Magic for extension modules (built-in as well as dynamically
    loaded).  To prevent initializing an extension module more than
@@ -576,7 +601,7 @@ _PyImport_FixupExtension(char *name, char *filename)
 {
     PyObject *modules, *mod, *dict, *copy;
     if (extensions == NULL) {
-        extensions = PyDict_New();
+        extensions = PyGC_AddRoot(PyDict_New());
         if (extensions == NULL)
             return NULL;
     }
@@ -669,11 +694,13 @@ remove_module(const char *name)
  * example.
  */
 PyObject *
-PyImport_ExecCodeModule(char *name, PyObject *co)
+PyImport_ExecCodeModule(const char *name, PyObject *co)
 {
     return PyImport_ExecCodeModuleEx(name, co, (char *)NULL);
 }
 
+// Pyston change: use our implementation from import.cpp and disable compiled module support
+#if 0
 PyObject *
 PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
 {
@@ -726,7 +753,6 @@ PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
     remove_module(name);
     return NULL;
 }
-
 
 /* Given a pathname for a Python source file, fill a buffer with the
    pathname for the corresponding compiled file.  Return the pathname
@@ -862,6 +888,14 @@ parse_source_module(const char *pathname, FILE *fp)
     PyArena_Free(arena);
     return co;
 }
+#else
+static PyObject *
+load_compiled_module(char *name, char *cpathname, FILE *fp) {
+    // we don't support compiled aka bytecode files currently
+    assert(0);
+    abort();
+}
+#endif
 
 
 /* Helper to open a bytecode file for writing in exclusive mode */
@@ -902,7 +936,7 @@ open_exclusive(char *filename, mode_t mode)
    modification of its source into the header.
    Errors are ignored, if a write error occurs an attempt is made to
    remove the file. */
-
+#if 0
 static void
 write_compiled_module(PyCodeObject *co, char *cpathname, struct stat *srcstat, time_t mtime)
 {
@@ -991,6 +1025,7 @@ update_compiled_module(PyCodeObject *co, char *pathname)
     Py_DECREF(newname);
     return 1;
 }
+#endif
 
 #ifdef MS_WINDOWS
 
@@ -1028,6 +1063,8 @@ win32_mtime(FILE *fp, char *pathname)
    object WITH INCREMENTED REFERENCE COUNT.  If there's a matching
    byte-compiled file, use that instead. */
 
+// Pyston change: use our implementation from import.cpp
+#if 0
 static PyObject *
 load_source_module(char *name, char *pathname, FILE *fp)
 {
@@ -1107,13 +1144,17 @@ error_exit:
     PyMem_FREE(buf);
     return NULL;
 }
+#else
+PyObject *
+load_source_module(char *name, char *pathname, FILE *fp);
+#endif
 
 
 /* Forward */
 static PyObject *load_module(char *, FILE *, char *, int, PyObject *);
 static struct filedescr *find_module(char *, char *, PyObject *,
                                      char *, size_t, FILE **, PyObject **);
-static struct _frozen *find_frozen(char *name);
+static struct _frozen *find_frozen(const char *name);
 
 /* Load a package and return its module object WITH INCREMENTED
    REFERENCE COUNT */
@@ -2011,7 +2052,7 @@ init_builtin(char *name)
 /* Frozen modules */
 
 static struct _frozen *
-find_frozen(char *name)
+find_frozen(const char *name)
 {
     struct _frozen *p;
 
@@ -2054,7 +2095,7 @@ get_frozen_object(char *name)
    This function is also used from frozenmain.c */
 
 int
-PyImport_ImportFrozenModule(char *name)
+PyImport_ImportFrozenModule(const char *name)
 {
     struct _frozen *p = find_frozen(name);
     PyObject *co;
@@ -2187,7 +2228,7 @@ PyImport_ImportModuleNoBlock(const char *name)
 static PyObject *get_parent(PyObject *globals, char *buf,
                             Py_ssize_t *p_buflen, int level);
 static PyObject *load_next(PyObject *mod, PyObject *altmod,
-                           char **p_name, char *buf, Py_ssize_t *p_buflen);
+                           const char **p_name, char *buf, Py_ssize_t *p_buflen);
 static int mark_miss(char *name);
 static int ensure_fromlist(PyObject *mod, PyObject *fromlist,
                            char *buf, Py_ssize_t buflen, int recursive);
@@ -2196,7 +2237,7 @@ static PyObject * import_submodule(PyObject *mod, char *name, char *fullname);
 /* The Magnum Opus of dotted-name import :-) */
 
 static PyObject *
-import_module_level(char *name, PyObject *globals, PyObject *locals,
+import_module_level(const char *name, PyObject *globals, PyObject *locals,
                     PyObject *fromlist, int level)
 {
     char *buf;
@@ -2280,7 +2321,7 @@ error_exit:
 }
 
 PyObject *
-PyImport_ImportModuleLevel(char *name, PyObject *globals, PyObject *locals,
+PyImport_ImportModuleLevel(const char *name, PyObject *globals, PyObject *locals,
                          PyObject *fromlist, int level)
 {
     PyObject *result;
@@ -2315,21 +2356,23 @@ get_parent(PyObject *globals, char *buf, Py_ssize_t *p_buflen, int level)
     PyObject *pkgname, *modname, *modpath, *modules, *parent;
     int orig_level = level;
 
-    if (globals == NULL || !PyDict_Check(globals) || !level)
+    // Pyston change: support attrwrapper as globals
+    // if (globals == NULL || !PyDict_Check(globals) || !level)
+    if (globals == NULL || (!PyDict_Check(globals) && globals->ob_type != &PyAttrWrapper_Type) || !level)
         return Py_None;
 
     if (namestr == NULL) {
-        namestr = PyString_InternFromString("__name__");
+        namestr = PyGC_AddRoot(PyString_InternFromString("__name__"));
         if (namestr == NULL)
             return NULL;
     }
     if (pathstr == NULL) {
-        pathstr = PyString_InternFromString("__path__");
+        pathstr = PyGC_AddRoot(PyString_InternFromString("__path__"));
         if (pathstr == NULL)
             return NULL;
     }
     if (pkgstr == NULL) {
-        pkgstr = PyString_InternFromString("__package__");
+        pkgstr = PyGC_AddRoot(PyString_InternFromString("__package__"));
         if (pkgstr == NULL)
             return NULL;
     }
@@ -2469,10 +2512,10 @@ get_parent(PyObject *globals, char *buf, Py_ssize_t *p_buflen, int level)
 
 /* altmod is either None or same as mod */
 static PyObject *
-load_next(PyObject *mod, PyObject *altmod, char **p_name, char *buf,
+load_next(PyObject *mod, PyObject *altmod, const char **p_name, char *buf,
           Py_ssize_t *p_buflen)
 {
-    char *name = *p_name;
+    const char *name = *p_name;
     char *dot = strchr(name, '.');
     size_t len;
     char *p;
@@ -2715,11 +2758,13 @@ import_submodule(PyObject *mod, char *subname, char *fullname)
 /* Re-import a module of any kind and return its module object, WITH
    INCREMENTED REFERENCE COUNT */
 
+
 PyObject *
 PyImport_ReloadModule(PyObject *m)
 {
-    PyInterpreterState *interp = PyThreadState_Get()->interp;
-    PyObject *modules_reloading = interp->modules_reloading;
+    // Pyston change: use static variable instead of storing it inside the interpreter state
+    // PyInterpreterState *interp = PyThreadState_Get()->interp;
+    // PyObject *modules_reloading = interp->modules_reloading;*/
     PyObject *modules = PyImport_GetModuleDict();
     PyObject *path = NULL, *loader = NULL, *existing_m = NULL;
     char *name, *subname;
@@ -2727,6 +2772,10 @@ PyImport_ReloadModule(PyObject *m)
     struct filedescr *fdp;
     FILE *fp = NULL;
     PyObject *newm;
+
+    // Pyston change: initalize static variable
+    if (!modules_reloading)
+        modules_reloading = PyGC_AddRoot(PyDict_New());
 
     if (modules_reloading == NULL) {
         Py_FatalError("PyImport_ReloadModule: "
@@ -2840,13 +2889,13 @@ PyImport_Import(PyObject *module_name)
 
     /* Initialize constant string objects */
     if (silly_list == NULL) {
-        import_str = PyString_InternFromString("__import__");
+        import_str = PyGC_AddRoot(PyString_InternFromString("__import__"));
         if (import_str == NULL)
             return NULL;
-        builtins_str = PyString_InternFromString("__builtins__");
+        builtins_str = PyGC_AddRoot(PyString_InternFromString("__builtins__"));
         if (builtins_str == NULL)
             return NULL;
-        silly_list = Py_BuildValue("[s]", "__doc__");
+        silly_list = PyGC_AddRoot(Py_BuildValue("[s]", "__doc__"));
         if (silly_list == NULL)
             return NULL;
     }
@@ -2871,7 +2920,9 @@ PyImport_Import(PyObject *module_name)
     }
 
     /* Get the __import__ function from the builtins */
-    if (PyDict_Check(builtins)) {
+    // Pyston change: add support for attrwrapper
+    // if (PyDict_Check(builtins)) {
+    if (PyDict_Check(builtins) || builtins->ob_type == &PyAttrWrapper_Type) {
         import = PyObject_GetItem(builtins, import_str);
         if (import == NULL)
             PyErr_SetObject(PyExc_KeyError, import_str);
@@ -2903,6 +2954,10 @@ static PyObject *
 imp_get_magic(PyObject *self, PyObject *noargs)
 {
     char buf[4];
+
+    // Pyston change: we have different pyc
+    assert(0);
+    abort();
 
     buf[0] = (char) ((pyc_magic >>  0) & 0xff);
     buf[1] = (char) ((pyc_magic >>  8) & 0xff);
@@ -3426,7 +3481,6 @@ initimp(void)
    returned and the existing table is unchanged.
 
    After a similar function by Just van Rossum. */
-
 int
 PyImport_ExtendInittab(struct _inittab *newtab)
 {
@@ -3441,6 +3495,10 @@ PyImport_ExtendInittab(struct _inittab *newtab)
         return 0; /* Nothing to do */
     for (i = 0; PyImport_Inittab[i].name != NULL; i++)
         ;
+
+    // Pyston change: Let the GC know about the variable
+    if (!our_copy)
+         PyGC_AddPotentialRoot(&our_copy, sizeof(void*));
 
     /* Allocate new memory for the combined table */
     p = our_copy;

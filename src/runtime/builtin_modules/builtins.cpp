@@ -478,8 +478,11 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    std::string _name = static_cast<BoxedString*>(name)->s();
-    return importModuleLevel(_name, globals, fromlist, ((BoxedInt*)level)->n);
+    Box* rtn
+        = PyImport_ImportModuleLevel(((BoxedString*)name)->c_str(), globals, NULL, fromlist, ((BoxedInt*)level)->n);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
@@ -1992,7 +1995,7 @@ void setupBuiltins() {
                                    ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
     builtins_module->giveAttr("__import__",
                               new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
-                                                               { None, None, None, boxInt(-1) }, NULL, import_doc));
+                                                               { NULL, NULL, NULL, boxInt(-1) }, NULL, import_doc));
 
     enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
                                        false, "enumerate");
