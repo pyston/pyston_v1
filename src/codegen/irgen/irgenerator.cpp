@@ -2794,7 +2794,7 @@ public:
 
         llvm::BasicBlock* orig_block = curblock;
 
-        llvm::BasicBlock* cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        llvm::BasicBlock* cxx_exc_dest = llvm::BasicBlock::Create(g.context, "cxxwrapper", irstate->getLLVMFunction());
 
         emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
 

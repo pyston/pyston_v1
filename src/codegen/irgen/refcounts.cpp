@@ -79,18 +79,16 @@ void addIncrefs(llvm::Value* v, int num_refs, llvm::Instruction* incref_pt) {
 #ifdef Py_REF_DEBUG
     auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
     auto reftotal = new llvm::LoadInst(reftotal_gv, "", incref_pt);
-    auto new_reftotal = llvm::BinaryOperator::Create(
-        llvm::BinaryOperator::BinaryOps::Add, reftotal,
-        getConstantInt(num_refs, g.i64), "", incref_pt);
+    auto new_reftotal = llvm::BinaryOperator::Create(llvm::BinaryOperator::BinaryOps::Add, reftotal,
+                                                     getConstantInt(num_refs, g.i64), "", incref_pt);
     new llvm::StoreInst(new_reftotal, reftotal_gv, incref_pt);
 #endif
 
     llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
     auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", incref_pt);
     auto refcount = new llvm::LoadInst(refcount_ptr, "", incref_pt);
-    auto new_refcount = llvm::BinaryOperator::Create(
-        llvm::BinaryOperator::BinaryOps::Add, refcount,
-        getConstantInt(num_refs, g.i64), "", incref_pt);
+    auto new_refcount = llvm::BinaryOperator::Create(llvm::BinaryOperator::BinaryOps::Add, refcount,
+                                                     getConstantInt(num_refs, g.i64), "", incref_pt);
     new llvm::StoreInst(new_refcount, refcount_ptr, incref_pt);
 }
 
@@ -100,22 +98,20 @@ void addDecrefs(llvm::Value* v, int num_refs, llvm::Instruction* decref_pt) {
 #ifdef Py_REF_DEBUG
     auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
     auto reftotal = new llvm::LoadInst(reftotal_gv, "", decref_pt);
-    auto new_reftotal = llvm::BinaryOperator::Create(
-        llvm::BinaryOperator::BinaryOps::Sub, reftotal,
-        getConstantInt(num_refs, g.i64), "", decref_pt);
+    auto new_reftotal = llvm::BinaryOperator::Create(llvm::BinaryOperator::BinaryOps::Sub, reftotal,
+                                                     getConstantInt(num_refs, g.i64), "", decref_pt);
     new llvm::StoreInst(new_reftotal, reftotal_gv, decref_pt);
 #endif
 
     llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
     auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", decref_pt);
     auto refcount = new llvm::LoadInst(refcount_ptr, "", decref_pt);
-    auto new_refcount = llvm::BinaryOperator::Create(
-        llvm::BinaryOperator::BinaryOps::Sub, refcount,
-        getConstantInt(num_refs, g.i64), "", decref_pt);
+    auto new_refcount = llvm::BinaryOperator::Create(llvm::BinaryOperator::BinaryOps::Sub, refcount,
+                                                     getConstantInt(num_refs, g.i64), "", decref_pt);
     new llvm::StoreInst(new_refcount, refcount_ptr, decref_pt);
 
     llvm::BasicBlock* cur_block = decref_pt->getParent();
-    llvm::BasicBlock* dealloc_block = llvm::BasicBlock::Create(g.context, "", decref_pt->getParent()->getParent());
+    llvm::BasicBlock* dealloc_block = llvm::BasicBlock::Create(g.context, "dealloc", decref_pt->getParent()->getParent());
     llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(decref_pt);
 
     assert(llvm::isa<llvm::BranchInst>(cur_block->getTerminator()));
@@ -268,6 +264,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto SBB : successors) {
                 assert(states.count(SBB));
                 for (auto&& p : states[SBB].refs) {
+                    assert(p.second > 0);
                     tracked_values.insert(p.first);
                 }
             }
@@ -304,6 +301,16 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     else
                         assert(state.refs.count(v) == 0);
                 } else {
+                    llvm::outs() << *v << " goes to multiple successors\n";
+
+                    for (auto SBB : successors) {
+                        auto it = states[SBB].refs.find(v);
+                        if (it != states[SBB].refs.end()) {
+                            llvm::outs() << SBB->getName() << ": " << it->second << '\n';
+                        } else
+                            llvm::outs() << SBB->getName() << ": " << 0 << '\n';
+                    }
+
                     assert(0 && "finish implementing");
                 }
             }
@@ -346,6 +353,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     if (rt->vars[op].reftype == RefType::OWNED) {
                         if (state.refs[op] == 0) {
                             // Don't do any updates now since we are iterating over the bb
+                            llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
                             last_uses.push_back(std::make_pair(op, &I));
                             state.refs[op] = 1;
                         }
@@ -382,7 +390,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 addDecrefs(p.first, 1, findIncrefPt(invoke->getUnwindDest()));
             } else {
                 assert(p.second != p.second->getParent()->getTerminator());
-                addDecrefs(p.first, 1, p.second->getNextNode());
+                auto next = p.second->getNextNode();
+                ASSERT(!llvm::isa<llvm::UnreachableInst>(next), "Can't add decrefs after this function...");
+                addDecrefs(p.first, 1, next);
             }
         }
 
