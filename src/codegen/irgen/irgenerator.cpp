@@ -204,13 +204,15 @@ llvm::Value* IRGenState::getFrameInfoVar() {
 
             // frame_info.exc.type = NULL
             llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+            getRefcounts()->setType(null_value, RefType::BORROWED);
             llvm::Value* exc_info = getExcinfoGep(builder, al);
             builder.CreateStore(
                 null_value, builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
 
             // frame_info.boxedLocals = NULL
             llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
-            builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
+            builder.CreateStore(getRefcounts()->setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED),
+                                boxed_locals_gep);
 
             if (getScopeInfo()->usesNameLookup()) {
                 // frame_info.boxedLocals = createDict()
@@ -222,7 +224,8 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // frame_info.frame_obj = NULL
             static llvm::Type* llvm_frame_obj_type_ptr
                 = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
-            builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
+            builder.CreateStore(getRefcounts()->setType(getNullPtr(llvm_frame_obj_type_ptr), RefType::BORROWED),
+                                getFrameObjGep(builder, al));
 
             this->frame_info = al;
         }
@@ -500,11 +503,11 @@ public:
     }
 
     Box* getIntConstant(int64_t n) override {
-        return autoDecref(irstate->getSourceInfo()->parent_module->getIntConstant(n));
+        return irstate->getSourceInfo()->parent_module->getIntConstant(n);
     }
 
     Box* getFloatConstant(double d) override {
-        return autoDecref(irstate->getSourceInfo()->parent_module->getFloatConstant(d));
+        return irstate->getSourceInfo()->parent_module->getFloatConstant(d);
     }
 
     llvm::Value* setType(llvm::Value* v, RefType reftype) {

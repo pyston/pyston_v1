@@ -466,14 +466,14 @@ BORROWED(BoxedString*) BoxedModule::getStringConstant(llvm::StringRef ast_str, b
     return r;
 }
 
-Box* BoxedModule::getUnicodeConstant(llvm::StringRef ast_str) {
+BORROWED(Box*) BoxedModule::getUnicodeConstant(llvm::StringRef ast_str) {
     Box*& r = unicode_constants[ast_str];
     if (!r)
         r = decodeUTF8StringPtr(ast_str);
     return r;
 }
 
-BoxedInt* BoxedModule::getIntConstant(int64_t n) {
+BORROWED(BoxedInt*) BoxedModule::getIntConstant(int64_t n) {
     BoxedInt*& r = int_constants[n];
     if (!r)
         r = new BoxedInt(n);
@@ -487,21 +487,21 @@ static int64_t getDoubleBits(double d) {
     return rtn;
 }
 
-BoxedFloat* BoxedModule::getFloatConstant(double d) {
+BORROWED(BoxedFloat*) BoxedModule::getFloatConstant(double d) {
     BoxedFloat*& r = float_constants[getDoubleBits(d)];
     if (!r)
         r = static_cast<BoxedFloat*>(boxFloat(d));
     return r;
 }
 
-Box* BoxedModule::getPureImaginaryConstant(double d) {
+BORROWED(Box*) BoxedModule::getPureImaginaryConstant(double d) {
     Box*& r = imaginary_constants[getDoubleBits(d)];
     if (!r)
         r = createPureImaginary(d);
     return r;
 }
 
-Box* BoxedModule::getLongConstant(llvm::StringRef ast_str) {
+BORROWED(Box*) BoxedModule::getLongConstant(llvm::StringRef ast_str) {
     Box*& r = long_constants[ast_str];
     if (!r)
         r = createLong(ast_str);

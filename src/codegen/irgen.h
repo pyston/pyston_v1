@@ -201,7 +201,7 @@ private:
     llvm::ValueMap<llvm::Value*, RefcountState> vars;
 public:
 
-    void setType(llvm::Value* v, RefType reftype);
+    llvm::Value* setType(llvm::Value* v, RefType reftype);
     void refConsumed(llvm::Value* v, llvm::Instruction*);
     static void addRefcounts(IRGenState* state);
 };
