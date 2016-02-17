@@ -111,8 +111,9 @@ void addDecrefs(llvm::Value* v, int num_refs, llvm::Instruction* decref_pt) {
     new llvm::StoreInst(new_refcount, refcount_ptr, decref_pt);
 
     llvm::BasicBlock* cur_block = decref_pt->getParent();
-    llvm::BasicBlock* dealloc_block = llvm::BasicBlock::Create(g.context, "dealloc", decref_pt->getParent()->getParent());
     llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(decref_pt);
+    llvm::BasicBlock* dealloc_block
+        = llvm::BasicBlock::Create(g.context, "dealloc", decref_pt->getParent()->getParent(), continue_block);
 
     assert(llvm::isa<llvm::BranchInst>(cur_block->getTerminator()));
     cur_block->getTerminator()->eraseFromParent();
@@ -273,46 +274,51 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 assert(rt->vars.count(v));
                 auto refstate = rt->vars[v];
 
-                if (refstate.reftype == RefType::BORROWED) {
-                    int min_refs = 1000000000;
-                    for (auto SBB : successors) {
-                        auto it = states[SBB].refs.find(v);
-                        if (it != states[SBB].refs.end()) {
-                            min_refs = std::min(it->second, min_refs);
-                        } else
-                            min_refs = 0;
-                    }
-
-                    for (auto SBB : successors) {
-                        auto it = states[SBB].refs.find(v);
-                        int this_refs = 0;
-                        if (it != states[SBB].refs.end()) {
-                            this_refs = it->second;
-                        }
-                        if (this_refs > min_refs) {
-                            addIncrefs(v, this_refs - min_refs, findIncrefPt(SBB));
-                            //llvm::outs() << *incref_pt << '\n';
-                            //llvm::outs() << "Need to incref " << *v << " at beginning of " << SBB->getName() << "\n";
-                        }
-                    }
-
-                    if (min_refs)
-                        state.refs[v] = min_refs;
-                    else
-                        assert(state.refs.count(v) == 0);
-                } else {
-                    llvm::outs() << *v << " goes to multiple successors\n";
-
-                    for (auto SBB : successors) {
-                        auto it = states[SBB].refs.find(v);
-                        if (it != states[SBB].refs.end()) {
-                            llvm::outs() << SBB->getName() << ": " << it->second << '\n';
-                        } else
-                            llvm::outs() << SBB->getName() << ": " << 0 << '\n';
-                    }
-
-                    assert(0 && "finish implementing");
+                int min_refs = 1000000000;
+                for (auto SBB : successors) {
+                    auto it = states[SBB].refs.find(v);
+                    if (it != states[SBB].refs.end()) {
+                        min_refs = std::min(it->second, min_refs);
+                    } else
+                        min_refs = 0;
                 }
+
+                if (refstate.reftype == RefType::OWNED)
+                    min_refs = std::max(1, min_refs);
+
+                for (auto SBB : successors) {
+                    auto it = states[SBB].refs.find(v);
+                    int this_refs = 0;
+                    if (it != states[SBB].refs.end()) {
+                        this_refs = it->second;
+                    }
+                    if (this_refs > min_refs) {
+                        addIncrefs(v, this_refs - min_refs, findIncrefPt(SBB));
+                        //llvm::outs() << *incref_pt << '\n';
+                        //llvm::outs() << "Need to incref " << *v << " at beginning of " << SBB->getName() << "\n";
+                    } else if (this_refs < min_refs) {
+                        assert(refstate.reftype == RefType::OWNED);
+                        addDecrefs(v, min_refs - this_refs, findIncrefPt(SBB));
+                    }
+                }
+
+                if (min_refs)
+                    state.refs[v] = min_refs;
+                else
+                    assert(state.refs.count(v) == 0);
+
+
+#if 0
+                llvm::outs() << *v << " goes to multiple successors\n";
+
+                for (auto SBB : successors) {
+                    auto it = states[SBB].refs.find(v);
+                    if (it != states[SBB].refs.end()) {
+                        llvm::outs() << SBB->getName() << ": " << it->second << '\n';
+                    } else
+                        llvm::outs() << SBB->getName() << ": " << 0 << '\n';
+                }
+#endif
             }
         }
 

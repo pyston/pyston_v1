@@ -4281,6 +4281,12 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             throw e;
     }
 
+    if (num_output_args < 1)
+        arg1 = NULL;
+    if (num_output_args < 2)
+        arg2 = NULL;
+    if (num_output_args < 3)
+        arg3 = NULL;
     AUTO_XDECREF(arg1);
     AUTO_XDECREF(arg2);
     AUTO_XDECREF(arg3);
