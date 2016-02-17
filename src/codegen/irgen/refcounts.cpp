@@ -342,9 +342,17 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     num_consumed = it->second;
 
                 if (num_times_as_op[op] > num_consumed) {
-                    if (rt->vars[op].reftype == RefType::BORROWED) {
-                    } else {
-                        assert(state.refs.count(op) && "handle this case (last reference of an owned var)");
+                    if (rt->vars[op].reftype == RefType::OWNED) {
+                        if (state.refs[op] == 0) {
+                            if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
+                                addDecrefs(op, 1, findIncrefPt(invoke->getNormalDest()));
+                                addDecrefs(op, 1, findIncrefPt(invoke->getUnwindDest()));
+                            } else {
+                                assert(&I != I.getParent()->getTerminator());
+                                addDecrefs(op, 1, I.getNextNode());
+                            }
+                            state.refs[op] = 1;
+                        }
                     }
                 }
 

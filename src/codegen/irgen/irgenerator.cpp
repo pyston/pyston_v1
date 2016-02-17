@@ -271,6 +271,9 @@ llvm::Value* IRGenState::getGlobalsIfCustom() {
     return getGlobals();
 }
 
+// XXX This is pretty hacky, but I think I can get rid of it once I merge in Marius's new frame introspection work
+#define NO_CXX_INTERCEPTION ((llvm::BasicBlock*)-1)
+
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
@@ -280,10 +283,14 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
-        bool needs_refcounting_fixup = true;
-        bool needs_cxx_interception
-            = (target_exception_style == CXX
-               && (needs_refcounting_fixup || unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI));
+        bool needs_cxx_interception;
+        if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
+            needs_cxx_interception = false;
+        } else {
+            bool needs_refcounting_fixup = true;
+            needs_cxx_interception = (target_exception_style == CXX && (needs_refcounting_fixup || unw_info.hasHandler()
+                                                                        || irstate->getExceptionStyle() == CAPI));
+        }
 
         if (needs_cxx_interception) {
             // Create the invoke:
@@ -297,7 +304,7 @@ private:
                 final_exc_dest = NULL; // signal to reraise as a capi exception
             }
 
-            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(final_exc_dest);
+            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(unw_info);
             normal_dest->moveAfter(curblock);
 
             llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
@@ -410,7 +417,7 @@ public:
         return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style = CXX) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
@@ -440,9 +447,9 @@ public:
             if (rtn_type == cs->getType()) {
                 return cs.getInstruction();
             } else if (rtn_type == g.i1) {
-                return getBuilder()->CreateTrunc(cs.getInstruction(), rtn_type);
+                return llvm::cast<llvm::Instruction>(getBuilder()->CreateTrunc(cs.getInstruction(), rtn_type));
             } else if (llvm::isa<llvm::PointerType>(rtn_type)) {
-                return getBuilder()->CreateIntToPtr(cs.getInstruction(), rtn_type);
+                return llvm::cast<llvm::Instruction>(getBuilder()->CreateIntToPtr(cs.getInstruction(), rtn_type));
             } else {
                 cs.getInstruction()->getType()->dump();
                 rtn_type->dump();
@@ -453,27 +460,27 @@ public:
         }
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
                             ExceptionStyle target_exception_style = CXX) override {
         return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style);
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
                             ExceptionStyle target_exception_style = CXX) override {
         return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style);
     }
 
-    llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+    llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
                              ExceptionStyle target_exception_style = CXX) override {
         return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style);
     }
 
-    llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+    llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
                              llvm::Value* arg3, ExceptionStyle target_exception_style = CXX) override {
         return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style);
     }
 
-    llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+    llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
                           const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) override {
         std::vector<llvm::Value*> stackmap_args;
 
@@ -2756,10 +2763,17 @@ public:
         return capi_exc_dest;
     }
 
-    llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) override {
+    llvm::BasicBlock* getCXXExcDest(const UnwindInfo& unw_info) override {
         //llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
         //if (cxx_exc_dest)
             //return cxx_exc_dest;
+
+        llvm::BasicBlock* final_dest;
+        if (unw_info.hasHandler()) {
+            final_dest = unw_info.exc_dest;
+        } else {
+            final_dest = NULL;
+        }
 
         llvm::BasicBlock* orig_block = curblock;
 
@@ -2812,7 +2826,8 @@ public:
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
-            auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
+            auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
+                                                 g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);

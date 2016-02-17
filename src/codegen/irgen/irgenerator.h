@@ -41,6 +41,7 @@ struct PatchpointInfo;
 class ScopeInfo;
 class TypeAnalysis;
 class RefcountTracker;
+class UnwindInfo;
 
 typedef std::unordered_map<InternedString, CompilerVariable*> SymbolTable;
 typedef std::map<InternedString, CompilerVariable*> SortedSymbolTable;
@@ -163,7 +164,7 @@ public:
                                       std::vector<llvm::Value*>& stackmap_args) = 0;
     virtual void addOutgoingExceptionState(ExceptionState exception_state) = 0;
     virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
-    virtual llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) = 0;
+    virtual llvm::BasicBlock* getCXXExcDest(const UnwindInfo&) = 0;
     virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
                                              AST_stmt* current_stmt) = 0;
     virtual CFGBlock* getCFGBlock() = 0;

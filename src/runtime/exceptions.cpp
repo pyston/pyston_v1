@@ -276,6 +276,7 @@ extern "C" void reraiseCapiExcAsCxx() {
 }
 
 extern "C" void rawThrow(Box* type, Box* value, Box* tb) {
+    startReraise();
     throw ExcInfo(type, value, tb);
 }
 
