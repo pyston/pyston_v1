@@ -132,7 +132,8 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
         assert(!relocatable_syms.count(name));
         name = shared_name;
     } else {
-        name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+        int nsyms = relocatable_syms.size();
+        name = (llvm::Twine("c") + llvm::Twine(nsyms)).str();
     }
 
     relocatable_syms[name] = addr;

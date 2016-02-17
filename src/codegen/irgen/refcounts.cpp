@@ -239,8 +239,6 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     for (auto&& BB : *f) {
         if (llvm::succ_begin(&BB) == llvm::succ_end(&BB)) {
-            printf("%s is a terminator block\n", BB.getName().data());
-
             block_queue.push_back(&BB);
         }
     }
@@ -311,6 +309,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
+        // A place to store any decrefs we might have to do, since those will split the basic block:
+        llvm::SmallVector<std::pair<llvm::Value*, llvm::Instruction*>, 4> last_uses;
+
         for (auto &I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
             llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
             llvm::DenseMap<llvm::Value*, int> num_times_as_op;
@@ -344,13 +345,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (num_times_as_op[op] > num_consumed) {
                     if (rt->vars[op].reftype == RefType::OWNED) {
                         if (state.refs[op] == 0) {
-                            if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
-                                addDecrefs(op, 1, findIncrefPt(invoke->getNormalDest()));
-                                addDecrefs(op, 1, findIncrefPt(invoke->getUnwindDest()));
-                            } else {
-                                assert(&I != I.getParent()->getTerminator());
-                                addDecrefs(op, 1, I.getNextNode());
-                            }
+                            // Don't do any updates now since we are iterating over the bb
+                            last_uses.push_back(std::make_pair(op, &I));
                             state.refs[op] = 1;
                         }
                     }
@@ -380,21 +376,39 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
+        for (auto& p : last_uses) {
+            if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(p.second)) {
+                addDecrefs(p.first, 1, findIncrefPt(invoke->getNormalDest()));
+                addDecrefs(p.first, 1, findIncrefPt(invoke->getUnwindDest()));
+            } else {
+                assert(p.second != p.second->getParent()->getTerminator());
+                addDecrefs(p.first, 1, p.second->getNextNode());
+            }
+        }
+
         if (&BB == &BB.getParent()->front()) {
             for (auto&& p : state.refs) {
                 llvm::outs() << *p.first << " " << p.second << '\n';
-                assert(llvm::isa<llvm::GlobalVariable>(p.first));
+
+                // Anything left should either be an argument or a global variable
+#ifndef NDEBUG
+                if (!llvm::isa<llvm::GlobalVariable>(p.first)) {
+                    bool found = false;
+                    for (auto&& arg : f->args()) {
+                        if (&arg == p.first) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    assert(found);
+                }
+#endif
                 assert(rt->vars[p.first].reftype == RefType::BORROWED);
+
                 addIncrefs(p.first, p.second, findIncrefPt(&BB));
             }
             state.refs.clear();
         }
-
-        llvm::outs() << "End of " << BB.getName() << ":\n";
-        for (auto&& p : state.refs) {
-            llvm::outs() << "With " << p.second << " refs: " << *p.first << '\n';
-        }
-        llvm::outs() << '\n';
 
         for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(&BB), llvm::pred_end(&BB))) {
             bool all_succ_done = true;

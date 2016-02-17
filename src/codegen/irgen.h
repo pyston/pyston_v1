@@ -86,20 +86,20 @@ public:
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                    const std::vector<llvm::Value*>& args, ExceptionStyle target_exception_style = CXX)
-        = 0;
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                    ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                    ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                     llvm::Value* arg2, ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                     llvm::Value* arg2, llvm::Value* arg3, ExceptionStyle target_exception_style = CXX)
-        = 0;
-    virtual llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                  const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                          const std::vector<llvm::Value*>& args,
+                                          ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                          ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                          ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                           llvm::Value* arg2, ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                           llvm::Value* arg2, llvm::Value* arg3,
+                                           ExceptionStyle target_exception_style = CXX) = 0;
+    virtual llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+                                        const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) = 0;
 
     virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
                                                 llvm::Value* exc_val, bool double_check = false) = 0;
@@ -108,6 +108,7 @@ public:
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;
 
     virtual llvm::Value* setType(llvm::Value* v, RefType reftype) = 0;
+    virtual void refConsumed(llvm::Value* v, llvm::Instruction* inst) = 0;
     virtual ConcreteCompilerVariable* getNone() = 0;
 };
 

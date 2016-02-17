@@ -517,6 +517,10 @@ public:
         return irstate->getSourceInfo()->parent_module->getFloatConstant(d);
     }
 
+    void refConsumed(llvm::Value* v, llvm::Instruction* inst) {
+        irstate->getRefcounts()->refConsumed(v, inst);
+    }
+
     llvm::Value* setType(llvm::Value* v, RefType reftype) {
         irstate->getRefcounts()->setType(v, reftype);
         return v;
@@ -1075,12 +1079,15 @@ private:
     ConcreteCompilerVariable* getEllipsis() {
         llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
         auto ellipsis_cls = Ellipsis->cls;
+        emitter.setType(ellipsis, RefType::BORROWED);
         return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis);
     }
 
     llvm::Constant* embedParentModulePtr() {
         BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
-        return embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
+        auto r = embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
+        emitter.setType(r, RefType::BORROWED);
+        return r;
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, const UnwindInfo& unw_info) {
@@ -1277,6 +1284,7 @@ private:
             llvm::Value* rtn
                 = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data, true),
                                       g.llvm_value_type_ptr);
+            emitter.setType(rtn, RefType::BORROWED);
 
             return new ConcreteCompilerVariable(STR, rtn);
         } else if (node->str_type == AST_Str::UNICODE) {
@@ -2571,28 +2579,34 @@ public:
 
         if (scope_info->takesClosure()) {
             passed_closure = AI;
+            emitter.setType(passed_closure, RefType::BORROWED);
             symbol_table[internString(PASSED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getPassedClosureType(), AI);
             ++AI;
         }
 
         if (scope_info->createsClosure()) {
-            if (!passed_closure)
+            if (!passed_closure) {
                 passed_closure = getNullPtr(g.llvm_closure_type_ptr);
+                emitter.setType(passed_closure, RefType::BORROWED);
+            }
 
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
                 g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
+            emitter.setType(new_closure, RefType::OWNED);
             symbol_table[internString(CREATED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure);
         }
 
         if (irstate->getSourceInfo()->is_generator) {
             symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI);
+            emitter.setType(AI, RefType::BORROWED);
             ++AI;
         }
 
         if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
             irstate->setGlobals(AI);
+            emitter.setType(AI, RefType::BORROWED);
             ++AI;
         }
 
@@ -2607,8 +2621,10 @@ public:
 
                     if (arg_types[i]->llvmType() == g.i64)
                         loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
-                    else
+                    else {
                         assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+                        emitter.setType(loaded, RefType::BORROWED);
+                    }
 
                     python_parameters.push_back(loaded);
                 }
@@ -2617,6 +2633,7 @@ public:
             }
 
             python_parameters.push_back(AI);
+            emitter.setType(AI, RefType::BORROWED);
             ++AI;
         }
 

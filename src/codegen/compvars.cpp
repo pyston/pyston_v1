@@ -231,12 +231,14 @@ public:
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr,
                  CompilerVariable* v) override {
         llvm::Constant* ptr = embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr);
+        emitter.setType(ptr, RefType::BORROWED);
         ConcreteCompilerVariable* converted = v->makeConverted(emitter, UNKNOWN);
         // g.funcs.setattr->dump();
         // var->getValue()->dump(); llvm::errs() << '\n';
         // ptr->dump(); llvm::errs() << '\n';
         // converted->getValue()->dump(); llvm::errs() << '\n';
         bool do_patchpoint = ENABLE_ICSETATTRS;
+        llvm::Instruction* inst;
         if (do_patchpoint) {
             ICSetupInfo* pp = createSetattrIC(info.getTypeRecorder(), info.getBJitICInfo());
 
@@ -245,10 +247,11 @@ public:
             llvm_args.push_back(ptr);
             llvm_args.push_back(converted->getValue());
 
-            emitter.createIC(pp, (void*)pyston::setattr, llvm_args, info.unw_info);
+            inst = emitter.createIC(pp, (void*)pyston::setattr, llvm_args, info.unw_info);
         } else {
-            emitter.createCall3(info.unw_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
+            inst = emitter.createCall3(info.unw_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
         }
+        emitter.refConsumed(converted->getValue(), inst);
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr) override {
@@ -456,6 +459,7 @@ public:
             rtn = emitter.createCall3(info.unw_info, rt_func, var->getValue(), converted_rhs->getValue(),
                                       getConstantInt(op_type, g.i32));
         }
+        emitter.setType(rtn, RefType::OWNED);
 
         if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn || op_type == AST_TYPE::Is
             || op_type == AST_TYPE::IsNot) {
@@ -788,6 +792,7 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
         closure_v = convertedClosure->getValue();
     } else {
         closure_v = getNullPtr(g.llvm_closure_type_ptr);
+        emitter.setType(closure_v, RefType::BORROWED);
     }
 
     llvm::Value* scratch;
@@ -813,6 +818,7 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
         g.funcs.createFunctionFromMetadata,
         std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure_v, globals,
                                    scratch, getConstantInt(defaults.size(), g.i64) });
+    emitter.setType(boxed, RefType::OWNED);
 
     return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed);
 }
@@ -2201,6 +2207,7 @@ public:
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
         assert(other_type == STR || other_type == UNKNOWN);
         llvm::Value* boxed = embedRelocatablePtr(var->getValue(), g.llvm_value_type_ptr);
+        emitter.setType(boxed, RefType::BORROWED);
         return new ConcreteCompilerVariable(other_type, boxed);
     }
 
