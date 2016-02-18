@@ -13,7 +13,9 @@ for a in (1, "", "/proc", "nonexisting_dir"):
     except Exception as e:
         print e
 
+print imp.lock_held()
 imp.acquire_lock()
+print imp.lock_held()
 imp.release_lock()
 
 import os

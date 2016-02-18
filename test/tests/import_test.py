@@ -35,3 +35,9 @@ import _multiprocessing
 del _multiprocessing
 del sys.modules["_multiprocessing"]
 import _multiprocessing
+
+import time
+del time
+del sys.modules["time"]
+import time
+print time.sleep(0)
