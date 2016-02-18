@@ -296,6 +296,11 @@ static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     return None;
 }
 
+static Box* classobjDelattr(Box* _cls, Box* _attr) {
+    _classobjSetattr(_cls, _attr, NULL);
+    return None;
+}
+
 static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
     try {
         _classobjSetattr(cls, attr, value);
@@ -1672,6 +1677,8 @@ void setupClassobj() {
                            new BoxedFunction(FunctionMetadata::create((void*)classobjGetattribute, UNKNOWN, 2)));
     classobj_cls->giveAttr("__setattr__",
                            new BoxedFunction(FunctionMetadata::create((void*)classobjSetattr, UNKNOWN, 3)));
+    classobj_cls->giveAttr("__delattr__",
+                           new BoxedFunction(FunctionMetadata::create((void*)classobjDelattr, UNKNOWN, 2)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)classobjStr, STR, 1)));
     classobj_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)classobjRepr, STR, 1)));
     classobj_cls->giveAttr("__dict__", dict_descr);
