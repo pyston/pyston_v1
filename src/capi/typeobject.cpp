@@ -2106,6 +2106,16 @@ void add_operators(BoxedClass* cls) noexcept {
 
     if (cls->tp_new)
         add_tp_new_wrapper(cls);
+
+    // Pyston change:
+    // Call PyType_Modified just to be extra safe.  Our class initialization happens slightly differently from
+    // CPython's, so we end up calling add_operators at more different times than they do.  The issue is that we
+    // sometimes call add_operators after calling typeLookup, so we might have already started using the method cache.
+    // Since add_operators directly adds class attributes, in theory it needs to call PyType_Modified, but CPython
+    // is able to avoid it since they know that no lookups had been cached yet.
+    // We could probably get to the point that we have the same guarantees, but it seems safer to just call
+    // PyType_Modified anyway.
+    PyType_Modified(cls);
 }
 
 static void type_mro_modified(PyTypeObject* type, PyObject* bases) {
