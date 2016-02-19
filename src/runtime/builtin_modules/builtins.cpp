@@ -2015,9 +2015,10 @@ void setupBuiltins() {
 
     enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
                                        false, "enumerate");
-    enumerate_cls->giveAttr(
-        "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false),
-                                     { boxInt(0) }));
+    enumerate_cls->giveAttr("__new__",
+                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3,
+                                                                       ParamNames({ "", "sequence", "start" }, "", "")),
+                                              { boxInt(0) }));
     enumerate_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::iter,
                                                                                    typeFromClass(enumerate_cls), 1)));
     enumerate_cls->giveAttr("next",

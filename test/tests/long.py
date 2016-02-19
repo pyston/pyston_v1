@@ -70,6 +70,7 @@ print pow(-5,  3, 7L)
 print pow(-5,  3, -7L)
 print (11L).__pow__(32, 50L)
 print (11L).__index__()
+print (11L).__rtruediv__(0)
 
 print long("100", 16)
 print long("100", 10)

@@ -111,7 +111,6 @@ test_imaplib            [unknown]
 test_imgfile            [unknown]
 test_importhooks        [unknown]
 test_import             [unknown]
-test_imp                [unknown]
 test_inspect            [unknown]
 test_io                 memory/gc issue?
 test_iterlen            [unknown]
