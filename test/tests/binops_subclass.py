@@ -1,7 +1,3 @@
-# expected: fail
-# - binop ordering is wrong, 
-#   should prefer executing a operation on the subclass first
-
 class M(type):
     def __instancecheck__(self, rhs):
         print "M.instancecheck",
