@@ -1352,6 +1352,13 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
     Py_RETURN_NONE;
 }
 
+static PyObject* builtin_reload(PyObject* self, PyObject* v) noexcept {
+    if (PyErr_WarnPy3k("In 3.x, reload() is renamed to imp.reload()", 1) < 0)
+        return NULL;
+
+    return PyImport_ReloadModule(v);
+}
+
 Box* getreversed(Box* o) {
     static BoxedString* reversed_str = internStringImmortal("__reversed__");
 
@@ -2159,6 +2166,7 @@ void setupBuiltins() {
 
     static PyMethodDef builtin_methods[] = {
         { "print", (PyCFunction)builtin_print, METH_VARARGS | METH_KEYWORDS, print_doc },
+        { "reload", builtin_reload, METH_O, reload_doc },
     };
     for (auto& md : builtin_methods) {
         builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, builtins_module, boxString("__builtin__")));
