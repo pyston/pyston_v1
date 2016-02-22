@@ -440,7 +440,8 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     Box* passthrough = static_cast<Box*>(self);
 
     while (methods && methods->ml_name) {
-        module->giveAttr(methods->ml_name, new BoxedCApiFunction(methods, passthrough, boxString(name)));
+        module->setattr(internStringMortal(methods->ml_name),
+                        new BoxedCApiFunction(methods, passthrough, boxString(name)), NULL);
 
         methods++;
     }
