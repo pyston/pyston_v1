@@ -6,11 +6,11 @@ import subprocess
 import sys
 
 def get_objdump(func):
-    for l in open("perf_map/index.txt"):
+    for l in open(args.perf_map_dir + "/index.txt"):
         addr, this_func = l.split()
         if this_func == func:
             # print ' '.join(["objdump", "-b", "binary", "-m", "i386", "-D", "perf_map/" + func, "--adjust-vma=0x%s" % addr])
-            p = subprocess.Popen(["objdump", "-b", "binary", "-m", "i386:x86-64", "-D", "perf_map/" + func, "--adjust-vma=0x%s" % addr], stdout=subprocess.PIPE)
+            p = subprocess.Popen(["objdump", "-b", "binary", "-m", "i386:x86-64", "-D", args.perf_map_dir + "/" + func, "--adjust-vma=0x%s" % addr], stdout=subprocess.PIPE)
             r = p.communicate()[0]
             assert p.wait() == 0
             return r
@@ -108,6 +108,7 @@ Benchmark that was run.  '--heap-map-target BENCHMARK' is
 equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
     """.strip())
     parser.add_argument("--perf-data", default="perf.data")
+    parser.add_argument("--perf-map-dir", default="perf_map")
     args = parser.parse_args()
 
     func = args.func_name

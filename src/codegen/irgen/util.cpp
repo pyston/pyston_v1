@@ -126,7 +126,7 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
 
     std::string name;
     if (!shared_name.empty()) {
-        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, true);
+        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, /* AllowInternal */ true);
         if (gv)
             return gv;
         assert(!relocatable_syms.count(name));
@@ -139,7 +139,8 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
     relocatable_syms[name] = addr;
 
     llvm::Type* var_type = type->getPointerElementType();
-    return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
+    return new llvm::GlobalVariable(*g.cur_module, var_type, /* isConstant */ false,
+                                    llvm::GlobalVariable::ExternalLinkage, 0, name);
 }
 
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
