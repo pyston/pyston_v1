@@ -396,6 +396,9 @@ private:
     // This needs to be the first member:
     RegionAllocator allocator;
 
+    // Increfs that we thought of doing during the guarding phase that we were able to put off.
+    std::vector<std::pair<RewriterVar*, int>> pending_increfs;
+
 protected:
     // Allocates `bytes` bytes of data.  The allocation will get freed when the rewriter gets freed.
     void* regionAlloc(size_t bytes) { return allocator.alloc(bytes); }

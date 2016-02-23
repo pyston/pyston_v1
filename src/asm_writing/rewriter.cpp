@@ -1177,18 +1177,28 @@ RewriterVar* RewriterVar::setType(RefType type) {
     assert(this->reftype == RefType::UNKNOWN || this->reftype == type);
 
     if (this->reftype == RefType::UNKNOWN) {
-        rewriter->addAction([=]() {
-            int num_needed_refs = this->num_refs_consumed - (this->refHandedOff() ? 1 : 0);
-            assert(num_needed_refs >= 0);
-            if (num_needed_refs > 0) {
-                // XXX do a single add instead of multiple incs
-                for (int i = 0; i < num_needed_refs; i++) {
-                    this->rewriter->_incref(this);
-                }
-            }
+        rewriter->addAction(
+            [=]() {
+                int num_needed_refs = this->num_refs_consumed - (this->refHandedOff() ? 1 : 0);
+                assert(num_needed_refs >= 0);
+                if (num_needed_refs > 0) {
+                    if (rewriter->isDoneGuarding()) {
+                        assert(num_needed_refs == 1); // not bad just curious
 
-            this->bumpUse();
-        }, { this }, ActionType::MUTATION);
+                        // XXX do a single add instead of multiple incs
+                        for (int i = 0; i < num_needed_refs; i++) {
+                            this->rewriter->_incref(this);
+                        }
+                    } else {
+                        rewriter->pending_increfs.push_back(std::make_pair(this, num_needed_refs));
+                    }
+                }
+
+                this->bumpUse();
+                // Register this as a NORMAL (ie non-MUTATION) action since we will be careful to not do any mutations
+                // if we are still in the guarding phase.
+            },
+            { this }, ActionType::NORMAL);
         this->reftype = type;
     }
 
@@ -1219,7 +1229,6 @@ void RewriterVar::_release() {
 void RewriterVar::refConsumed() {
     num_refs_consumed++;
     last_refconsumed_numuses = uses.size();
-    // Maybe emit an incref here to make debugging more clear?
 }
 
 void RewriterVar::bumpUse() {
@@ -1306,6 +1315,13 @@ void Rewriter::commit() {
         for (RewriterVar* arg : args) {
             if (arg->next_use == arg->uses.size()) {
                 arg->_release();
+            }
+        }
+
+        for (auto&& p : pending_increfs) {
+            // TODO use a single add rather than N inc's
+            for (int i = 0; i < p.second; i++) {
+                _incref(p.first);
             }
         }
         assertConsistent();
