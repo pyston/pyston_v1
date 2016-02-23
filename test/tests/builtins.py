@@ -1,3 +1,5 @@
+import sys
+
 __builtins__.aoeu = 1
 print aoeu
 
@@ -41,6 +43,8 @@ print list(enumerate(start=-42, sequence=xrange(5, 10)))
 # If the first argument is None, filter calls checks for truthiness (ie is equivalent to passing 'bool')
 print filter(None, xrange(-5, 5))
 
+print filter(None, unicode("12"))
+
 print isinstance(1, int)
 print isinstance(1, (float, int))
 print isinstance(1, (float, (), (int, 3), 4))
@@ -79,6 +83,7 @@ print hex(12345)
 print oct(234)
 print hex(0)
 print oct(0) # This should not add an additional leading 0, ie should return "0" not "00"
+print abs((-sys.maxint)-1)
 
 try:
     print hex([])
@@ -129,8 +134,23 @@ print apply(sorted, [l], { "reverse" : True })
 print format(5.0, '+')
 print format(5.011111111111, '+.6')
 print format("abc", '')
+print format(0, str(10))
 
 print '{n}'.format(n=None)
+
+print hash(1L)
+def C(long):
+    def __hash__(self):
+        return self
+print hash(2L)
+try:
+    print hash({})
+except TypeError as e:
+    print e
+try:
+    print hash(set())
+except TypeError as e:
+    print e
 
 # Thankfully, setting __builtins__ has no effect:
 __builtins__ = {'zzz': 2}
