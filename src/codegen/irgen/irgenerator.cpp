@@ -2418,7 +2418,18 @@ private:
                 // printf("no st entry, setting undefined\n");
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
                 assert(phi_type->isUsable());
-                cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()));
+
+                // Forward an incref'd None instead of a NULL.
+                // TODO Change to using NULL to represent not-defined for boxed types, similar
+                // to CPython?
+                llvm::Value* v;
+                if (phi_type == phi_type->getBoxType()) {
+                    v = emitter.getNone()->getValue();
+                } else {
+                    v = llvm::UndefValue::get(phi_type->llvmType());
+                }
+
+                cur = new ConcreteCompilerVariable(phi_type, v);
                 _setFake(defined_name, makeBool(0));
             }
         }
