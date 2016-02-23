@@ -38,6 +38,7 @@ addons:
     - g++-4.8
     - gdb
     - libbz2-dev
+    - libgeoip-dev
     - libgmp3-dev
     - libmpfr-dev
     - liblzma-dev
