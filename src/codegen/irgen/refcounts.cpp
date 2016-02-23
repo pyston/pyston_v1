@@ -43,6 +43,8 @@
 namespace pyston {
 
 llvm::Value* RefcountTracker::setType(llvm::Value* v, RefType reftype) {
+    assert(!llvm::isa<llvm::UndefValue>(v));
+
     auto& var = this->vars[v];
 
     assert(var.reftype == reftype || var.reftype == RefType::UNKNOWN);
@@ -245,14 +247,15 @@ class BlockOrderer {
 private:
     llvm::DenseMap<llvm::BasicBlock*, int> priority; // lower goes first
 
-    class BlockComparer {
+    struct BlockComparer {
         bool operator()(std::pair<llvm::BasicBlock*, int> lhs, std::pair<llvm::BasicBlock*, int> rhs) {
-            return lhs.second < rhs.second;
+            return lhs.second > rhs.second;
         }
     };
 
     llvm::DenseSet<llvm::BasicBlock*> in_queue;
-    std::priority_queue<std::pair<llvm::BasicBlock*, int>> queue;
+    std::priority_queue<std::pair<llvm::BasicBlock*, int>, std::vector<std::pair<llvm::BasicBlock*, int>>,
+                        BlockComparer> queue;
 
 public:
     BlockOrderer(std::vector<llvm::BasicBlock*> order) {
@@ -262,6 +265,7 @@ public:
     }
 
     void add(llvm::BasicBlock* b) {
+        assert(in_queue.size() == queue.size());
         if (in_queue.count(b))
             return;
         assert(priority.count(b));
@@ -416,6 +420,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 #endif
 
+        llvm::outs() << '\n';
         llvm::outs() << "Processing " << BB.getName() << '\n';
 
         RefState& state = states[&BB];
@@ -484,6 +489,13 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         // Then, iterate backwards through the instructions in this BB, updating the ref states
         for (auto &I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
+            // Phis get special handling:
+            // - we only use one of the operands to the phi node (based on the block we came from)
+            // - the phi-node-generator is supposed to handle that by putting a refConsumed on the terminator of the previous block
+            // - that refConsumed will caus a use as well.
+            if (llvm::isa<llvm::PHINode>(&I))
+                continue;
+
             llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
             llvm::DenseMap<llvm::Value*, int> num_times_as_op;
 
@@ -536,6 +548,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
+        llvm::outs() << "End of " << BB.getName() << '\n';
+
         // Handle variables that were defined in this BB:
         for (auto&& p : rt->vars) {
             llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
@@ -568,9 +582,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : state.ending_refs) {
                 assert(p.second);
 
-                // Anything left should either be an argument or a global variable
+                // Anything left should either be an argument, constant or global variable
 #ifndef NDEBUG
-                if (!llvm::isa<llvm::GlobalVariable>(p.first)) {
+                if (!llvm::isa<llvm::GlobalVariable>(p.first) && !llvm::isa<llvm::Constant>(p.first)) {
                     bool found = false;
                     for (auto&& arg : f->args()) {
                         if (&arg == p.first) {
@@ -578,6 +592,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                             break;
                         }
                     }
+                    if (!found)
+                        llvm::outs() << "Couldn't find " << *p.first << '\n';
                     assert(found);
                 }
 #endif
@@ -590,7 +606,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         if (endingRefsDifferent(orig_ending_refs, state.ending_refs)) {
             llvm::outs() << "changed!\n";
-            for (auto&& SBB : llvm::successors(&BB)) {
+            for (auto&& SBB : llvm::predecessors(&BB)) {
+                // llvm::outs() << "reconsidering: " << SBB->getName() << '\n';
                 orderer.add(SBB);
             }
         } else {

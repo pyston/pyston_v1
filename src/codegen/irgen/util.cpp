@@ -245,6 +245,9 @@ public:
 };
 
 void dumpPrettyIR(llvm::Function* f) {
+    //f->getParent()->dump();
+    //return;
+
     std::unique_ptr<llvm::Module> tmp_module(llvm::CloneModule(f->getParent()));
     // std::unique_ptr<llvm::Module> tmp_module(new llvm::Module("tmp", g.context));
 
