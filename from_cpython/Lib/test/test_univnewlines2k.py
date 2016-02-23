@@ -1,4 +1,3 @@
-# expected: fail
 # Tests universal newline support for both reading and parsing files.
 import unittest
 import os

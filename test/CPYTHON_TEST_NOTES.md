@@ -197,7 +197,6 @@ test_unicode            argument passing issue?
 test_unicodedata        [unknown]
 test_unicode_file       exit code 139, no error message
 test_unittest           serialize_ast assert
-test_univnewlines2k     [unknown]
 test_univnewlines       [unknown]
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
