@@ -1868,34 +1868,40 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     if (flags == METH_VARARGS) {
         rtn = (Box*)func(self->passthrough, arg1);
         if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1)
+                                        ->setType(RefType::OWNED);
     } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
         rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, arg1, arg2);
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
-                                                                 rewrite_args->arg2);
+                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
     } else if (flags == METH_NOARGS) {
         rtn = (Box*)func(self->passthrough, NULL);
         if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(
-                true, (void*)func, r_passthrough, rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
+                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
+                      ->setType(RefType::OWNED);
     } else if (flags == METH_O) {
         rtn = (Box*)func(self->passthrough, arg1);
         if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1)
+                                        ->setType(RefType::OWNED);
     } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
         assert(paramspec.totalReceived() <= 3); // would need to pass through oargs
         rtn = ((Box * (*)(Box*, Box*, Box*, Box*))func)(self->passthrough, arg1, arg2, arg3);
         if (rewrite_args) {
             if (paramspec.totalReceived() == 1)
-                rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1);
-            else if (paramspec.totalReceived() == 2)
                 rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
-                                                                     rewrite_args->arg1, rewrite_args->arg2);
+                                                                     rewrite_args->arg1)->setType(RefType::OWNED);
+            else if (paramspec.totalReceived() == 2)
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
+                                                   rewrite_args->arg2)->setType(RefType::OWNED);
             else if (paramspec.totalReceived() == 3)
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(
-                    true, (void*)func, r_passthrough, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
+                                                   rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
             else
                 abort();
         }

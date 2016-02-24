@@ -1108,6 +1108,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 throw e;
         }
 
+        AUTO_XDECREF(made);
+        AUTO_XDECREF(arg2);
+        AUTO_XDECREF(arg3);
+
         if (!rewrite_success)
             rewrite_args = NULL;
 

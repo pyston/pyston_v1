@@ -79,7 +79,7 @@ enum class RefType {
     UNKNOWN
 #ifndef NDEBUG
         // Set this to non-zero to make it possible for the debugger to
-        = 0
+        = 1
 #endif
         ,
     OWNED,

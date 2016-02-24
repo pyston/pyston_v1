@@ -513,6 +513,12 @@ void RewriterVar::xdecref() {
 }
 
 void Rewriter::_incref(RewriterVar* var) {
+    // Small optimization: skip any time we want to do xincref(NULL)
+    if (var->isConstant() && var->constant_value == 0) {
+        assert(var->nullable);
+        return;
+    }
+
     assert(!var->nullable);
     //assembler->trap();
     //auto reg = var->getInReg();

@@ -218,6 +218,7 @@ llvm::Value* IRGenState::getFrameInfoVar() {
                 // frame_info.boxedLocals = createDict()
                 // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
                 this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+                getRefcounts()->setType(this->boxed_locals, RefType::OWNED);
                 builder.CreateStore(this->boxed_locals, boxed_locals_gep);
             }
 
@@ -782,6 +783,7 @@ private:
                 llvm::Value* name_arg
                     = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(name, true),
                                           g.llvm_boxedstring_type_ptr);
+                emitter.setType(name_arg, RefType::BORROWED);
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
 
@@ -819,10 +821,11 @@ private:
                 assert(ast_str->str_type == AST_Str::STR);
                 const std::string& module_name = ast_str->str_data;
 
-                llvm::Value* imported = emitter.createCall(unw_info, g.funcs.import,
-                                                           { getConstantInt(level, g.i32), converted_froms->getValue(),
-                                                             embedRelocatablePtr(module_name.c_str(), g.i8_ptr),
-                                                             getConstantInt(module_name.size(), g.i64) });
+                llvm::Value* imported = emitter.createCall(
+                    unw_info, g.funcs.import,
+                    { getConstantInt(level, g.i32), converted_froms->getValue(),
+                      emitter.setType(embedRelocatablePtr(module_name.c_str(), g.i8_ptr), RefType::BORROWED),
+                      getConstantInt(module_name.size(), g.i64) });
                 ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
                 return v;
             }
@@ -1085,8 +1088,8 @@ private:
 
     ConcreteCompilerVariable* getEllipsis() {
         llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
-        auto ellipsis_cls = Ellipsis->cls;
         emitter.setType(ellipsis, RefType::BORROWED);
+        auto ellipsis_cls = Ellipsis->cls;
         return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis);
     }
 
@@ -1185,6 +1188,7 @@ private:
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r);
@@ -1196,7 +1200,8 @@ private:
                 llvm::CallSite call = emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { getConstantInt(0, g.i1), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
-                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
+                      getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -1209,7 +1214,8 @@ private:
                 emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { i1FromBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
-                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
+                      getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
                 _popFake(defined_name);
@@ -1230,9 +1236,10 @@ private:
         } else if (node->num_type == AST_Num::FLOAT) {
             return makeFloat(node->n_float);
         } else if (node->num_type == AST_Num::COMPLEX) {
-            return makePureImaginary(irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
+            return makePureImaginary(emitter,
+                                     irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
         } else {
-            return makeLong(irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
+            return makeLong(emitter, irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
         }
     }
 
@@ -1299,6 +1306,7 @@ private:
         } else if (node->str_type == AST_Str::UNICODE) {
             llvm::Value* rtn = embedRelocatablePtr(
                 irstate->getSourceInfo()->parent_module->getUnicodeConstant(node->str_data), g.llvm_value_type_ptr);
+            emitter.setType(rtn, RefType::BORROWED);
 
             return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
         } else {
@@ -1404,8 +1412,10 @@ private:
         ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
 
         llvm::Value* classobj = emitter.createCall3(
-            unw_info, g.funcs.createUserClass, embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr),
+            unw_info, g.funcs.createUserClass,
+            emitter.setType(embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
             bases_tuple->getValue(), converted_attr_dict->getValue());
+        emitter.setType(classobj, RefType::OWNED);
 
         // Note: createuserClass is free to manufacture non-class objects
         CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj);
@@ -1703,6 +1713,7 @@ private:
             // TODO inefficient
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
                                 val->makeConverted(emitter, UNKNOWN)->getValue());
         } else {
@@ -1888,13 +1899,15 @@ private:
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
             emitter.createCall2(unw_info, g.funcs.delGlobal, irstate->getGlobals(),
-                                embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr));
+                                emitter.setType(embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED));
             return;
         }
 
         if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
             return;
         }
@@ -1904,11 +1917,11 @@ private:
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
         if (symbol_table.count(target->id) == 0) {
-            llvm::CallSite call
-                = emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                     { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                       embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                       getConstantInt(true /*local_error_msg*/, g.i1) });
+            llvm::CallSite call = emitter.createCall(
+                unw_info, g.funcs.assertNameDefined,
+                { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                  emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
+                  getConstantInt(true /*local_error_msg*/, g.i1) });
             call.setDoesNotReturn();
             return;
         }
@@ -1917,10 +1930,11 @@ private:
         ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
         if (is_defined_var) {
-            emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                               { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                 embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                 getConstantInt(true /*local_error_msg*/, g.i1) });
+            emitter.createCall(
+                unw_info, g.funcs.assertNameDefined,
+                { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                  emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
+                  getConstantInt(true /*local_error_msg*/, g.i1) });
             _popFake(defined_name);
         }
 
@@ -2244,7 +2258,7 @@ private:
                 ConcreteCompilerVariable* converted = v->makeConverted(emitter, v->getBoxType());
                 args.push_back(converted->getValue());
             } else {
-                args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone"));
+                args.push_back(emitter.getNone()->getValue());
             }
         }
 

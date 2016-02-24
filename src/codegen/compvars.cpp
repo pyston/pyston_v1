@@ -256,6 +256,7 @@ public:
 
     void delattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, BoxedString* attr) override {
         llvm::Constant* ptr = embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr);
+        emitter.setType(ptr, RefType::BORROWED);
 
         // TODO
         // bool do_patchpoint = ENABLE_ICDELATTRS;
@@ -283,8 +284,8 @@ public:
 
         llvm::Value* cls_value = emitter.getBuilder()->CreateLoad(cls_ptr);
         assert(cls_value->getType() == g.llvm_class_type_ptr);
-        llvm::Value* rtn
-            = emitter.getBuilder()->CreateICmpEQ(cls_value, embedRelocatablePtr(cls, g.llvm_class_type_ptr));
+        llvm::Value* rtn = emitter.getBuilder()->CreateICmpEQ(
+            cls_value, emitter.setType(embedRelocatablePtr(cls, g.llvm_class_type_ptr), RefType::BORROWED));
         return rtn;
     }
 
@@ -1604,12 +1605,14 @@ CompilerVariable* makeUnboxedFloat(IREmitter& emitter, llvm::Value* v) {
 }
 
 
-ConcreteCompilerVariable* makeLong(Box* v) {
-    return new ConcreteCompilerVariable(LONG, embedRelocatablePtr(v, g.llvm_value_type_ptr));
+ConcreteCompilerVariable* makeLong(IREmitter& emitter, Box* v) {
+    return new ConcreteCompilerVariable(
+        LONG, emitter.setType(embedRelocatablePtr(v, g.llvm_value_type_ptr), RefType::BORROWED));
 }
 
-ConcreteCompilerVariable* makePureImaginary(Box* v) {
-    return new ConcreteCompilerVariable(BOXED_COMPLEX, embedRelocatablePtr(v, g.llvm_value_type_ptr));
+ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, Box* v) {
+    return new ConcreteCompilerVariable(
+        BOXED_COMPLEX, emitter.setType(embedRelocatablePtr(v, g.llvm_value_type_ptr), RefType::BORROWED));
 }
 
 class KnownClassobjType : public ValuedCompilerType<BoxedClass*> {
@@ -1742,11 +1745,13 @@ public:
             ASSERT(rtattr, "%s.%s", debugName().c_str(), attr->data());
             if (rtattr->cls == function_cls) {
                 CompilerVariable* clattr = new ConcreteCompilerVariable(
-                    typeFromClass(function_cls), embedRelocatablePtr(rtattr, g.llvm_value_type_ptr));
+                    typeFromClass(function_cls),
+                    emitter.setType(embedRelocatablePtr(rtattr, g.llvm_value_type_ptr), RefType::BORROWED));
 
                 return InstanceMethodType::makeIM(
                     var, clattr,
-                    new ConcreteCompilerVariable(UNKNOWN, embedRelocatablePtr(cls, g.llvm_value_type_ptr)));
+                    new ConcreteCompilerVariable(
+                        UNKNOWN, emitter.setType(embedRelocatablePtr(cls, g.llvm_value_type_ptr), RefType::BORROWED)));
             }
         }
 
@@ -1895,6 +1900,7 @@ public:
                 llvm_value = embedRelocatablePtr(value, g.llvm_value_type_ptr);
             else
                 llvm_value = getNullPtr(g.llvm_value_type_ptr);
+            emitter.setType(llvm_value, RefType::BORROWED);
 
             new_args.push_back(new ConcreteCompilerVariable(UNKNOWN, llvm_value));
         }
@@ -2465,6 +2471,7 @@ public:
         }
 
         llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
+        emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(other_type, rtn);
     }

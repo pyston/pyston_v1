@@ -1248,9 +1248,9 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
                     // will tell the auto-refcount system to decref it.
                     r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
                         ->setType(RefType::OWNED);
-                    // TODO make this stealing
                     r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
                                       rewrite_args->attrval);
+                    rewrite_args->attrval->refConsumed();
 
                     rewrite_args->out_success = true;
                 }
@@ -2591,7 +2591,9 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
                 if (attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
                     if (return_convention == ReturnConvention::NO_RETURN) {
                         assert(!rtn);
-                        rtn = rewriter->loadConst(0, Location::forArg(1));
+                        rtn = rewriter->loadConst(0, Location::forArg(1))
+                                  ->setType(RefType::BORROWED)
+                                  ->setNullable(true);
                     }
                     rewriter->call(true, (void*)NoexcHelper::call, rtn, rewriter->getArg(0),
                                    rewriter->loadConst((intptr_t)attr, Location::forArg(2)));
@@ -2770,10 +2772,8 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
             raiseAttributeError(obj, attr->s());
         }
 
-        // TODO: make setattr() stealing
+        // TODO: make Box::setattr() stealing
         obj->setattr(attr, val, rewrite_args);
-        if (rewrite_args)
-            rewrite_args->attrval->refConsumed();
         Py_DECREF(val);
     }
 
@@ -3798,7 +3798,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 for (int i = 0; i < num_output_args - 3; i++) {
                     rewrite_args->args->getAttr(i * sizeof(Box*))
                         ->setType(RefType::BORROWED)
-                        ->setNullable(true)
+                        ->setNullable(argspec.has_kwargs)
                         ->refConsumed();
                 }
             }
@@ -6782,6 +6782,7 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
         setattr(static_cast<BoxedModule*>(globals), name, value);
     } else {
         RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
+        assert(0 && "check refcounting");
         static_cast<BoxedDict*>(globals)->d[name] = value;
     }
 }

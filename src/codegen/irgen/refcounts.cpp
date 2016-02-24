@@ -104,6 +104,11 @@ void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
 
     llvm::IRBuilder<true> builder(incref_pt);
 
+    // Deal with subtypes of Box:
+    while (v->getType() != g.llvm_value_type_ptr) {
+        v = builder.CreateConstInBoundsGEP2_32(v, 0, 0);
+    }
+
     if (nullable) {
         cur_block = incref_pt->getParent();
         continue_block = cur_block->splitBasicBlock(incref_pt);
@@ -148,6 +153,12 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
 
     assert(num_refs > 0);
     llvm::IRBuilder<true> builder(decref_pt);
+
+    // Deal with subtypes of Box:
+    while (v->getType() != g.llvm_value_type_ptr) {
+        v = builder.CreateConstInBoundsGEP2_32(v, 0, 0);
+    }
+
 #ifdef Py_REF_DEBUG
     auto reftotal_gv = g.cur_module->getOrInsertGlobal("_Py_RefTotal", g.i64);
     auto reftotal = new llvm::LoadInst(reftotal_gv, "", decref_pt);
@@ -671,8 +682,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     if (VERBOSITY()) {
         fprintf(stderr, "After refcounts:\n");
         fprintf(stderr, "\033[35m");
-        f->dump();
-        //dumpPrettyIR(f);
+        dumpPrettyIR(f);
         fprintf(stderr, "\033[0m");
     }
 }

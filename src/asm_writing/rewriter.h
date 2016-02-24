@@ -314,6 +314,7 @@ public:
 #ifndef NDEBUG
     // XXX: for testing, reset these on deallocation so that we will see the next time they get set.
     ~RewriterVar() {
+        rewriter = (Rewriter*)-1;
         reftype = (RefType)-1;
         num_refs_consumed = -11;
     }
