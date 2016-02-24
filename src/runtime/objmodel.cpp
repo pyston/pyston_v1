@@ -1601,6 +1601,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             if (rewrite_args) {
                 RewriterVar* r_rtn
                     = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
+                r_rtn->setType(RefType::OWNED);
                 rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
             return boxInstanceMethod(im_self, im_func, im_class);
@@ -2568,6 +2569,9 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
 
     Box* val;
     if (rewriter.get()) {
+        rewriter->getArg(0)->setType(RefType::BORROWED);
+        rewriter->getArg(1)->setType(RefType::BORROWED);
+
         Location dest;
         TypeRecorder* recorder = rewriter->getTypeRecorder();
         if (recorder)
@@ -2824,7 +2828,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
     if (rewriter.get()) {
         rewriter->getArg(0)->setType(RefType::BORROWED);
         rewriter->getArg(1)->setType(RefType::BORROWED);
-        rewriter->getArg(2)->setType(RefType::BORROWED);
+        rewriter->getArg(2)->setType(RefType::OWNED);
 
         auto r_cls = rewriter->getArg(0)->getAttr(offsetof(Box, cls));
         // rewriter->trap();
@@ -3790,13 +3794,10 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             }
         }
         if (rewrite_args) {
-            // TODO should probably rethink the whole vrefcounting thing here.
-            // which ones actually need new vrefs?
             if (num_output_args >= 3) {
-                RELEASE_ASSERT(0, "not sure what to do here\n");
-                //for (int i = 0; i < num_output_args - 3; i++) {
-                    //rewrite_args->args->getAttr(i * sizeof(Box*))->incref();
-                //}
+                for (int i = 0; i < num_output_args - 3; i++) {
+                    rewrite_args->args->getAttr(i * sizeof(Box*))->setType(RefType::BORROWED)->refConsumed();
+                }
             }
         }
     };
@@ -3884,7 +3885,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
         if (num_output_args > 3 && num_output_args > num_passed_args) {
-            assert(!rewrite_args && "check refcounting");
             int arg_bytes_required = (num_output_args - 3) * sizeof(Box*);
             RewriterVar* new_args = NULL;
 
@@ -4193,9 +4193,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 rewrite_args->arg3
                     = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->setType(RefType::BORROWED);
             else {
-                assert(0 && "check refcounting");
-                rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*),
-                                            rewrite_args->rewriter->loadConst((intptr_t)default_obj));
+                auto rvar = rewrite_args->rewriter->loadConst((intptr_t)default_obj);
+                rvar->setType(RefType::BORROWED);
+                rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*), rvar);
+                if (default_obj)
+                    rvar->refConsumed();
             }
         }
 
@@ -4367,6 +4369,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         res = createGenerator(func, arg1, arg2, arg3, oargs);
 
         if (rewrite_args) {
+            assert(0 && "check refcounting");
             RewriterVar* r_arg1 = num_output_args >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0);
             RewriterVar* r_arg2 = num_output_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0);
             RewriterVar* r_arg3 = num_output_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0);
@@ -4380,8 +4383,11 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
                                         arg3, oargs);
     }
-    if (rewrite_args) {
-        RELEASE_ASSERT(num_output_args <= 3, "figure out vrefs for arg array");
+
+    if (rewrite_args && num_output_args > 3) {
+        for (int i = 0; i < num_output_args - 3; i++) {
+            rewrite_args->args->getAttr(i * sizeof(Box*))->setType(RefType::OWNED)->setNullable(true);
+        }
     }
 
     return res;
@@ -6145,7 +6151,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
     static BoxedString* hasnext_str = getStaticString("__hasnext__");
 
     if (rewriter.get()) {
-        RewriterVar* r_o = rewriter->getArg(0);
+        RewriterVar* r_o = rewriter->getArg(0)->setType(RefType::BORROWED);
         RewriterVar* r_cls = r_o->getAttr(offsetof(Box, cls));
         GetattrRewriteArgs rewrite_args(rewriter.get(), r_cls, rewriter->getReturnDestination());
         Box* r = typeLookup(o->cls, hasnext_str, &rewrite_args);
@@ -6155,10 +6161,11 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
             RewriterVar* rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
             rtn->addGuard((uint64_t)r);
             rewriter->commitReturning(r_o);
-            return o;
+            return incref(o);
         } else /* if (!r) */ {
             rewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
             RewriterVar* var = rewriter.get()->call(true, (void*)createBoxedIterWrapper, rewriter->getArg(0));
+            var->setType(RefType::OWNED);
             rewriter->commitReturning(var);
             return createBoxedIterWrapper(o);
         }
@@ -6167,7 +6174,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
     // assert((typeLookup(o->cls, hasnext_str) == NULL) == (o->cls->tpp_hasnext == object_cls->tpp_hasnext));
     if (o->cls->tpp_hasnext == object_cls->tpp_hasnext)
         return new BoxedIterWrapper(o);
-    return o;
+    return incref(o);
 }
 
 extern "C" Box* getPystonIter(Box* o) {

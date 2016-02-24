@@ -208,6 +208,7 @@ class RewriterVar {
     int num_refs_consumed = 0; // The number of "refConsumed()" calls on this RewriterVar
     int last_refconsumed_numuses = 0; // The number of uses in the `uses` array when the last refConsumed() call was made.
     RefType reftype = RefType::UNKNOWN;
+    bool nullable = false;
     // Helper function: whether there is a ref that got consumed but came from the consumption of the
     // initial (owned) reference.
     bool refHandedOff();
@@ -227,6 +228,10 @@ public:
     RewriterVar* toBool(Location loc = Location::any());
 
     RewriterVar* setType(RefType type);
+    RewriterVar* setNullable(bool nullable) {
+        this->nullable = nullable;
+        return this;
+    }
 
     // Call this to let the automatic refcount machinery know that a refcount
     // got "consumed", ie passed off.  Such as to a function that steals a reference,

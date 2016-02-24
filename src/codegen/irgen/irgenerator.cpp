@@ -1108,8 +1108,10 @@ private:
             emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
-            llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-                                                 embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
+            llvm::Value* r = emitter.createCall2(
+                unw_info, g.funcs.getGlobal, irstate->getGlobals(),
+                emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                RefType::BORROWED));
             emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         }
@@ -1685,9 +1687,10 @@ private:
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
             } else {
                 auto converted = val->makeConverted(emitter, val->getBoxType());
-                emitter.createCall3(unw_info, g.funcs.setGlobal, irstate->getGlobals(),
-                                    embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr),
-                                    converted->getValue());
+                emitter.createCall3(
+                    unw_info, g.funcs.setGlobal, irstate->getGlobals(),
+                    emitter.setType(embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
+                    converted->getValue());
             }
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient
@@ -1802,8 +1805,9 @@ private:
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
         static BoxedString* AssertionError_str = getStaticString("AssertionError");
-        llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-                                                embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
+        llvm_args.push_back(emitter.createCall2(
+            unw_info, g.funcs.getGlobal, irstate->getGlobals(),
+            emitter.setType(embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr), RefType::BORROWED)));
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {

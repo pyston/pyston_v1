@@ -445,9 +445,9 @@ public:
 #ifdef DISABLE_INT_FREELIST
         return Box::operator new (size, int_cls);
 #else
-        if (free_list == NULL) {
+        if (unlikely(free_list == NULL)) {
             free_list = fill_free_list();
-            RELEASE_ASSERT(free_list, "");
+            assert(free_list);
         }
 
         PyIntObject* v = free_list;

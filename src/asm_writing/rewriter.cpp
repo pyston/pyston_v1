@@ -513,6 +513,7 @@ void RewriterVar::xdecref() {
 }
 
 void Rewriter::_incref(RewriterVar* var) {
+    assert(!var->nullable);
     //assembler->trap();
     //auto reg = var->getInReg();
     //assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
@@ -533,6 +534,7 @@ void Rewriter::_incref(RewriterVar* var) {
 }
 
 void Rewriter::_decref(RewriterVar* var) {
+    assert(!var->nullable);
     //assembler->trap();
 
     //this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
@@ -563,6 +565,7 @@ void Rewriter::_decref(RewriterVar* var) {
 }
 
 void Rewriter::_xdecref(RewriterVar* var) {
+    assert(var->nullable);
     //assembler->trap();
 
     this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
@@ -1206,8 +1209,12 @@ RewriterVar* RewriterVar::setType(RefType type) {
 }
 
 void RewriterVar::_release() {
-    if (reftype == RefType::OWNED && !this->refHandedOff())
-        this->rewriter->_decref(this);
+    if (reftype == RefType::OWNED && !this->refHandedOff()) {
+        if (nullable)
+            this->rewriter->_xdecref(this);
+        else
+            this->rewriter->_decref(this);
+    }
 
     for (Location loc : locations) {
         rewriter->vars_by_location.erase(loc);
@@ -1849,7 +1856,14 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
                 if (!done_guarding && var->is_arg && var->arg_loc == Location(reg)) {
                     continue;
                 }
-                if (var->uses[var->next_use] > best) {
+
+                if (var->next_use == var->uses.size()) {
+                    // If we found a variable that is dead but somehow occupying a location,
+                    // don't touch it.
+                    // This could be something that we are actively working on decref'ing.
+
+                    continue;
+                } else if (var->uses[var->next_use] > best) {
                     found = true;
                     best = var->uses[var->next_use];
                     best_reg = reg;

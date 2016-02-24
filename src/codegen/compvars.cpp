@@ -406,21 +406,27 @@ public:
         llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::createBoxedIterWrapperIfNeeded,
                                                  { converted_iter_call->getValue() }, info.unw_info);
         llvm::Value* value_has_iter = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        emitter.setType(value_has_iter, RefType::OWNED);
         llvm::BasicBlock* value_has_iter_bb = emitter.currentBasicBlock();
-        emitter.getBuilder()->CreateBr(bb_join);
+        auto has_iter_terminator = emitter.getBuilder()->CreateBr(bb_join);
 
         // var has no __iter__()
         // TODO: we could create a patchpoint if this turns out to be hot
         emitter.setCurrentBasicBlock(bb_no_iter);
         llvm::Value* value_no_iter = emitter.createCall(info.unw_info, g.funcs.getiterHelper, var->getValue());
+        emitter.setType(value_no_iter, RefType::OWNED);
         llvm::BasicBlock* value_no_iter_bb = emitter.currentBasicBlock();
-        emitter.getBuilder()->CreateBr(bb_join);
+        auto no_iter_terminator = emitter.getBuilder()->CreateBr(bb_join);
 
         // join
         emitter.setCurrentBasicBlock(bb_join);
         auto phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, "iter");
         phi->addIncoming(value_has_iter, value_has_iter_bb);
         phi->addIncoming(value_no_iter, value_no_iter_bb);
+
+        emitter.refConsumed(value_has_iter, has_iter_terminator);
+        emitter.refConsumed(value_no_iter, no_iter_terminator);
+        emitter.setType(phi, RefType::OWNED);
 
         return new ConcreteCompilerVariable(UNKNOWN, phi);
     }
@@ -505,6 +511,7 @@ ConcreteCompilerType* UNKNOWN = new UnknownType();
 CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                        BoxedString* attr, bool cls_only) {
     llvm::Constant* ptr = embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr);
+    emitter.setType(ptr, RefType::BORROWED);
 
     llvm::Value* rtn_val = NULL;
 
@@ -539,6 +546,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     } else {
         rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style);
     }
+    emitter.setType(rtn_val, RefType::OWNED);
 
     if (target_exception_style == CAPI)
         emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
@@ -716,7 +724,7 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
-    other_args.push_back(embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr));
+    other_args.push_back(emitter.setType(embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr), RefType::BORROWED));
     other_args.push_back(getConstantInt(flags.asInt(), g.i64));
     return _call(emitter, info, func, exception_style, func_ptr, other_args, flags.argspec, args, keyword_names,
                  UNKNOWN);
@@ -1779,7 +1787,8 @@ public:
 
                 llvm::CallSite call = emitter.createCall3(
                     info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
-                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style);
+                    emitter.setType(embedRelocatablePtr(attr->data(), g.i8_ptr), RefType::BORROWED),
+                    getConstantInt(attr->size(), g.i64), exception_style);
                 if (exception_style == CAPI) {
                     emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
                                                            getNullPtr(g.llvm_value_type_ptr));

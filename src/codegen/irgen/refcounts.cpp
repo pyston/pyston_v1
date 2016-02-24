@@ -305,10 +305,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     llvm::Function* f = irstate->getLLVMFunction();
     RefcountTracker* rt = irstate->getRefcounts();
 
-    fprintf(stderr, "Before refcounts:\n");
-    fprintf(stderr, "\033[35m");
-    dumpPrettyIR(f);
-    fprintf(stderr, "\033[0m");
+    if (VERBOSITY()) {
+        fprintf(stderr, "Before refcounts:\n");
+        fprintf(stderr, "\033[35m");
+        dumpPrettyIR(f);
+        fprintf(stderr, "\033[0m");
+    }
 
 #ifndef NDEBUG
     int num_untracked = 0;
@@ -361,7 +363,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             printf("missed a refcounted object: ");
             fflush(stdout);
             v->dump();
-            //abort();
+            abort();
         }
     };
 
@@ -625,11 +627,13 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             addDecrefs(op.operand, op.num_refs, op.insertion_pt);
     }
 
-    fprintf(stderr, "After refcounts:\n");
-    fprintf(stderr, "\033[35m");
-    f->dump();
-    //dumpPrettyIR(f);
-    fprintf(stderr, "\033[0m");
+    if (VERBOSITY()) {
+        fprintf(stderr, "After refcounts:\n");
+        fprintf(stderr, "\033[35m");
+        f->dump();
+        //dumpPrettyIR(f);
+        fprintf(stderr, "\033[0m");
+    }
 }
 
 } // namespace pyston
