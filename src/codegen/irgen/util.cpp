@@ -201,46 +201,6 @@ public:
                 return module->getOrInsertGlobal(name, pt->getElementType());
             }
         }
-        if (llvm::IntrinsicInst* ii = llvm::dyn_cast<llvm::IntrinsicInst>(v)) {
-            if (ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_i64
-                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_void
-                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_double) {
-                int pp_id = -1;
-                for (int i = 0; i < ii->getNumArgOperands(); i++) {
-                    llvm::Value* op = ii->getArgOperand(i);
-                    if (i != 2) {
-                        if (i == 0) {
-                            llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
-                            pp_id = l_pp_id->getSExtValue();
-                        }
-                        ii->setArgOperand(i, llvm::MapValue(op, VMap, flags, type_remapper, this));
-                        continue;
-                    } else {
-                        assert(pp_id != -1);
-                        void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
-
-                        bool lookup_success = true;
-                        std::string name;
-                        if (addr == (void*)None) {
-                            name = "None";
-                        } else {
-                            name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
-                        }
-
-                        if (!lookup_success) {
-                            llvm::Constant* int_val
-                                = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
-                            ii->setArgOperand(i, ptr_val);
-                            continue;
-                        } else {
-                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8));
-                        }
-                    }
-                }
-                return ii;
-            }
-        }
         return v;
     }
 };
@@ -263,6 +223,42 @@ void dumpPrettyIR(llvm::Function* f) {
     }
     for (llvm::inst_iterator it = inst_begin(new_f), end = inst_end(new_f); it != end; ++it) {
         llvm::RemapInstruction(&*it, VMap, flags, type_remapper, &materializer);
+
+        if (llvm::IntrinsicInst* ii = llvm::dyn_cast<llvm::IntrinsicInst>(&*it)) {
+            if (ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_i64
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_void
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_double) {
+                int pp_id = -1;
+                for (int i = 0; i < ii->getNumArgOperands(); i++) {
+                    llvm::Value* op = ii->getArgOperand(i);
+                    if (i == 0) {
+                        llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
+                        pp_id = l_pp_id->getSExtValue();
+                    } else if (i == 2) {
+                        assert(pp_id != -1);
+                        void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
+
+                        bool lookup_success = true;
+                        std::string name;
+                        if (addr == (void*)None) {
+                            name = "None";
+                        } else {
+                            name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
+                        }
+
+                        if (!lookup_success) {
+                            llvm::Constant* int_val
+                                = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
+                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
+                            ii->setArgOperand(i, ptr_val);
+                            continue;
+                        } else {
+                            ii->setArgOperand(i, tmp_module->getOrInsertGlobal(name, g.i8));
+                        }
+                    }
+                }
+            }
+        }
     }
     tmp_module->begin()->dump();
     // tmp_module->dump();
