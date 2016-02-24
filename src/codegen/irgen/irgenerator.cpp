@@ -288,7 +288,7 @@ private:
         if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
             needs_cxx_interception = false;
         } else {
-            bool needs_refcounting_fixup = false;
+            bool needs_refcounting_fixup = true;
             needs_cxx_interception = (target_exception_style == CXX && (needs_refcounting_fixup || unw_info.hasHandler()
                                                                         || irstate->getExceptionStyle() == CAPI));
         }
