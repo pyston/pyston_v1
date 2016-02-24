@@ -1260,20 +1260,26 @@ class BoxedEnumerate : public Box {
 private:
     BoxIterator iterator, iterator_end;
     int64_t idx;
+    BoxedLong* idx_long;
 
 public:
-    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx)
-        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx) {}
+    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx, BoxedLong* idx_long)
+        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx), idx_long(idx_long) {}
 
     DEFAULT_CLASS(enumerate_cls);
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
-        RELEASE_ASSERT(PyInt_Check(start), "");
-        int64_t idx = static_cast<BoxedInt*>(start)->n;
-
+        RELEASE_ASSERT(PyInt_Check(start) || PyLong_Check(start), "");
+        int64_t idx = PyInt_AsSsize_t(start);
+        BoxedLong* idx_long = NULL;
+        if (idx == -1 && PyErr_Occurred()) {
+            PyErr_Clear();
+            assert(PyLong_Check(start));
+            idx_long = (BoxedLong*)start;
+        }
         llvm::iterator_range<BoxIterator> range = obj->pyElements();
-        return new BoxedEnumerate(range.begin(), range.end(), idx);
+        return new BoxedEnumerate(range.begin(), range.end(), idx, idx_long);
     }
 
     static Box* iter(Box* _self) noexcept {
@@ -1287,7 +1293,19 @@ public:
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
         ++self->iterator;
-        return BoxedTuple::create({ boxInt(self->idx++), val });
+        Box* rtn = BoxedTuple::create({ self->idx_long ? self->idx_long : boxInt(self->idx), val });
+
+        // check if incrementing the counter would overflow it, if so switch to long counter
+        if (self->idx == PY_SSIZE_T_MAX) {
+            assert(!self->idx_long);
+            self->idx_long = boxLong(self->idx);
+            self->idx = -1;
+        }
+        if (self->idx_long)
+            self->idx_long = (BoxedLong*)longAdd(self->idx_long, boxInt(1));
+        else
+            ++self->idx;
+        return rtn;
     }
 
     static Box* hasnext(Box* _self) {
@@ -1302,6 +1320,7 @@ public:
         BoxedEnumerate* it = (BoxedEnumerate*)b;
         it->iterator.gcHandler(v);
         it->iterator_end.gcHandler(v);
+        v->visit(&it->idx_long);
     }
 };
 

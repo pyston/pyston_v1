@@ -39,6 +39,8 @@ print filter(lambda x: x % 2, xrange(20))
 print type(enumerate([]))
 print list(enumerate(xrange(5, 10)))
 print list(enumerate(start=-42, sequence=xrange(5, 10)))
+print list(enumerate(range(3), 2**128))  # tests long
+print list(enumerate(range(3), 2**63-1)) # tests start with int and than switch to long
 
 # If the first argument is None, filter calls checks for truthiness (ie is equivalent to passing 'bool')
 print filter(None, xrange(-5, 5))
