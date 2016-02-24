@@ -29,3 +29,24 @@ def f():
     f3(b=3, a=4)
     f3(b=2, **{'c':3})
 f()
+f()
+
+# Stress many-arguments:
+def f2(a, b=3, c=4, d=5, *args, **kw):
+    print a, b, c, d, args, kw
+
+def g():
+    print f2(1, 2, 3, 4)
+    print f2(1, 2, 3, 4, k=1)
+    print f2(1, 2, 3, 4, 5)
+    print f2(1, 2, 3, 4, 5, 6)
+    print f2(1, 2, 3, 4, 5, 6, 7)
+    print f2(1, 2, 3, 4, 5, 6, 7, 8)
+    print f2(1, 2, 3, 4, 5, 6, 7, 8, 9)
+    print f2(1, 2, 3, 4, 5, 6, 7, 8, 9, k=1)
+
+g()
+g()
+del f2.func_defaults
+g()
+g()
