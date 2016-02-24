@@ -229,5 +229,7 @@ extern "C" void delGlobal(Box* globals, BoxedString* name);
 extern "C" void boxedLocalsSet(Box* boxedLocals, BoxedString* attr, Box* val);
 extern "C" Box* boxedLocalsGet(Box* boxedLocals, BoxedString* attr, Box* globals);
 extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr);
+
+extern "C" void checkRefs(Box* b);
 }
 #endif

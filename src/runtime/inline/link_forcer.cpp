@@ -136,6 +136,7 @@ void force() {
     FORCE(caughtCapiException);
     FORCE(reraiseCapiExcAsCxx);
     FORCE(deopt);
+    FORCE(checkRefs);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);

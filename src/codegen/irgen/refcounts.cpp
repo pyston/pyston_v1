@@ -174,6 +174,10 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
                                                      getConstantInt(num_refs, g.i64), "", decref_pt);
     new llvm::StoreInst(new_refcount, refcount_ptr, decref_pt);
 
+#ifdef Py_REF_DEBUG
+    llvm::CallInst::Create(g.funcs.checkRefs, {v}, "", decref_pt);
+#endif
+
     llvm::BasicBlock* cur_block = decref_pt->getParent();
     llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(decref_pt);
     llvm::BasicBlock* dealloc_block

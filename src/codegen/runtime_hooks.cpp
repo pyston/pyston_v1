@@ -322,6 +322,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(caughtCapiException);
     GET(reraiseCapiExcAsCxx);
     GET(deopt);
+    GET(checkRefs);
 
     GET(div_float_float);
     GET(floordiv_float_float);

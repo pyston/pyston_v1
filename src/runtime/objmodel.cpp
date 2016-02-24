@@ -6894,4 +6894,8 @@ extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr) {
     }
     d.erase(it);
 }
+
+extern "C" void checkRefs(Box* b) {
+    RELEASE_ASSERT(b->ob_refcnt >= 0, "%ld", b->ob_refcnt);
+}
 }
