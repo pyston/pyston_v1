@@ -4452,9 +4452,10 @@ extern "C" void Py_Finalize() noexcept {
 
     teardownCodegen();
 
-    PRINT_TOTAL_REFS();
+    if (VERBOSITY())
+        PRINT_TOTAL_REFS();
 #ifdef Py_REF_DEBUG
-    assert(_Py_RefTotal == 0);
+    RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
 #endif
 }
 }

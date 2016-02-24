@@ -211,7 +211,7 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
 
     for (auto&& BB : *f) {
         if (llvm::succ_begin(&BB) == llvm::succ_end(&BB)) {
-            llvm::outs() << "Adding " << BB.getName() << " since it is an exit node.\n";
+            // llvm::outs() << "Adding " << BB.getName() << " since it is an exit node.\n";
             ordering.push_back(&BB);
             added.insert(&BB);
         }
@@ -235,7 +235,7 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
                 if (num_successors_added[PBB] == num_successors) {
                     ordering.push_back(PBB);
                     added.insert(PBB);
-                    llvm::outs() << "Adding " << PBB->getName() << " since it has all of its successors added.\n";
+                    // llvm::outs() << "Adding " << PBB->getName() << " since it has all of its successors added.\n";
                 }
             }
         } else {
@@ -283,7 +283,7 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
             assert(best);
             ordering.push_back(best);
             added.insert(best);
-            llvm::outs() << "Adding " << best->getName() << " since it is the best provisional node.\n";
+            // llvm::outs() << "Adding " << best->getName() << " since it is the best provisional node.\n";
         }
     }
 
@@ -354,7 +354,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     llvm::Function* f = irstate->getLLVMFunction();
     RefcountTracker* rt = irstate->getRefcounts();
 
-    if (VERBOSITY()) {
+    if (VERBOSITY() >= 2) {
         fprintf(stderr, "Before refcounts:\n");
         fprintf(stderr, "\033[35m");
         dumpPrettyIR(f);
@@ -472,8 +472,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 #endif
 
-        llvm::outs() << '\n';
-        llvm::outs() << "Processing " << BB.getName() << '\n';
+        if (VERBOSITY() >= 2) {
+            llvm::outs() << '\n';
+            llvm::outs() << "Processing " << BB.getName() << '\n';
+        }
 
         RefState& state = states[&BB];
 
@@ -576,9 +578,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (num_times_as_op[op] > num_consumed) {
                     if (rt->vars[op].reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
-                            // Don't do any updates now since we are iterating over the bb
-                            llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
+                            // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
+                            // Don't do any updates now since we are iterating over the bb
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
                                 state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findIncrefPt(invoke->getNormalDest())}));
                                 state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findIncrefPt(invoke->getUnwindDest())}));
@@ -600,7 +602,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
-        llvm::outs() << "End of " << BB.getName() << '\n';
+        if (VERBOSITY() >= 2) {
+            llvm::outs() << "End of " << BB.getName() << '\n';
+        }
 
         // Handle variables that were defined in this BB:
         for (auto&& p : rt->vars) {
@@ -625,9 +629,6 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     }
                 }
                 state.ending_refs.erase(inst);
-            } else {
-                if (state.ending_refs.count(p.first))
-                    llvm::outs() << *p.first << " " << state.ending_refs[p.first] << '\n';
             }
         }
 
@@ -659,13 +660,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 
         if (endingRefsDifferent(orig_ending_refs, state.ending_refs)) {
-            llvm::outs() << "changed!\n";
             for (auto&& SBB : llvm::predecessors(&BB)) {
                 // llvm::outs() << "reconsidering: " << SBB->getName() << '\n';
                 orderer.add(SBB);
             }
-        } else {
-            llvm::outs() << "no changes\n";
         }
     }
 
@@ -679,7 +677,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             addDecrefs(op.operand, op.nullable, op.num_refs, op.insertion_pt);
     }
 
-    if (VERBOSITY()) {
+    if (VERBOSITY() >= 2) {
         fprintf(stderr, "After refcounts:\n");
         fprintf(stderr, "\033[35m");
         dumpPrettyIR(f);

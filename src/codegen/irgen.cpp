@@ -864,7 +864,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
 
                 if (v->getType()->getBoxType() == v->getType()) {
-                    llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
+                    // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     irstate->getRefcounts()->setType(llvm_phi, RefType::OWNED);
                     assert(llvm::isa<llvm::BranchInst>(llvm_exit_blocks[b->predecessors[j]]->getTerminator()));
                     irstate->getRefcounts()->refConsumed(v->getValue(), llvm_exit_blocks[b->predecessors[j]]->getTerminator());

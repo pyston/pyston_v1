@@ -3172,7 +3172,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
             // but the docs say -1. TODO it would be nice to just handle any negative value.
             rewrite_args->rewriter->checkAndThrowCAPIException(r_n, -1);
 
-            RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n);
+            RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n)->setType(RefType::OWNED);
 
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_r;
