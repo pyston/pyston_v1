@@ -667,7 +667,7 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         RELEASE_ASSERT(0, "%d", flags);
     }
 
-    assert(paramspec.totalReceived() < 3);
+    assert(paramspec.totalReceived() <= 3);
     assert(!oargs);
 
     switch (paramspec.totalReceived()) {

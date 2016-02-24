@@ -640,7 +640,6 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
         rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-        emitter.setType(rtn, RefType::OWNED);
     } else {
         // printf("\n");
         // func->dump();
@@ -651,9 +650,10 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
         rtn = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
-        emitter.setType(rtn, RefType::OWNED);
     }
 
+    if (rtn_type->getBoxType() == rtn_type)
+        emitter.setType(rtn, RefType::OWNED);
     assert(rtn->getType() == rtn_type->llvmType());
 
     if (target_exception_style == CAPI) {

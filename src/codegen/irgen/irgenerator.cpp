@@ -523,6 +523,8 @@ public:
     }
 
     llvm::Value* setType(llvm::Value* v, RefType reftype) {
+        assert(llvm::isa<PointerType>(v->getType()));
+
         irstate->getRefcounts()->setType(v, reftype);
         return v;
     }
@@ -731,10 +733,16 @@ private:
                             = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
                         llvm::PHINode* phi_exc_tb
                             = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                        emitter.setType(phi_exc_type, RefType::OWNED);
+                        emitter.setType(phi_exc_value, RefType::OWNED);
+                        emitter.setType(phi_exc_tb, RefType::OWNED);
                         for (auto e : this->incoming_exc_state) {
                             phi_exc_type->addIncoming(e.exc_type->getValue(), e.from_block);
                             phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
                             phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
+                            emitter.refConsumed(e.exc_type->getValue(), e.from_block->getTerminator());
+                            emitter.refConsumed(e.exc_value->getValue(), e.from_block->getTerminator());
+                            emitter.refConsumed(e.exc_tb->getValue(), e.from_block->getTerminator());
                         }
                         exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type);
                         exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value);
@@ -786,6 +794,7 @@ private:
                 emitter.setType(name_arg, RefType::BORROWED);
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
+                emitter.setType(r, RefType::OWNED);
 
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
@@ -802,6 +811,7 @@ private:
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
                                                      irstate->getGlobals());
+                emitter.setType(r, RefType::OWNED);
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
             }
@@ -826,6 +836,7 @@ private:
                     { getConstantInt(level, g.i32), converted_froms->getValue(),
                       emitter.setType(embedRelocatablePtr(module_name.c_str(), g.i8_ptr), RefType::BORROWED),
                       getConstantInt(module_name.size(), g.i64) });
+                emitter.setType(imported, RefType::OWNED);
                 ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
                 return v;
             }
@@ -1020,6 +1031,7 @@ private:
 
     CompilerVariable* evalDict(AST_Dict* node, const UnwindInfo& unw_info) {
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
+        emitter.setType(v, RefType::OWNED);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v);
         if (node->keys.size()) {
             static BoxedString* setitem_str = getStaticString("__setitem__");
@@ -1070,6 +1082,7 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createList);
+        emitter.setType(v, RefType::OWNED);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(LIST, v);
 
         llvm::Value* f = g.funcs.listAppendInternal;
@@ -1251,6 +1264,7 @@ private:
         std::vector<llvm::Value*> args{ cvar->getValue() };
         llvm::Value* rtn = emitter.createCall(unw_info, g.funcs.repr, args);
         rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
+        emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(STR, rtn);
     }
@@ -1263,6 +1277,7 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
+        emitter.setType(v, RefType::OWNED);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v);
 
         static BoxedString* add_str = getStaticString("add");
@@ -1363,6 +1378,7 @@ private:
 
         llvm::Value* rtn
             = emitter.createCall2(unw_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
+        emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
@@ -1824,9 +1840,11 @@ private:
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
         static BoxedString* AssertionError_str = getStaticString("AssertionError");
-        llvm_args.push_back(emitter.createCall2(
-            unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-            emitter.setType(embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr), RefType::BORROWED)));
+        llvm_args.push_back(emitter.setType(
+            emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
+                                emitter.setType(embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED)),
+            RefType::OWNED));
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {

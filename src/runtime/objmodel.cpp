@@ -1673,8 +1673,8 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             if (rewrite_args) {
                 // return an unbound instancemethod
                 RewriterVar* r_cls = rewrite_args->obj;
-                RewriterVar* r_rtn
-                    = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr, r_cls);
+                RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr, r_cls)
+                                         ->setType(RefType::OWNED);
                 rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
             }
             return boxUnboundInstanceMethod(descr, cls);

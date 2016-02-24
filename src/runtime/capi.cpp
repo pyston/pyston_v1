@@ -1916,7 +1916,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         RELEASE_ASSERT(0, "0x%x", flags);
     }
 
-    assert(paramspec.totalReceived() < 3);
+    assert(paramspec.totalReceived() <= 3);
     assert(!oargs);
 
     if (rewrite_args) {
