@@ -90,19 +90,10 @@ extern "C" Box* vars(Box* obj) {
 }
 
 extern "C" Box* abs_(Box* x) {
-    if (PyInt_Check(x)) {
-        i64 n = static_cast<BoxedInt*>(x)->n;
-        return boxInt(n >= 0 ? n : -n);
-    } else if (x->cls == float_cls) {
-        double d = static_cast<BoxedFloat*>(x)->d;
-        return boxFloat(std::abs(d));
-    } else if (x->cls == long_cls) {
-        return longAbs(static_cast<BoxedLong*>(x));
-    } else {
-        static BoxedString* abs_str = internStringImmortal("__abs__");
-        CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
-        return callattr(x, abs_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-    }
+    Box* rtn = PyNumber_Absolute(x);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 extern "C" Box* binFunc(Box* x) {
@@ -326,12 +317,13 @@ extern "C" Box* chr(Box* arg) {
 }
 
 extern "C" Box* unichr(Box* arg) {
-    if (arg->cls != int_cls)
-        raiseExcHelper(TypeError, "an integer is required");
+    int n = -1;
+    if (!PyArg_ParseSingle(arg, 0, "unichr", "i", &n))
+        throwCAPIException();
 
-    i64 n = static_cast<BoxedInt*>(arg)->n;
     Box* rtn = PyUnicode_FromOrdinal(n);
-    checkAndThrowCAPIException();
+    if (!rtn)
+        checkAndThrowCAPIException();
     return rtn;
 }
 
@@ -936,6 +928,111 @@ Fail_1:
     return NULL;
 }
 
+static PyObject* filterunicode(PyObject* func, PyObject* strobj) {
+    PyObject* result;
+    Py_ssize_t i, j;
+    Py_ssize_t len = PyUnicode_GetSize(strobj);
+    Py_ssize_t outlen = len;
+
+    if (func == Py_None) {
+        /* If it's a real string we can return the original,
+         * as no character is ever false and __getitem__
+         * does return this character. If it's a subclass
+         * we must go through the __getitem__ loop */
+        if (PyUnicode_CheckExact(strobj)) {
+            Py_INCREF(strobj);
+            return strobj;
+        }
+    }
+    if ((result = PyUnicode_FromUnicode(NULL, len)) == NULL)
+        return NULL;
+
+    for (i = j = 0; i < len; ++i) {
+        PyObject* item, *arg, *good;
+        int ok;
+
+        item = (*strobj->cls->tp_as_sequence->sq_item)(strobj, i);
+        if (item == NULL)
+            goto Fail_1;
+        if (func == Py_None) {
+            ok = 1;
+        } else {
+            arg = PyTuple_Pack(1, item);
+            if (arg == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            good = PyEval_CallObject(func, arg);
+            Py_DECREF(arg);
+            if (good == NULL) {
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            ok = PyObject_IsTrue(good);
+            Py_DECREF(good);
+        }
+        if (ok > 0) {
+            Py_ssize_t reslen;
+            if (!PyUnicode_Check(item)) {
+                PyErr_SetString(PyExc_TypeError, "can't filter unicode to unicode:"
+                                                 " __getitem__ returned different type");
+                Py_DECREF(item);
+                goto Fail_1;
+            }
+            reslen = PyUnicode_GET_SIZE(item);
+            if (reslen == 1)
+                PyUnicode_AS_UNICODE(result)[j++] = PyUnicode_AS_UNICODE(item)[0];
+            else {
+                /* do we need more space? */
+                Py_ssize_t need = j + reslen + len - i - 1;
+
+                /* check that didnt overflow */
+                if ((j > PY_SSIZE_T_MAX - reslen) || ((j + reslen) > PY_SSIZE_T_MAX - len) || ((j + reslen + len) < i)
+                    || ((j + reslen + len - i) <= 0)) {
+                    Py_DECREF(item);
+                    return NULL;
+                }
+
+                assert(need >= 0);
+                assert(outlen >= 0);
+
+                if (need > outlen) {
+                    /* overallocate,
+                       to avoid reallocations */
+                    if (need < 2 * outlen) {
+                        if (outlen > PY_SSIZE_T_MAX / 2) {
+                            Py_DECREF(item);
+                            return NULL;
+                        } else {
+                            need = 2 * outlen;
+                        }
+                    }
+
+                    if (PyUnicode_Resize(&result, need) < 0) {
+                        Py_DECREF(item);
+                        goto Fail_1;
+                    }
+                    outlen = need;
+                }
+                memcpy(PyUnicode_AS_UNICODE(result) + j, PyUnicode_AS_UNICODE(item), reslen * sizeof(Py_UNICODE));
+                j += reslen;
+            }
+        }
+        Py_DECREF(item);
+        if (ok < 0)
+            goto Fail_1;
+    }
+
+    if (j < outlen)
+        PyUnicode_Resize(&result, j);
+
+    return result;
+
+Fail_1:
+    Py_DECREF(result);
+    return NULL;
+}
+
 static PyObject* filtertuple(PyObject* func, PyObject* tuple) {
     PyObject* result;
     Py_ssize_t i, j;
@@ -1012,7 +1109,6 @@ Box* filter2(Box* f, Box* container) {
         f = bool_cls;
 
     // Special cases depending on the type of container influences the return type
-    // TODO There are other special cases like this
     if (PyTuple_Check(container)) {
         Box* rtn = filtertuple(f, static_cast<BoxedTuple*>(container));
         if (!rtn) {
@@ -1023,6 +1119,14 @@ Box* filter2(Box* f, Box* container) {
 
     if (PyString_Check(container)) {
         Box* rtn = filterstring(f, static_cast<BoxedString*>(container));
+        if (!rtn) {
+            throwCAPIException();
+        }
+        return rtn;
+    }
+
+    if (PyUnicode_Check(container)) {
+        Box* rtn = filterunicode(f, container);
         if (!rtn) {
             throwCAPIException();
         }
@@ -1156,20 +1260,26 @@ class BoxedEnumerate : public Box {
 private:
     BoxIterator iterator, iterator_end;
     int64_t idx;
+    BoxedLong* idx_long;
 
 public:
-    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx)
-        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx) {}
+    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx, BoxedLong* idx_long)
+        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx), idx_long(idx_long) {}
 
     DEFAULT_CLASS(enumerate_cls);
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
-        RELEASE_ASSERT(PyInt_Check(start), "");
-        int64_t idx = static_cast<BoxedInt*>(start)->n;
-
+        RELEASE_ASSERT(PyInt_Check(start) || PyLong_Check(start), "");
+        int64_t idx = PyInt_AsSsize_t(start);
+        BoxedLong* idx_long = NULL;
+        if (idx == -1 && PyErr_Occurred()) {
+            PyErr_Clear();
+            assert(PyLong_Check(start));
+            idx_long = (BoxedLong*)start;
+        }
         llvm::iterator_range<BoxIterator> range = obj->pyElements();
-        return new BoxedEnumerate(range.begin(), range.end(), idx);
+        return new BoxedEnumerate(range.begin(), range.end(), idx, idx_long);
     }
 
     static Box* iter(Box* _self) noexcept {
@@ -1183,7 +1293,19 @@ public:
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
         ++self->iterator;
-        return BoxedTuple::create({ boxInt(self->idx++), val });
+        Box* rtn = BoxedTuple::create({ self->idx_long ? self->idx_long : boxInt(self->idx), val });
+
+        // check if incrementing the counter would overflow it, if so switch to long counter
+        if (self->idx == PY_SSIZE_T_MAX) {
+            assert(!self->idx_long);
+            self->idx_long = boxLong(self->idx);
+            self->idx = -1;
+        }
+        if (self->idx_long)
+            self->idx_long = (BoxedLong*)longAdd(self->idx_long, boxInt(1));
+        else
+            ++self->idx;
+        return rtn;
     }
 
     static Box* hasnext(Box* _self) {
@@ -1198,6 +1320,7 @@ public:
         BoxedEnumerate* it = (BoxedEnumerate*)b;
         it->iterator.gcHandler(v);
         it->iterator_end.gcHandler(v);
+        v->visit(&it->idx_long);
     }
 };
 
@@ -1511,7 +1634,7 @@ Box* input(Box* prompt) {
 Box* builtinRound(Box* _number, Box* _ndigits) {
     double x = PyFloat_AsDouble(_number);
     if (PyErr_Occurred())
-        raiseExcHelper(TypeError, "a float is required");
+        throwCAPIException();
 
     /* interpret 2nd argument as a Py_ssize_t; clip on overflow */
     Py_ssize_t ndigits = PyNumber_AsSsize_t(_ndigits, NULL);
@@ -2050,9 +2173,9 @@ void setupBuiltins() {
                                                  { NULL, NULL }, NULL, range_doc);
     builtins_module->giveAttr("range", range_obj);
 
-    auto* round_obj
-        = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinRound, BOXED_FLOAT, 2, false, false),
-                                           "round", { boxInt(0) }, NULL, round_doc);
+    auto* round_obj = new BoxedBuiltinFunctionOrMethod(
+        FunctionMetadata::create((void*)builtinRound, BOXED_FLOAT, 2, ParamNames({ "number", "ndigits" }, "", "")),
+        "round", { boxInt(0) }, NULL, round_doc);
     builtins_module->giveAttr("round", round_obj);
 
     setupXrange();
@@ -2161,7 +2284,7 @@ void setupBuiltins() {
                                          FunctionMetadata::create((void*)builtinCmp, UNKNOWN, 2), "cmp", cmp_doc));
     builtins_module->giveAttr(
         "format", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinFormat, UNKNOWN, 2), "format",
-                                                   format_doc));
+                                                   { NULL }, NULL, format_doc));
 
 
     static PyMethodDef builtin_methods[] = {

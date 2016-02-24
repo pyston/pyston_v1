@@ -28,6 +28,12 @@ sudo apt-get install -yq automake git cmake ninja-build ccache libncurses5-dev l
 sudo yum install git make cmake clang gcc gcc-c++ ccache ninja-build xz-devel automake libtool gmp-devel mpfr-devel readline-devel openssl-devel sqlite-devel python-devel zlib-devel bzip2-devel ncurses-devel texlive-latex2man libffi-devel
 ```
 
+### Additional prerequisites for running the integration tests
+**Ubuntu**
+```
+sudo apt-get install libgeoip-dev
+```
+
 ### Building and testing
 ```
 git clone https://github.com/dropbox/pyston.git ~/pyston

@@ -86,6 +86,7 @@ static PyObject* do_mklist(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mkdict(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mkvalue(const char**, va_list*, int) noexcept;
 
+typedef double va_double;
 static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noexcept {
     for (;;) {
         switch (*(*p_format)++) {
@@ -124,72 +125,15 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'l':
                 return PyInt_FromLong(va_arg(*p_va, long));
 
-            case 'd':
-                return PyFloat_FromDouble(va_arg(*p_va, double));
-
-            case 'c': {
-                char p[1];
-                p[0] = (char)va_arg(*p_va, int);
-                return PyString_FromStringAndSize(p, 1);
+            case 'k': {
+                unsigned long n;
+                n = va_arg(*p_va, unsigned long);
+                if (n > (unsigned long)PyInt_GetMax())
+                    return PyLong_FromUnsignedLong(n);
+                else
+                    return PyInt_FromLong(n);
             }
 
-            case 'N':
-            case 'S':
-            case 'O':
-                if (**p_format == '&') {
-                    typedef PyObject* (*converter)(void*);
-                    converter func = va_arg(*p_va, converter);
-                    void* arg = va_arg(*p_va, void*);
-                    ++*p_format;
-                    return (*func)(arg);
-                } else {
-                    PyObject* v;
-                    v = va_arg(*p_va, PyObject*);
-                    if (v != NULL) {
-                        if (*(*p_format - 1) != 'N')
-                            Py_INCREF(v);
-                    } else if (!PyErr_Occurred())
-                        /* If a NULL was passed
-                         * because a call that should
-                         * have constructed a value
-                         * failed, that's OK, and we
-                         * pass the error on; but if
-                         * no error occurred it's not
-                         * clear that the caller knew
-                         * what she was doing. */
-                        PyErr_SetString(PyExc_SystemError, "NULL object passed to Py_BuildValue");
-                    return v;
-                }
-
-            case 's':
-            case 'z': {
-                PyObject* v;
-                char* str = va_arg(*p_va, char*);
-                Py_ssize_t n;
-                if (**p_format == '#') {
-                    ++*p_format;
-                    if (flags & FLAG_SIZE_T)
-                        n = va_arg(*p_va, Py_ssize_t);
-                    else
-                        n = va_arg(*p_va, int);
-                } else
-                    n = -1;
-                if (str == NULL) {
-                    v = Py_None;
-                    Py_INCREF(v);
-                } else {
-                    if (n < 0) {
-                        size_t m = strlen(str);
-                        if (m > PY_SSIZE_T_MAX) {
-                            PyErr_SetString(PyExc_OverflowError, "string too long for Python string");
-                            return NULL;
-                        }
-                        n = (Py_ssize_t)m;
-                    }
-                    v = PyString_FromStringAndSize(str, n);
-                }
-                return v;
-            }
 #ifdef HAVE_LONG_LONG
             case 'L':
                 return PyLong_FromLongLong((PY_LONG_LONG)va_arg(*p_va, PY_LONG_LONG));
@@ -221,6 +165,78 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
                 return v;
             }
 #endif
+            case 'f':
+            case 'd':
+                return PyFloat_FromDouble((double)va_arg(*p_va, va_double));
+
+#ifndef WITHOUT_COMPLEX
+            case 'D':
+                return PyComplex_FromCComplex(*((Py_complex*)va_arg(*p_va, Py_complex*)));
+#endif /* WITHOUT_COMPLEX */
+
+            case 'c': {
+                char p[1];
+                p[0] = (char)va_arg(*p_va, int);
+                return PyString_FromStringAndSize(p, 1);
+            }
+
+            case 's':
+            case 'z': {
+                PyObject* v;
+                char* str = va_arg(*p_va, char*);
+                Py_ssize_t n;
+                if (**p_format == '#') {
+                    ++*p_format;
+                    if (flags & FLAG_SIZE_T)
+                        n = va_arg(*p_va, Py_ssize_t);
+                    else
+                        n = va_arg(*p_va, int);
+                } else
+                    n = -1;
+                if (str == NULL) {
+                    v = Py_None;
+                    Py_INCREF(v);
+                } else {
+                    if (n < 0) {
+                        size_t m = strlen(str);
+                        if (m > PY_SSIZE_T_MAX) {
+                            PyErr_SetString(PyExc_OverflowError, "string too long for Python string");
+                            return NULL;
+                        }
+                        n = (Py_ssize_t)m;
+                    }
+                    v = PyString_FromStringAndSize(str, n);
+                }
+                return v;
+            }
+
+            case 'N':
+            case 'S':
+            case 'O':
+                if (**p_format == '&') {
+                    typedef PyObject* (*converter)(void*);
+                    converter func = va_arg(*p_va, converter);
+                    void* arg = va_arg(*p_va, void*);
+                    ++*p_format;
+                    return (*func)(arg);
+                } else {
+                    PyObject* v;
+                    v = va_arg(*p_va, PyObject*);
+                    if (v != NULL) {
+                        if (*(*p_format - 1) != 'N')
+                            Py_INCREF(v);
+                    } else if (!PyErr_Occurred())
+                        /* If a NULL was passed
+                         * because a call that should
+                         * have constructed a value
+                         * failed, that's OK, and we
+                         * pass the error on; but if
+                         * no error occurred it's not
+                         * clear that the caller knew
+                         * what she was doing. */
+                        PyErr_SetString(PyExc_SystemError, "NULL object passed to Py_BuildValue");
+                    return v;
+                }
 
             case ':':
             case ',':
@@ -229,7 +245,8 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
                 break;
 
             default:
-                RELEASE_ASSERT(0, "%c", *((*p_format) - 1));
+                PyErr_SetString(PyExc_SystemError, "bad format char passed to Py_BuildValue");
+                return NULL;
         }
     }
     abort();
