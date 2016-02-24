@@ -195,7 +195,8 @@ class IRGenState;
 class RefcountTracker {
 private:
     struct RefcountState {
-        RefType reftype;
+        RefType reftype = RefType::UNKNOWN;
+        bool nullable = false;
 
         //llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
     };
@@ -204,6 +205,7 @@ private:
 public:
 
     llvm::Value* setType(llvm::Value* v, RefType reftype);
+    llvm::Value* setNullable(llvm::Value* v, bool nullable = true);
     void refConsumed(llvm::Value* v, llvm::Instruction*);
     static void addRefcounts(IRGenState* state);
 };

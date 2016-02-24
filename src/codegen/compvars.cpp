@@ -1409,8 +1409,10 @@ public:
             // Will this ever hit the cache?
             boxed = embedRelocatablePtr(emitter.getFloatConstant(llvm_val->getValueAPF().convertToDouble()),
                                         g.llvm_value_type_ptr);
+            emitter.setType(boxed, RefType::BORROWED);
         } else {
             boxed = emitter.getBuilder()->CreateCall(g.funcs.boxFloat, unboxed);
+            emitter.setType(boxed, RefType::OWNED);
         }
         return new ConcreteCompilerVariable(other_type, boxed);
     }

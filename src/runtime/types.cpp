@@ -1113,7 +1113,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
         class InitHelper {
         public:
-            static Box* call(Box* made, BoxedClass* cls, Box* args, Box* kwargs) noexcept(S == CAPI) {
+            static Box* call(STOLEN(Box*) made, BoxedClass* cls, Box* args, Box* kwargs) noexcept(S == CAPI) {
                 if (!isSubclass(made->cls, cls))
                     return made;
 
@@ -1132,8 +1132,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         assert(!arg3 || arg3->cls == dict_cls);
 
         if (rewrite_args) {
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)InitHelper::call, r_made, r_ccls,
-                                                                 rewrite_args->arg2, rewrite_args->arg3);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)InitHelper::call, r_made, r_ccls, rewrite_args->arg2,
+                                               rewrite_args->arg3)->setType(RefType::OWNED);
+            r_made->refConsumed();
             rewrite_args->out_success = true;
         }
         return InitHelper::call(made, cls, arg2, arg3);

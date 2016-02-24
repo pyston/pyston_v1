@@ -3782,21 +3782,24 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
     auto propagate_args = [&]() {
         if (num_output_args >= 1)
-            Py_INCREF(oarg1);
+            Py_XINCREF(oarg1);
         if (num_output_args >= 2)
-            Py_INCREF(oarg2);
+            Py_XINCREF(oarg2);
         if (num_output_args >= 3)
-            Py_INCREF(oarg3);
+            Py_XINCREF(oarg3);
         if (num_output_args >= 3) {
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
             for (int i = 0; i < num_output_args - 3; i++) {
-                Py_INCREF(oargs[i]);
+                Py_XINCREF(oargs[i]);
             }
         }
         if (rewrite_args) {
             if (num_output_args >= 3) {
                 for (int i = 0; i < num_output_args - 3; i++) {
-                    rewrite_args->args->getAttr(i * sizeof(Box*))->setType(RefType::BORROWED)->refConsumed();
+                    rewrite_args->args->getAttr(i * sizeof(Box*))
+                        ->setType(RefType::BORROWED)
+                        ->setNullable(true)
+                        ->refConsumed();
                 }
             }
         }
@@ -3918,7 +3921,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
     }
     if (rewrite_args) {
-        assert(positional_to_positional < 3 && "figure this out");
+        for (int i = 3; i < positional_to_positional; i++) {
+            rewrite_args->args->getAttr((i - 3) * sizeof(Box*))->setType(RefType::BORROWED)->refConsumed();
+        }
     }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
@@ -3939,7 +3944,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
     RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
-        assert(!rewrite_args && "check refcounting");
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
         if (rewrite_args) {
             if (i == 0)
@@ -3949,7 +3953,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             if (i == 2)
                 unused_positional_rvars.push_back(rewrite_args->arg3);
             if (i >= 3)
-                unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+                unused_positional_rvars.push_back(
+                    rewrite_args->args->getAttr((i - 3) * sizeof(Box*))->setType(RefType::BORROWED));
         }
     }
     for (int i = varargs_to_positional; i < varargs_size; i++) {
@@ -3960,7 +3965,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     if (paramspec.takes_varargs) {
         int varargs_idx = paramspec.num_args;
         if (rewrite_args) {
-            assert(0 && "check refcounting");
             assert(!varargs_size);
             assert(!argspec.has_starargs);
 
@@ -3968,8 +3972,10 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             int varargs_size = unused_positional_rvars.size();
 
             if (varargs_size == 0) {
-                varargs_val = rewrite_args->rewriter->loadConst(
-                    (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
+                varargs_val
+                    = rewrite_args->rewriter->loadConst((intptr_t)EmptyTuple,
+                                                        varargs_idx < 3 ? Location::forArg(varargs_idx)
+                                                                        : Location::any())->setType(RefType::BORROWED);
             } else {
                 assert(varargs_size <= 6);
                 void* create_ptrs[] = {
@@ -3981,7 +3987,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     (void*)BoxedTuple::create5, //
                     (void*)BoxedTuple::create6, //
                 };
-                varargs_val = rewrite_args->rewriter->call(false, create_ptrs[varargs_size], unused_positional_rvars);
+                varargs_val = rewrite_args->rewriter->call(false, create_ptrs[varargs_size], unused_positional_rvars)
+                                  ->setType(RefType::OWNED);
             }
 
             if (varargs_val) {
@@ -3991,8 +3998,10 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     rewrite_args->arg2 = varargs_val;
                 if (varargs_idx == 2)
                     rewrite_args->arg3 = varargs_val;
-                if (varargs_idx >= 3)
+                if (varargs_idx >= 3) {
                     rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
+                    varargs_val->refConsumed();
+                }
             }
         }
 
@@ -4025,7 +4034,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     // If you need to access the dict, you should call get_okwargs()
     BoxedDict** _okwargs = NULL;
     if (paramspec.takes_kwargs) {
-        assert(!rewrite_args && "check refcounting");
         int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
         if (rewrite_args) {
             RewriterVar* r_kwargs = rewrite_args->rewriter->loadConst(0);
@@ -6714,7 +6722,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
                 auto r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                 rewriter->commitReturning(r_rtn);
             } else {
-                assert(0 && "check refcounting");
                 rewrite_args.getReturn(); // just to make the asserts happy
                 rewriter.reset(NULL);
             }
