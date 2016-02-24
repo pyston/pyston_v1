@@ -80,8 +80,8 @@ llvm::Instruction* findIncrefPt(llvm::BasicBlock* BB) {
 void addIncrefs(llvm::Value* v, int num_refs, llvm::Instruction* incref_pt) {
     if (num_refs > 1) {
         // Not bad but I don't think this should happen:
-        printf("Whoa more than one incref??\n");
-        raise(SIGTRAP);
+        //printf("Whoa more than one incref??\n");
+        //raise(SIGTRAP);
     }
 
     assert(num_refs > 0);
