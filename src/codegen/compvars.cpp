@@ -2337,9 +2337,10 @@ public:
         }
 
         ASSERT(other_type == UNKNOWN || other_type == BOXED_BOOL, "%s", other_type->debugName().c_str());
-        llvm::Value* boxed = emitter.getBuilder()->CreateSelect(i1FromBool(emitter, var),
-                                                                embedConstantPtr(True, g.llvm_value_type_ptr),
-                                                                embedConstantPtr(False, g.llvm_value_type_ptr));
+        llvm::Value* boxed = emitter.getBuilder()->CreateSelect(
+            i1FromBool(emitter, var), emitter.setType(embedConstantPtr(True, g.llvm_value_type_ptr), RefType::BORROWED),
+            emitter.setType(embedConstantPtr(False, g.llvm_value_type_ptr), RefType::BORROWED));
+        emitter.setType(boxed, RefType::BORROWED);
         return new ConcreteCompilerVariable(other_type, boxed);
     }
 

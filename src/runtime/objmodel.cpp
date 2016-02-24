@@ -1892,19 +1892,14 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                            getTypeName(getset_descr));
         }
 
-        // Abort because right now we can't call twice in a rewrite
-        if (for_call) {
-            rewrite_args = NULL;
-        }
-
         if (rewrite_args) {
-            assert(0 && "check refcounting");
             // hmm, maybe we should write assembly which can look up the function address and call any function
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
 
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
             RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
+                                                             /* has_side_effects */ true, (void*)getset_descr->get,
+                                                             rewrite_args->obj, r_closure)->setType(RefType::OWNED);
 
             rewrite_args->setReturn(r_rtn, descr->cls == capi_getset_cls ? ReturnConvention::CAPI_RETURN
                                                                          : ReturnConvention::HAS_RETURN);
@@ -6869,7 +6864,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, BoxedString* attr, Box* globals
         auto it = d.find(attr);
         if (it != d.end()) {
             Box* value = it->second;
-            return value;
+            return incref(value);
         }
     } else {
         try {

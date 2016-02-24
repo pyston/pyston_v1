@@ -610,18 +610,11 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
     rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
                        arg2, arg3, args, oargs, keyword_names);
 
-    AUTO_XDECREF(arg1);
-    AUTO_XDECREF(arg2);
-    AUTO_XDECREF(arg3);
-    assert(!oargs);
-
     if (paramspec.takes_varargs)
         assert(arg2 && arg2->cls == tuple_cls);
 
     if (!rewrite_success)
         rewrite_args = NULL;
-
-    assert(!rewrite_args && "check refcounting");
 
     Box* rtn;
     if (flags == PyWrapperFlag_KEYWORDS) {
@@ -630,9 +623,9 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;
-            rewrite_args->out_rtn
-                = rewriter->call(true, (void*)wk, rewrite_args->arg1, rewrite_args->arg2,
-                                 rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)), rewrite_args->arg3);
+            rewrite_args->out_rtn = rewriter->call(true, (void*)wk, rewrite_args->arg1, rewrite_args->arg2,
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)),
+                                                   rewrite_args->arg3)->setType(RefType::OWNED);
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
@@ -642,7 +635,8 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;
             rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)));
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
+                                        ->setType(RefType::OWNED);
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
@@ -653,7 +647,8 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;
             rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(1)));
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(1)))
+                                        ->setType(RefType::OWNED);
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
@@ -663,12 +658,27 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         if (rewrite_args) {
             auto rewriter = rewrite_args->rewriter;
             rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)));
+                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
+                                        ->setType(RefType::OWNED);
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
     } else {
         RELEASE_ASSERT(0, "%d", flags);
+    }
+
+    assert(paramspec.totalReceived() < 3);
+    assert(!oargs);
+
+    switch (paramspec.totalReceived()) {
+        case 3:
+            Py_XDECREF(arg3);
+        case 2:
+            Py_XDECREF(arg2);
+        case 1:
+            Py_XDECREF(arg1);
+        default:
+            break;
     }
 
     checkAndThrowCAPIException();

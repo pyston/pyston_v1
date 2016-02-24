@@ -1855,11 +1855,6 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     if (!rewrite_success)
         rewrite_args = NULL;
 
-    assert(!oargs);
-    AUTO_XDECREF(arg1);
-    AUTO_XDECREF(arg2);
-    AUTO_XDECREF(arg3);
-
     RewriterVar* r_passthrough = NULL;
     if (rewrite_args)
         r_passthrough = rewrite_args->rewriter->loadConst((intptr_t)self->passthrough, Location::forArg(0));
@@ -1921,9 +1916,23 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         RELEASE_ASSERT(0, "0x%x", flags);
     }
 
+    assert(paramspec.totalReceived() < 3);
+    assert(!oargs);
+
     if (rewrite_args) {
         rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
         rewrite_args->out_success = true;
+    }
+
+    switch (paramspec.totalReceived()) {
+        case 3:
+            Py_XDECREF(arg3);
+        case 2:
+            Py_XDECREF(arg2);
+        case 1:
+            Py_XDECREF(arg1);
+        default:
+            break;
     }
 
     checkAndThrowCAPIException();

@@ -1023,7 +1023,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             // Another option is to rely on rewriting to make this fast, which would probably require adding
             // a custom internal callable to object.__new__
             made = objectNewNoArgs(cls);
-            r_made = rewrite_args->rewriter->call(true, (void*)objectNewNoArgs, r_ccls);
+            r_made = rewrite_args->rewriter->call(true, (void*)objectNewNoArgs, r_ccls)->setType(RefType::OWNED);
             assert(made);
         } else {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
@@ -1174,7 +1174,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             // Note: this code path includes the descriptor logic
             if (rewrite_args) {
-                assert(0 && "check refcounting");
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init, rewrite_args->destination);
                 srewrite_args.arg1 = r_made;
                 if (npassed_args >= 2)

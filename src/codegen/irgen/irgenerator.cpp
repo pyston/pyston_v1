@@ -1191,6 +1191,7 @@ private:
             emitter.setType(attr, RefType::BORROWED);
             llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
+            emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             // vst is one of {FAST, CLOSURE}
