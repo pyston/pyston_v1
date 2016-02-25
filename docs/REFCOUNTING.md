@@ -17,11 +17,16 @@ Exception safety
 Helpers:
 AUTO_DECREF, autoDecref, incref
 
-A use-after-free will typically show up as a segfault (where the accessed memory location is something like 0xdbdbdbdb), or as an "Object has negative ref count" error message.  In both cases, I find it best to do `watch -l op->ob_refcnt`.  I find it helpful to open up a text file and write down what each of the ref operations means, and then figure out which ones were extra or which ones were missing.
-
-If you get extra refs at the end, try to bisect down the program until you find the point that the ref was leaked.  Unfortunately there is not a good way to enumerate all live objects to figure out what they are.
+Invariant: all paths through a function should leave each variable with 0 net refs.  (This includes paths out via exceptions.)
 
 ## Refcounting in the rewriter, baseline jit, and llvm jit
+
+## Debugging
+
+A use-after-free will typically show up as a segfault (where the accessed memory location is something like 0xdbdbdbdb), or as an "Object has negative ref count" error message.  In both cases, I find it best to do `watch -l op->ob_refcnt`.  I find it helpful to open up a text file and write down what each of the ref operations means, and then figure out which ones were extra or which ones were missing.
+
+If the program ends with a message such as "10 refs remaining!", try to bisect down the program until you find the point that the ref was leaked.  Unfortunately there is not a good way to enumerate all live objects to figure out what they are.
+
 
 If the assertion `assert(var->reftype != RefType::UNKNOWN)` fails in Rewriter::commitReturning(), this means that someone forgot to call `setType` on a refcounted RewriterVar.  Unfortunately, we don't have any tracking of where RewriterVars get created, so we will use GDB to help us.
 
