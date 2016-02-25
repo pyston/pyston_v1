@@ -337,14 +337,16 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
 
     if (isSubclass(_rhs->cls, unicode_cls)) {
         Box* rtn = PyUnicode_Concat(lhs, _rhs);
-        checkAndThrowCAPIException();
+        if (!rtn)
+            throwCAPIException();
         return rtn;
     }
 
     if (!PyString_Check(_rhs)) {
         if (PyByteArray_Check(_rhs)) {
             Box* rtn = PyByteArray_Concat(lhs, _rhs);
-            checkAndThrowCAPIException();
+            if (!rtn)
+                throwCAPIException();
             return rtn;
         } else {
             // This is a compatibility break with CPython, which has their sq_concat method
@@ -1150,6 +1152,7 @@ error:
     }
     return NULL;
 }
+
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
     Box* rtn = PyString_Format(lhs, rhs);
     checkAndThrowCAPIException();
@@ -1243,7 +1246,7 @@ static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
 
     if (curWidth >= targetWidth) {
         if (self->cls == str_cls) {
-            return self;
+            return incref(self);
         } else {
             // If self isn't a string but a subclass of str, then make a new string to return
             return boxString(self->s());
@@ -1642,6 +1645,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
 
     if (cls != str_cls) {
         Box* tmp = strNew(str_cls, obj);
+        AUTO_DECREF(tmp);
         assert(PyString_Check(tmp));
         BoxedString* tmp_s = static_cast<BoxedString*>(tmp);
 
@@ -1675,11 +1679,11 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(length >= 0);
 
     if (length == 0)
-        return EmptyString;
+        return incref(EmptyString);
 
     if (length == 1) {
         char c = self->s()[start];
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
     BoxedString* bs = BoxedString::createUninitializedString(length);
@@ -1864,10 +1868,10 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
         return BoxedTuple::create({ self, EmptyString, EmptyString });
 
 
-    return BoxedTuple::create(
-        { boxString(llvm::StringRef(self->data(), found_idx)),
-          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
-          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
+    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
+                                                                     self->size() - found_idx - sep->size()))) });
 }
 
 Box* strRpartition(BoxedString* self, BoxedString* sep) {
@@ -1878,10 +1882,10 @@ Box* strRpartition(BoxedString* self, BoxedString* sep) {
     if (found_idx == std::string::npos)
         return BoxedTuple::create({ EmptyString, EmptyString, self });
 
-    return BoxedTuple::create(
-        { boxString(llvm::StringRef(self->data(), found_idx)),
-          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
-          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
+    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
+                                                                     self->size() - found_idx - sep->size()))) });
 }
 
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
@@ -1891,8 +1895,8 @@ Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(!kwargs || kwargs->cls == dict_cls);
 
     Box* rtn = _do_string_format(self, args, kwargs);
-    checkAndThrowCAPIException();
-    assert(rtn);
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -1911,9 +1915,9 @@ Box* strStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, BOTHSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "strip arg must be None, str or unicode");
@@ -1935,9 +1939,9 @@ Box* strLStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, LEFTSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "lstrip arg must be None, str or unicode");
@@ -1959,9 +1963,9 @@ Box* strRStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, RIGHTSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "rstrip arg must be None, str or unicode");
@@ -2142,7 +2146,8 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strStartswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                Py_RETURN_TRUE;
+                return b;
+            Py_DECREF(b);
         }
         Py_RETURN_FALSE;
     }
@@ -2213,7 +2218,8 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strEndswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                Py_RETURN_TRUE;
+                return b;
+            Py_DECREF(b);
         }
         Py_RETURN_FALSE;
     }
@@ -2249,8 +2255,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'decode' requires a 'str' object but received a '%s'", getTypeName(self));
 
-    BoxedString* encoding_str = (BoxedString*)encoding;
-    BoxedString* error_str = (BoxedString*)error;
+    BORROWED(BoxedString*) encoding_str = (BoxedString*)encoding;
+    BORROWED(BoxedString*) error_str = (BoxedString*)error;
 
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
@@ -2274,8 +2280,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
 
-    BoxedString* encoding_str = (BoxedString*)encoding;
-    BoxedString* error_str = (BoxedString*)error;
+    BORROWED(BoxedString*) encoding_str = (BoxedString*)encoding;
+    BORROWED(BoxedString*) error_str = (BoxedString*)error;
 
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
@@ -2303,7 +2309,7 @@ static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) {
     }
 
     char c = boxedString->s()[i];
-    return characters[c & UCHAR_MAX];
+    return incref(characters[c & UCHAR_MAX]);
 }
 
 template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
@@ -2330,7 +2336,7 @@ template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
         }
 
         char c = self->s()[n];
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -2366,7 +2372,7 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) {}
+    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) { Py_INCREF(s); }
 
     DEFAULT_CLASS(str_iterator_cls);
 
@@ -2382,7 +2388,7 @@ public:
 
     static Box* iter(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
-        return self;
+        return incref(self);
     }
 
     static Box* next(BoxedStringIterator* self) {
@@ -2392,7 +2398,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
     static Box* next_capi(Box* _self) noexcept {
@@ -2403,7 +2409,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
     static void dealloc(BoxedStringIterator* o) noexcept {
@@ -2628,7 +2634,7 @@ overflow1:
     return NULL;
 }
 
-static PyObject* string_zfill(PyObject* self, PyObject* args) {
+static PyObject* string_zfill(PyObject* self, PyObject* args) noexcept {
     Py_ssize_t fill;
     PyObject* s;
     char* p;
@@ -2649,7 +2655,7 @@ static PyObject* string_zfill(PyObject* self, PyObject* args) {
 
     // Pyston change:
     // s = pad(self, fill, 0, '0');
-    s = pad((BoxedString*)self, boxInt(width), characters['0' & UCHAR_MAX], JUST_RIGHT);
+    s = pad((BoxedString*)self, autoDecref(boxInt(width)), characters['0' & UCHAR_MAX], JUST_RIGHT);
 
     if (s == NULL)
         return NULL;
@@ -2760,7 +2766,7 @@ static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexc
     return 1;
 }
 
-static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t index, const char** ptr) {
+static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t index, const char** ptr) noexcept {
     if (index != 0) {
         PyErr_SetString(PyExc_SystemError, "accessing non-existent string segment");
         return -1;
@@ -2834,7 +2840,8 @@ void setupStr() {
 
     str_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)str_str, STR, 1)));
-    str_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)strRepr, STR, 1)));
+    str_cls->giveAttr("__repr__",
+                      new BoxedFunction(FunctionMetadata::create((void*)strRepr, STR, 1, ParamNames::empty(), CAPI)));
     str_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)strHash, UNKNOWN, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)strNonzero, BOXED_BOOL, 1)));
 

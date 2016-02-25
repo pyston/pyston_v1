@@ -2214,7 +2214,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
             // Check if __get__ exists
             if (descr_get) {
                 if (rewrite_args) {
-                    assert(0 && "check refcounting");
                     RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _get_ = typeLookup<rewritable>(descr->cls, get_str, &grewrite_args);
@@ -2239,7 +2238,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                 // Check if __set__ exists
                 Box* _set_ = NULL;
                 if (rewrite_args) {
-                    assert(0 && "check refcounting");
                     RewriterVar* r_descr_cls = r_descr->getAttr(offsetof(Box, cls), Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
                     _set_ = typeLookup<REWRITABLE>(descr->cls, set_str, &grewrite_args);

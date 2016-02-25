@@ -430,7 +430,7 @@ extern "C" int PyInt_ClearFreeList() noexcept;
 class BoxedInt : public Box {
 private:
     static PyIntObject *free_list;
-    static PyIntObject * fill_free_list();
+    static PyIntObject * fill_free_list() noexcept;
 
 public:
     int64_t n;
@@ -457,8 +457,8 @@ public:
 #endif
     }
 
-    static void tp_dealloc(Box* b);
-    static void tp_free(void* b);
+    static void tp_dealloc(Box* b) noexcept;
+    static void tp_free(void* b) noexcept;
 
     friend int PyInt_ClearFreeList() noexcept;
 };

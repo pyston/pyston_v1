@@ -4371,7 +4371,7 @@ extern "C" void Py_Finalize() noexcept {
     call_sys_exitfunc();
     // initialized = 0;
 
-    // XXX
+#ifdef Py_REF_DEBUG
     PyGC_Collect(); // To make sure it creates any static objects
     IN_SHUTDOWN = true;
     PyOS_FiniInterrupts();
@@ -4395,6 +4395,7 @@ extern "C" void Py_Finalize() noexcept {
     // May need to run multiple collections to collect everything:
     while (PyGC_Collect())
         ;
+#endif
 
 // PyGC_Collect());
 

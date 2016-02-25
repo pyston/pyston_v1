@@ -253,8 +253,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         }
     }
 
-    assert(!rewrite_args && "check refcounting");
-
     STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
 
     assert(_self->cls == method_cls);
@@ -339,7 +337,8 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         if (rewrite_args)
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)));
+                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
+                      ->setType(RefType::OWNED);
     } else if (call_flags == METH_VARARGS) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
@@ -347,15 +346,16 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                                 rewrite_args->arg2);
+                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
     } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
             rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(arg1, arg2, arg3);
         }
         if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                                 rewrite_args->arg2, rewrite_args->arg3);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                               rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
     } else if (call_flags == METH_O) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
@@ -363,7 +363,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         }
         if (rewrite_args)
             rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                                 rewrite_args->arg2);
+                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
     } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
         {
             UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
@@ -371,15 +371,18 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         }
         if (rewrite_args) {
             if (paramspec.totalReceived() == 2)
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth,
-                                                                     rewrite_args->arg1, rewrite_args->arg2);
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                   rewrite_args->arg2)->setType(RefType::OWNED);
             else if (paramspec.totalReceived() == 3)
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(
-                    true, (void*)self->method->ml_meth, rewrite_args->arg1, rewrite_args->arg2, rewrite_args->arg3);
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                   rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
             else if (paramspec.totalReceived() > 3)
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                   rewrite_args->arg2, rewrite_args->arg3, rewrite_args->args);
+                                                   rewrite_args->arg2, rewrite_args->arg3,
+                                                   rewrite_args->args)->setType(RefType::OWNED);
             else
                 abort();
         }

@@ -69,7 +69,7 @@ typedef struct _intblock PyIntBlock;
 static PyIntBlock *block_list = NULL;
 PyIntObject *BoxedInt::free_list = NULL;
 
-PyIntObject* BoxedInt::fill_free_list(void) {
+PyIntObject* BoxedInt::fill_free_list(void) noexcept {
     PyIntObject* p, *q;
     /* Python's object allocator isn't appropriate for large blocks. */
     p = (PyIntObject*)PyMem_MALLOC(sizeof(PyIntBlock));
@@ -87,7 +87,7 @@ PyIntObject* BoxedInt::fill_free_list(void) {
     return p + N_INTOBJECTS - 1;
 }
 
-void BoxedInt::tp_dealloc(Box* v) {
+void BoxedInt::tp_dealloc(Box* v) noexcept {
 #ifdef DISABLE_INT_FREELIST
     v->cls->tp_free(v);
 #else
@@ -99,7 +99,7 @@ void BoxedInt::tp_dealloc(Box* v) {
 #endif
 }
 
-void BoxedInt::tp_free(void* b) {
+void BoxedInt::tp_free(void* b) noexcept {
 #ifdef DISABLE_INT_FREELIST
     assert(0);
 #endif
@@ -379,20 +379,18 @@ bool __builtin_smull_overflow(i64 lhs, i64 rhs, i64* result) {
 
 #endif
 
-// Could add this to the others, but the inliner should be smart enough
-// that this isn't needed:
 extern "C" Box* add_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_saddl_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longAdd(boxLong(lhs), boxLong(rhs));
+    return longAdd(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_ssubl_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longSub(boxLong(lhs), boxLong(rhs));
+    return longSub(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
@@ -405,7 +403,7 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
     if (lhs == PYSTON_INT_MIN && rhs == -1) {
-        return longDiv(boxLong(lhs), boxLong(rhs));
+        return longDiv(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
     }
 #endif
 
@@ -457,14 +455,14 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
         return boxFloat(pow_float_float(lhs, rhs));
 
     // let longPow do the checks.
-    return longPow(boxLong(lhs), boxLong(rhs), mod);
+    return longPow(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)), mod);
 }
 
 extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_smull_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longMul(boxLong(lhs), boxLong(rhs));
+    return longMul(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" i1 eq_i64_i64(i64 lhs, i64 rhs) {
@@ -676,7 +674,7 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
         if ((res >> rhs->n) == lhs->n)
             return boxInt(lhs->n << rhs->n);
     }
-    return longLshift(boxLong(lhs->n), rhs);
+    return longLshift(autoDecref(boxLong(lhs->n)), rhs);
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
@@ -685,7 +683,7 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
-        return longLshift(boxLong(lhs->n), rhs);
+        return longLshift(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
@@ -719,14 +717,18 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
     Box* divResult = intDiv(lhs, rhs);
 
     if (divResult == NotImplemented) {
-        return incref(NotImplemented);
+        return divResult;
     }
+
+    AUTO_DECREF(divResult);
 
     Box* modResult = intMod(lhs, rhs);
 
     if (modResult == NotImplemented) {
-        return incref(NotImplemented);
+        return modResult;
     }
+
+    AUTO_DECREF(modResult);
 
     Box* arg[2] = { divResult, modResult };
     return createTuple(2, arg);
@@ -774,7 +776,7 @@ extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
     assert(PyInt_Check(lhs));
     assert(PyLong_Check(rhs));
     BoxedLong* lhs_long = boxLong(lhs->n);
-    return longPow(lhs_long, rhs, mod);
+    return longPow(autoDecref(lhs_long), rhs, mod);
 }
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
@@ -814,7 +816,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
 
     Box* rtn = pow_i64_i64(lhs->n, rhs_int->n, mod);
     if (PyLong_Check(rtn))
-        return longInt(rtn);
+        return longInt(autoDecref(rtn));
     return rtn;
 }
 
@@ -834,7 +836,7 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
-        return longRshift(boxLong(lhs->n), rhs);
+        return longRshift(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
@@ -897,7 +899,7 @@ extern "C" Box* intNeg(BoxedInt* v) {
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
     if (v->n == PYSTON_INT_MIN) {
-        return longNeg(boxLong(v->n));
+        return longNeg(autoDecref(boxLong(v->n)));
     }
 #endif
 
@@ -1041,6 +1043,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
 
     if (PyString_Check(val)) {
         BoxedString* s = static_cast<BoxedString*>(val);
+        AUTO_DECREF(s);
 
         if (s->size() != strlen(s->data())) {
             Box* srepr = PyObject_Repr(val);
@@ -1102,6 +1105,8 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
         assert(S == CAPI);
         return NULL;
     }
+
+    AUTO_DECREF(n);
 
     if (n->cls == long_cls) {
         if (cls == int_cls)
