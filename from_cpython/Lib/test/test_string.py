@@ -1,6 +1,3 @@
-# skip-if: True
-# expected: fail
-# this test gets stuck in an infinite loop(?) in test_replace (from string_tests)
 import unittest, string
 from test import test_support, string_tests
 from UserList import UserList

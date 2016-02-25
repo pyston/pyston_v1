@@ -78,6 +78,7 @@ extern "C" void initzlib();
 extern "C" void init_codecs();
 extern "C" void init_socket();
 extern "C" void _PyUnicode_Init();
+extern "C" void _string_init();
 extern "C" void initunicodedata();
 extern "C" void init_weakref();
 extern "C" void initcStringIO();
@@ -4067,6 +4068,7 @@ void setupRuntime() {
     _PyUnicode_Init();
     unicode_cls->is_constant = true;
     unicode_cls->is_user_defined = false;
+    _string_init();
     setupDescr();
     setupTraceback();
     setupCode();

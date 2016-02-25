@@ -23,6 +23,22 @@ PyObject * _do_string_format(PyObject *self, PyObject *args, PyObject *kwargs) {
     return do_string_format(self, args, kwargs);
 }
 
+void _string_init() {
+    if (PyType_Ready(&PyFieldNameIter_Type) < 0)
+        Py_FatalError("Can't initialize field name iterator type");
+
+    if (PyType_Ready(&PyFormatterIter_Type) < 0)
+        Py_FatalError("Can't initialize formatter iter type");
+}
+
+PyObject * _formatter_parser(STRINGLIB_OBJECT *self) {
+    return formatter_parser(self);
+}
+
+PyObject * _formatter_field_name_split(STRINGLIB_OBJECT *self) {
+    return formatter_field_name_split(self);
+}
+
 PyObject *
 string_count(PyStringObject *self,
              PyObject *sub_obj, PyObject* obj_start, PyObject** args)
