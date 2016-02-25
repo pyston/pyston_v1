@@ -2921,7 +2921,8 @@ void setupStr() {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
     }
 
-    auto str_new = FunctionMetadata::create((void*)strNew<CXX>, UNKNOWN, 2, false, false, ParamNames::empty(), CXX);
+    auto str_new = FunctionMetadata::create((void*)strNew<CXX>, UNKNOWN, 2, false, false,
+                                            ParamNames({ "", "object" }, "", ""), CXX);
     str_new->addVersion((void*)strNew<CAPI>, UNKNOWN, CAPI);
     str_cls->giveAttr("__new__", new BoxedFunction(str_new, { EmptyString }));
 

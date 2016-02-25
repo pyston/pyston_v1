@@ -3,6 +3,7 @@ f = 1.0
 print f
 
 print float(2)
+print float(x=2)
 
 # print f - 2
 
