@@ -1,4 +1,10 @@
+# To try to make runs with different n as similar as possible, we always
+# create an array of N elements by repeating the n as many times as necessary.
+# This way, the control flow of the main loop will be the same regardless of
+# the number of objects we create -- with such a small benchmark, this ends
+# up being noticeable.
 N = 1024
+
 def f(n):
     l = []
     assert N % n == 0

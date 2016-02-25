@@ -1200,7 +1200,7 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
         fwrite(&checksum, 1, CHECKSUM_LENGTH, cache_fp);
     memcpy(&file_data[checksum_start + LENGTH_LENGTH], &checksum, CHECKSUM_LENGTH);
 
-    return std::move(file_data);
+    return file_data;
 }
 
 // Parsing the file is somewhat expensive since we have to shell out to cpython;

@@ -240,15 +240,63 @@ void initCodegen() {
 
 Integration tests that run `pip` will often cache downloaded packages, so you may want to try `rm -rf ~/.cache/pip`. We do not clear the cache by default because the test takes longer to run and we run into cases where the failure can occur only when packages are cached just as often as when the packages are not cached.
 
-##### Problem: I found the crash, but the stacktrace is convoluted
+##### Problem: I have a segmentation fault (SIGSEGV) or a bus error (SIGBUS) and I don't understand how it happens, GDB is crashing
+
+Most segmentation faults are obvious (e.g. deferencing a NULL pointer) but sometimes, it is not clear how it happens. For example, accessing a field without a pointer dereference (e.g. `v.x`).
+
+Check how large the backtrace is. It's possible that the segumentation fault or bus error is actually a stack overflow, in which case the crash could happen just about anywhere. Furthermore, GDB seems to handle stack traces badly (attempting to print a variable might crash GDB).
+
+Also consider that the stack being run could be a generator stack, in which case local variables will have address starting with `0x427`. They look like heap objects, but they are not.
+
+##### Problem: I found the crash, but I do not understand the stacktrace (it is convoluted or seems wrong)
 
 The real cause of an error is often deeper down in the stack. If an assertion failed for example, it may be the case that the assertion calls an exception handler, which tries unwinding the stack for debug information, then fails again and triggers another assertion, which is the one you see. If you see anything that refers to unwinding or exception handling in the stacktrace, you may need to look deeper down.
 
+It is also possible that an exception was not handled and unwinding fails. The error message might contain references to unwinding. For example:
+
+```
+Traceback (most recent call last):
+File "/usr/share/gdb/auto-load/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.19-gdb.py", line 63, in <module from libstdcxx.v6.printers import register_libstdcxx_printers
+ImportError: No module named 'libstdcxx'
+Pyston v0.5.0 (rev dfd0b2eadb3723e5898419ade3c535c1e2f7ecf9), targeting Python 2.7.7
+>> float(1<<1024)
+../../src/runtime/cxx_unwind.cpp:612: void std::terminate(): Assertion `0' failed: std::terminate() called!
+Someone called abort!
+Traceback (most recent call last):
+File "<stdin>", line 1, in <module>
+```
+
+In that case, the backtrace might not be very helpful. For example:
+
+```
+#0  0x00007ffff5189cc9 in __GI_raise (sig=sig@entry=6) at ../nptl/sysdeps/unix/sysv/linux/raise.c:56
+#1  0x00007ffff518d0d8 in __GI_abort () at abort.c:89
+#2  0x00000000007dd05c in abort () at ../../src/codegen/unwinding.cpp:1222
+#3  0x000000000087a43a in std::terminate () at ../../src/runtime/cxx_unwind.cpp:612
+#4  0x00000000006285a6 in __clang_call_terminate ()
+#5  0x00000000008992a1 in pyston::_floatNew<(pyston::ExceptionStyle)0> (a=0x127018ad68)
+    at ../../src/runtime/float.cpp:852
+#6  0x00000000008986db in pyston::floatNew<(pyston::ExceptionStyle)0> (_cls=0x127000b808, a=0x127018ad68)
+        at ../../src/runtime/float.cpp:920
+(More stack frames follow...)
+(gdb) frame 5
+#5  0x00000000008992a1 in pyston::_floatNew<(pyston::ExceptionStyle)0> (a=0x127018ad68)
+    at ../../src/runtime/float.cpp:852
+    852             return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
+
+```
+
+The backtrace is misleading since it suggests that an error occured on line 852, which is entirely wrong (that line is never actually reached!).
+
+If that happens, you should either add a try/catch pair, or use C-style exceptions instead.
+
 ##### Problem: I get a segmentation due to stackoverflow from an infinite loop of mutually recursive functions like `runtimeCall`.
 
-Pyston started without support for [CPython slots](https://docs.python.org/2/c-api/typeobj.html#sequence-structs) (e.g. `tp_` or `mp_`, `sq_`, etc) but they were introduced later. Some legacy code will still assign functions to the `tp_` slots that do an attribute lookup for a function that contains the logic instead of just running the logic directly. For example, `slot_tp_del` might do an attribute for `__del__` instead of just calling a finalizer.
+Pyston started without support for [CPython slots](https://docs.python.org/2/c-api/typeobj.html#sequence-structs) (e.g. `tp_` or `mp_`, `sq_`, etc) but they were introduced later. Some legacy code will still assign functions to the `tp_` slots that do an attribute lookup for a function that contains the logic instead of just running the logic directly. For example, `slot_tp_del` might do an attribute lookup for `__del__` instead of just calling a finalizer.
 
 Sometimes, that attribute lookup ends up calling the `tp_` slot again which creates a loop which only terminates with a stackoverflow. The solution in those cases is often to figure out the object and the slot involved in the recursive calls, and assign a non-default function to the `tp_` slot that does not do another attribute lookup.
+
+https://github.com/dropbox/pyston/commit/79b2e9ccd835fb2cfeb47756a92295d4d17ef91b is a commit that fixed one instance of this problem.
 
 ##### Problem: My object is not getting garbage collected
 
