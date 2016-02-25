@@ -19,9 +19,27 @@ We have some documentation for those interested in contributing: see our [Develo
 
 ### Roadmap
 
-##### v0.1: [released 4/2/2014](https://tech.dropbox.com/2014/04/introducing-pyston-an-upcoming-jit-based-python-implementation/)
-- Focus was on building and validating the core Python-to-LLVM JIT infrastructure.
-- Many core parts of the language were missing.
+##### v0.5: Coming soon
+- Focus is on being ready to run Dropbox's production services.  Initial plan:
+ - Support for a final few esoteric Python features
+ - Better stability and performance (but particularly for the Dropbox servers)
+
+##### v0.4: [released 11/3/2015](http://blog.pyston.org/2015/11/03/102/)
+- Many new features and better language support
+ - Passes most of the tests of several famous python libraries
+ - Unicode support
+ - GC finalizer
+ - much improved C API support
+- Better performance
+ - Custom C++ exception handler
+ - Object Cache (improves startup time)
+ - Baseline JIT
+
+##### v0.3: [released 2/24/2015](http://blog.pyston.org/2015/02/24/pyston-0-3-self-hosting-sufficiency/)
+- Better language support
+ - Can self-host all of our internal Python scripts
+- Better performance
+ - Match CPython's performance on our small benchmark suite
 
 ##### v0.2: [released 9/11/2014](http://blog.pyston.org/2014/09/11/9/)
 - Focus was on improving language compatibility to the point that we can start running "real code" in the form of existing benchmarks.
@@ -35,24 +53,9 @@ We have some documentation for those interested in contributing: see our [Develo
  - Multithreading support
 - We have allowed performance to regress, sometimes considerably, but (hopefully) in places that allow for more efficient implementations as we have time.
 
-##### v0.3: [released 2/24/2015](http://blog.pyston.org/2015/02/24/pyston-0-3-self-hosting-sufficiency/)
-- Better language support
- - Can self-host all of our internal Python scripts
-- Better performance
- - Match CPython's performance on our small benchmark suite
-
-##### v0.4: [released 10/31/2015]
-- Many new features and better language support
- - Passes most of the tests of several famous python libraries
- - Unicode support
- - GC finalizer
- - much improved C API support
-- Better performance
- - Custom C++ exception handler
- - Object Cache (improves startup time)
- - Baseline JIT
-
-##### v0.5: Coming soon
+##### v0.1: [released 4/2/2014](https://tech.dropbox.com/2014/04/introducing-pyston-an-upcoming-jit-based-python-implementation/)
+- Focus was on building and validating the core Python-to-LLVM JIT infrastructure.
+- Many core parts of the language were missing.
 
 ### Trying it out
 
