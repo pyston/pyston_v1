@@ -2378,7 +2378,7 @@ public:
 
     DEFAULT_CLASS(str_iterator_cls);
 
-    static bool hasnextUnboxed(BoxedStringIterator* self) {
+    static llvm_compat_bool hasnextUnboxed(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
         return self->it != self->end;
     }

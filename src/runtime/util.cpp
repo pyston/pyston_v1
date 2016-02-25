@@ -118,10 +118,6 @@ Box* boxStringFromCharPtr(const char* s) {
     return boxString(s);
 }
 
-extern "C" bool hasnext(Box* o) {
-    return o->cls->tpp_hasnext(o);
-}
-
 extern "C" void _PyObject_Dump(Box* b) noexcept {
     dump(b);
 }

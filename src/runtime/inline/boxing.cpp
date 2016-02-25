@@ -47,5 +47,9 @@ i64 unboxInt(Box* b) {
     return ((BoxedInt*)b)->n;
 }
 
+extern "C" bool hasnext(Box* o) {
+    return o->cls->tpp_hasnext(o);
+}
+
 // BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}
 }

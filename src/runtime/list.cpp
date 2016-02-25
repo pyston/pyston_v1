@@ -1315,6 +1315,22 @@ void BoxedList::dealloc(Box* b) noexcept {
     Py_TRASHCAN_SAFE_END(op)
 }
 
+template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
+    Box* rtn = listiter_next(s);
+    if (!rtn) {
+        if (S == CAPI) {
+            PyErr_SetObject(StopIteration, None);
+            return NULL;
+        } else
+            raiseExcHelper(StopIteration, (const char*)NULL);
+    }
+    return rtn;
+}
+
+// force instantiation:
+template Box* listiterNext<CAPI>(Box*) noexcept;
+template Box* listiterNext<CXX>(Box*);
+
 int BoxedList::traverse(Box* _o, visitproc visit, void* arg) noexcept {
     PyListObject* o = (PyListObject*)_o;
     Py_ssize_t i;

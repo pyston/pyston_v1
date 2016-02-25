@@ -89,7 +89,7 @@ public:
 
     DEFAULT_CLASS(xrange_iterator_cls);
 
-    static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
+    static llvm_compat_bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
 

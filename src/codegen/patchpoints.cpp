@@ -80,16 +80,6 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
 
     // printf("parsing pp %ld:\n", reinterpret_cast<int64_t>(this));
 
-    StackMap::Record::Location frame_info_location = r->locations[cur_arg];
-    cur_arg++;
-    // We could allow the frame_info to exist in a different location for each callsite,
-    // but in reality it will always live at a fixed stack offset.
-    if (map->frameInfoFound()) {
-        assert(frame_info_location == map->frame_info_location);
-    } else {
-        map->frame_info_location = frame_info_location;
-    }
-
     for (FrameVarInfo& frame_var : frame_vars) {
         int num_args = frame_var.type->numFrameArgs();
 
@@ -164,6 +154,16 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         RELEASE_ASSERT(new_patchpoints.size() > r->id, "");
         PatchpointInfo* pp = new_patchpoints[r->id].first;
         assert(pp);
+
+        if (pp->isFrameInfoStackmap()) {
+            assert(r->locations.size() == pp->totalStackmapArgs());
+            StackMap::Record::Location frame_info_location = r->locations[0];
+            assert(!cf->location_map->frameInfoFound());
+            assert(frame_info_location.type == StackMap::Record::Location::Direct);
+            assert(frame_info_location.regnum == 6 /* must be rbp based */);
+            cf->location_map->frame_info_location = frame_info_location;
+            continue;
+        }
 
         void* slowpath_func = PatchpointInfo::getSlowpathAddr(r->id);
         if (VERBOSITY() >= 2) {

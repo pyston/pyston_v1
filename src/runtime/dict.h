@@ -58,7 +58,7 @@ Box* dictIterValues(Box* self);
 Box* dictIterItems(Box* self);
 Box* dictIterIter(Box* self);
 Box* dictIterHasnext(Box* self);
-i1 dictIterHasnextUnboxed(Box* self);
+llvm_compat_bool dictIterHasnextUnboxed(Box* self);
 Box* dictiter_next(Box* self) noexcept;
 Box* dictIterNext(Box* self);
 

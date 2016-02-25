@@ -777,10 +777,9 @@ PyObject* slot_tp_iter(PyObject* self) noexcept {
     return call_method(self, "next", &next_str, "()");
 }
 
-static bool slotTppHasnext(PyObject* self) {
+static llvm_compat_bool slotTppHasnext(PyObject* self) {
     STAT_TIMER(t0, "us_timer_slot_tpphasnext", SLOT_AVOIDABILITY(self));
 
-    static PyObject* hasnext_str;
     Box* r = self->hasnextOrNullIC();
     assert(r);
     return r->nonzeroIC();

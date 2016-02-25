@@ -525,7 +525,11 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
                                   ExceptionStyle forced_exception_style = CXX);
 EffortLevel initialEffort();
 
-typedef bool i1;
+#if BOOLS_AS_I64
+typedef int64_t llvm_compat_bool;
+#else
+typedef bool llvm_compat_bool;
+#endif
 typedef int64_t i64;
 
 const char* getNameOfClass(BoxedClass* cls);
@@ -940,8 +944,14 @@ struct FrameInfo {
     BoxedClosure* passed_closure;
 
     Box** vregs;
+    // Current statement
+    // Caution the llvm tier only updates this information on direct external calls but not for patchpoints.
+    // This means if a patchpoint "current_stmt" info is available it must be used instead of this field.
+    AST_stmt* stmt;
+    // This is either a module or a dict
+    Box* globals;
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0) {}
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0), stmt(0), globals(0) {}
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:

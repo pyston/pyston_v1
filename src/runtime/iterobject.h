@@ -77,7 +77,7 @@ public:
     }
 };
 
-bool calliter_hasnext(Box* b);
+llvm_compat_bool calliterHasnextUnboxed(Box* b);
 
 void setupIter();
 }

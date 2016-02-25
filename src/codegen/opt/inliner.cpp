@@ -212,6 +212,9 @@ public:
                     RELEASE_ASSERT(arg.getType() == call->getOperand(op_idx)->getType(), "");
                 }
 
+                if (f->getName() == "allowGLReadPreemption")
+                    continue;
+
                 assert(!f->isDeclaration());
                 CS.setCalledFunction(f);
                 calls.push_back(CS);
