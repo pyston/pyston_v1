@@ -1,12 +1,21 @@
-# expected: fail
 from test.test_support import run_unittest
-from test.test_math import parse_testfile, test_file
+from test.test_math import parse_testfile
 import unittest
+import os, sys
 import cmath, math
 from cmath import phase, polar, rect, pi
 
 INF = float('inf')
 NAN = float('nan')
+
+# Pyston change: pull testcases file from source directory
+# locate file with test values
+if __name__ == '__main__':
+    file = sys.argv[0]
+else:
+    file = __file__
+test_dir = os.path.dirname(file) or os.curdir
+test_file = os.path.join(test_dir, 'cmath_testcases.txt')
 
 complex_zeros = [complex(x, y) for x in [0.0, -0.0] for y in [0.0, -0.0]]
 complex_infinities = [complex(x, y) for x, y in [

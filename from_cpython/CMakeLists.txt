@@ -36,6 +36,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     bufferedio.c
     bytesio.c
     cache.c
+    cmathmodule.c
     connection.c
     cStringIO.c
     cursor.c
@@ -84,6 +85,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     bytes_methods.c
     capsule.c
     cobject.c
+    complexobject.c
     dictproxy.c
     exceptions.c
     floatobject.c

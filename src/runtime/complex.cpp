@@ -21,6 +21,8 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
+extern "C" PyObject* complex_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+
 namespace pyston {
 
 static inline void raiseDivZeroExc() {
@@ -398,147 +400,15 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* com
     complex_cls->giveAttr(name, new BoxedFunction(md));
 }
 
-static Py_complex c_1 = { 1., 0. };
-
-extern "C" Py_complex c_prod(Py_complex a, Py_complex b) noexcept {
-    Py_complex r;
-    r.real = a.real * b.real - a.imag * b.imag;
-    r.imag = a.real * b.imag + a.imag * b.real;
-    return r;
-}
-
-extern "C" Py_complex c_quot(Py_complex a, Py_complex b) noexcept {
-    /******************************************************************
-    This was the original algorithm.  It's grossly prone to spurious
-    overflow and underflow errors.  It also merrily divides by 0 despite
-    checking for that(!).  The code still serves a doc purpose here, as
-    the algorithm following is a simple by-cases transformation of this
-    one:
-
-    Py_complex r;
-    double d = b.real*b.real + b.imag*b.imag;
-    if (d == 0.)
-        errno = EDOM;
-    r.real = (a.real*b.real + a.imag*b.imag)/d;
-    r.imag = (a.imag*b.real - a.real*b.imag)/d;
-    return r;
-    ******************************************************************/
-
-    /* This algorithm is better, and is pretty obvious:  first divide the
-     * numerators and denominator by whichever of {b.real, b.imag} has
-     * larger magnitude.  The earliest reference I found was to CACM
-     * Algorithm 116 (Complex Division, Robert L. Smith, Stanford
-     * University).  As usual, though, we're still ignoring all IEEE
-     * endcases.
-     */
-    Py_complex r; /* the result */
-    const double abs_breal = b.real < 0 ? -b.real : b.real;
-    const double abs_bimag = b.imag < 0 ? -b.imag : b.imag;
-
-    if (abs_breal >= abs_bimag) {
-        /* divide tops and bottom by b.real */
-        if (abs_breal == 0.0) {
-            errno = EDOM;
-            r.real = r.imag = 0.0;
-        } else {
-            const double ratio = b.imag / b.real;
-            const double denom = b.real + b.imag * ratio;
-            r.real = (a.real + a.imag * ratio) / denom;
-            r.imag = (a.imag - a.real * ratio) / denom;
-        }
-    } else {
-        /* divide tops and bottom by b.imag */
-        const double ratio = b.real / b.imag;
-        const double denom = b.real * ratio + b.imag;
-        assert(b.imag != 0.0);
-        r.real = (a.real * ratio + a.imag) / denom;
-        r.imag = (a.imag * ratio - a.real) / denom;
-    }
-    return r;
-}
-
-extern "C" Py_complex c_pow(Py_complex a, Py_complex b) noexcept {
-    Py_complex r;
-    double vabs, len, at, phase;
-    if (b.real == 0. && b.imag == 0.) {
-        r.real = 1.;
-        r.imag = 0.;
-    } else if (a.real == 0. && a.imag == 0.) {
-        if (b.imag != 0. || b.real < 0.)
-            errno = EDOM;
-        r.real = 0.;
-        r.imag = 0.;
-    } else {
-        vabs = hypot(a.real, a.imag);
-        len = pow(vabs, b.real);
-        at = atan2(a.imag, a.real);
-        phase = at * b.real;
-        if (b.imag != 0.0) {
-            len /= exp(at * b.imag);
-            phase += b.imag * log(vabs);
-        }
-        r.real = len * cos(phase);
-        r.imag = len * sin(phase);
-    }
-    return r;
-}
-
-static Py_complex c_powu(Py_complex x, long n) noexcept {
-    Py_complex r, p;
-    long mask = 1;
-    r = c_1;
-    p = x;
-    while (mask > 0 && n >= mask) {
-        if (n & mask)
-            r = c_prod(r, p);
-        mask <<= 1;
-        p = c_prod(p, p);
-    }
-    return r;
-}
-
-static Py_complex c_powi(Py_complex x, long n) noexcept {
-    Py_complex cn;
-
-    if (n > 100 || n < -100) {
-        cn.real = (double)n;
-        cn.imag = 0.;
-        return c_pow(x, cn);
-    } else if (n > 0)
-        return c_powu(x, n);
-    else
-        return c_quot(c_1, c_powu(x, -n));
-}
-
 Box* complexPow(BoxedComplex* lhs, Box* _rhs, Box* mod) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
-    Py_complex p;
-    Py_complex exponent;
-    long int_exponent;
-    Py_complex a, b;
-    a = PyComplex_AsCComplex(lhs);
-    b = PyComplex_AsCComplex(_rhs);
-    if (mod != Py_None) {
-        raiseExcHelper(ValueError, "complex modulo");
-    }
-    PyFPE_START_PROTECT("complex_pow", return 0) errno = 0;
-    exponent = b;
-    int_exponent = (long)exponent.real;
-    if (exponent.imag == 0. && exponent.real == int_exponent)
-        p = c_powi(a, int_exponent);
-    else
-        p = c_pow(a, exponent);
 
-    PyFPE_END_PROTECT(p) Py_ADJUST_ERANGE2(p.real, p.imag);
-    if (errno == EDOM) {
-        raiseExcHelper(ZeroDivisionError, "0.0 to a negative or complex power");
-    } else if (errno == ERANGE) {
-        raiseExcHelper(OverflowError, "complex exponentiation");
-    }
-
-    return boxComplex(p.real, p.imag);
+    PyObject* res = complex_pow(lhs, _rhs, mod);
+    if (res == NULL)
+        throwCAPIException();
+    return res;
 }
 
 Box* complexRpow(BoxedComplex* _lhs, Box* _rhs) {
@@ -613,34 +483,19 @@ Box* complexConjugate(BoxedComplex* self) {
     return new BoxedComplex(self->real, -self->imag);
 }
 
-Box* complexAbs(BoxedComplex* self) {
-    if (!PyComplex_Check(self))
+Box* complexAbs(BoxedComplex* _self) {
+    if (!PyComplex_Check(_self))
         raiseExcHelper(TypeError, "descriptor '__abs__' requires a 'complex' object but received a '%s'",
-                       getTypeName(self));
+                       getTypeName(_self));
     double result;
+    Py_complex self = PyComplex_AsCComplex(_self);
+    result = c_abs(self);
 
-    if (isinf(self->real) || isinf(self->imag)) {
-        /* C99 rules: if either the real or the imaginary part is an
-           infinity, return infinity, even if the other part is a
-           NaN. */
-        if (!isinf(self->real)) {
-            return boxFloat(fabs(self->real));
-        }
-        if (!isinf(self->imag)) {
-            return boxFloat(fabs(self->imag));
-        }
-        /* either the real or imaginary part is a NaN,
-           and neither is infinite. Result should be NaN. */
-        return boxFloat(Py_NAN);
-    }
-
-    result = sqrt(self->real * self->real + self->imag * self->imag);
-
-    if (isinf(result)) {
+    if (errno == ERANGE) {
         raiseExcHelper(OverflowError, "absolute value too large");
     }
 
-    return boxFloat(result);
+    return PyFloat_FromDouble(result);
 }
 
 Box* complexGetnewargs(BoxedComplex* self) {
