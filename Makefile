@@ -647,17 +647,19 @@ cmake_check:
 	@cmake --version >/dev/null || (echo "cmake not available"; false)
 	@$(NINJA) --version >/dev/null || (echo "ninja not available"; false)
 
+COMMON_CMAKE_OPTIONS := $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) $(CMAKE_VALGRIND) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -GNinja
+
 .PHONY: cmake_check clang_check
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Debug
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
-	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(SRC_DIR) -DTEST_THREADS=$(TEST_THREADS) -DCMAKE_BUILD_TYPE=Release
+	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Release
 
 # Shared modules (ie extension modules that get built using pyston on setup.py) that we will ask CMake
 # to build.  You can flip this off to allow builds to continue even if self-hosting the sharedmods would fail.
@@ -675,7 +677,7 @@ CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_GCC)
-	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_VALGRIND)
+	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
 	$(NINJA) -C $(CMAKE_DIR_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
@@ -685,7 +687,7 @@ CMAKE_SETUP_RELEASE_GCC := $(CMAKE_DIR_RELEASE_GCC)/build.ninja
 $(CMAKE_SETUP_RELEASE_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC)
-	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND)
+	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS)  -DCMAKE_BUILD_TYPE=Release
 .PHONY: pyston_release_gcc
 pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC)
 	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
@@ -697,7 +699,7 @@ CMAKE_SETUP_RELEASE_GCC_PGO := $(CMAKE_DIR_RELEASE_GCC_PGO)/build.ninja
 $(CMAKE_SETUP_RELEASE_GCC_PGO):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
-	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=use
+	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Release -DENABLE_PGO=ON -DPROFILE_STATE=use
 .PHONY: pyston_release_gcc_pgo
 pyston_release_gcc_pgo: $(CMAKE_SETUP_RELEASE_GCC_PGO) $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
 	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
@@ -707,7 +709,7 @@ CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED := $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUME
 $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)
-	cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(SRC_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_VALGRIND) -DENABLE_PGO=ON -DPROFILE_STATE=generate -DPROFILE_DIR=$(CMAKE_DIR_RELEASE_GCC_PGO)
+	cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Release -DENABLE_PGO=ON -DPROFILE_STATE=generate -DPROFILE_DIR=$(CMAKE_DIR_RELEASE_GCC_PGO)
 
 .PHONY: pyston_release_gcc_pgo_instrumented
 pyston_release_gcc_pgo_instrumented: $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED)
@@ -1047,15 +1049,16 @@ update_section_ordering: pyston_release
 
 # TESTING:
 
-plugins/clang_linter.o: plugins/clang_linter.cpp $(BUILD_SYSTEM_DEPS)
-	ninja -C $(CMAKE_DIR_DBG) llvm/bin/llvm-config clangASTMatchers clangTooling LLVMLTO LLVMDebugInfoPDB LLVMLineEditor LLVMInterpreter LLVMOrcJIT
-	$(CXX) $< -o $@ -std=c++11 $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) -fno-rtti -O0 -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_INC_DBG)/tools/clang/include -c
+PLUGINS := $(wildcard plugins/*.cpp)
+$(patsubst %.cpp,%.o,$(PLUGINS)): plugins/%.o: plugins/%.cpp $(BUILD_SYSTEM_DEPS)
+	ninja -C $(CMAKE_DIR_DBG) llvm/bin/llvm-config clangASTMatchers clangTooling LLVMLTO LLVMDebugInfoPDB LLVMLineEditor LLVMInterpreter LLVMOrcJIT llvm/bin/clang
+	$(CMAKE_DIR_DBG)/llvm/bin/clang $< -o $@ -std=c++11 $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) -fno-rtti -O0 -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_INC_DBG)/tools/clang/include -c
 
-plugins/clang_linter.so: plugins/clang_linter.o
-	$(CXX) $< -o $@ -shared -lclangASTMatchers -lclangTooling $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags)
+$(patsubst %.cpp,%.so,$(PLUGINS)): plugins/%.so: plugins/%.o
+	$(CMAKE_DIR_DBG)/llvm/bin/clang $< -o $@ -shared -lclangASTMatchers -lclangTooling $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags)
 	# $(CXX) $< -o $@ -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags --system-libs --libs all)
 
-plugins/clang_linter: plugins/clang_linter.o $(BUILD_SYSTEM_DEPS)
+$(patsubst %.cpp,%,$(PLUGINS)): plugins/%: plugins/%.o $(BUILD_SYSTEM_DEPS)
 	$(CXX) $< -o $@ -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BIN_DBG)/llvm-config --ldflags --system-libs --libs all)
 
 .PHONY: tool_test
@@ -1070,6 +1073,9 @@ superlint: plugins/clang_linter.so
 lint_%: %.cpp plugins/clang_linter.so
 	$(ECHO) Linting $<
 	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped  -Ibuild_deps/libpypa/src/ -Wno-covered-switch-default -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
+
+refcount_checker:
+	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker
 
 .PHONY: clang_lint
 clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))

@@ -1573,7 +1573,7 @@ private:
 public:
     PhonyUnboxedType(llvm::Type* t, CompilerType* usable_type) : t(t), usable_type(usable_type) {}
 
-    std::string debugName() { return "phony(" + ConcreteCompilerType::debugName() + ")"; }
+    std::string debugName() override { return "phony(" + ConcreteCompilerType::debugName() + ")"; }
 
     CompilerType* getUsableType() override { return usable_type; }
 
@@ -2660,7 +2660,7 @@ class UnboxedSliceType : public ValuedCompilerType<UnboxedSlice> {
 public:
     std::string debugName() override { return "slice"; }
 
-    void assertMatches(UnboxedSlice slice) {}
+    void assertMatches(UnboxedSlice slice) override {}
 
     int numFrameArgs() override { RELEASE_ASSERT(0, "unboxed slice should never get serialized"); }
 
