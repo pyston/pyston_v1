@@ -39,6 +39,7 @@ addons:
     - gdb
     - libbz2-dev
     - libgmp3-dev
+    - libmpfr-dev
     - liblzma-dev
     - libncurses5-dev
     - libreadline-dev

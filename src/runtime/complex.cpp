@@ -541,6 +541,23 @@ Box* complexPow(BoxedComplex* lhs, Box* _rhs, Box* mod) {
     return boxComplex(p.real, p.imag);
 }
 
+Box* complexRpow(BoxedComplex* _lhs, Box* _rhs) {
+    if (!PyComplex_Check(_lhs))
+        raiseExcHelper(TypeError, "descriptor '__rpow__' requires a 'complex' object but received a '%s'",
+                       getTypeName(_lhs));
+    BoxedComplex* lhs = new BoxedComplex(0.0, 0.0);
+    if (PyInt_Check(_rhs)) {
+        lhs->real = (static_cast<BoxedInt*>(_rhs))->n;
+    } else if (_rhs->cls == float_cls) {
+        lhs->real = (static_cast<BoxedFloat*>(_rhs))->d;
+    } else if (_rhs->cls == complex_cls) {
+        lhs = static_cast<BoxedComplex*>(_rhs);
+    } else {
+        return NotImplemented;
+    }
+    return complexPow(lhs, _lhs, None);
+}
+
 Box* complexHash(BoxedComplex* self) {
     if (!PyComplex_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'complex' object but received a '%s'",
@@ -1254,6 +1271,8 @@ void setupComplex() {
     complex_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)complexRDiv, UNKNOWN, 2)));
     complex_cls->giveAttr(
         "__pow__", new BoxedFunction(FunctionMetadata::create((void*)complexPow, UNKNOWN, 3, false, false), { None }));
+    complex_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)complexRpow, UNKNOWN, 2)));
+
     complex_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)complexMod, UNKNOWN, 2)));
     complex_cls->giveAttr("__divmod__",
                           new BoxedFunction(FunctionMetadata::create((void*)complexDivmod, BOXED_TUPLE, 2)));

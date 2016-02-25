@@ -1,4 +1,3 @@
-# expected: fail
 """Tests for Lib/fractions.py."""
 
 from decimal import Decimal

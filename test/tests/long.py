@@ -146,3 +146,19 @@ print(long(unicode("-3")))
 
 print(long(x=10))
 print(long(x="10", base=10))
+
+try:
+    print(long('hek2mgl', 22))
+except Exception as e:
+    print(e.message)
+
+print(long('hek2mgl', 23))
+print(long('hek2mgl', 24))
+
+for i in range(-10, 10):
+    print(hash((-1 << 63) + i))
+    print(hash((1 << 63) + i))
+
+for i in xrange(100):
+    for j in xrange(100):
+        print i, j, hash((1 << i) - (1 << j))

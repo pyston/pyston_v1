@@ -1,4 +1,3 @@
-# expected: fail
 import unittest
 import sys
 
@@ -17,7 +16,10 @@ class Frm(object):
         return self.format % self.args
 
 # SHIFT should match the value in longintrepr.h for best testing.
-SHIFT = sys.long_info.bits_per_digit
+SHIFT = 64
+# Pyston changes: Pyston long implementation not based on digits.
+# disable it for now.
+# SHIFT = sys.long_info.bits_per_digit
 BASE = 2 ** SHIFT
 MASK = BASE - 1
 KARATSUBA_CUTOFF = 70   # from longobject.c

@@ -459,7 +459,7 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
             return inst->getAttrWrapper();
 
         if (attr_str->s() == "__class__")
-            return inst->inst_cls;
+            return incref(inst->inst_cls);
     }
 
     Box* attr = instanceGetattributeWithFallback<rewritable>(inst, attr_str, rewrite_args);
@@ -1522,8 +1522,13 @@ Box* instanceLong(Box* _inst) {
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     static BoxedString* long_str = getStaticString("__long__");
-    Box* long_func = _instanceGetattribute(inst, long_str, true);
-    return runtimeCall(long_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (PyObject_HasAttr((PyObject*)inst, long_str)) {
+        Box* long_func = _instanceGetattribute(inst, long_str, true);
+        return runtimeCall(autoDecref(long_func), ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    }
+
+    Box* res = instanceInt(inst);
+    return res;
 }
 
 Box* instanceFloat(Box* _inst) {
