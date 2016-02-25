@@ -17,8 +17,20 @@ Exception safety
 Helpers:
 AUTO_DECREF, autoDecref, incref
 
-If you get a use-after-free (typically a segfault where we tried to access dead memory that looks like 0xdbdbdbdb): `watch -l op->ob_refcnt`.  I find it helpful to open up a text file and write down what each of the ref operations means, and then figure out which ones were extra or which ones were missing.
+A use-after-free will typically show up as a segfault (where the accessed memory location is something like 0xdbdbdbdb), or as an "Object has negative ref count" error message.  In both cases, I find it best to do `watch -l op->ob_refcnt`.  I find it helpful to open up a text file and write down what each of the ref operations means, and then figure out which ones were extra or which ones were missing.
 
 If you get extra refs at the end, try to bisect down the program until you find the point that the ref was leaked.  Unfortunately there is not a good way to enumerate all live objects to figure out what they are.
 
 ## Refcounting in the rewriter, baseline jit, and llvm jit
+
+If the assertion `assert(var->reftype != RefType::UNKNOWN)` fails in Rewriter::commitReturning(), this means that someone forgot to call `setType` on a refcounted RewriterVar.  Unfortunately, we don't have any tracking of where RewriterVars get created, so we will use GDB to help us.
+
+- Type `run` a few (~3) times to make sure that the program enters steady-state behavior (on-disk caches get filled).
+- When the assertion hits, go up to the `commitReturning()` stack frame that contains the assertion.
+- Type `watch -l *(char**)&var->reftype`.  This adds a breakpoint that will get hit whenever the reftype field gets modified.  The `-l` flag tells gdb to evaluate the expression once and then watch the resulting address (rather than symbolically reevaluating it each time).  The `*(char**)&` part is a workaround since otherwise GDB will fail to reset the breakpoint when we do the next step.
+- Type `run` to restart the program.  You should see the breakpoint get hit.  We are only interested in the last time the breakpoint gets hit, so we need to do the following:
+- Type `continue` until the program exits.  Then do `info break` to see how many times the breakpoint got hit ("breakpoint already hit 47 times").  You could also count it out yourself but I find this much easier.
+- Then do `run`, then `continue N-1` where N was the number of times the breakpoint got hit.
+- Now we should be at the point that the RewriterVar got created.  You can do a backtrace to see who created the RewriterVar and thus where the annotation needs to get added.
+
+Similarly, you can get this assertion about an llvm::Value*, in which case you should try `watch -l *(void**)v`.

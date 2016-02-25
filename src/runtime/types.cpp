@@ -1519,7 +1519,7 @@ static Box* funcName(Box* b, void*) {
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
     if (func->name == NULL)
         return boxString("<unknown function name>");
-    return func->name;
+    return incref(func->name);
 }
 
 static void funcSetName(Box* b, Box* v, void*) {
@@ -1780,8 +1780,11 @@ Box* instancemethodEq(BoxedInstanceMethod* self, Box* rhs) {
 
 Box* sliceRepr(BoxedSlice* self) {
     BoxedString* start = static_cast<BoxedString*>(repr(self->start));
+    AUTO_DECREF(start);
     BoxedString* stop = static_cast<BoxedString*>(repr(self->stop));
+    AUTO_DECREF(stop);
     BoxedString* step = static_cast<BoxedString*>(repr(self->step));
+    AUTO_DECREF(step);
     return boxStringTwine(llvm::Twine("slice(") + start->s() + ", " + stop->s() + ", " + step->s() + ")");
 }
 
@@ -1971,7 +1974,7 @@ static PyObject* typeModule(Box* _type, void* context) {
         mod = type->getattr(module_str);
         if (!mod)
             raiseExcHelper(AttributeError, "__module__");
-        return mod;
+        return incref(mod);
     } else {
         s = strrchr(type->tp_name, '.');
         if (s != NULL)

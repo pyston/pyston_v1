@@ -1762,7 +1762,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
                     // TODO would be faster to not use a call
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm);
+                    RewriterVar* r_rtn
+                        = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm)->setType(RefType::BORROWED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
@@ -1967,6 +1968,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
             if (rewrite_args && attr->interned_state == SSTATE_INTERNED_IMMORTAL) {
                 auto r_box = rewrite_args->rewriter->loadConst((intptr_t)attr);
                 auto r_rtn = rewrite_args->rewriter->call(true, (void*)obj->cls->tp_getattro, rewrite_args->obj, r_box);
+                r_rtn->setType(RefType::OWNED);
 
                 rewrite_args->rewriter->call(false, (void*)ensureValidCapiReturn, r_rtn);
                 rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);

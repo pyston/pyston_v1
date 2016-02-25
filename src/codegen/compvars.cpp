@@ -162,6 +162,7 @@ public:
 
         llvm::Value* boxed = emitter.getBuilder()->CreateCall3(g.funcs.boxInstanceMethod, obj->getValue(),
                                                                func->getValue(), im_class->getValue());
+        emitter.setType(boxed, RefType::OWNED);
 
         return new ConcreteCompilerVariable(other_type, boxed);
     }
@@ -342,6 +343,7 @@ public:
 
                 llvm::Value* r
                     = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
+                emitter.setType(r, RefType::OWNED);
                 emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
 
@@ -366,10 +368,12 @@ public:
                 = emitter.createIC(pp, (void*)(target_exception_style == CAPI ? pyston::getitem_capi : pyston::getitem),
                                    llvm_args, info.unw_info, target_exception_style);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            emitter.setType(rtn, RefType::OWNED);
         } else {
             rtn = emitter.createCall2(info.unw_info,
                                       target_exception_style == CAPI ? g.funcs.getitem_capi : g.funcs.getitem,
                                       var->getValue(), converted_slice->getValue(), target_exception_style);
+            emitter.setType(rtn, RefType::OWNED);
         }
 
         if (target_exception_style == CAPI)
@@ -768,6 +772,7 @@ ConcreteCompilerVariable* UnknownType::unaryop(IREmitter& emitter, const OpInfo&
         rtn = emitter.createCall2(info.unw_info, g.funcs.unaryop, converted->getValue(),
                                   getConstantInt(op_type, g.i32));
     }
+    emitter.setType(rtn, RefType::OWNED);
 
     return new ConcreteCompilerVariable(UNKNOWN, rtn);
 }
@@ -2035,6 +2040,7 @@ public:
                     llvm::Value* r = emitter.createCall3(
                         info.unw_info, embedConstantPtr((void*)PySequence_GetSlice, ft->getPointerTo()),
                         var->getValue(), start, stop);
+                    emitter.setType(r, RefType::OWNED);
                     emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
                     return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
@@ -2692,6 +2698,7 @@ public:
         args.push_back(cstop->getValue());
         args.push_back(cstep->getValue());
         llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.createSlice, args);
+        emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(SLICE, rtn);
     }

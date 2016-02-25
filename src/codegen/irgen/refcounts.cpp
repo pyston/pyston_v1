@@ -71,7 +71,8 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
 
 llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB) {
     ASSERT(pred_begin(BB) == pred_end(BB) || pred_end(BB) == ++pred_begin(BB),
-           "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors");
+           "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors (%s)",
+           BB->getName().data());
 
     if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
         // Don't split up the landingpad+extract+cxa_begin_catch

@@ -84,7 +84,7 @@ Box* boxStringOrNone(const char* s) {
     }
 }
 
-Box* noneIfNull(Box* b) {
+BORROWED(Box*) noneIfNull(Box* b) {
     if (b == NULL) {
         return None;
     } else {

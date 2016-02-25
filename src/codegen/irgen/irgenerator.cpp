@@ -262,6 +262,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
             // frame_info.boxedLocals = createDict()
             // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
             this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+            getRefcounts()->setType(this->boxed_locals, RefType::OWNED);
             builder.CreateStore(this->boxed_locals, boxed_locals_gep);
         }
 
@@ -2855,14 +2856,13 @@ public:
     // instead propagate the exception out of the function.
     llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
                                      AST_stmt* current_stmt) override {
-        assert(0 && "check refcounting");
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         llvm::PHINode*& phi_node = capi_phis[final_dest];
 
         if (!capi_exc_dest) {
             auto orig_block = curblock;
 
-            capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+            capi_exc_dest = llvm::BasicBlock::Create(g.context, "capi_exc_dest", irstate->getLLVMFunction());
 
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
@@ -2897,6 +2897,11 @@ public:
                 llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
                 llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
 
+                // TODO: nullable?
+                emitter.setType(exc_type, RefType::OWNED);
+                emitter.setType(exc_value, RefType::OWNED);
+                emitter.setType(exc_traceback, RefType::OWNED);
+
                 addOutgoingExceptionState(
                     IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type),
                                                 new ConcreteCompilerVariable(UNKNOWN, exc_value),
@@ -2911,10 +2916,13 @@ public:
         assert(capi_exc_dest);
         assert(phi_node);
 
+        llvm::BasicBlock* critedge_breaker = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        critedge_breaker->moveBefore(capi_exc_dest);
+        llvm::BranchInst::Create(capi_exc_dest, critedge_breaker);
 
-        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr), from_block);
+        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr), critedge_breaker);
 
-        return capi_exc_dest;
+        return critedge_breaker;
     }
 
     llvm::BasicBlock* getCXXExcDest(const UnwindInfo& unw_info) override {
