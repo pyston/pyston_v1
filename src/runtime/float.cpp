@@ -929,17 +929,15 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
 // Roughly analogous to CPython's float_new.
 // The arguments need to be unpacked from args and kwds.
 static Box* floatNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
-    PyObject* x = False;
+    PyObject* x = False; // False is like initalizing it to 0.0 but faster because we don't need to box it in case the
+                         // optional arg exists
     static char* kwlist[2] = { NULL, NULL };
     kwlist[0] = const_cast<char*>("x");
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:float", kwlist, &x))
         return NULL;
 
-    if (x == NULL)
-        return floatNew<CAPI>(type, None);
-    else
-        return floatNew<CAPI>(type, x);
+    return floatNew<CAPI>(type, x);
 }
 
 PyObject* float_str_or_repr(double v, int precision, char format_code) {
@@ -1663,7 +1661,8 @@ void setupFloat() {
     float_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)floatDivmod, UNKNOWN, 2)));
     float_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)floatRDivmod, UNKNOWN, 2)));
 
-    auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false, ParamNames::empty(), CXX);
+    auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false,
+                                              ParamNames({ "", "x" }, "", ""), CXX);
     float_new->addVersion((void*)floatNew<CAPI>, UNKNOWN, CAPI);
     float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
 
