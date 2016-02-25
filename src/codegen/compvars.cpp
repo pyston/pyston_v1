@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "codegen/codegen.h"

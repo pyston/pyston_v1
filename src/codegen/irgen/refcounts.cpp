@@ -481,6 +481,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             llvm::outs() << "Processing " << BB.getName() << '\n';
         }
 
+        bool firsttime = (states.count(&BB) == 0);
         RefState& state = states[&BB];
 
         llvm::DenseMap<llvm::Value*, int> orig_ending_refs = std::move(state.ending_refs);
@@ -663,7 +664,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             state.ending_refs.clear();
         }
 
-        if (endingRefsDifferent(orig_ending_refs, state.ending_refs)) {
+        // It is possible that we ended with zero live variables, which due to our skipping of un-run blocks,
+        // is not the same thing as an un-run block.  Hence the check of 'firsttime'
+        if (firsttime || endingRefsDifferent(orig_ending_refs, state.ending_refs)) {
             for (auto&& SBB : llvm::predecessors(&BB)) {
                 // llvm::outs() << "reconsidering: " << SBB->getName() << '\n';
                 orderer.add(SBB);
