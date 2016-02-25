@@ -104,6 +104,8 @@ public:
     virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
                                                 llvm::Value* exc_val, bool double_check = false) = 0;
 
+    virtual llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) = 0;
+
     virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;
 

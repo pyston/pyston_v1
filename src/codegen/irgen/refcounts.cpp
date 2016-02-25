@@ -398,7 +398,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         if (!ok_type) {
 #ifndef NDEBUG
-            if (s->getName().startswith("struct.pyston::Box") || (s->getName().startswith("Py") || s->getName().endswith("Object")) || s->getName().startswith("class.pyston::Box")) {
+            if (s->getName().startswith("struct.pyston::Box")
+                || (s->getName().startswith("Py") && s->getName().endswith("Object"))
+                || s->getName().startswith("class.pyston::Box")) {
                 v->dump();
                 if (s && s->elements().size() >= 2) {
                     s->elements()[0]->dump();

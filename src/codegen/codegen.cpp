@@ -30,6 +30,7 @@
 #include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
 #include "core/ast.h"
+#include "core/cfg.h"
 #include "core/util.h"
 #include "runtime/code.h"
 #include "runtime/types.h"
@@ -70,6 +71,20 @@ BoxedCode* FunctionMetadata::getCode() {
         //gc::registerPermanentRoot(code_obj);
     }
     return code_obj;
+}
+
+int FunctionMetadata::calculateNumVRegs() {
+    SourceInfo* source_info = source.get();
+
+    CFG* cfg = source_info->cfg;
+    assert(cfg && "We don't calculate the CFG inside this function because it can raise an exception and its "
+                  "therefore not safe to call at every point");
+
+    if (!cfg->hasVregsAssigned()) {
+        ScopeInfo* scope_info = source->getScopeInfo();
+        cfg->assignVRegs(param_names, scope_info);
+    }
+    return cfg->sym_vreg_map.size();
 }
 
 void FunctionMetadata::addVersion(CompiledFunction* compiled) {

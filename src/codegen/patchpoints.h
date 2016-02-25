@@ -29,15 +29,70 @@ struct CompiledFunction;
 class CompilerType;
 struct StackMap;
 class TypeRecorder;
-class ICSetupInfo;
 
 static const int MAX_FRAME_SPILLS = 9; // TODO this shouldn't have to be larger than the set of non-callee-save args (9)
                                        // except that will we currently spill the same reg multiple times
-static const int CALL_ONLY_SIZE
+static const int CALL_ONLY_SIZE = 13 + 1; // 13 for the call, + 1 if we want to nop/trap
+
+static const int DEOPT_CALL_ONLY_SIZE
     = 13 + (MAX_FRAME_SPILLS * 9)
       + 1; // 13 for the call, 9 bytes per spill (7 for GP, 9 for XMM), + 1 if we want to nop/trap
 
 void processStackmap(CompiledFunction* cf, StackMap* stackmap);
+
+class ICSetupInfo {
+public:
+    enum ICType {
+        Generic,
+        Callsite,
+        GetGlobal,
+        Getattr,
+        Setattr,
+        Delattr,
+        Getitem,
+        Setitem,
+        Delitem,
+        Binexp,
+        Nonzero,
+        Hasnext,
+        Deopt,
+    };
+
+private:
+    ICSetupInfo(ICType type, int num_slots, int slot_size, bool has_return_value, TypeRecorder* type_recorder)
+        : type(type),
+          num_slots(num_slots),
+          slot_size(slot_size),
+          has_return_value(has_return_value),
+          type_recorder(type_recorder) {}
+
+public:
+    const ICType type;
+
+    const int num_slots, slot_size;
+    const bool has_return_value;
+    TypeRecorder* const type_recorder;
+
+    int totalSize() const;
+    bool hasReturnValue() const { return has_return_value; }
+    bool isDeopt() const { return type == Deopt; }
+
+    llvm::CallingConv::ID getCallingConvention() const {
+// FIXME: we currently have some issues with using PreserveAll (the rewriter currently
+// does not completely preserve live outs), so disable it temporarily.
+#if 0
+        // The plan is to switch probably everything over to PreseveAll (and potentially AnyReg),
+        // but for only switch Getattr so the testing can be localized:
+        if (type == Getattr || type == Setattr)
+            return llvm::CallingConv::PreserveAll;
+#endif
+
+        return llvm::CallingConv::C;
+    }
+
+    static ICSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
+                                   TypeRecorder* type_recorder);
+};
 
 struct PatchpointInfo {
 public:
@@ -73,6 +128,8 @@ public:
 
     int scratchStackmapArg() { return 0; }
     int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
+    bool isDeopt() const { return icinfo ? icinfo->isDeopt() : false; }
+    int numFrameSpillsSupported() const { return isDeopt() ? MAX_FRAME_SPILLS : 0; }
 
     void addFrameVar(llvm::StringRef name, CompilerType* type);
     void setNumFrameArgs(int num_frame_args) {
@@ -100,58 +157,6 @@ public:
     static void* getSlowpathAddr(unsigned int pp_id);
 };
 
-class ICSetupInfo {
-public:
-    enum ICType {
-        Generic,
-        Callsite,
-        GetGlobal,
-        Getattr,
-        Setattr,
-        Delattr,
-        Getitem,
-        Setitem,
-        Delitem,
-        Binexp,
-        Nonzero,
-        Hasnext,
-    };
-
-private:
-    ICSetupInfo(ICType type, int num_slots, int slot_size, bool has_return_value, TypeRecorder* type_recorder)
-        : type(type),
-          num_slots(num_slots),
-          slot_size(slot_size),
-          has_return_value(has_return_value),
-          type_recorder(type_recorder) {}
-
-public:
-    const ICType type;
-
-    const int num_slots, slot_size;
-    const bool has_return_value;
-    TypeRecorder* const type_recorder;
-
-    int totalSize() const;
-    bool hasReturnValue() const { return has_return_value; }
-
-    llvm::CallingConv::ID getCallingConvention() const {
-// FIXME: we currently have some issues with using PreserveAll (the rewriter currently
-// does not completely preserve live outs), so disable it temporarily.
-#if 0
-        // The plan is to switch probably everything over to PreseveAll (and potentially AnyReg),
-        // but for only switch Getattr so the testing can be localized:
-        if (type == Getattr || type == Setattr)
-            return llvm::CallingConv::PreserveAll;
-#endif
-
-        return llvm::CallingConv::C;
-    }
-
-    static ICSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
-                                   TypeRecorder* type_recorder);
-};
-
 class ICInfo;
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
 ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
@@ -165,6 +170,7 @@ ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
+ICSetupInfo* createDeoptIC();
 
 } // namespace pyston
 

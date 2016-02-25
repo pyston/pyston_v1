@@ -494,6 +494,8 @@ public:
     void addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
                     ExceptionStyle exception_style = CXX);
 
+    int calculateNumVRegs();
+
     // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
     // once to it.
     static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
@@ -935,8 +937,11 @@ struct FrameInfo {
     Box* boxedLocals;
 
     BoxedFrame* frame_obj;
+    BoxedClosure* passed_closure;
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
+    Box** vregs;
+
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0) {}
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:

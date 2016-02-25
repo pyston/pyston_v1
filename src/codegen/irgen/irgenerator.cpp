@@ -59,6 +59,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       frame_info(NULL),
       frame_info_arg(NULL),
       globals(NULL),
+      vregs(NULL),
       scratch_size(0) {
     assert(cf->func);
     assert(!cf->md); // in this case don't need to pass in sourceinfo
@@ -144,7 +145,7 @@ static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v
     return builder.CreateConstInBoundsGEP2_32(v, 0, 0);
 }
 
-static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
+template <typename Builder> static llvm::Value* getFrameObjGep(Builder& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
     static_assert(sizeof(ExcInfo) == 24, "");
     static_assert(sizeof(Box*) == 8, "");
@@ -152,6 +153,16 @@ static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* 
     return builder.CreateConstInBoundsGEP2_32(v, 0, 2);
     // TODO: this could be made more resilient by doing something like
     // gep->accumulateConstantOffset(g.tm->getDataLayout(), ap_offset)
+}
+
+template <typename Builder> static llvm::Value* getPassedClosureGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, passed_closure) == 40, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 3);
+}
+
+template <typename Builder> static llvm::Value* getVRegsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, vregs) == 48, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 4);
 }
 
 llvm::Value* IRGenState::getFrameInfoVar() {
@@ -181,10 +192,6 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         if (entry_block.begin() != entry_block.end())
             builder.SetInsertPoint(&entry_block, entry_block.getFirstInsertionPt());
 
-
-        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
-        assert(al->isStaticAlloca());
-
         if (entry_block.getTerminator())
             builder.SetInsertPoint(entry_block.getTerminator());
         else
@@ -195,12 +202,33 @@ llvm::Value* IRGenState::getFrameInfoVar() {
 
             this->frame_info = frame_info_arg;
 
+            // use vrags array from the interpreter
+            vregs = builder.CreateLoad(getVRegsGep(builder, frame_info_arg));
+
             if (getScopeInfo()->usesNameLookup()) {
                 // load frame_info.boxedLocals
                 this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
             }
+
         } else {
             // The "normal" case
+
+            assert(!vregs);
+            getMD()->calculateNumVRegs();
+            int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
+            if (num_user_visible_vregs > 0) {
+                auto* vregs_alloca
+                    = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
+                // Clear the vregs array because 0 means undefined valued.
+                builder.CreateMemSet(vregs_alloca, getConstantInt(0, g.i8),
+                                     getConstantInt(num_user_visible_vregs * sizeof(Box*)),
+                                     vregs_alloca->getAlignment());
+                vregs = vregs_alloca;
+            } else
+                vregs = getNullPtr(g.llvm_value_type_ptr_ptr);
+
+            llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
+            assert(al->isStaticAlloca());
 
             // frame_info.exc.type = NULL
             llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
@@ -228,6 +256,19 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             builder.CreateStore(getRefcounts()->setType(getNullPtr(llvm_frame_obj_type_ptr), RefType::BORROWED),
                                 getFrameObjGep(builder, al));
 
+            // frame_info.passed_closure = NULL
+            auto passed_closure = getNullPtr(g.llvm_closure_type_ptr);
+            getRefcounts()->setType(passed_closure, RefType::BORROWED);
+            auto store = builder.CreateStore(passed_closure, getPassedClosureGep(builder, al));
+
+            // TODO: reenable these?  technically correct, but currently unsupported and the expected
+            // behavior is to just optimize them away anyway.
+            // emitter.setNullable(passed_closure, true);
+            // emitter.refConsumed(passed_closure, store);
+
+            // set frame_info.vregs
+            builder.CreateStore(vregs, getVRegsGep(builder, al));
+
             this->frame_info = al;
         }
     }
@@ -240,6 +281,15 @@ llvm::Value* IRGenState::getBoxedLocalsVar() {
     getFrameInfoVar(); // ensures this->boxed_locals_var is initialized
     assert(this->boxed_locals != NULL);
     return this->boxed_locals;
+}
+
+llvm::Value* IRGenState::getVRegsVar() {
+    if (!vregs) {
+        // calling this sets also the vregs member
+        getFrameInfoVar();
+        assert(vregs);
+    }
+    return vregs;
 }
 
 ScopeInfo* IRGenState::getScopeInfo() {
@@ -493,6 +543,14 @@ public:
         return rtn.getInstruction();
     }
 
+    llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) override {
+        ICSetupInfo* pp = createDeoptIC();
+        llvm::Value* v
+            = createIC(pp, (void*)pyston::deopt, { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
+                       UnwindInfo(current_stmt, NULL));
+        return getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
+    }
+
     void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
                                         bool double_check = false) override {
         assert(!double_check); // need to call PyErr_Occurred
@@ -671,8 +729,7 @@ private:
 
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
-        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
-                                             embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value);
+        llvm::Value* v = emitter.createDeopt(current_statement, (AST_expr*)node, node_value);
         emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
@@ -1704,6 +1761,22 @@ private:
         return rtn;
     }
 
+    template <typename GetLLVMValCB> void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb) {
+        auto cfg = irstate->getSourceInfo()->cfg;
+        if (!cfg->hasVregsAssigned())
+            irstate->getMD()->calculateNumVRegs();
+        assert(cfg->sym_vreg_map.count(name));
+        int vreg = cfg->sym_vreg_map[name];
+        assert(vreg >= 0);
+
+        if (vreg < cfg->sym_vreg_map_user_visible.size()) {
+            // looks like this store don't have to be volatile because llvm knows that the vregs are visible thru the
+            // FrameInfo which escapes.
+            auto* gep = emitter.getBuilder()->CreateConstInBoundsGEP1_64(irstate->getVRegsVar(), vreg);
+            emitter.getBuilder()->CreateStore(get_llvm_val_cb(), gep);
+        }
+    }
+
     // only updates symbol_table if we're *not* setting a global
     void _doSet(InternedString name, CompilerVariable* val, const UnwindInfo& unw_info) {
         assert(name.s() != "None");
@@ -1753,6 +1826,9 @@ private:
                 llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
                 emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
             }
+
+            auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
+            _setVRegIfUserVisible(name, get_llvm_val);
         }
     }
 
@@ -1934,6 +2010,8 @@ private:
         // Can't be in a closure because of this syntax error:
         // SyntaxError: can not delete variable 'x' referenced in nested scope
         assert(vst == ScopeInfo::VarScopeType::FAST);
+
+        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); });
 
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call = emitter.createCall(
@@ -2507,7 +2585,8 @@ public:
 
         pp->addFrameVar("!current_stmt", UNBOXED_INT);
 
-        if (ENABLE_FRAME_INTROSPECTION) {
+        // For deopts we need to add the compiler created names to the stackmap
+        if (ENABLE_FRAME_INTROSPECTION && pp->isDeopt()) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
             // nice for debugging though.
             typedef std::pair<InternedString, CompilerVariable*> Entry;
@@ -2515,6 +2594,11 @@ public:
             std::sort(sorted_symbol_table.begin(), sorted_symbol_table.end(),
                       [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
             for (const auto& p : sorted_symbol_table) {
+                // We never have to include non compiler generated vars because the user visible variables are stored
+                // inside the vregs array.
+                if (!p.first.isCompilerCreatedName())
+                    continue;
+
                 CompilerVariable* v = p.second;
                 v->serializeToFrame(stackmap_args);
                 pp->addFrameVar(p.first.s(), v->getType());
@@ -2637,6 +2721,11 @@ public:
             emitter.setType(passed_closure, RefType::BORROWED);
             symbol_table[internString(PASSED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getPassedClosureType(), AI);
+
+            // store the passed_closure inside the frame info so that frame introspection can access it without needing
+            // a stackmap entry
+            emitter.getBuilder()->CreateStore(passed_closure,
+                                              getPassedClosureGep(*emitter.getBuilder(), irstate->getFrameInfoVar()));
             ++AI;
         }
 

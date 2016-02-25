@@ -343,6 +343,7 @@ void PystonObjectCache::calculateModuleHash(const llvm::Module* M, EffortLevel e
     HashOStream hash_stream;
     llvm::WriteBitcodeToFile(M, hash_stream);
     hash_stream << (int)effort;
+    hash_stream << USE_REGALLOC_BASIC;
     hash_before_codegen = hash_stream.getHash();
 }
 
