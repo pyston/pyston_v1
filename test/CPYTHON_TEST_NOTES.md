@@ -198,7 +198,6 @@ test_sqlite             [unknown]
 test_ssl                [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
-test_strtod             [unknown]
 test_structmembers      [unknown]
 test_struct             [unknown]
 test_subprocess         exit code 141 [sigpipe?], no error message
