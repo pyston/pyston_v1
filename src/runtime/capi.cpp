@@ -585,8 +585,11 @@ extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
 
 
 extern "C" int PyObject_Not(PyObject* o) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    int res;
+    res = PyObject_IsTrue(o);
+    if (res < 0)
+        return res;
+    return res == 0;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
@@ -1037,16 +1040,6 @@ extern "C" int PyErr_ExceptionMatches(PyObject* exc) noexcept {
 
 extern "C" PyObject* PyErr_Occurred() noexcept {
     return cur_thread_state.curexc_type;
-}
-
-extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) noexcept {
-    // These warnings are silenced by default:
-    // We should copy the real CPython code in here
-    if (category == PyExc_DeprecationWarning)
-        return 0;
-
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
 }
 
 extern "C" void* PyMem_Malloc(size_t nbytes) noexcept {
@@ -1939,13 +1932,6 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     assert(rtn && "should have set + thrown an exception!");
     return rtn;
 }
-
-/* Warning with explicit origin */
-extern "C" int PyErr_WarnExplicit(PyObject* category, const char* text, const char* filename_str, int lineno,
-                                  const char* module_str, PyObject* registry) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 
 /* extension modules might be compiled with GC support so these
    functions must always be available */

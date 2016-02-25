@@ -41,6 +41,7 @@ BoxedDict* sys_modules_dict;
 extern "C" {
 // supposed to be exposed through sys.flags
 int Py_BytesWarningFlag = 0;
+int Py_DivisionWarningFlag = 0;
 int Py_HashRandomizationFlag = 0;
 }
 
@@ -400,6 +401,10 @@ extern "C" const char* Py_GetPlatform() noexcept {
     // build-time.
     return "unknown";
 #endif
+}
+
+extern "C" PyObject* PySys_GetModulesDict() noexcept {
+    return getSysModulesDict();
 }
 
 static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {

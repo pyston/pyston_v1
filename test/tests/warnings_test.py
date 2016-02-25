@@ -1,5 +1,14 @@
 import warnings
+import _warnings
 
-# Specifying this as a DeprecationWarning is a hacky way of supressing the warning,
-# since we don't output the exact same error message as CPython right now:
-warnings.warn("hello world", DeprecationWarning)
+warnings.filterwarnings('error')
+
+try:
+    warnings.warn("hello world", Warning)
+except Warning as w:
+    print(w.args[0])
+
+try:
+    _warnings.warn("deperecated", Warning)
+except Warning as w:
+    print(w.args[0])
