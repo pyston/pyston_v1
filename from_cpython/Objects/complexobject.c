@@ -215,8 +215,6 @@ c_abs(Py_complex z)
     return result;
 }
 
-// Pyston changes: comment this out
-#if 0
 static PyObject *
 complex_subtype_from_c_complex(PyTypeObject *type, Py_complex cval)
 {
@@ -356,14 +354,18 @@ PyComplex_AsCComplex(PyObject *op)
     }
 }
 
+// Pyston changes: comment this out
+#if 0
 static void
 complex_dealloc(PyObject *op)
 {
     op->ob_type->tp_free(op);
 }
+#endif
 
 
-static PyObject *
+// Pyston change: make no static
+PyObject *
 complex_format(PyComplexObject *v, int precision, char format_code)
 {
     PyObject *result = NULL;
@@ -426,6 +428,8 @@ complex_format(PyComplexObject *v, int precision, char format_code)
     return result;
 }
 
+// Pyston changes: comment this out
+#if 0
 static int
 complex_print(PyComplexObject *v, FILE *fp, int flags)
 {
@@ -788,8 +792,10 @@ complex_coerce(PyObject **pv, PyObject **pw)
     }
     return 1; /* Can't do it */
 }
+#endif
 
-static PyObject *
+// Pyston change: make no static
+PyObject *
 complex_richcompare(PyObject *v, PyObject *w, int op)
 {
     PyObject *res;
@@ -858,6 +864,8 @@ complex_richcompare(PyObject *v, PyObject *w, int op)
     return Py_NotImplemented;
 }
 
+// Pyston change: comment this out
+#if 0
 static PyObject *
 complex_int(PyObject *v)
 {
@@ -907,8 +915,10 @@ PyDoc_STRVAR(complex__format__doc,
 "complex.__format__() -> str\n"
 "\n"
 "Convert to a string according to format_spec.");
+#endif
 
-static PyObject *
+// Pyston changes: make no static
+PyObject *
 complex__format__(PyObject* self, PyObject* args)
 {
     PyObject *format_spec;
@@ -952,7 +962,6 @@ PyDoc_STRVAR(complex_is_finite_doc,
 "complex.is_finite() -> bool\n"
 "\n"
 "Returns True if the real and the imaginary part is finite.");
-#endif
 
 static PyMethodDef complex_methods[] = {
     {"conjugate",       (PyCFunction)complex_conjugate, METH_NOARGS,
@@ -974,6 +983,7 @@ static PyMemberDef complex_members[] = {
      "the imaginary part of a complex number"},
     {0},
 };
+#endif
 
 static PyObject *
 complex_subtype_from_string(PyTypeObject *type, PyObject *v)
@@ -1136,22 +1146,26 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
     return NULL;
 }
 
-static PyObject *
-complex_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
-    PyObject *r, *i, *tmp;
+// Pyston changes: change the API, make it no static
+// and let complex_new accept unpacked arguments
+PyObject *
+complex_new(PyTypeObject *type, PyObject *r, PyObject *i) {
+    PyObject *tmp;
     PyNumberMethods *nbr, *nbi = NULL;
     Py_complex cr, ci;
     int own_r = 0;
     int cr_is_complex = 0;
     int ci_is_complex = 0;
-    static char *kwlist[] = {"real", "imag", 0};
 
-    r = Py_False;
-    i = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO:complex", kwlist,
-                                     &r, &i))
-        return NULL;
+    /* Pyston changes: comment this out, pyston don't use tuple arg.
+       static char *kwlist[] = {"real", "imag", 0};
+
+       r = Py_False;
+       i = NULL;
+       if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO:complex", kwlist,
+       &r, &i))
+       return NULL;
+       */
 
     /* Special-case for a single argument when type(arg) is complex. */
     if (PyComplex_CheckExact(r) && i == NULL &&
@@ -1269,6 +1283,8 @@ complex_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return complex_subtype_from_doubles(type, cr.real, ci.real);
 }
 
+// Pyston changes: comment this out
+#if 0
 PyDoc_STRVAR(complex_doc,
 "complex(real[, imag]) -> complex number\n"
 "\n"

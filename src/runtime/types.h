@@ -486,6 +486,10 @@ public:
     DEFAULT_CLASS_SIMPLE(complex_cls, false);
 };
 
+static_assert(sizeof(BoxedComplex) == sizeof(PyComplexObject), "");
+static_assert(offsetof(BoxedComplex, real) == offsetof(PyComplexObject, cval.real), "");
+static_assert(offsetof(BoxedComplex, imag) == offsetof(PyComplexObject, cval.imag), "");
+
 class BoxedBool : public BoxedInt {
 public:
     BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(b ? 1 : 0) {}
