@@ -249,6 +249,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
 
         // frame_info.exc.type = NULL
         llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+        getRefcounts()->setType(null_value, RefType::BORROWED);
         llvm::Value* exc_info = getExcinfoGep(builder, al);
         builder.CreateStore(null_value,
                             builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
@@ -267,7 +268,9 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         // frame_info.frame_obj = NULL
         static llvm::Type* llvm_frame_obj_type_ptr
             = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
-        builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
+        auto null_frame = getNullPtr(llvm_frame_obj_type_ptr);
+        getRefcounts()->setType(null_frame, RefType::BORROWED);
+        builder.CreateStore(null_frame, getFrameObjGep(builder, al));
 
         // set  frame_info.passed_closure
         builder.CreateStore(passed_closure, getPassedClosureGep(builder, al));
@@ -324,7 +327,6 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
 }
 
 llvm::Value* IRGenState::getGlobals() {
-    assert(0 && "check refcounting (set to BORROWED?)");
     assert(globals);
     return globals;
 }

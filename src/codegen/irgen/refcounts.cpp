@@ -69,7 +69,7 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     //var.ref_consumers.push_back(inst);
 }
 
-llvm::Instruction* findIncrefPt(llvm::BasicBlock* BB) {
+llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB) {
     ASSERT(pred_begin(BB) == pred_end(BB) || pred_end(BB) == ++pred_begin(BB),
            "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors");
 
@@ -402,6 +402,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 || (s->getName().startswith("Py") && s->getName().endswith("Object"))
                 || s->getName().startswith("class.pyston::Box")) {
                 v->dump();
+                s->dump();
                 if (s && s->elements().size() >= 2) {
                     s->elements()[0]->dump();
                     s->elements()[1]->dump();
@@ -453,6 +454,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     };
 
     struct RefState {
+        // We do a backwards scan and starting/ending here refers to the scan, not the instruction sequence.
+        // So "starting_refs" are the refs that are inherited, ie the refstate at the end of the basic block.
+        // "ending_refs" are the refs we calculated, which corresponds to the refstate at the beginning of the block.
         llvm::DenseMap<llvm::Value*, int> starting_refs;
         llvm::DenseMap<llvm::Value*, int> ending_refs;
 
@@ -532,10 +536,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                         this_refs = it->second;
                     }
                     if (this_refs > min_refs) {
-                        state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, findIncrefPt(SBB)}));
+                        state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, findInsertionPoint(SBB)}));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(RefOp({v, refstate.nullable, min_refs - this_refs, findIncrefPt(SBB)}));
+                        state.decrefs.push_back(RefOp({v, refstate.nullable, min_refs - this_refs, findInsertionPoint(SBB)}));
                     }
                 }
 
@@ -589,8 +593,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
                             // Don't do any updates now since we are iterating over the bb
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findIncrefPt(invoke->getNormalDest())}));
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findIncrefPt(invoke->getUnwindDest())}));
+                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getNormalDest())}));
+                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getUnwindDest())}));
                             } else {
                                 assert(&I != I.getParent()->getTerminator());
                                 auto next = I.getNextNode();
@@ -616,14 +620,22 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         // Handle variables that were defined in this BB:
         for (auto&& p : rt->vars) {
             llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
-            if (inst && inst->getParent() == &BB) {
+            if (!inst)
+                continue;
+
+            // Invokes are special.  Handle them here by treating them as if they happened in their normal-dest block.
+            llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(inst);
+            if ((!ii && inst->getParent() == &BB) || (ii && ii->getNormalDest() == &BB)) {
                 int starting_refs = (p.second.reftype == RefType::OWNED ? 1 : 0);
                 if (state.ending_refs[inst] != starting_refs) {
-                    llvm::Instruction* insertion_pt = inst->getNextNode();
-                    assert(insertion_pt);
-                    while (llvm::isa<llvm::PHINode>(insertion_pt)) {
-                        insertion_pt = insertion_pt->getNextNode();
-                        assert(insertion_pt);
+                    llvm::Instruction* insertion_pt;
+                    if (ii) {
+                        insertion_pt = findInsertionPoint(&BB);
+                    } else {
+                        insertion_pt = inst->getNextNode();
+                        while (llvm::isa<llvm::PHINode>(insertion_pt)) {
+                            insertion_pt = insertion_pt->getNextNode();
+                        }
                     }
 
                     if (state.ending_refs[inst] < starting_refs) {
@@ -661,7 +673,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 #endif
                 assert(rt->vars[p.first].reftype == RefType::BORROWED);
 
-                state.increfs.push_back(RefOp({p.first, rt->vars[p.first].nullable, p.second, findIncrefPt(&BB)}));
+                state.increfs.push_back(RefOp({p.first, rt->vars[p.first].nullable, p.second, findInsertionPoint(&BB)}));
             }
             state.ending_refs.clear();
         }

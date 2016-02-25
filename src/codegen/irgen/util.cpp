@@ -263,7 +263,7 @@ void dumpPrettyIR(llvm::Function* f) {
                 remapPatchpoint(ii);
             }
         } else if (llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(&*it)) {
-            if (ii->getCalledFunction()->isIntrinsic()) {
+            if (ii->getCalledFunction() && ii->getCalledFunction()->isIntrinsic()) {
                 remapPatchpoint(ii);
             }
         }
