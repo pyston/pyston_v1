@@ -132,6 +132,13 @@ int BoxedTraceback::clear(Box* self) noexcept {
     abort();
 }
 
+static Box* traceback_tb_next(Box* self, void*) {
+    assert(self->cls == traceback_cls);
+
+    BoxedTraceback* traceback = static_cast<BoxedTraceback*>(self);
+    return traceback->tb_next;
+}
+
 void setupTraceback() {
     traceback_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTraceback), false, "traceback",
                                        (destructor)BoxedTraceback::dealloc, NULL, true,
@@ -139,6 +146,15 @@ void setupTraceback() {
 
     traceback_cls->giveAttr("getLines",
                             new BoxedFunction(FunctionMetadata::create((void*)BoxedTraceback::getLines, UNKNOWN, 1)));
+
+    /*
+     * Currently not supported.
+    traceback_cls->giveAttr("tb_frame", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_frame, NULL, NULL));
+    traceback_cls->giveAttr("tb_lasti", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_lasti, NULL, NULL));
+    traceback_cls->giveAttr("tb_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_lineno, NULL,
+    NULL));
+    */
+    traceback_cls->giveAttr("tb_next", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_next, NULL, NULL));
 
     traceback_cls->freeze();
 }
