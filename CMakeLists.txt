@@ -112,6 +112,7 @@ add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 
 # jemalloc
 ExternalProject_Add(libjemalloc
+                    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a
                     PREFIX jemalloc-build
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/build_deps/jemalloc
                     DEPENDS gitsubmodules
@@ -124,8 +125,8 @@ ExternalProject_Add(libjemalloc
                     LOG_INSTALL ON)
 
 #
-# CMake (<3.3) has no way of knowing that an ExternalProject creates specific output files.  This is a problem for ninja,
-# which will not know how to build the generated file.
+# CMake (<3.3) does not support BUILD_BYPRODUCTS.
+# This is a problem for ninja, which will not know how to build the generated file.
 # Here are a couple hacks to get around it:
 #
 # Add a copy step.  This just hides the dependency but it seems to work.
