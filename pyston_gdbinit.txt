@@ -6,3 +6,6 @@ skip file /usr/include/c++/4.9/bits/stl_vector.h
 skip pyston::ArgPassSpec::ArgPassSpec(int, int, bool, bool)
 skip pyston::InternedString::getBox() const
 skip pyston::BoxedString::s() const
+
+skip pyston::autoDecref<pyston::Box, false>(pyston::Box*)
+skip pyston::autoDecref<pyston::Box, true>(pyston::Box*)

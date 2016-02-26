@@ -43,8 +43,8 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
             loc = Py_None;
         }
 
-        auto args = BoxedTuple::create({ boxString(file), boxInt(lineno), None, loc });
-        Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), boxString(msg), args, NULL, NULL, NULL);
+        auto args = BoxedTuple::create({ autoDecref(boxString(file)), autoDecref(boxInt(lineno)), None, loc });
+        Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), autoDecref(boxString(msg)), args, NULL, NULL, NULL);
         assert(!PyErr_Occurred());
         throw ExcInfo(exc->cls, exc, None);
     } else {
@@ -166,6 +166,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
 
     // TODO need to clean up when we call normalize, do_raise, etc
     if (frame_exc_info->type == None) {
+        assert(0 && "check refcounting");
         frame_exc_info->type = TypeError;
         frame_exc_info->value
             = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");

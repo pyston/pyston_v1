@@ -221,7 +221,7 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
 
 extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {
     BoxedInt* lineno = (BoxedInt*)BoxedFrame::lineno((Box*)_f, NULL);
-    return lineno->n;
+    return autoDecref(lineno)->n;
 }
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {

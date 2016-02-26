@@ -53,9 +53,7 @@ PyTypeObject PyTraceBack_Type = {
     "traceback",
     sizeof(PyTracebackObject),
     0,
-    // Pyston change:
-    //(destructor)tb_dealloc, /*tp_dealloc*/
-    (destructor)0,
+    (destructor)tb_dealloc, /*tp_dealloc*/
     0,                  /*tp_print*/
     0,              /*tp_getattr*/
     0,                  /*tp_setattr*/
@@ -126,8 +124,10 @@ PyTraceBack_Here(PyFrameObject *frame)
 int
 PyTraceBack_Here_Tb(PyFrameObject *frame, PyTracebackObject** tb)
 {
-    if ((PyObject*)*tb == Py_None)
+    if ((PyObject*)*tb == Py_None) {
+        Py_DECREF(*tb);
         *tb = NULL;
+    }
     *tb = newtracebackobject(*tb, frame);
     if (*tb == NULL)
         return -1;
