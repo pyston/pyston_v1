@@ -1562,11 +1562,11 @@ void setupInt() {
 
     int_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)intBitLength, BOXED_INT, 1)));
 
-    int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intIntGetset, NULL, NULL));
-    int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
+    int_cls->giveAttrDescriptor("real", intIntGetset, NULL);
+    int_cls->giveAttrDescriptor("imag", int0, NULL);
     int_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)intIntGetset, BOXED_INT, 1)));
-    int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intIntGetset, NULL, NULL));
-    int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
+    int_cls->giveAttrDescriptor("numerator", intIntGetset, NULL);
+    int_cls->giveAttrDescriptor("denominator", int1, NULL);
 
     add_operators(int_cls);
     int_cls->freeze();

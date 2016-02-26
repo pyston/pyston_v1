@@ -694,6 +694,9 @@ public:
 
     void clearAttrs();
 
+    void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*),
+            void (*set)(Box*, Box*, void*));
+
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
     template <Rewritable rewritable = REWRITABLE>

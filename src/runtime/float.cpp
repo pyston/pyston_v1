@@ -928,6 +928,9 @@ template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == C
             else
                 throwCAPIException();
         }
+
+        // Make sure that we're not in an error state when we return a non-NULL value.
+        assert(!PyErr_Occurred());
         return new BoxedFloat(a_f);
     } else if (a->cls == str_cls || a->cls == unicode_cls) {
         BoxedFloat* res = (BoxedFloat*)PyFloat_FromString(a, NULL);
@@ -1759,8 +1762,8 @@ void setupFloat() {
     float_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)floatLong, UNKNOWN, 1)));
     float_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)floatHash, BOXED_INT, 1)));
 
-    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatConjugate, NULL, NULL));
-    float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
+    float_cls->giveAttrDescriptor("real", floatConjugate, NULL);
+    float_cls->giveAttrDescriptor("imag", float0, NULL);
     float_cls->giveAttr("conjugate",
                         new BoxedFunction(FunctionMetadata::create((void*)floatConjugate, BOXED_FLOAT, 1)));
 

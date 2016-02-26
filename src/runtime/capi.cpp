@@ -1977,10 +1977,8 @@ void setupCAPI() {
     capifunc_cls->giveAttr("__call__", capi_call);
     capifunc_cls->tpp_call.capi_val = BoxedCApiFunction::tppCall<CAPI>;
     capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;
-    capifunc_cls->giveAttr("__name__",
-                           new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::getname, NULL, NULL));
-    capifunc_cls->giveAttr("__doc__",
-                           new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCApiFunction::doc, NULL, NULL));
+    capifunc_cls->giveAttrDescriptor("__name__", BoxedCApiFunction::getname, NULL);
+    capifunc_cls->giveAttrDescriptor("__doc__", BoxedCApiFunction::doc, NULL);
     capifunc_cls->giveAttr(
         "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
 

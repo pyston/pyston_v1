@@ -1240,9 +1240,13 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
 #define JUST_RIGHT 1
 #define JUST_CENTER 2
 static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
-    assert(width->cls == int_cls);
-    assert(PyString_Check(fillchar));
-    assert(static_cast<BoxedString*>(fillchar)->size() == 1);
+    if (!PyInt_Check(width)) {
+        raiseExcHelper(TypeError, "an integer is required");
+    }
+    if (!PyString_Check(fillchar) || static_cast<BoxedString*>(fillchar)->size() != 1) {
+        raiseExcHelper(TypeError, "must be char, not %s", fillchar->cls->tp_name);
+    }
+
     int64_t curWidth = self->size();
     int64_t targetWidth = static_cast<BoxedInt*>(width)->n;
 

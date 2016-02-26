@@ -1071,12 +1071,14 @@ public:
     Box* (*get)(Box*, void*);
     void (*set)(Box*, Box*, void*);
     void* closure;
+    BoxedString* name;
 
-    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
-        : get(get), set(set), closure(closure) {}
+    BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
+        : get(get), set(set), closure(closure), name(name) {
+        Py_INCREF(name);
+    }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
 
     // No DEFAULT_CLASS annotation here -- force callers to explicitly specifiy pyston_getset_cls or capi_getset_cls
 };

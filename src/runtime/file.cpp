@@ -1897,7 +1897,8 @@ void setupFile() {
 
     for (auto& getset : file_getsetlist) {
         file_cls->giveAttr(getset.name, new (capi_getset_cls) BoxedGetsetDescriptor(
-                                            getset.get, (void (*)(Box*, Box*, void*))getset.set, getset.closure));
+                                            autoDecref(internStringMortal(getset.name)), getset.get,
+                                            (void (*)(Box*, Box*, void*))getset.set, getset.closure));
     }
 
     file_cls->freeze();
