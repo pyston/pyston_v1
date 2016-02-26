@@ -220,7 +220,7 @@ int handleArg(char code) {
     } else if (code == 'x') {
         ENABLE_PYPA_PARSER = false;
     } else if (code == 'X') {
-        ENABLE_CPYTHON_PARSER = true;
+        ENABLE_CPYTHON_PARSER = false;
     } else if (code == 'E') {
         Py_IgnoreEnvironmentFlag = 1;
     } else if (code == 'P') {
