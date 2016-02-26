@@ -2182,7 +2182,8 @@ void setupBuiltins() {
         { "print", (PyCFunction)builtin_print, METH_VARARGS | METH_KEYWORDS, print_doc },
     };
     for (auto& md : builtin_methods) {
-        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, builtins_module, boxString("__builtin__")));
+        builtins_module->giveAttr(md.ml_name,
+                                  new BoxedCApiFunction(&md, builtins_module, autoDecref(boxString("__builtin__"))));
     }
 }
 }
