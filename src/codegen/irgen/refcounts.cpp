@@ -42,6 +42,14 @@
 
 namespace pyston {
 
+static int numSuccessors(llvm::BasicBlock* b) {
+    return std::distance(llvm::succ_begin(b), llvm::succ_end(b));
+}
+
+static int numPredecessors(llvm::BasicBlock* b) {
+    return std::distance(llvm::pred_begin(b), llvm::pred_end(b));
+}
+
 llvm::Value* RefcountTracker::setType(llvm::Value* v, RefType reftype) {
     assert(!llvm::isa<llvm::UndefValue>(v));
 
@@ -69,10 +77,11 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     //var.ref_consumers.push_back(inst);
 }
 
-llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB) {
-    ASSERT(pred_begin(BB) == pred_end(BB) || pred_end(BB) == ++pred_begin(BB),
-           "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors (%s)",
-           BB->getName().data());
+llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, bool multipred_ok = false) {
+    if (!multipred_ok)
+        ASSERT(numPredecessors(BB) <= 1,
+               "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors (%s)",
+               BB->getName().data());
 
     if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
         // Don't split up the landingpad+extract+cxa_begin_catch
@@ -522,9 +531,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 for (auto SBB : successors) {
                     auto it = states[SBB].ending_refs.find(v);
                     if (it != states[SBB].ending_refs.end()) {
+                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", have "
+                                     //<< it->second << " refs on " << *v << '\n';
                         min_refs = std::min(it->second, min_refs);
-                    } else
+                    } else {
+                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName()
+                                     //<< ", have 0 (missing) refs on " << *v << '\n';
                         min_refs = 0;
+                    }
                 }
 
                 if (refstate.reftype == RefType::OWNED)
@@ -536,7 +550,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     if (it != states[SBB].ending_refs.end()) {
                         this_refs = it->second;
                     }
+
                     if (this_refs > min_refs) {
+                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
+                                     //<< (this_refs - min_refs) << " refs to " << *v << '\n';
                         state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, findInsertionPoint(SBB)}));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
@@ -590,9 +607,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (num_times_as_op[op] > num_consumed) {
                     if (rt->vars[op].reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
-                            // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
+                             //llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
-                            // Don't do any updates now since we are iterating over the bb
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
                                 state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getNormalDest())}));
                                 state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getUnwindDest())}));
@@ -649,6 +665,43 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     }
                 }
                 state.ending_refs.erase(inst);
+            }
+        }
+
+        // If we have any predecessor blocks with multiple successors, then let's just zero-out our pending refs.
+        // If we avoid critical edges, we have have the predecessor take care of this, but to allow critical edges
+        // we need to have a shared "interface" that we adhere to.
+        //
+        // Note: I'm not sure if the "try to coalesce refcounting operations" optimizations actually do anything.
+        // In that case there isn't any cost to hitting this case, and since it's simpler maybe we should do
+        // this for everything?
+        bool have_multisucc_predecessor = false;
+        for (auto PBB : llvm::predecessors(&BB)) {
+            if (numSuccessors(PBB) > 1) {
+                have_multisucc_predecessor = true;
+                break;
+            }
+        }
+
+        if (have_multisucc_predecessor) {
+            for (auto&& p : state.ending_refs) {
+                llvm::Value* v = p.first;
+                auto var = rt->vars[v];
+
+                int starting_refs = (var.reftype == RefType::OWNED ? 1 : 0);
+
+                assert(starting_refs <= state.ending_refs[v]);
+                if (state.ending_refs[v] == starting_refs)
+                    continue;
+
+                llvm::Instruction* insertion_pt = findInsertionPoint(&BB, /* multipred_ok */ true);
+
+                state.increfs.push_back(RefOp({ v, var.nullable, state.ending_refs[v] - starting_refs, insertion_pt }));
+
+                if (starting_refs == 0)
+                    state.ending_refs.erase(p.first);
+                else
+                    state.ending_refs[p.first] = starting_refs;
             }
         }
 

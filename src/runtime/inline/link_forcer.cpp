@@ -74,6 +74,7 @@ void force() {
     FORCE(decodeUTF8StringPtr);
     FORCE(initFrame);
     FORCE(deinitFrame);
+    FORCE(makePendingCalls);
 
     FORCE(getattr);
     FORCE(getattr_capi);

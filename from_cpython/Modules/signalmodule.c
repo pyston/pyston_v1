@@ -895,10 +895,6 @@ PyErr_CheckSignals(void)
     if (!is_tripped)
         return 0;
 
-    // Pyston change:
-    Py_FatalError("TODO");
-
-#if 0
     int i;
     PyObject *f;
 
@@ -943,7 +939,6 @@ PyErr_CheckSignals(void)
             Py_DECREF(result);
         }
     }
-#endif
 
     return 0;
 }

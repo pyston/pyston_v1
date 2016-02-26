@@ -990,43 +990,66 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
         printf("\n");
     }
 
+    Value rtn;
     switch (node->type) {
         case AST_TYPE::Assert:
-            return visit_assert((AST_Assert*)node);
+            rtn = visit_assert((AST_Assert*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Assign:
-            return visit_assign((AST_Assign*)node);
+            rtn = visit_assign((AST_Assign*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Delete:
-            return visit_delete((AST_Delete*)node);
+            rtn = visit_delete((AST_Delete*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Exec:
-            return visit_exec((AST_Exec*)node);
+            rtn = visit_exec((AST_Exec*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Expr:
             // docstrings are str constant expression statements.
             // ignore those while interpreting.
-            if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
-                return visit_expr((AST_Expr*)node);
+            if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str) {
+                rtn = visit_expr((AST_Expr*)node);
+                ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            }
             break;
         case AST_TYPE::Pass:
-            return Value(); // nothing todo
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break; // nothing todo
         case AST_TYPE::Print:
-            return visit_print((AST_Print*)node);
+            rtn = visit_print((AST_Print*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Raise:
-            return visit_raise((AST_Raise*)node);
+            rtn = visit_raise((AST_Raise*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Return:
-            return visit_return((AST_Return*)node);
+            rtn = visit_return((AST_Return*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
         case AST_TYPE::Global:
-            return visit_global((AST_Global*)node);
+            rtn = visit_global((AST_Global*)node);
+            ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            break;
 
         // pseudo
         case AST_TYPE::Branch:
-            return visit_branch((AST_Branch*)node);
+            rtn = visit_branch((AST_Branch*)node);
+            break;
         case AST_TYPE::Jump:
-            return visit_jump((AST_Jump*)node);
+            rtn = visit_jump((AST_Jump*)node);
+            break;
         case AST_TYPE::Invoke:
-            return visit_invoke((AST_Invoke*)node);
+            rtn = visit_invoke((AST_Invoke*)node);
+            break;
         default:
             RELEASE_ASSERT(0, "not implemented");
     };
-    return Value();
+    return rtn;
 }
 
 Value ASTInterpreter::visit_return(AST_Return* node) {
@@ -1748,6 +1771,11 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     Box* rtn = BoxedTuple::create({ type, value, traceback });
     last_exception = ExcInfo(NULL, NULL, NULL);
     return rtn;
+}
+
+void ASTInterpreterJitInterface::pendingCallsCheckHelper() {
+    if (unlikely(_pendingcalls_to_do))
+        makePendingCalls();
 }
 
 void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {

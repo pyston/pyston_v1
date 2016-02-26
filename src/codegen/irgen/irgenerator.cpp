@@ -357,11 +357,53 @@ private:
     llvm::BasicBlock*& curblock;
     IRGenerator* irgenerator;
 
+    void emitPendingCallsCheck(llvm::BasicBlock* exc_dest) {
+        auto&& builder = *getBuilder();
+
+        llvm::GlobalVariable* pendingcalls_to_do_gv = g.cur_module->getGlobalVariable("_pendingcalls_to_do");
+        if (!pendingcalls_to_do_gv) {
+            static_assert(sizeof(_pendingcalls_to_do) == 4, "");
+            pendingcalls_to_do_gv = new llvm::GlobalVariable(
+                *g.cur_module, g.i32, false, llvm::GlobalValue::ExternalLinkage, 0, "_pendingcalls_to_do");
+            pendingcalls_to_do_gv->setAlignment(4);
+        }
+
+        llvm::BasicBlock* cur_block = builder.GetInsertBlock();
+
+        llvm::BasicBlock* pendingcalls_set = createBasicBlock("_pendingcalls_set");
+        pendingcalls_set->moveAfter(cur_block);
+        llvm::BasicBlock* join_block = createBasicBlock("continue_after_pendingcalls_check");
+        join_block->moveAfter(pendingcalls_set);
+
+        llvm::Value* pendingcalls_to_do_val = builder.CreateLoad(pendingcalls_to_do_gv, true /* volatile */);
+        llvm::Value* is_zero
+            = builder.CreateICmpEQ(pendingcalls_to_do_val, getConstantInt(0, pendingcalls_to_do_val->getType()));
+
+        llvm::Metadata* md_vals[]
+            = { llvm::MDString::get(g.context, "branch_weights"), llvm::ConstantAsMetadata::get(getConstantInt(1000)),
+                llvm::ConstantAsMetadata::get(getConstantInt(1)) };
+        llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Metadata*>(md_vals));
+
+
+        builder.CreateCondBr(is_zero, join_block, pendingcalls_set, branch_weights);
+        {
+            setCurrentBasicBlock(pendingcalls_set);
+
+            if (exc_dest) {
+                builder.CreateInvoke(g.funcs.makePendingCalls, join_block, exc_dest);
+            } else {
+                builder.CreateCall(g.funcs.makePendingCalls);
+                builder.CreateBr(join_block);
+            }
+        }
+
+        cur_block = join_block;
+        setCurrentBasicBlock(join_block);
+    }
+
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
-        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
-                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
-        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
+        emitSetCurrentStmt(unw_info.current_stmt);
 
         bool needs_cxx_interception;
         if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
@@ -389,12 +431,24 @@ private:
 
             llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
 
+            // Note -- this code can often create critical edges between LLVM blocks.
+            // The refcounting system has some support for handling this, but if we start generating
+            // IR that it can't handle, we might have to break the critical edges here (or teach the
+            // refcounting system how to do that.)
+
             // Normal case:
             getBuilder()->SetInsertPoint(normal_dest);
             curblock = normal_dest;
+            if (unw_info.hasHandler())
+                emitPendingCallsCheck(irgenerator->getCXXExcDest(unw_info));
+            else
+                emitPendingCallsCheck(NULL);
             return rtn;
         } else {
+
             llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
+            if (target_exception_style == CXX)
+                emitPendingCallsCheck(NULL);
             return cs;
         }
     }
@@ -496,8 +550,18 @@ public:
         return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
     }
 
-    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
-                            ExceptionStyle target_exception_style = CXX) override {
+    // Our current frame introspection approach requires that we update the currently executed stmt before doing a call
+    // to a function which could throw an exception, inspect the python call frame,...
+    // Only patchpoint don't need to set the current statement because the stmt will be inluded in the stackmap args.
+    void emitSetCurrentStmt(AST_stmt* stmt) {
+        getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_aststmt_type_ptr)
+                                       : getNullPtr(g.llvm_aststmt_type_ptr),
+                                  irstate->getStmtVar());
+    }
+
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                  const std::vector<llvm::Value*>& args,
+                                  ExceptionStyle target_exception_style = CXX) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
         // get checked.
@@ -2107,7 +2171,7 @@ private:
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
 
         if (!irstate->getCurFunction()->entry_descriptor)
-            emitter.createCall(unw_info, g.funcs.deinitFrame, irstate->getFrameInfoVar());
+            emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
 
         assert(rtn->getValue());
         auto ret_inst = emitter.getBuilder()->CreateRet(rtn->getValue());
@@ -2841,9 +2905,10 @@ public:
     }
 
     void doSafePoint(AST_stmt* next_statement) override {
-        // Unwind info is always needed in allowGLReadPreemption if it has any chance of
-        // running arbitrary code like finalizers.
-        emitter.createCall(UnwindInfo(next_statement, NULL), g.funcs.allowGLReadPreemption, NOEXC);
+        // We need to setup frame introspection by updating the current stmt because we can run can run arbitrary code
+        // like finalizers inside allowGLReadPreemption.
+        emitter.emitSetCurrentStmt(next_statement);
+        emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption);
     }
 
     // Create a (or reuse an existing) block that will catch a CAPI exception, and then forward
@@ -2865,8 +2930,9 @@ public:
             assert(!phi_node);
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
 
-            emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.caughtCapiException,
-                               { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
+            emitter.emitSetCurrentStmt(current_stmt);
+            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException,
+                                             { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
 
             if (!final_dest) {
                 // Propagate the exception out of the function:
@@ -2874,7 +2940,7 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
-                    emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.deinitFrame, irstate->getFrameInfoVar());
+                    emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
             } else {
@@ -2915,6 +2981,8 @@ public:
         assert(capi_exc_dest);
         assert(phi_node);
 
+        // Break a likely critical edge, for the benefit of the refcounter.
+        // We should probably just teach the refcounter to break the edges on-demand though.
         llvm::BasicBlock* critedge_breaker = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
         critedge_breaker->moveBefore(capi_exc_dest);
         llvm::BranchInst::Create(capi_exc_dest, critedge_breaker);

@@ -162,6 +162,7 @@ extern "C" Box* createDict();
 extern "C" Box* createList();
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step);
 extern "C" Box* createTuple(int64_t nelts, Box** elts);
+extern "C" void makePendingCalls();
 
 Box* objectStr(Box*);
 Box* objectRepr(Box*);
@@ -1311,6 +1312,8 @@ inline BoxedString* getStaticString(llvm::StringRef s) {
     constants.push_back(r);
     return r;
 }
+
+extern "C" volatile int _pendingcalls_to_do;
 
 inline Box* Box::getattrString(const char* attr) {
     // XXX need to auto-decref

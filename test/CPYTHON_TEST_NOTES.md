@@ -183,7 +183,6 @@ test_scope              eval of code object from existing function (not currentl
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
 test_shlex              [unknown]
-test_signal             [unknown]
 test_site               [unknown]
 test_smtpnet            [unknown]
 test_socketserver       [unknown]

@@ -497,6 +497,10 @@ void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitOSRPoint() end");
 }
 
+void JitFragmentWriter::emitPendingCallsCheck() {
+    call(false, (void*)ASTInterpreterJitInterface::pendingCallsCheckHelper);
+}
+
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() start");
     if (!dest)
@@ -769,13 +773,17 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
         RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
         addAction([=]() { _emitRecordType(type_recorder_var, obj_cls_var); }, { type_recorder_var, obj_cls_var },
                   ActionType::NORMAL);
+
+        emitPendingCallsCheck();
         return result;
     }
+    emitPendingCallsCheck();
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
     return result;
 #else
     assert(args_vec.size() < 7);
-    auto result = call(false, func_addr, args_vec);
+    RewriterVar* result = call(false, func_addr, args_vec);
+    emitPendingCallsCheck();
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
     return result;
 #endif
