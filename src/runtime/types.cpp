@@ -479,7 +479,7 @@ BORROWED(Box*) BoxedModule::getUnicodeConstant(llvm::StringRef ast_str) {
 BORROWED(BoxedInt*) BoxedModule::getIntConstant(int64_t n) {
     BoxedInt*& r = int_constants[n];
     if (!r)
-        r = new BoxedInt(n);
+        r = (BoxedInt*)boxInt(n);
     return r;
 }
 

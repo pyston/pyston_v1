@@ -355,13 +355,13 @@ extern "C" Box* ord(Box* obj) {
         size = PyString_GET_SIZE(obj);
         if (size == 1) {
             ord = (long)((unsigned char)*PyString_AS_STRING(obj));
-            return new BoxedInt(ord);
+            return boxInt(ord);
         }
     } else if (PyByteArray_Check(obj)) {
         size = PyByteArray_GET_SIZE(obj);
         if (size == 1) {
             ord = (long)((unsigned char)*PyByteArray_AS_STRING(obj));
-            return new BoxedInt(ord);
+            return boxInt(ord);
         }
 
 #ifdef Py_USING_UNICODE
@@ -369,7 +369,7 @@ extern "C" Box* ord(Box* obj) {
         size = PyUnicode_GET_SIZE(obj);
         if (size == 1) {
             ord = (long)*PyUnicode_AS_UNICODE(obj);
-            return new BoxedInt(ord);
+            return boxInt(ord);
         }
 #endif
     } else {
