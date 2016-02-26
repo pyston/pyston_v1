@@ -80,20 +80,7 @@ public:
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
     AST_stmt* getCurrentStatement();
-    Box* fastLocalsToBoxedLocals();
     Box* getGlobalsDict();
-
-    // Gets the "current version" of this frame: if the frame has executed since
-    // the iterator was obtained, the methods may return old values. This returns
-    // an updated copy that returns the updated values.
-    // The "current version" will live at the same stack location, but any other
-    // similarities need to be verified by the caller, ie it is up to the caller
-    // to determine that we didn't leave and reenter the stack frame.
-    // This function can only be called from the thread that created this object.
-    PythonFrameIterator getCurrentVersion();
-
-    // Assuming this is a valid frame iterator, return the next frame back (ie older).
-    PythonFrameIterator back();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
     void operator=(PythonFrameIterator&& rhs);
@@ -101,7 +88,7 @@ public:
     ~PythonFrameIterator();
 };
 
-PythonFrameIterator getPythonFrame(int depth);
+FrameInfo* getPythonFrameInfo(int depth);
 
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).

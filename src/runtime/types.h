@@ -1169,6 +1169,7 @@ public:
 
     struct Context* context, *returnContext;
     void* stack_begin;
+    FrameInfo* top_caller_frame_info;
 
 #if STAT_TIMERS
     StatTimer* prev_stack;
@@ -1272,7 +1273,11 @@ Box* codeForFunction(BoxedFunction*);
 Box* codeForFunctionMetadata(FunctionMetadata*);
 FunctionMetadata* metadataFromCode(Box* code);
 
+Box* getFrame(FrameInfo* frame_info);
 Box* getFrame(int depth);
+void frameInvalidateBack(BoxedFrame* frame);
+extern "C" void deinitFrame(FrameInfo* frame_info);
+extern "C" void initFrame(FrameInfo* frame_info);
 
 inline BoxedString* boxString(llvm::StringRef s) {
     if (s.size() <= 1) {

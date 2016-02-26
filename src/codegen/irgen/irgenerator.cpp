@@ -175,6 +175,11 @@ template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, 
     return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
 }
 
+template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, md) == 64 + 16, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 8);
+}
+
 void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
                                    llvm::Value* frame_info_arg) {
     /*
@@ -279,9 +284,12 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
+        builder.CreateStore(embedRelocatablePtr(getMD(), g.llvm_functionmetadata_type_ptr), getMDGep(builder, al));
 
         this->frame_info = al;
         this->globals = passed_globals;
+
+        builder.CreateCall(g.funcs.initFrame, this->frame_info);
     }
 
     stmt = getStmtGep(builder, frame_info);
@@ -350,6 +358,10 @@ private:
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
                             ExceptionStyle target_exception_style) {
+        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
+                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
+        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
+
         bool needs_cxx_interception;
         if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
             needs_cxx_interception = false;
@@ -430,7 +442,7 @@ private:
 
         pp_args.insert(pp_args.end(), ic_stackmap_args.begin(), ic_stackmap_args.end());
 
-        irgenerator->addFrameStackmapArgs(info, unw_info.current_stmt, pp_args);
+        irgenerator->addFrameStackmapArgs(info, pp_args);
 
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
@@ -444,7 +456,6 @@ private:
             abort();
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-
         llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style);
         return rtn;
     }
@@ -503,10 +514,6 @@ public:
             }
         }
 #endif
-
-        llvm::Value* stmt = unw_info.current_stmt ? embedRelocatablePtr(unw_info.current_stmt, g.llvm_aststmt_type_ptr)
-                                                  : getNullPtr(g.llvm_aststmt_type_ptr);
-        getBuilder()->CreateStore(stmt, irstate->getStmtVar());
         return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
     }
 
@@ -2098,6 +2105,9 @@ private:
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
 
+        if (!irstate->getCurFunction()->entry_descriptor)
+            emitter.createCall(unw_info, g.funcs.deinitFrame, irstate->getFrameInfoVar());
+
         assert(rtn->getValue());
         auto ret_inst = emitter.getBuilder()->CreateRet(rtn->getValue());
 
@@ -2546,23 +2556,8 @@ private:
     }
 
 public:
-    void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
-                              std::vector<llvm::Value*>& stackmap_args) override {
+    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
-
-        assert(UNBOXED_INT->llvmType() == g.i64);
-        if (ENABLE_JIT_OBJECT_CACHE) {
-            llvm::Value* v;
-            if (current_stmt)
-                v = emitter.getBuilder()->CreatePtrToInt(embedRelocatablePtr(current_stmt, g.i8_ptr), g.i64);
-            else
-                v = getConstantInt(0, g.i64);
-            stackmap_args.push_back(v);
-        } else {
-            stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
-        }
-
-        pp->addFrameVar("!current_stmt", UNBOXED_INT);
 
         // For deopts we need to add the compiler created names to the stackmap
         if (ENABLE_FRAME_INTROSPECTION && pp->isDeopt()) {
@@ -2867,8 +2862,9 @@ public:
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
-            emitter.getBuilder()->CreateCall2(g.funcs.caughtCapiException, phi_node,
-                                              embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr));
+
+            emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.caughtCapiException,
+                               { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
 
             if (!final_dest) {
                 // Propagate the exception out of the function:
@@ -2876,6 +2872,7 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
+                    emitter.createCall(UnwindInfo(current_stmt, NULL), g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
             } else {

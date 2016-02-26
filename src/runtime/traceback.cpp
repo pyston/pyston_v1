@@ -82,37 +82,14 @@ void printTraceback(Box* b) {
     }
 }
 
-Box* BoxedTraceback::getLines(Box* b) {
-    assert(b->cls == traceback_cls);
-
-    BoxedTraceback* tb = static_cast<BoxedTraceback*>(b);
-
-    if (!tb->py_lines) {
-        BoxedList* lines = new BoxedList();
-        for (BoxedTraceback* wtb = tb; wtb && wtb != None; wtb = static_cast<BoxedTraceback*>(wtb->tb_next)) {
-            auto& line = wtb->line;
-            auto l = BoxedTuple::create({ line.file, line.func, boxInt(line.line) });
-            listAppendInternal(lines, l);
-        }
-        tb->py_lines = lines;
-    }
-
-    return tb->py_lines;
-}
-
-void BoxedTraceback::here(LineInfo lineInfo, Box** tb) {
-    Box* old_tb = *tb;
-    *tb = new BoxedTraceback(std::move(lineInfo), *tb);
-    Py_DECREF(old_tb);
-}
-
 void BoxedTraceback::dealloc(Box* b) noexcept {
     BoxedTraceback* self = static_cast<BoxedTraceback*>(b);
 
     Py_DECREF(self->tb_next);
-    Py_XDECREF(self->py_lines);
     Py_DECREF(self->line.file);
     Py_DECREF(self->line.func);
+
+    Py_DECREF(self->tb_frame);
 
     PyObject_GC_Del(b);
 }
@@ -121,7 +98,7 @@ int BoxedTraceback::traverse(Box* self, visitproc visit, void *arg) noexcept {
     BoxedTraceback* tb = static_cast<BoxedTraceback*>(self);
 
     Py_VISIT(tb->tb_next);
-    Py_VISIT(tb->py_lines);
+    Py_VISIT(tb->tb_frame);
     Py_VISIT(tb->line.file);
     Py_VISIT(tb->line.func);
 
@@ -132,11 +109,10 @@ int BoxedTraceback::clear(Box* self) noexcept {
     abort();
 }
 
-static Box* traceback_tb_next(Box* self, void*) {
-    assert(self->cls == traceback_cls);
-
-    BoxedTraceback* traceback = static_cast<BoxedTraceback*>(self);
-    return traceback->tb_next;
+void BoxedTraceback::here(LineInfo lineInfo, Box** tb, Box* frame) {
+    Box* old_tb = *tb;
+    *tb = new BoxedTraceback(std::move(lineInfo), *tb, frame);
+    Py_DECREF(old_tb);
 }
 
 extern "C" int _Py_DisplaySourceLine(PyObject* f, const char* filename, int lineno, int indent) noexcept {
@@ -148,17 +124,15 @@ void setupTraceback() {
                                        (destructor)BoxedTraceback::dealloc, NULL, true,
                                        (traverseproc)BoxedTraceback::traverse, (inquiry)BoxedTraceback::clear);
 
-    traceback_cls->giveAttr("getLines",
-                            new BoxedFunction(FunctionMetadata::create((void*)BoxedTraceback::getLines, UNKNOWN, 1)));
-
     /*
      * Currently not supported.
-    traceback_cls->giveAttr("tb_frame", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_frame, NULL, NULL));
     traceback_cls->giveAttr("tb_lasti", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_lasti, NULL, NULL));
-    traceback_cls->giveAttr("tb_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(traceback_tb_lineno, NULL,
-    NULL));
     */
-    traceback_cls->giveAttrDescriptor("tb_next", traceback_tb_next, NULL);
+
+    traceback_cls->giveAttr(
+        "tb_frame", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedTraceback, tb_frame)));
+    traceback_cls->giveAttr(
+        "tb_next", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedTraceback, tb_next)));
     traceback_cls->giveAttr("tb_lineno",
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::INT,
                                                       offsetof(BoxedTraceback, line) + offsetof(LineInfo, line)));
