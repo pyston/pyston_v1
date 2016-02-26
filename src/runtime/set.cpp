@@ -865,7 +865,7 @@ void setupSet() {
     set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
 
     set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSetIterator), false, "setiterator",
-                                          (destructor)BoxedSetIterator::dealloc, NULL, true,
+                                          false, (destructor)BoxedSetIterator::dealloc, NULL, true,
                                           (traverseproc)BoxedSetIterator::traverse, NOCLEAR);
     set_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
                                                (void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));

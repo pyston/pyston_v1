@@ -575,11 +575,11 @@ public:
         return irstate->getSourceInfo()->parent_module->getFloatConstant(d);
     }
 
-    void refConsumed(llvm::Value* v, llvm::Instruction* inst) {
+    void refConsumed(llvm::Value* v, llvm::Instruction* inst) override {
         irstate->getRefcounts()->refConsumed(v, inst);
     }
 
-    llvm::Value* setType(llvm::Value* v, RefType reftype) {
+    llvm::Value* setType(llvm::Value* v, RefType reftype) override {
         assert(llvm::isa<PointerType>(v->getType()));
 
         irstate->getRefcounts()->setType(v, reftype);
@@ -591,7 +591,7 @@ public:
         return v;
     }
 
-    ConcreteCompilerVariable* getNone() {
+    ConcreteCompilerVariable* getNone() override {
         llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
         setType(none, RefType::BORROWED);
         return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
@@ -678,7 +678,7 @@ public:
           types(types),
           state(RUNNING) {}
 
-    virtual CFGBlock* getCFGBlock() {
+    virtual CFGBlock* getCFGBlock() override {
         return myblock;
     }
 

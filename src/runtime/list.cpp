@@ -1375,11 +1375,11 @@ void setupList() {
     list_cls->tp_as_mapping = &list_as_mapping;
 
     list_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedListIterator), false, "listiterator",
-                                           (destructor)BoxedListIterator::dealloc, NULL, true,
+                                           false, (destructor)BoxedListIterator::dealloc, NULL, true,
                                            (traverseproc)BoxedListIterator::traverse, NOCLEAR);
     list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedListIterator), false,
-                                                   "listreverseiterator", (destructor)BoxedListIterator::dealloc, NULL,
-                                                   true, (traverseproc)BoxedListIterator::traverse, NOCLEAR);
+                                                   "listreverseiterator", false, (destructor)BoxedListIterator::dealloc,
+                                                   NULL, true, (traverseproc)BoxedListIterator::traverse, NOCLEAR);
     list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
 
     list_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)listLen, BOXED_INT, 1)));

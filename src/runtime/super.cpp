@@ -192,7 +192,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 
 void setupSuper() {
     super_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super",
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super", true,
                              (destructor)BoxedSuper::dealloc, NULL, true, (traverseproc)BoxedSuper::traverse, NOCLEAR);
 
     // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,

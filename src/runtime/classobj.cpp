@@ -1764,12 +1764,12 @@ int BoxedClassobj::clear(Box* self) noexcept {
 void setupClassobj() {
     classobj_cls
         = BoxedClass::create(type_cls, object_cls, offsetof(BoxedClassobj, attrs), offsetof(BoxedClassobj, weakreflist),
-                             sizeof(BoxedClassobj), false, "classobj", (destructor)BoxedClassobj::dealloc, NULL, true,
-                             (traverseproc)BoxedClassobj::traverse, (inquiry)BoxedClassobj::clear);
+                             sizeof(BoxedClassobj), false, "classobj", false, (destructor)BoxedClassobj::dealloc, NULL,
+                             true, (traverseproc)BoxedClassobj::traverse, (inquiry)BoxedClassobj::clear);
     instance_cls
         = BoxedClass::create(type_cls, object_cls, offsetof(BoxedInstance, attrs), offsetof(BoxedInstance, weakreflist),
-                             sizeof(BoxedInstance), false, "instance", (destructor)BoxedInstance::dealloc, NULL, true,
-                             (traverseproc)BoxedInstance::traverse, (inquiry)BoxedInstance::clear);
+                             sizeof(BoxedInstance), false, "instance", false, (destructor)BoxedInstance::dealloc, NULL,
+                             true, (traverseproc)BoxedInstance::traverse, (inquiry)BoxedInstance::clear);
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(FunctionMetadata::create((void*)classobjNew, UNKNOWN, 4, false, false)));

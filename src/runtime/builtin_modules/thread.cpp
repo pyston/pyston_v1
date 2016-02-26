@@ -228,7 +228,7 @@ void setupThread() {
                                           FunctionMetadata::create((void*)threadCount, BOXED_INT, 0), "_count"));
 
     thread_lock_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedThreadLock), false, "lock",
-                                         BoxedThreadLock::dealloc, NULL, false);
+                                         true, BoxedThreadLock::dealloc, NULL, false);
     thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
     thread_lock_cls->has_safe_tp_dealloc = true;
     thread_lock_cls->instances_are_nonzero = true;
@@ -250,7 +250,7 @@ void setupThread() {
     thread_lock_cls->freeze();
 
     ThreadError = BoxedClass::create(type_cls, Exception, Exception->attrs_offset, Exception->tp_weaklistoffset,
-                                     Exception->tp_basicsize, false, "error", NULL, NULL, false);
+                                     Exception->tp_basicsize, false, "error", true, NULL, NULL, false);
     ThreadError->giveAttr("__module__", boxString("thread"));
     ThreadError->freeze();
 

@@ -144,7 +144,7 @@ extern "C" int _Py_DisplaySourceLine(PyObject* f, const char* filename, int line
 }
 
 void setupTraceback() {
-    traceback_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTraceback), false, "traceback",
+    traceback_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTraceback), false, "traceback", true,
                                        (destructor)BoxedTraceback::dealloc, NULL, true,
                                        (traverseproc)BoxedTraceback::traverse, (inquiry)BoxedTraceback::clear);
 

@@ -854,13 +854,13 @@ void setupDict() {
     dict_cls->tp_as_sequence = &dict_as_sequence;
 
     dictiterkey_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictIterator), false,
-                                         "dictionary-keyiterator", (destructor)BoxedDictIterator::dealloc, NULL, true,
+                                         "dictionary-keyiterator", true, (destructor)BoxedDictIterator::dealloc, NULL, true,
                                          (traverseproc)BoxedDictIterator::traverse, NOCLEAR);
     dictitervalue_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictIterator), false,
-                                           "dictionary-valueiterator", (destructor)BoxedDictIterator::dealloc, NULL,
+                                           "dictionary-valueiterator", true, (destructor)BoxedDictIterator::dealloc, NULL,
                                            true, (traverseproc)BoxedDictIterator::traverse, NOCLEAR);
     dictiteritem_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedDictIterator), false,
-                                          "dictionary-itemiterator", (destructor)BoxedDictIterator::dealloc, NULL, true,
+                                          "dictionary-itemiterator", true, (destructor)BoxedDictIterator::dealloc, NULL, true,
                                           (traverseproc)BoxedDictIterator::traverse, NOCLEAR);
 
     dictiterkey_cls->instances_are_nonzero = dictitervalue_cls->instances_are_nonzero

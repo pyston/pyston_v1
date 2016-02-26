@@ -634,8 +634,8 @@ void BoxedClass::freeze() {
 
 std::vector<BoxedClass*> classes;
 BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size, bool is_user_defined,
-                       const char* name, destructor dealloc, freefunc free, bool is_gc, traverseproc traverse,
-                       inquiry clear)
+                       const char* name, bool is_subclassable, destructor dealloc, freefunc free, bool is_gc,
+                       traverseproc traverse, inquiry clear)
     : attrs(HiddenClass::makeSingleton()),
       attrs_offset(attrs_offset),
       is_constant(false),
@@ -666,7 +666,8 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
 
     tp_flags |= Py_TPFLAGS_DEFAULT_CORE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
-    tp_flags |= Py_TPFLAGS_BASETYPE;
+    if (is_subclassable)
+        tp_flags |= Py_TPFLAGS_BASETYPE;
     if (is_gc)
         tp_flags |= Py_TPFLAGS_HAVE_GC;
 
@@ -759,11 +760,12 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int weaklist_offset, 
 }
 
 BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset, int weaklist_offset,
-                               int instance_size, bool is_user_defined, const char* name, destructor dealloc,
-                               freefunc free, bool is_gc, traverseproc traverse, inquiry clear) {
+                               int instance_size, bool is_user_defined, const char* name, bool is_subclassable,
+                               destructor dealloc, freefunc free, bool is_gc, traverseproc traverse, inquiry clear) {
     assert(!is_user_defined);
-    BoxedClass* made = new (metaclass, 0) BoxedClass(base, attrs_offset, weaklist_offset, instance_size,
-                                                     is_user_defined, name, dealloc, free, is_gc, traverse, clear);
+    BoxedClass* made = new (metaclass, 0)
+        BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name, is_subclassable, dealloc,
+                   free, is_gc, traverse, clear);
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:
@@ -870,8 +872,8 @@ static int subtype_clear(PyObject* self) noexcept {
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
                                bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data(), subtype_dealloc,
-                 PyObject_GC_Del, true, subtype_traverse, subtype_clear),
+    : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data(), true,
+                 subtype_dealloc, PyObject_GC_Del, true, subtype_traverse, subtype_clear),
       ht_name(name),
       ht_slots(NULL) {
     assert(is_user_defined);

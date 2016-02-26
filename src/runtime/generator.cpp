@@ -489,8 +489,8 @@ static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) 
 
 void setupGenerator() {
     generator_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
-                                       sizeof(BoxedGenerator), false, "generator", (destructor)generator_dealloc, NULL,
-                                       true, (traverseproc)generator_traverse, NOCLEAR);
+                                       sizeof(BoxedGenerator), false, "generator", false, (destructor)generator_dealloc,
+                                       NULL, true, (traverseproc)generator_traverse, NOCLEAR);
     generator_cls->has_safe_tp_dealloc = true;
     generator_cls->giveAttr(
         "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));

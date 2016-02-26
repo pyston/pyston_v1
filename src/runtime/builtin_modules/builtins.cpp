@@ -1853,7 +1853,7 @@ void setupBuiltins() {
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", NULL, NULL, false);
+    ellipsis_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
@@ -1868,8 +1868,8 @@ void setupBuiltins() {
         "print", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)print, NONE, 0, true, true), "print",
                                                   print_doc));
 
-    notimplemented_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", NULL, NULL, false);
+    notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", false,
+                                            NULL, NULL, false);
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
@@ -1981,8 +1981,8 @@ void setupBuiltins() {
         "__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                        { None, None, None, autoDecref(boxInt(-1)) }, NULL, import_doc));
 
-    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate),
-                                       false, "enumerate", BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
+    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", false,
+                                       BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
     enumerate_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false),
                                      { autoDecref(boxInt(0)) }));

@@ -3753,9 +3753,10 @@ void setupRuntime() {
     type_cls = static_cast<BoxedClass*>(_PyObject_GC_Malloc(sizeof(BoxedClass)));
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
-    ::new (object_cls) BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", object_dealloc, PyObject_Del, /* is_gc */ false);
+    ::new (object_cls)
+        BoxedClass(NULL, 0, 0, sizeof(Box), false, "object", true, object_dealloc, PyObject_Del, /* is_gc */ false);
     ::new (type_cls) BoxedClass(object_cls, offsetof(BoxedClass, attrs), offsetof(BoxedClass, tp_weaklist),
-                                sizeof(BoxedHeapClass), false, "type", BoxedClass::dealloc, PyObject_GC_Del, true,
+                                sizeof(BoxedHeapClass), false, "type", true, BoxedClass::dealloc, PyObject_GC_Del, true,
                                 (traverseproc)type_traverse, (inquiry)type_clear);
     _PyObject_GC_TRACK(object_cls);
     _PyObject_GC_TRACK(type_cls);
@@ -3775,18 +3776,19 @@ void setupRuntime() {
     object_cls->tp_new = object_new;
     type_cls->tp_getattro = type_getattro;
 
-    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", NULL, NULL, /* is_gc */ false);
+    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", false, NULL, NULL, /* is_gc */ false);
     None = new (none_cls) Box();
     constants.push_back(None);
     assert(None->cls);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", NULL, NULL, false);
+    basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", true, NULL, NULL, false);
 
     // We add 1 to the tp_basicsize of the BoxedString in order to hold the null byte at the end.
     // We use offsetof(BoxedString, s_data) as opposed to sizeof(BoxedString) so that we can
     // use the extra padding bytes at the end of the BoxedString.
-    str_cls = new (0) BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str", NULL, NULL, false);
+    str_cls = new (0)
+        BoxedClass(basestring_cls, 0, 0, offsetof(BoxedString, s_data) + 1, false, "str", true, NULL, NULL, false);
     str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
     str_cls->tp_itemsize = sizeof(char);
 
@@ -3804,7 +3806,7 @@ void setupRuntime() {
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
-    tuple_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple",
+    tuple_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple", true,
                                    (destructor)tupledealloc, NULL, true, (traverseproc)tupletraverse, NOCLEAR);
 
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
@@ -3812,48 +3814,49 @@ void setupRuntime() {
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     constants.push_back(EmptyTuple);
-    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", BoxedList::dealloc, NULL, true,
-                                  BoxedList::traverse, BoxedList::clear);
+    list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", true, BoxedList::dealloc, NULL,
+                                  true, BoxedList::traverse, BoxedList::clear);
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     pyston_getset_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor",
-                                           BoxedGetsetDescriptor::dealloc, NULL, false);
+                                           false, BoxedGetsetDescriptor::dealloc, NULL, false);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", NULL, NULL, false);
-    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", BoxedDict::dealloc, NULL, true,
-                                  BoxedDict::traverse, BoxedDict::clear);
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", false, NULL, NULL, false);
+    dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", true, BoxedDict::dealloc, NULL,
+                                  true, BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist),
-                                  sizeof(BoxedFile), false, "file", file_dealloc, NULL, false);
-    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", BoxedInt::tp_dealloc, /*BoxedInt::tp_free*/NULL, false);
+    file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist), sizeof(BoxedFile), false, "file",
+                                  true, file_dealloc, NULL, false);
+    int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", true, BoxedInt::tp_dealloc,
+                                 /*BoxedInt::tp_free*/ NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", NULL, NULL, false);
-    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", NULL, NULL, false);
-    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", NULL, NULL, false);
+    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", false, NULL, NULL, false);
+    complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", true, NULL, NULL, false);
+    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", true, NULL, NULL, false);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
-    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", NULL, NULL, false);
-    function_cls = new (0)
-        BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
-                   sizeof(BoxedFunction), false, "function", functionDtor, NULL, true, (traverseproc)func_traverse, NOCLEAR);
+    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, NULL, NULL, false);
+    function_cls = new (0) BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
+                                      sizeof(BoxedFunction), false, "function", false, functionDtor, NULL, true,
+                                      (traverseproc)func_traverse, NOCLEAR);
     builtin_function_or_method_cls = new (0) BoxedClass(
         object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist), sizeof(BoxedBuiltinFunctionOrMethod), false,
-        "builtin_function_or_method", functionDtor, NULL, true, (traverseproc)builtin_func_traverse, NOCLEAR);
+        "builtin_function_or_method", false, functionDtor, NULL, true, (traverseproc)builtin_func_traverse, NOCLEAR);
     function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
     module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false, "module",
-                                    BoxedModule::dealloc, NULL, true, BoxedModule::traverse, BoxedModule::clear);
-    member_descriptor_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false, "member_descriptor", NULL, NULL, false);
+                                    true, BoxedModule::dealloc, NULL, true, BoxedModule::traverse, BoxedModule::clear);
+    member_descriptor_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false,
+                                               "member_descriptor", true, NULL, NULL, false);
     capifunc_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", BoxedCApiFunction::dealloc, NULL,
-                   true, BoxedCApiFunction::traverse, BoxedCApiFunction::clear);
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", true, BoxedCApiFunction::dealloc,
+                   NULL, true, BoxedCApiFunction::traverse, BoxedCApiFunction::clear);
     method_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor), false, "method_descriptor",
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor), false, "method_descriptor", false,
                    BoxedMethodDescriptor::dealloc, NULL, true, BoxedMethodDescriptor::traverse, NOCLEAR);
     wrapperobject_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper", BoxedWrapperObject::dealloc,
-                   NULL, true, BoxedWrapperObject::traverse, NOCLEAR);
-    wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0,
-                                          sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor", NULL, NULL, false);
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper", false,
+                   BoxedWrapperObject::dealloc, NULL, true, BoxedWrapperObject::traverse, NOCLEAR);
+    wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor",
+                                          false, NULL, NULL, false);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);
@@ -3960,31 +3963,31 @@ void setupRuntime() {
     type_cls->giveAttrDescriptor("__dict__", typeDict, NULL);
 
 
-    instancemethod_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedInstanceMethod, im_weakreflist),
-                                            sizeof(BoxedInstanceMethod), false, "instancemethod",
-                                            BoxedInstanceMethod::dealloc, NULL, true, BoxedInstanceMethod::traverse, NOCLEAR);
+    instancemethod_cls = BoxedClass::create(
+        type_cls, object_cls, 0, offsetof(BoxedInstanceMethod, im_weakreflist), sizeof(BoxedInstanceMethod), false,
+        "instancemethod", false, BoxedInstanceMethod::dealloc, NULL, true, BoxedInstanceMethod::traverse, NOCLEAR);
 
-    slice_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice", BoxedSlice::dealloc, NULL, false);
+    slice_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSlice), false, "slice", false,
+                                   BoxedSlice::dealloc, NULL, false);
     set_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist), sizeof(BoxedSet), false,
-                                 "set", BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
+                                 "set", true, BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
     frozenset_cls
         = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedSet, weakreflist), sizeof(BoxedSet), false,
-                             "frozenset", BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
+                             "frozenset", true, BoxedSet::dealloc, NULL, true, BoxedSet::traverse, BoxedSet::clear);
     capi_getset_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset",
-                                         BoxedGetsetDescriptor::dealloc, NULL, false);
-    closure_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClosure), false,
-                                     "closure", BoxedClosure::dealloc, NULL, true, BoxedClosure::traverse, BoxedClosure::clear);
-    property_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedProperty),
-                                      false, "property", BoxedProperty::dealloc, NULL, true, BoxedProperty::traverse, NOCLEAR);
+                                         true, BoxedGetsetDescriptor::dealloc, NULL, false);
+    closure_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClosure), false, "closure", true,
+                                     BoxedClosure::dealloc, NULL, true, BoxedClosure::traverse, BoxedClosure::clear);
+    property_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedProperty), false, "property", true,
+                                      BoxedProperty::dealloc, NULL, true, BoxedProperty::traverse, NOCLEAR);
     staticmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStaticmethod), false, "staticmethod",
-                                          BoxedStaticmethod::dealloc, NULL, true, BoxedStaticmethod::traverse,
+                                          true, BoxedStaticmethod::dealloc, NULL, true, BoxedStaticmethod::traverse,
                                           BoxedStaticmethod::clear);
     classmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClassmethod), false, "classmethod",
-                                         BoxedClassmethod::dealloc, NULL, true, BoxedClassmethod::traverse,
+                                         true, BoxedClassmethod::dealloc, NULL, true, BoxedClassmethod::traverse,
                                          BoxedClassmethod::clear);
     attrwrapperiter_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(AttrWrapperIter), false, "attrwrapperiter",
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(AttrWrapperIter), false, "attrwrapperiter", true,
                              AttrWrapperIter::dealloc, NULL, true, AttrWrapperIter::traverse, NOCLEAR);
 
     pyston_getset_cls->giveAttr("__get__",
@@ -4173,7 +4176,6 @@ void setupRuntime() {
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSlice, step)));
     slice_cls->freeze();
     slice_cls->tp_compare = (cmpfunc)slice_compare;
-    slice_cls->tp_flags &= ~Py_TPFLAGS_BASETYPE;
 
     static PyMappingMethods attrwrapper_as_mapping;
     attrwrapper_cls->tp_as_mapping = &attrwrapper_as_mapping;

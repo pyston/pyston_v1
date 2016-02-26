@@ -189,7 +189,7 @@ llvm_compat_bool calliterHasnextUnboxed(Box* b) {
 
 
 void setupIter() {
-    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "iterator",
+    seqiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "iterator", false,
                                      (destructor)BoxedSeqIter::dealloc, NULL, true,
                                      (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
@@ -203,7 +203,7 @@ void setupIter() {
     seqiter_cls->tp_iter = PyObject_SelfIter;
     seqiter_cls->tp_iternext = seqiter_next;
 
-    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "reversed",
+    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "reversed", false,
                                         (destructor)BoxedSeqIter::dealloc, NULL, true,
                                         (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
@@ -217,7 +217,7 @@ void setupIter() {
     seqreviter_cls->tp_iternext = seqiter_next;
 
     iterwrapper_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedIterWrapper), false, "iterwrapper",
-                                         (destructor)BoxedIterWrapper::dealloc, NULL, true,
+                                         false, (destructor)BoxedIterWrapper::dealloc, NULL, true,
                                          (traverseproc)BoxedIterWrapper::traverse, NOCLEAR);
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)iterwrapperNext, UNKNOWN, 1)));
