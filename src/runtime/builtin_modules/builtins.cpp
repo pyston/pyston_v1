@@ -1873,6 +1873,7 @@ void setupBuiltins() {
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
+    notimplemented_cls->instances_are_nonzero = true;
     NotImplemented = new (notimplemented_cls) Box();
 
     constants.push_back(NotImplemented);
