@@ -2358,6 +2358,8 @@ file_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     if (not_yet_string == NULL) {
         not_yet_string = PyString_InternFromString("<uninitialized file>");
+        // Pyston change:
+        PyGC_RegisterStaticConstant(not_yet_string);
         if (not_yet_string == NULL)
             return NULL;
     }

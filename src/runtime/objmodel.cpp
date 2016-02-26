@@ -147,14 +147,19 @@ extern "C" void printHelper(Box* w, Box* v, bool nl) {
             raiseExcHelper(RuntimeError, "lost sys.stdout");
     }
 
+    // CPython comments:
+    /* PyFile_SoftSpace() can exececute arbitrary code
+       if sys.stdout is an instance with a __getattr__.
+       If __getattr__ raises an exception, w will
+       be freed, so we need to prevent that temporarily. */
+    /* w.write() may replace sys.stdout, so we
+     * have to keep our reference to it */
+    Py_INCREF(w);
+    AUTO_DECREF(w);
+
     int err = 0;
 
     if (v) {
-        /* PyFile_SoftSpace() can exececute arbitrary code
-           if sys.stdout is an instance with a __getattr__.
-           If __getattr__ raises an exception, w will
-           be freed, so we need to prevent that temporarily. */
-        Py_XINCREF(w);
         if (w != NULL && PyFile_SoftSpace(w, 0))
             err = PyFile_WriteString(" ", w);
         if (err == 0)
@@ -182,13 +187,9 @@ extern "C" void printHelper(Box* w, Box* v, bool nl) {
 
     if (nl) {
         if (w != NULL) {
-            /* w.write() may replace sys.stdout, so we
-             * have to keep our reference to it */
-            Py_INCREF(w);
             err = PyFile_WriteString("\n", w);
             if (err == 0)
                 PyFile_SoftSpace(w, 0);
-            Py_DECREF(w);
         }
         // Py_XDECREF(stream);
     }

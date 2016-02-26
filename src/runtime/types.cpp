@@ -3382,7 +3382,6 @@ static Box* getsetDelete(Box* self, Box* obj) {
     return getsetSet(self, obj, NULL);
 }
 
-<<<<<<< HEAD
 void Box::clearAttrs() {
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
@@ -3744,14 +3743,11 @@ extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
 
 extern "C" void _PyUnicode_Fini(void);
 
-||||||| merged common ancestors
-=======
 static int _check_and_flush(FILE* stream) {
     int prev_fail = ferror(stream);
     return fflush(stream) || prev_fail ? EOF : 0;
 }
 
->>>>>>> 1f4a1b
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
@@ -4248,12 +4244,12 @@ void setupRuntime() {
     syserr = PyFile_FromFile(stderr, "<stderr>", "w", _check_and_flush);
     RELEASE_ASSERT(!PyErr_Occurred(), "");
 
-    sys_module->giveAttr("stdout", sysout);
-    sys_module->giveAttr("stdin", sysin);
-    sys_module->giveAttr("stderr", syserr);
-    sys_module->giveAttr("__stdout__", sys_module->getattr(internStringMortal("stdout")));
-    sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
-    sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
+    sys_module->giveAttrBorrowed("stdout", sysout);
+    sys_module->giveAttrBorrowed("stdin", sysin);
+    sys_module->giveAttrBorrowed("stderr", syserr);
+    sys_module->giveAttr("__stdout__", sysout);
+    sys_module->giveAttr("__stdin__", sysin);
+    sys_module->giveAttr("__stderr__", syserr);
 
 
     setupBuiltins();

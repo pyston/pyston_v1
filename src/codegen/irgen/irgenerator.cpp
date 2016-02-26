@@ -2132,8 +2132,8 @@ private:
             auto d = evalExpr(node->dest, unw_info);
             dest = d->makeConverted(emitter, d->getBoxType());
         } else {
-            dest = new ConcreteCompilerVariable(
-                UNKNOWN, emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED), true);
+            dest = new ConcreteCompilerVariable(UNKNOWN,
+                                                emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED));
         }
         assert(dest);
 
