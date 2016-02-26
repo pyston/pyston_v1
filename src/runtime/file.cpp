@@ -1887,6 +1887,8 @@ void setupFile() {
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_name), true));
     file_cls->giveAttr("mode",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_mode), true));
+    file_cls->giveAttr("encoding",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFile, f_encoding), true));
 
     file_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)fileNew, UNKNOWN, 4, false, false),
                                                     { autoDecref(boxString("r")), autoDecref(boxInt(-1)) }));

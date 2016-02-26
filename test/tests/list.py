@@ -85,7 +85,7 @@ while l:
     del l[0]
 
 l = range(5)
-l.extend(range(5))
+print l.extend(range(5))
 print l
 
 # Repeating a list

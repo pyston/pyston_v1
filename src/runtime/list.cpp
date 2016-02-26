@@ -820,6 +820,11 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
     return self;
 }
 
+Box* listExtend(BoxedList* self, Box* _rhs) {
+    listIAdd(self, _rhs);
+    return None;
+}
+
 Box* listAdd(BoxedList* self, Box* _rhs) {
     if (!PyList_Check(_rhs)) {
         return incref(NotImplemented);
@@ -1426,7 +1431,7 @@ void setupList() {
                        new BoxedFunction(FunctionMetadata::create((void*)listPop, UNKNOWN, 2, false, false), { None }));
 
     list_cls->giveAttr("append", new BoxedFunction(FunctionMetadata::create((void*)listAppend, NONE, 2)));
-    list_cls->giveAttr("extend", new BoxedFunction(FunctionMetadata::create((void*)listIAdd, UNKNOWN, 2)));
+    list_cls->giveAttr("extend", new BoxedFunction(FunctionMetadata::create((void*)listExtend, NONE, 2)));
 
     list_cls->giveAttr("insert", new BoxedFunction(FunctionMetadata::create((void*)listInsert, NONE, 3)));
     list_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)listMul, UNKNOWN, 2)));

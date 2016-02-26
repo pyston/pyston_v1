@@ -20,6 +20,7 @@ def chop(s):
 
 for desc in [sys.stderr, sys.stdout, sys.stdin]:
     print chop(str(desc))
+    print desc.encoding
 
 f = open("/dev/null", 'w')
 print chop(str(f))
