@@ -184,22 +184,25 @@ struct SearchResult {
     SearchResult(Box* loader) : loader(loader), type(IMP_HOOK) {}
 };
 
-SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedList* path_list) {
-    static BoxedString* meta_path_str = getStaticString("meta_path");
-    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(meta_path_str));
-    if (!meta_path || meta_path->cls != list_cls)
-        raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
-
+SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedList* path_list, bool call_import_hooks) {
     static BoxedString* findmodule_str = getStaticString("find_module");
-    for (int i = 0; i < meta_path->size; i++) {
-        Box* finder = meta_path->elts->elts[i];
 
-        auto path_pass = path_list ? path_list : None;
-        CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
-        Box* loader = callattr(finder, findmodule_str, callattr_flags, full_name, path_pass, NULL, NULL, NULL);
+    if (call_import_hooks) {
+        static BoxedString* meta_path_str = getStaticString("meta_path");
+        BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr(meta_path_str));
+        if (!meta_path || meta_path->cls != list_cls)
+            raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
 
-        if (loader != None)
-            return SearchResult(loader);
+
+        for (int i = 0; i < meta_path->size; i++) {
+            Box* finder = meta_path->elts->elts[i];
+            auto path_pass = path_list ? path_list : None;
+            CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
+            Box* loader = callattr(finder, findmodule_str, callattr_flags, full_name, path_pass, NULL, NULL, NULL);
+
+            if (loader != None)
+                return SearchResult(loader);
+        }
     }
 
     if (!path_list)
@@ -240,15 +243,19 @@ SearchResult findModule(const std::string& name, BoxedString* full_name, BoxedLi
         llvm::sys::path::append(joined_path, "__init__.py");
         std::string fn(joined_path.str());
 
-        PyObject* importer = get_path_importer(path_importer_cache, path_hooks, _p);
-        if (importer == NULL)
-            throwCAPIException();
+        if (call_import_hooks) {
+            PyObject* importer = get_path_importer(path_importer_cache, path_hooks, _p);
+            if (importer == NULL)
+                throwCAPIException();
 
-        if (importer != None) {
-            CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
-            Box* loader = callattr(importer, findmodule_str, callattr_flags, full_name, NULL, NULL, NULL, NULL);
-            if (loader != None)
-                return SearchResult(loader);
+            if (importer != None) {
+                CallattrFlags callattr_flags{.cls_only = false,
+                                             .null_on_nonexistent = false,
+                                             .argspec = ArgPassSpec(1) };
+                Box* loader = callattr(importer, findmodule_str, callattr_flags, full_name, NULL, NULL, NULL, NULL);
+                if (loader != None)
+                    return SearchResult(loader);
+            }
         }
 
         if (pathExists(fn))
@@ -405,7 +412,7 @@ static Box* importSub(const std::string& name, BoxedString* full_name, Box* pare
         }
     }
 
-    SearchResult sr = findModule(name, full_name, path_list);
+    SearchResult sr = findModule(name, full_name, path_list, true /* call_import_hooks */);
 
     if (sr.type != SearchResult::SEARCH_ERROR) {
         Box* module;
@@ -732,7 +739,7 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     BoxedString* name = static_cast<BoxedString*>(_name);
     BoxedList* path_list = path && path != None ? path : getSysPath();
 
-    SearchResult sr = findModule(name->s(), name, path_list);
+    SearchResult sr = findModule(name->s(), name, path_list, false /* call_import_hooks */);
     if (sr.type == SearchResult::SEARCH_ERROR)
         raiseExcHelper(ImportError, "%s", name->data());
 

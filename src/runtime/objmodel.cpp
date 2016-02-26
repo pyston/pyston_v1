@@ -3046,7 +3046,7 @@ extern "C" bool nonzero(Box* obj) {
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
                        || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
                        || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls
-                       || obj->cls == wrapperobject_cls,
+                       || obj->cls == wrapperobject_cls || obj->cls == code_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {

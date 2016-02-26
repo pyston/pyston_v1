@@ -20,6 +20,9 @@ exec compile('print(1, 2)', 'test.py', 'exec')
 tree = compile('print(1, 2)', 'test.py', 'exec', _ast.PyCF_ONLY_AST)
 exec compile(tree, '<tree>', 'exec')
 
+c = compile('print(1, 2)', '', 'exec')
+exec c
+print(c.co_name, c.co_filename)
 
 # test bad syntax which should not raise in compile time:
 try:
