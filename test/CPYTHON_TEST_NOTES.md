@@ -24,7 +24,7 @@ test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
 test_argparse           [unknown]
 test_ascii_formatd      segfault in ctypes (but only on CI)
-test_ast                [unknown]
+test_ast                mismatch of parser error checks. remove test/tests/test_ast.py when the orig test passes
 test_asynchat           [unknown]
 test_asyncore           [unknown]
 test_atexit             [unknown]
