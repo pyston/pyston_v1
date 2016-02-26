@@ -41,7 +41,6 @@
 #include "runtime/ctxswitching.h"
 #include "runtime/objmodel.h"
 #include "runtime/generator.h"
-#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 
@@ -560,8 +559,7 @@ public:
             if (exceptionAtLineCheck()) {
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
-                auto line_info = lineInfoForFrameInfo(prev_frame_info);
-                exceptionAtLine(line_info, &exc_info.traceback);
+                exceptionAtLine(&exc_info.traceback);
             }
         }
     }
@@ -682,39 +680,6 @@ template <typename Func> void unwindPythonStack(Func func) {
 //
 // 4. Unless we've hit the end of the stack, go to 2 and keep unwinding.
 //
-static StatCounter us_gettraceback("us_gettraceback");
-Box* getTraceback() {
-    STAT_TIMER(t0, "us_timer_gettraceback", 20);
-    if (!ENABLE_FRAME_INTROSPECTION) {
-        static bool printed_warning = false;
-        if (!printed_warning) {
-            printed_warning = true;
-            fprintf(stderr, "Warning: can't get traceback since ENABLE_FRAME_INTROSPECTION=0\n");
-        }
-        return None;
-    }
-
-    if (!ENABLE_TRACEBACKS) {
-        static bool printed_warning = false;
-        if (!printed_warning) {
-            printed_warning = true;
-            fprintf(stderr, "Warning: can't get traceback since ENABLE_TRACEBACKS=0\n");
-        }
-        return None;
-    }
-
-    Timer _t("getTraceback", 1000);
-
-    Box* tb = None;
-    for (FrameInfo* frame_info = getTopFrameInfo(); frame_info; frame_info = frame_info->back) {
-        BoxedTraceback::here(lineInfoForFrameInfo(frame_info), &tb, getFrame(frame_info));
-    }
-
-    long us = _t.end();
-    us_gettraceback.log(us);
-
-    return static_cast<BoxedTraceback*>(tb);
-}
 
 ExcInfo* getFrameExcInfo() {
     std::vector<ExcInfo*> to_update;
@@ -1042,7 +1007,10 @@ void _printStacktrace() {
     }
 
     recursive = true;
-    printTraceback(getTraceback());
+    Box* file = PySys_GetObject("stderr");
+    PyTracebackObject* tb = NULL;
+    PyTraceBack_Here_Tb((struct _frame*)getFrame(0), &tb);
+    PyTraceBack_Print((Box*)tb, file);
     recursive = false;
 }
 
@@ -1057,26 +1025,23 @@ extern "C" void abort() {
         Stats::dump();
         fprintf(stderr, "Someone called abort!\n");
 
-        // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
-        if (traceback_cls) {
 
-            // If we call abort(), things may be seriously wrong.  Set an alarm() to
-            // try to handle cases that we would just hang.
-            // (Ex if we abort() from a static constructor, and _printStackTrace uses
-            // that object, _printStackTrace will hang waiting for the first construction
-            // to finish.)
-            alarm(1);
-            try {
-                _printStacktrace();
-            } catch (ExcInfo) {
-                fprintf(stderr, "error printing stack trace during abort()");
-            }
-
-            // Cancel the alarm.
-            // This is helpful for when running in a debugger, since otherwise the debugger will catch the
-            // abort and let you investigate, but the alarm will still come back to kill the program.
-            alarm(0);
+        // If we call abort(), things may be seriously wrong.  Set an alarm() to
+        // try to handle cases that we would just hang.
+        // (Ex if we abort() from a static constructor, and _printStackTrace uses
+        // that object, _printStackTrace will hang waiting for the first construction
+        // to finish.)
+        alarm(1);
+        try {
+            _printStacktrace();
+        } catch (ExcInfo) {
+            fprintf(stderr, "error printing stack trace during abort()");
         }
+
+        // Cancel the alarm.
+        // This is helpful for when running in a debugger, since otherwise the debugger will catch the
+        // abort and let you investigate, but the alarm will still come back to kill the program.
+        alarm(0);
     }
 
     if (PAUSE_AT_ABORT) {

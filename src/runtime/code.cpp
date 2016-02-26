@@ -110,6 +110,15 @@ extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
     return unboxInt(BoxedCode::argcount((Box*)op, NULL));
 }
 
+extern "C" PyObject* PyCode_GetFilename(PyCodeObject* op) noexcept {
+    RELEASE_ASSERT(PyCode_Check((Box*)op), "");
+    return BoxedCode::filename((Box*)op, NULL);
+}
+extern "C" PyObject* PyCode_GetName(PyCodeObject* op) noexcept {
+    RELEASE_ASSERT(PyCode_Check((Box*)op), "");
+    return BoxedCode::name((Box*)op, NULL);
+}
+
 void setupCode() {
     code_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", true, NULL, NULL, false);

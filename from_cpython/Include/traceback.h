@@ -10,8 +10,6 @@ struct _frame;
 
 /* Traceback interface */
 
-// Pyston change: not necessarily our object format
-#if 0
 typedef struct _traceback {
 	PyObject_HEAD
 	struct _traceback *tb_next;
@@ -19,18 +17,16 @@ typedef struct _traceback {
 	int tb_lasti;
 	int tb_lineno;
 } PyTracebackObject;
-#endif
-typedef struct _PyTracebackObject PyTracebackObject;
 
 PyAPI_FUNC(int) PyTraceBack_Here(struct _frame *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyTraceBack_Print(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) _Py_DisplaySourceLine(PyObject *, const char *, int, int) PYSTON_NOEXCEPT;
 
+// Pyston change: this function does not modify curexc_traceback but instead sets the supplied tb
+PyAPI_FUNC(int) PyTraceBack_Here_Tb(struct _frame *, PyTracebackObject **) PYSTON_NOEXCEPT;
+
 /* Reveal traceback type so we can typecheck traceback objects */
-// Pyston change: not a static type any more
-PyAPI_DATA(PyTypeObject*) traceback_cls;
-#define PyTraceBack_Type (*traceback_cls)
-// PyAPI_DATA(PyTypeObject) PyTraceBack_Type;
+PyAPI_DATA(PyTypeObject) PyTraceBack_Type;
 #define PyTraceBack_Check(v) (Py_TYPE(v) == &PyTraceBack_Type)
 
 #ifdef __cplusplus

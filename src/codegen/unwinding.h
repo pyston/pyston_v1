@@ -28,7 +28,6 @@ namespace pyston {
 class Box;
 class BoxedDict;
 class BoxedModule;
-class BoxedTraceback;
 struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
@@ -41,8 +40,6 @@ Box* getGlobals();     // returns either the module or a globals dict
 Box* getGlobalsDict(); // always returns a dict-like object
 CompiledFunction* getCFForAddress(uint64_t addr);
 
-Box* getTraceback();
-
 class PythonUnwindSession;
 PythonUnwindSession* beginPythonUnwindSession();
 PythonUnwindSession* getActivePythonUnwindSession();
@@ -54,9 +51,9 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 void logException(ExcInfo* exc_info);
 void startReraise();
 bool exceptionAtLineCheck();
-void exceptionAtLine(LineInfo line_info, Box** traceback);
-void caughtCxxException(LineInfo line_info, ExcInfo* exc_info);
-extern "C" void caughtCapiException(AST_stmt* current_stmt, void* source_info);
+void exceptionAtLine(Box** traceback);
+void caughtCxxException(ExcInfo* exc_info);
+extern "C" void caughtCapiException();
 extern "C" void reraiseCapiExcAsCxx() __attribute__((noreturn));
 
 

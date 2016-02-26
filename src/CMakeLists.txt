@@ -103,7 +103,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/set.cpp
 		runtime/str.cpp
 		runtime/super.cpp
-		runtime/traceback.cpp
 		runtime/tuple.cpp
 		runtime/types.cpp
 		runtime/util.cpp
