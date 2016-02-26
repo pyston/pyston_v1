@@ -84,7 +84,7 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
     int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
     int64_t offset = (int8_t*)code.get() - (int8_t*)offset_ptr;
-    assert(offset >= INT_MIN && offset <= INT_MAX);
+    RELEASE_ASSERT(offset >= INT_MIN && offset <= INT_MAX, "");
     *offset_ptr = offset;
     *size_ptr = code_size;
 

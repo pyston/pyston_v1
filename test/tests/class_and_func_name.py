@@ -54,3 +54,9 @@ print sorted.__name__
 # should all fail:
 set_name(sorted, "blah")
 set_name(sorted, 5)
+
+import abc
+class D(C):
+    __metaclass__ = abc.ABCMeta
+D.__name__ = "has_abc_meta"
+print D

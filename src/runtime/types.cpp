@@ -3086,7 +3086,7 @@ static Box* typeName(Box* b, void*) {
 }
 
 static void typeSetName(Box* b, Box* v, void*) {
-    assert(b->cls == type_cls);
+    assert(PyType_Check(b));
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
     // Awkward... in CPython you can only set __name__ for heaptype classes
@@ -4047,6 +4047,7 @@ void setupRuntime() {
     none_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->giveAttrBorrowed("__doc__", None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
+    none_cls->tp_new = NULL; // don't allow creating instances
     none_cls->freeze();
     none_cls->tp_repr = none_repr;
 
@@ -4345,24 +4346,25 @@ BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) no
 
     BoxedDict* d = getSysModulesDict();
 
+    BoxedModule* module = NULL;
+
     // Surprisingly, there are times that we need to return the existing module if
     // one exists:
     Box* existing = d->getOrNull(name);
     if (existing && PyModule_Check(existing)) {
-        return static_cast<BoxedModule*>(existing);
+        module = static_cast<BoxedModule*>(existing);
+        Py_INCREF(module);
+    } else {
+        module = new BoxedModule();
+        autoDecref(moduleInit(module, name, autoDecref(boxString(doc ? doc : ""))));
+        d->d[incref(name)] = module;
     }
 
-    BoxedModule* module = new BoxedModule();
-    autoDecref(moduleInit(module, name, autoDecref(boxString(doc ? doc : ""))));
-
     if (fn)
-        module->giveAttr("__file__", boxString(fn));
-
-    Py_XDECREF(existing);
-    d->d[incref(name)] = module;
+        module->setattr(autoDecref(internStringMortal("__file__")), autoDecref(boxString(fn)), NULL);
 
     if (name->s() == "__main__")
-        module->giveAttrBorrowed("__builtins__", builtins_module);
+        module->setattr(autoDecref(internStringMortal("__builtins__")), builtins_module, NULL);
     return module;
 }
 
