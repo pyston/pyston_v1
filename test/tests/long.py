@@ -125,11 +125,11 @@ print type(+long.__new__(C, 5L))
 
 print((0L).bit_length())
 
-values = ['inf', '-inf', 'nan']
+values = [float('inf'), float('-inf'), float('nan'), None]
 
 for v in values:
     try:
-        long(float(v))
+        long(v)
     except Exception as e:
         print(e.message)
 

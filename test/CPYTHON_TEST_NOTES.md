@@ -73,7 +73,6 @@ test_ctypes             [unknown]
 test_curses             [unknown]
 test_datetime           needs _PyObject_GetDictPtr
 test_dbm                [unknown]
-test_decimal            I think we need to copy decimaltestdata from cpython
 test_decorators         decorator bug -- we evaluate decorator obj and its args in wrong order
 test_deque              couple unknown issues
 test_descrtut           `exec in DefaultDict()`
