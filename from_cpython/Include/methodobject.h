@@ -19,6 +19,10 @@ PyAPI_DATA(PyTypeObject*) capifunc_cls;
 
 #define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 
+// Pyston change: expose our builtin_function_or_method type
+PyAPI_DATA(PyTypeObject*) builtin_function_or_method_cls;
+#define PyBuiltinFunction_Type (*builtin_function_or_method_cls)
+
 typedef PyObject *(*PyCFunction)(PyObject *, PyObject *);
 typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *, PyObject *,
 					     PyObject *);

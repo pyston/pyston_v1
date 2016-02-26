@@ -1285,13 +1285,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 
     // TODO should just call list_ass_slice
     try {
-        BoxedSlice* slice = (BoxedSlice*)createSlice(autoDecref(boxInt(ilow)), autoDecref(boxInt(ihigh)), None);
-        if (v)
-            autoDecref(listSetitemSlice(l, slice, v));
-        else
-            autoDecref(listDelitemSlice(l, slice));
-
-        Py_DECREF(slice);
+        adjustNegativeIndicesOnObject(l, &ilow, &ihigh);
+        listSetitemSliceInt64(l, ilow, ihigh, 1, v);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);

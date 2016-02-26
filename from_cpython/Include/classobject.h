@@ -58,6 +58,10 @@ PyAPI_DATA(PyTypeObject*) instancemethod_cls;
 #define PyMethod_Check(op) (Py_TYPE(op) == &PyMethod_Type)
 
 PyAPI_FUNC(PyObject *) PyClass_New(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
+
+// Pyston change: pyston addition returns PyClassObject->cl_name
+PyAPI_FUNC(PyObject *) PyClass_Name(PyObject *) PYSTON_NOEXCEPT;
+
 PyAPI_FUNC(PyObject *) PyInstance_New(PyObject *, PyObject *,
                                             PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyInstance_NewRaw(PyObject *, PyObject *) PYSTON_NOEXCEPT;

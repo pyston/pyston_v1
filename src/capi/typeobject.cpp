@@ -2052,7 +2052,7 @@ static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr(new_str))
         return;
 
-    type->giveAttr(incref(new_str), new BoxedCApiFunction(tp_new_methoddef, type));
+    type->giveAttr(incref(new_str), new BoxedCApiFunction(tp_new_methoddef, type, NULL /* module name */));
 }
 
 void add_operators(BoxedClass* cls) noexcept {

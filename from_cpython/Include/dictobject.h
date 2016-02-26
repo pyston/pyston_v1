@@ -110,6 +110,8 @@ PyAPI_DATA(PyTypeObject) PyDictValues_Type;
 
 PyAPI_DATA(PyTypeObject*) dict_cls;
 #define PyDict_Type (*dict_cls)
+PyAPI_DATA(PyTypeObject*) attrwrapper_cls;
+#define PyAttrWrapper_Type (*attrwrapper_cls)
 PyAPI_DATA(PyTypeObject*) dictiterkey_cls;
 #define PyDictIterKey_Type (*dictiterkey_cls)
 PyAPI_DATA(PyTypeObject*) dictitervalue_cls;

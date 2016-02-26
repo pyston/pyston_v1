@@ -144,6 +144,8 @@ typedef struct {
     PyObject **data;
 } Pdata;
 
+// Pyston change: use GC allocs instead of malloc
+#if 0
 static void
 Pdata_dealloc(Pdata *self)
 {
@@ -157,10 +159,13 @@ Pdata_dealloc(Pdata *self)
         free(self->data);
     PyObject_Del(self);
 }
+#endif
 
 static PyTypeObject PdataType = {
     PyVarObject_HEAD_INIT(NULL, 0) "cPickle.Pdata", sizeof(Pdata), 0,
-    (destructor)Pdata_dealloc,
+    // Pyston change: use GC allocs instead of malloc
+    // (destructor)Pdata_dealloc,
+    (destructor)0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0L,0L,0L,0L, ""
 };
 
@@ -175,7 +180,11 @@ Pdata_New(void)
         return NULL;
     self->size = 8;
     self->length = 0;
-    self->data = malloc(self->size * sizeof(PyObject*));
+
+    // Pyston change: use GC allocs instead of malloc
+    // self->data = malloc(self->size * sizeof(PyObject*));
+    self->data = PyMem_Malloc(self->size * sizeof(PyObject*));
+
     if (self->data)
         return (PyObject*)self;
     Py_DECREF(self);
@@ -225,7 +234,11 @@ Pdata_grow(Pdata *self)
     if (bigger > (PY_SSIZE_T_MAX / sizeof(PyObject *)))
         goto nomemory;
     nbytes = bigger * sizeof(PyObject *);
-    tmp = realloc(self->data, nbytes);
+
+    // Pyston change: use GC allocs instead of malloc
+    // tmp = realloc(self->data, nbytes);
+    tmp = PyMem_Realloc(self->data, nbytes);
+
     if (tmp == NULL)
         goto nomemory;
     self->data = tmp;
@@ -322,10 +335,16 @@ Pdata_popList(Pdata *self, Py_ssize_t start)
   }                                                 \
 }
 
+// Pyston change:
+/*
 #define FREE_ARG_TUP(self) {                        \
     if (Py_REFCNT(self->arg) > 1) {                 \
       Py_CLEAR(self->arg);                          \
     }                                               \
+  }
+*/
+#define FREE_ARG_TUP(self) {                        \
+    Py_CLEAR(self->arg);                            \
   }
 
 typedef struct Picklerobject {
@@ -531,7 +550,9 @@ read_file(Unpicklerobject *self, char **s, Py_ssize_t n)
         Py_ssize_t size;
 
         size = ((n < 32) ? 32 : n);
-        if (!( self->buf = (char *)malloc(size))) {
+        // Pyston change: use GC allocs instead of malloc
+        // if (!( self->buf = (char *)malloc(size))) {
+        if (!( self->buf = (char *)PyMem_Malloc(size))) {
             PyErr_NoMemory();
             return -1;
         }
@@ -539,7 +560,9 @@ read_file(Unpicklerobject *self, char **s, Py_ssize_t n)
         self->buf_size = size;
     }
     else if (n > self->buf_size) {
-        char *newbuf = (char *)realloc(self->buf, n);
+        // Pyston change: use GC allocs instead of malloc
+        // char *newbuf = (char *)realloc(self->buf, n);
+        char *newbuf = (char *)PyMem_Realloc(self->buf, n);
         if (!newbuf)  {
             PyErr_NoMemory();
             return -1;
@@ -575,7 +598,9 @@ readline_file(Unpicklerobject *self, char **s)
     Py_ssize_t i;
 
     if (self->buf_size == 0) {
-        if (!( self->buf = (char *)malloc(40))) {
+        // Pyston change: use GC allocs instead of malloc
+        // if (!( self->buf = (char *)malloc(40))) {
+        if (!( self->buf = (char *)PyMem_Malloc(40))) {
             PyErr_NoMemory();
             return -1;
         }
@@ -599,7 +624,9 @@ readline_file(Unpicklerobject *self, char **s)
             return -1;
         }
         bigger = self->buf_size << 1;
-        newbuf = (char *)realloc(self->buf, bigger);
+        // Pyston change: use GC allocs instead of malloc
+        // newbuf = (char *)realloc(self->buf, bigger);
+        newbuf = (char *)PyMem_Realloc(self->buf, bigger);
         if (newbuf == NULL)  {
             PyErr_NoMemory();
             return -1;
@@ -800,7 +827,9 @@ get(Picklerobject *self, PyObject *id)
 static int
 put(Picklerobject *self, PyObject *ob)
 {
-    if (Py_REFCNT(ob) < 2 || self->fast)
+    // Pyston change:
+    // if (Py_REFCNT(ob) < 2 || self->fast)
+    if (/*Py_REFCNT(ob) < 2 ||*/ self->fast)
         return 0;
 
     return put2(self, ob);
@@ -2087,7 +2116,9 @@ save_inst(Picklerobject *self, PyObject *args)
     }
 
     if (!self->bin) {
-        if (!( name = ((PyClassObject *)class)->cl_name ))  {
+        // Pyston change:
+        // if (!( name = ((PyClassObject *)class)->cl_name ))  {
+        if (!( name = PyClass_Name(class)))  {
             PyErr_SetString(PicklingError, "class has no name");
             goto finally;
         }
@@ -2634,7 +2665,9 @@ save(Picklerobject *self, PyObject *args, int pers_save)
 #endif
     }
 
-    if (Py_REFCNT(args) > 1) {
+    // Pyston change:
+    // if (Py_REFCNT(args) > 1) {
+    if (/*Py_REFCNT(args) >*/ 1) {
         if (!( py_ob_id = PyLong_FromVoidPtr(args)))
             goto finally;
 
@@ -2689,6 +2722,14 @@ save(Picklerobject *self, PyObject *args, int pers_save)
         }
         break;
 
+    // Pyston change: add support for attrwrapper
+    case 'a':
+        if (type == &PyAttrWrapper_Type) {
+            res = save_dict(self, args);
+            goto finally;
+        }
+        break;
+
     case 'i':
         if (type == &PyInstance_Type) {
             res = save_inst(self, args);
@@ -2698,6 +2739,12 @@ save(Picklerobject *self, PyObject *args, int pers_save)
 
     case 'c':
         if (type == &PyClass_Type) {
+            res = save_global(self, args, NULL);
+            goto finally;
+        }
+
+        // Pyston change: moved because we call this type 'capifunc'
+        if (type == &PyCFunction_Type) {
             res = save_global(self, args, NULL);
             goto finally;
         }
@@ -2716,7 +2763,15 @@ save(Picklerobject *self, PyObject *args, int pers_save)
         break;
 
     case 'b':
+        // Pyston change: moved because we call this type 'capifunc'
+        /*
         if (type == &PyCFunction_Type) {
+            res = save_global(self, args, NULL);
+            goto finally;
+        }
+        */
+        // Pyston change: added handler for 'builtin_function_or_method'
+        if (type == &PyBuiltinFunction_Type) {
             res = save_global(self, args, NULL);
             goto finally;
         }
@@ -3144,7 +3199,8 @@ get_Pickler(PyObject *self, PyObject *args, PyObject *kwds)
     return (PyObject *)newPicklerobject(file, proto);
 }
 
-
+// Pyston change: use GC allocs instead of malloc
+#if 0
 static void
 Pickler_dealloc(Picklerobject *self)
 {
@@ -3160,6 +3216,7 @@ Pickler_dealloc(Picklerobject *self)
     PyMem_Free(self->write_buf);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
+#endif
 
 static int
 Pickler_traverse(Picklerobject *self, visitproc visit, void *arg)
@@ -3286,7 +3343,9 @@ static PyTypeObject Picklertype = {
     "cPickle.Pickler",            /*tp_name*/
     sizeof(Picklerobject),              /*tp_basicsize*/
     0,
-    (destructor)Pickler_dealloc,        /* tp_dealloc */
+    // Pyston change: use GC allocs instead of malloc
+    // (destructor)Pickler_dealloc,     /* tp_dealloc */
+    0,                                  /* tp_dealloc */
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
@@ -4643,10 +4702,16 @@ load_mark(Unpicklerobject *self)
         s=self->marks_size+20;
         if (s <= self->num_marks) s=self->num_marks + 1;
         if (self->marks == NULL)
-            marks=(Py_ssize_t *)malloc(s * sizeof(Py_ssize_t));
+            // Pyston change: use GC allocs instead of malloc
+            // marks=(Py_ssize_t *)malloc(s * sizeof(Py_ssize_t));
+            marks=(Py_ssize_t *)PyMem_Malloc(s * sizeof(Py_ssize_t));
         else
-            marks=(Py_ssize_t *)realloc(self->marks,
-                                        s * sizeof(Py_ssize_t));
+            // Pyston change: use GC allocs instead of malloc
+            // marks=(Py_ssize_t *)realloc(self->marks,
+            //                             s * sizeof(Py_ssize_t));
+            marks=(Py_ssize_t *)PyMem_Realloc(self->marks,
+                                              s * sizeof(Py_ssize_t));
+
         if (!marks) {
             PyErr_NoMemory();
             return -1;
@@ -5529,7 +5594,8 @@ get_Unpickler(PyObject *self, PyObject *file)
     return (PyObject *)newUnpicklerobject(file);
 }
 
-
+// Pyston change: use GC allocs instead of malloc
+#if 0
 static void
 Unpickler_dealloc(Unpicklerobject *self)
 {
@@ -5554,6 +5620,7 @@ Unpickler_dealloc(Unpicklerobject *self)
 
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
+#endif
 
 static int
 Unpickler_traverse(Unpicklerobject *self, visitproc visit, void *arg)
@@ -5785,7 +5852,9 @@ static PyTypeObject Unpicklertype = {
     "cPickle.Unpickler",                 /*tp_name*/
     sizeof(Unpicklerobject),             /*tp_basicsize*/
     0,
-    (destructor)Unpickler_dealloc,      /* tp_dealloc */
+    // Pyston change: use GC allocs instead of malloc
+    // (destructor)Unpickler_dealloc,   /* tp_dealloc */
+    (destructor)0,                      /* tp_dealloc */
     0,                                  /* tp_print */
     (getattrfunc)Unpickler_getattr,     /* tp_getattr */
     (setattrfunc)Unpickler_setattr,     /* tp_setattr */
@@ -5868,6 +5937,10 @@ init_stuff(PyObject *module_dict)
     if (PyType_Ready(&Unpicklertype) < 0)
         return -1;
     if (PyType_Ready(&Picklertype) < 0)
+        return -1;
+
+    // Pyston change:
+    if (PyType_Ready(&PdataType) < 0)
         return -1;
 
     INIT_STR(__class__);

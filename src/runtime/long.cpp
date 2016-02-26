@@ -20,6 +20,7 @@
 #include <mpfr.h>
 #include <sstream>
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "capi/typeobject.h"
@@ -204,18 +205,19 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
             || (base == 2 && (str[1] == 'b' || str[1] == 'B'))))
         str += 2;
 
+    llvm::StringRef str_ref = str;
+    llvm::StringRef str_ref_trimmed = str_ref.rtrim(base < 22 ? "Ll \t\n\v\f\r" : " \t\n\v\f\r");
+
     BoxedLong* rtn = new BoxedLong();
     int r = 0;
-    if ((str[strlen(str) - 1] == 'L' || str[strlen(str) - 1] == 'l') && base < 22) {
-        std::string without_l(str, strlen(str) - 1);
-        r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
-    } else {
-        // if base great than 22, 'l' or 'L' should count as a digit.
+    if (str_ref_trimmed != str_ref)
+        r = mpz_init_set_str(rtn->n, str_ref_trimmed.str().c_str(), base);
+    else
         r = mpz_init_set_str(rtn->n, str, base);
-    }
 
-    if (pend)
-        *pend = const_cast<char*>(str) + strlen(str);
+    if (pend) {
+        *pend = const_cast<char*>(str) + str_ref.size();
+    }
     if (r != 0) {
         PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base, str);
         return NULL;
@@ -527,6 +529,12 @@ extern "C" void* PyLong_AsVoidPtr(PyObject* vv) noexcept {
     if (x == -1 && PyErr_Occurred())
         return NULL;
     return (void*)x;
+}
+
+
+extern "C" size_t _PyLong_NumBits(PyObject* vv) noexcept {
+    RELEASE_ASSERT(PyLong_Check(vv), "");
+    return mpz_sizeinbase(((BoxedLong*)vv)->n, 2);
 }
 
 extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian,

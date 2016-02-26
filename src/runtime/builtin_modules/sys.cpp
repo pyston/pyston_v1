@@ -745,7 +745,7 @@ void setupSys() {
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module, boxString("sys")));
     }
 
     sys_module->giveAttrBorrowed("__displayhook__", sys_module->getattr(autoDecref(internStringMortal("displayhook"))));

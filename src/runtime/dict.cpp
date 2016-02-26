@@ -158,6 +158,9 @@ Box* dictLen(BoxedDict* self) {
 }
 
 extern "C" Py_ssize_t PyDict_Size(PyObject* op) noexcept {
+    if (op->cls == attrwrapper_cls)
+        return PyObject_Size(op);
+
     RELEASE_ASSERT(PyDict_Check(op), "");
     return static_cast<BoxedDict*>(op)->d.size();
 }
