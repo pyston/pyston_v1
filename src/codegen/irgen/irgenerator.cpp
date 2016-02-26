@@ -268,7 +268,8 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
             // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
             this->boxed_locals = builder.CreateCall(g.funcs.createDict);
             getRefcounts()->setType(this->boxed_locals, RefType::OWNED);
-            builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            auto inst = builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            getRefcounts()->refConsumed(this->boxed_locals, inst);
         }
 
         // frame_info.frame_obj = NULL
@@ -2696,6 +2697,7 @@ public:
         if (scope_info->takesClosure()) {
             passed_closure = AI;
             ++AI;
+            emitter.setType(passed_closure, RefType::BORROWED);
         } else {
             passed_closure = getNullPtr(g.llvm_closure_type_ptr);
             emitter.setType(passed_closure, RefType::BORROWED);

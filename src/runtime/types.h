@@ -865,6 +865,11 @@ struct BoxAndHash {
         static unsigned getHashValue(BoxAndHash val) { return val.hash; }
     };
 };
+// Similar to the incref(Box*) function:
+inline BoxAndHash& incref(BoxAndHash& b) {
+    Py_INCREF(b.value);
+    return b;
+}
 
 class BoxedDict : public Box {
 public:

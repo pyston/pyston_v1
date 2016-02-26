@@ -919,7 +919,8 @@ static BoxedDict* localsForFrame(Box** vregs, CFG* cfg) {
     for (auto& l : cfg->sym_vreg_map_user_visible) {
         Box* val = vregs[l.second];
         if (val) {
-            rtn->d[l.first.getBox()] = val;
+            assert(!rtn->d.count(l.first.getBox()));
+            rtn->d[incref(l.first.getBox())] = incref(val);
         }
     }
     return rtn;
@@ -963,9 +964,11 @@ Box* FrameInfo::updateBoxedLocals() {
     }
 
     if (!frame_info->boxedLocals) {
-        frame_info->boxedLocals = d;
+        frame_info->boxedLocals = incref(d);
         return d;
     }
+
+    AUTO_DECREF(d);
 
     // Loop through all the values found above.
     // TODO Right now d just has all the python variables that are *initialized*
@@ -974,7 +977,8 @@ Box* FrameInfo::updateBoxedLocals() {
     if (frame_info->boxedLocals->cls == dict_cls) {
         BoxedDict* boxed_locals = (BoxedDict*)frame_info->boxedLocals;
         for (auto&& new_elem : d->d) {
-            boxed_locals->d[new_elem.first] = new_elem.second;
+            assert(0 && "refcounting here is wrong if the key already exists");
+            boxed_locals->d[incref(new_elem.first)] = incref(new_elem.second);
         }
     } else {
         for (const auto& p : *d) {

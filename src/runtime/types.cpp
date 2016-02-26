@@ -3470,9 +3470,11 @@ tupletraverse(PyTupleObject *o, visitproc visit, void *arg)
 void BoxedModule::dealloc(Box* b) noexcept {
     BoxedModule* self = static_cast<BoxedModule*>(b);
 
-    BoxedModule::clear(b);
+    _PyObject_GC_UNTRACK(self);
 
-    b->cls->tp_free(b);
+    BoxedModule::clear(self);
+
+    b->cls->tp_free(self);
 }
 
 int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {

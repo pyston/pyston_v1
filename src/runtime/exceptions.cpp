@@ -304,7 +304,7 @@ bool exceptionAtLineCheck() {
 
 void exceptionAtLine(LineInfo line_info, Box** traceback) {
     if (exceptionAtLineCheck())
-        BoxedTraceback::here(line_info, traceback, getFrame((FrameInfo*)cur_thread_state.frame_info));
+        BoxedTraceback::here(line_info, traceback, autoDecref(getFrame((FrameInfo*)cur_thread_state.frame_info)));
 }
 
 void startReraise() {

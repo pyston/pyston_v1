@@ -80,15 +80,17 @@ public:
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_code)
-            f->_code = (Box*)f->frame_info->md->getCode();
-        return f->_code;
+            f->_code = incref((Box*)f->frame_info->md->getCode());
+
+        return incref(f->_code);
     }
 
     static Box* locals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (f->hasExited())
-            return f->_locals;
+            return incref(f->_locals);
+
         return f->frame_info->updateBoxedLocals();
     }
 
@@ -96,11 +98,15 @@ public:
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_globals) {
-            f->_globals = f->frame_info->globals;
-            if (f->_globals && PyModule_Check(f->_globals))
-                f->_globals = f->_globals->getAttrWrapper();
+            Box* globals = f->frame_info->globals;
+            if (globals && PyModule_Check(globals))
+                f->_globals = globals->getAttrWrapper();
+            else {
+                f->_globals = incref(globals);
+            }
         }
-        return f->_globals;
+
+        return incref(f->_globals);
     }
 
     static Box* back(Box* obj, void*) {
@@ -108,11 +114,12 @@ public:
 
         if (!f->_back) {
             if (!f->frame_info->back)
-                f->_back = None;
+                f->_back = incref(None);
             else
                 f->_back = BoxedFrame::boxFrame(f->frame_info->back);
         }
-        return f->_back;
+
+        return incref(f->_back);
     }
 
     static Box* lineno(Box* obj, void*) {
@@ -129,9 +136,11 @@ public:
         if (hasExited())
             return;
 
-        _back = back(this, NULL);
-        _code = code(this, NULL);
-        _globals = globals(this, NULL);
+        // Call the getters for their side-effects of caching the result:
+        autoDecref(back(this, NULL));
+        autoDecref(code(this, NULL));
+        autoDecref(globals(this, NULL));
+        assert(!_locals);
         _locals = locals(this, NULL);
         _stmt = frame_info->stmt;
 
@@ -145,19 +154,28 @@ public:
         if (fi->frame_obj == NULL)
             fi->frame_obj = new BoxedFrame(fi);
         assert(fi->frame_obj->cls == frame_cls);
-        return fi->frame_obj;
+        return incref(fi->frame_obj);
     }
 
     static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedFrame* f = static_cast<BoxedFrame*>(b);
 
-        //Py_DECREF(f->_back);
-        //Py_DECREF(f->_code);
-        //Py_DECREF(f->_globals);
-        //Py_DECREF(f->_locals);
+        _PyObject_GC_UNTRACK(f);
+
+        Py_DECREF(f->_back);
+        Py_DECREF(f->_code);
+        Py_DECREF(f->_globals);
+        Py_DECREF(f->_locals);
+
+        f->cls->tp_free(b);
     }
     static int traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedFrame* o = static_cast<BoxedFrame*>(self);
+        Py_VISIT(o->_back);
+        Py_VISIT(o->_code);
+        Py_VISIT(o->_globals);
+        Py_VISIT(o->_locals);
+        return 0;
     }
     static int clear(Box* self) noexcept {
         Py_FatalError("unimplemented");
@@ -192,8 +210,11 @@ extern "C" void initFrame(FrameInfo* frame_info) {
 extern "C" void deinitFrame(FrameInfo* frame_info) {
     cur_thread_state.frame_info = frame_info->back;
     BoxedFrame* frame = frame_info->frame_obj;
-    if (frame)
+    if (frame) {
         frame->handleFrameExit();
+        Py_CLEAR(frame_info->frame_obj);
+    }
+    Py_CLEAR(frame_info->boxedLocals);
 }
 
 extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {

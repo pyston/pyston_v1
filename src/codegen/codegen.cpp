@@ -68,7 +68,7 @@ BoxedCode* FunctionMetadata::getCode() {
     if (!code_obj) {
         code_obj = new BoxedCode(this);
         // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
-        //gc::registerPermanentRoot(code_obj);
+        constants.push_back(code_obj);
     }
     return code_obj;
 }

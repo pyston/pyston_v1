@@ -478,7 +478,7 @@ public:
 
     int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
 
-    BoxedCode* getCode();
+    BORROWED(BoxedCode*) getCode();
 
     bool isGenerator() const {
         if (source)
@@ -944,12 +944,12 @@ struct FrameInfo {
     Box* boxedLocals;
 
     BoxedFrame* frame_obj;
-    BoxedClosure* passed_closure;
+    BORROWED(BoxedClosure*) passed_closure;
 
     Box** vregs;
     AST_stmt* stmt; // current statement
     // This is either a module or a dict
-    Box* globals;
+    BORROWED(Box*) globals;
 
     FrameInfo* back;
     FunctionMetadata* md;
