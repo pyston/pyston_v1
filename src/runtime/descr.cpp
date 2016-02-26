@@ -186,7 +186,7 @@ static Box* propertyDeleter(Box* self, Box* obj) {
 }
 
 static Box* staticmethodInit(Box* _self, Box* f) {
-    RELEASE_ASSERT(_self->cls == staticmethod_cls, "");
+    RELEASE_ASSERT(isSubclass(_self->cls, staticmethod_cls), "");
     BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
     self->sm_callable = f;
 
@@ -194,7 +194,7 @@ static Box* staticmethodInit(Box* _self, Box* f) {
 }
 
 static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
-    RELEASE_ASSERT(self->cls == staticmethod_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, staticmethod_cls), "");
 
     BoxedStaticmethod* sm = static_cast<BoxedStaticmethod*>(self);
 
@@ -210,7 +210,7 @@ extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
 }
 
 static Box* classmethodInit(Box* _self, Box* f) {
-    RELEASE_ASSERT(_self->cls == classmethod_cls, "");
+    RELEASE_ASSERT(isSubclass(_self->cls, classmethod_cls), "");
     BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
     self->cm_callable = f;
 
@@ -218,7 +218,7 @@ static Box* classmethodInit(Box* _self, Box* f) {
 }
 
 static Box* classmethodGet(Box* self, Box* obj, Box* type) {
-    RELEASE_ASSERT(self->cls == classmethod_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, classmethod_cls), "");
 
     BoxedClassmethod* cm = static_cast<BoxedClassmethod*>(self);
 
