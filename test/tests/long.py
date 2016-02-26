@@ -162,3 +162,43 @@ for i in range(-10, 10):
 for i in xrange(100):
     for j in xrange(100):
         print i, j, hash((1 << i) - (1 << j))
+
+pow_test_data = [42L, 3, 4.5, "x", 0, -42, None]
+
+for rhs in pow_test_data:
+    for lhs in pow_test_data:
+        for mod in pow_test_data:
+            try:
+                print(long.__rpow__(rhs, lhs, mod))
+            except Exception as e:
+                print(e.message)
+
+unary_test_data = [-42, -0, 0, 42]
+
+for i in unary_test_data:
+    print(int.__abs__(i))
+    print(int.__long__(i))
+
+data = ["-1L", "0L", "1L",
+        "42L", "-42L",
+        "42.0", "5", "0", "5+5j", "0.0",
+        "\"42\"", "None",
+        ]
+
+operations = ["__rpow__",
+              "__rshift__",
+              "__lshift__",
+              "__rrshift__",
+              "__rlshift__",
+              "__coerce__",
+              ]
+
+for x in data:
+    for y in data:
+        for operation in operations:
+            try:
+                print(eval("long.{op}({arg1}, {arg2})".format(op=operation,
+                                                               arg1=x,
+                                                               arg2=y)))
+            except Exception as e:
+                print(e.message)

@@ -446,6 +446,16 @@ extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
 }
 
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
+    if (mod != None) {
+        if (!PyInt_Check(mod)) {
+            return NotImplemented;
+        }
+        BoxedInt* mod_int = static_cast<BoxedInt*>(mod);
+        if (mod_int->n == 0) {
+            raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
+        }
+    }
+
     i64 orig_rhs = rhs;
     i64 rtn = 1, curpow = lhs;
 
@@ -492,6 +502,19 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     }
 }
 
+Box* intRAdd(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__radd__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (PyInt_Check(rhs)) {
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+        return add_i64_i64(lhs->n, rhs_int->n);
+    } else {
+        return NotImplemented;
+    }
+}
+
 extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));
@@ -504,6 +527,18 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(lhs->n & rhs_int->n);
+}
+
+Box* intRAnd(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rand__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
@@ -526,6 +561,17 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
     return boxInt(lhs->n | rhs_int->n);
 }
 
+Box* intROr(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__ror__' requires a 'int' object but received a '%s'", getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(lhs->n | rhs_int->n);
+}
+
 extern "C" Box* intXorInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));
@@ -538,6 +584,18 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(lhs->n ^ rhs_int->n);
+}
+
+Box* intRXor(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rxor__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n ^ rhs_int->n);
@@ -572,6 +630,18 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
     }
 }
 
+Box* intRDiv(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rdiv__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (PyInt_Check(rhs)) {
+        return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
+    } else {
+        return NotImplemented;
+    }
+}
+
 extern "C" Box* intFloordivInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));
@@ -600,6 +670,18 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
     } else {
         return incref(NotImplemented);
     }
+}
+
+Box* intRFloordiv(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rfloordiv__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+
+    return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
 }
 
 extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
@@ -636,6 +718,18 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
     }
 }
 
+Box* intRTruediv(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (PyInt_Check(rhs)) {
+        return intTruedivInt(static_cast<BoxedInt*>(rhs), lhs);
+    } else {
+        return NotImplemented;
+    }
+}
+
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));
@@ -649,7 +743,7 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
         if ((res >> rhs->n) == lhs->n)
             return boxInt(lhs->n << rhs->n);
     }
-    return longLshift(autoDecref(boxLong(lhs->n)), rhs);
+    return longLShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
@@ -658,13 +752,26 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
-        return longLshift(autoDecref(boxLong(lhs->n)), rhs);
+        return longLShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intLShiftInt(lhs, rhs_int);
+}
+
+Box* intRLShift(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rlshift__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return intLShiftInt(rhs_int, lhs);
 }
 
 extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
@@ -682,6 +789,18 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
+}
+
+Box* intRMod(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rmod__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(mod_i64_i64(rhs_int->n, lhs->n));
 }
 
 extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
@@ -709,6 +828,16 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
     return createTuple(2, arg);
 }
 
+Box* intRDivmod(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rdivmod__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+    return intDivmod(static_cast<BoxedInt*>(rhs), lhs);
+}
 
 extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
@@ -735,6 +864,17 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     } else {
         return incref(NotImplemented);
     }
+}
+
+Box* intRMul(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rmul__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs))
+        return NotImplemented;
+
+    return intMul(lhs, rhs);
 }
 
 static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func) {
@@ -776,17 +916,10 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
         return incref(NotImplemented);
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    BoxedInt* mod_int = static_cast<BoxedInt*>(mod);
-
     if (mod != None) {
         if (rhs_int->n < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
-        if (!PyInt_Check(mod)) {
-            return incref(NotImplemented);
-        } else if (mod_int->n == 0) {
-            raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
-        }
     }
 
     Box* rtn = pow_i64_i64(lhs->n, rhs_int->n, mod);
@@ -795,8 +928,29 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     return rtn;
 }
 
-extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(PyInt_Check(lhs));
+Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rpow__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs))
+        return NotImplemented;
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    if (mod != None) {
+        if (lhs->n < 0)
+            raiseExcHelper(TypeError, "pow() 2nd argument "
+                                      "cannot be negative when 3rd argument specified");
+    }
+    Box* rtn = pow_i64_i64(rhs_int->n, lhs->n, mod);
+    if (PyLong_Check(rtn))
+        return longInt(rtn);
+    return rtn;
+}
+
+Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
     assert(PyInt_Check(rhs));
 
     if (rhs->n < 0)
@@ -811,13 +965,25 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs->cls == long_cls)
-        return longRshift(autoDecref(boxLong(lhs->n)), rhs);
+        return longRShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
         return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intRShiftInt(lhs, rhs_int);
+}
+
+Box* intRRShift(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rrshift__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return intRShiftInt(rhs_int, lhs);
 }
 
 extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
@@ -844,6 +1010,19 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
         return intSubFloat(lhs, rhs_float);
     } else {
         return incref(NotImplemented);
+    }
+}
+
+Box* intRSub(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__rsub__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (PyInt_Check(rhs)) {
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+        return sub_i64_i64(rhs_int->n, lhs->n);
+    } else {
+        return NotImplemented;
     }
 }
 
@@ -908,12 +1087,36 @@ extern "C" Box* intHash(BoxedInt* self) {
     return boxInt(self->n);
 }
 
+Box* intAbs(BoxedInt* v) {
+    if (!PyInt_Check(v))
+        raiseExcHelper(TypeError, "descriptor '__abs__' requires a 'int' object but received a '%s'", getTypeName(v));
+
+    if (v->n == PYSTON_INT_MIN) {
+        return longNeg(boxLong(v->n));
+    }
+    return boxInt(std::abs(v->n));
+}
+
 extern "C" Box* intBin(BoxedInt* self) {
     if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__bin__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
     return _PyInt_Format(reinterpret_cast<PyIntObject*>(self), 2, 0);
+}
+
+Box* intCoerce(BoxedInt* lhs, Box* rhs) {
+    if (!PyInt_Check(lhs))
+        raiseExcHelper(TypeError, "descriptor '__coerce__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (!PyInt_Check(rhs)) {
+        return NotImplemented;
+    }
+
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+
+    return BoxedTuple::create({ lhs, rhs_int });
 }
 
 extern "C" Box* intHex(BoxedInt* self) {
@@ -972,6 +1175,14 @@ Box* intFloat(BoxedInt* self) {
                        getTypeName(self));
 
     return boxFloat(self->n);
+}
+
+Box* intLong(BoxedInt* self) {
+    if (!PyInt_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__long__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return boxLong(self->n);
 }
 
 extern "C" Box* intIndex(BoxedInt* v) {
@@ -1283,6 +1494,23 @@ void setupInt() {
     _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
     _addFuncIntUnknown("__mod__", BOXED_INT, (void*)intModInt, (void*)intMod);
     _addFuncPow("__pow__", BOXED_INT, (void*)intPowFloat, (void*)intPow);
+
+    int_cls->giveAttr("__radd__", new BoxedFunction(FunctionMetadata::create((void*)intRAdd, UNKNOWN, 2)));
+    int_cls->giveAttr("__rand__", new BoxedFunction(FunctionMetadata::create((void*)intRAnd, UNKNOWN, 2)));
+    int_cls->giveAttr("__ror__", new BoxedFunction(FunctionMetadata::create((void*)intROr, UNKNOWN, 2)));
+    int_cls->giveAttr("__rxor__", new BoxedFunction(FunctionMetadata::create((void*)intRXor, UNKNOWN, 2)));
+
+    int_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)intRSub, UNKNOWN, 2)));
+    int_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)intRMul, UNKNOWN, 2)));
+    int_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)intRDiv, UNKNOWN, 2)));
+    int_cls->giveAttr("__rfloordiv__", new BoxedFunction(FunctionMetadata::create((void*)intRFloordiv, UNKNOWN, 2)));
+    int_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)intRTruediv, UNKNOWN, 2)));
+    int_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)intRMod, UNKNOWN, 2)));
+    int_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)intRDivmod, UNKNOWN, 2)));
+    int_cls->giveAttr("__rpow__",
+                      new BoxedFunction(FunctionMetadata::create((void*)intRPow, UNKNOWN, 3, false, false), { None }));
+    int_cls->giveAttr("__rrshift__", new BoxedFunction(FunctionMetadata::create((void*)intRRShift, UNKNOWN, 2)));
+    int_cls->giveAttr("__rlshift__", new BoxedFunction(FunctionMetadata::create((void*)intRLShift, UNKNOWN, 2)));
     // Note: CPython implements int comparisons using tp_compare
     int_cls->tp_richcompare = int_richcompare;
 
@@ -1297,6 +1525,9 @@ void setupInt() {
     int_cls->tp_hash = (hashfunc)int_hash;
     int_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)intDivmod, UNKNOWN, 2)));
 
+
+    int_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)intCoerce, UNKNOWN, 2)));
+    int_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)intAbs, UNKNOWN, 1)));
     int_cls->giveAttr("__bin__", new BoxedFunction(FunctionMetadata::create((void*)intBin, STR, 1)));
     int_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(FunctionMetadata::create((void*)intOct, STR, 1)));
@@ -1305,6 +1536,23 @@ void setupInt() {
     int_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)intIndex, BOXED_INT, 1)));
     int_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)intInt, BOXED_INT, 1)));
     int_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)intFloat, BOXED_FLOAT, 1)));
+    int_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)intLong, LONG, 1)));
+
+    int_cls->giveAttr("__doc__",
+                      boxString("int(x=0) -> int or long\n"
+                                "int(x, base=10) -> int or long\n"
+                                "\n"
+                                "Convert a number or string to an integer, or return 0 if no arguments\n"
+                                "are given.  If x is floating point, the conversion truncates towards zero.\n"
+                                "If x is outside the integer range, the function returns a long instead.\n"
+                                "\n"
+                                "If x is not a number or if base is given, then x must be a string or\n"
+                                "Unicode object representing an integer literal in the given base.  The\n"
+                                "literal can be preceded by '+' or '-' and be surrounded by whitespace.\n"
+                                "The base defaults to 10.  Valid bases are 0 and 2-36.  Base 0 means to\n"
+                                "interpret the base from the string as an integer literal.\n"
+                                ">>> int('0b100', base=0)\n"
+                                "4"));
 
     auto int_new = FunctionMetadata::create((void*)intNew<CXX>, UNKNOWN, 3, false, false,
                                             ParamNames({ "", "x", "base" }, "", ""), CXX);

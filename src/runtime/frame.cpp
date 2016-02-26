@@ -154,9 +154,17 @@ Box* getFrame(int depth) {
     return BoxedFrame::boxFrame(std::move(it));
 }
 
-extern "C" int PyFrame_GetLineNumber(PyFrameObject* f) noexcept {
-    BoxedInt* lineno = (BoxedInt*)BoxedFrame::lineno((Box*)f, NULL);
-    return lineno->n;
+extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {
+    // TODO remove this when we are able to introspect exited frames:
+    // We check if the frame exited and only return the correct line number when it is still available.
+    // Because of a limitation in out current frame introspection we can also not inspect OSRed frames.
+    BoxedFrame* f = (BoxedFrame*)_f;
+    PythonFrameIterator new_it = f->it.getCurrentVersion();
+    if (new_it.exists() && new_it.getFrameInfo()->frame_obj == f) {
+        BoxedInt* lineno = (BoxedInt*)BoxedFrame::lineno((Box*)f, NULL);
+        return lineno->n;
+    }
+    return -1;
 }
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
