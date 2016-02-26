@@ -33,8 +33,6 @@ functions should be applied to nil objects.
    interning of any string.
    Together, these sped the interpreter by up to 20%. */
 
-// Pyston change: comment this out since this is not the format we're using
-#if 0
 typedef struct {
     PyObject_VAR_HEAD
     long ob_shash;
@@ -50,9 +48,6 @@ typedef struct {
      *       from 'interned' to this object are *not counted* in ob_refcnt.
      */
 } PyStringObject;
-#endif
-struct _PyStringObject;
-typedef struct _PyStringObject PyStringObject;
 
 #define SSTATE_NOT_INTERNED 0
 #define SSTATE_INTERNED_MORTAL 1

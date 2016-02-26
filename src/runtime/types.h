@@ -504,7 +504,8 @@ public:
     llvm::StringRef s() const { return llvm::StringRef(s_data, ob_size); };
 
     long hash; // -1 means not yet computed
-    char interned_state;
+    int interned_state;
+    char s_data[0];
 
     char* data() { return s_data; }
     const char* c_str() {
@@ -560,10 +561,13 @@ private:
 
     BoxedString(size_t n); // non-initializing constructor
 
-    char s_data[0];
-
     friend void setupRuntime();
 };
+static_assert(sizeof(BoxedString) == sizeof(PyStringObject), "");
+static_assert(offsetof(BoxedString, ob_size) == offsetof(PyStringObject, ob_size), "");
+static_assert(offsetof(BoxedString, hash) == offsetof(PyStringObject, ob_shash), "");
+static_assert(offsetof(BoxedString, interned_state) == offsetof(PyStringObject, ob_sstate), "");
+static_assert(offsetof(BoxedString, s_data) == offsetof(PyStringObject, ob_sval), "");
 
 extern "C" size_t strHashUnboxed(BoxedString* self);
 extern "C" int64_t hashUnboxed(Box* obj);

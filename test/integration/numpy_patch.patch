@@ -147,78 +147,11 @@ index d025901..27c8718 100644
                  }
                  PyDict_SetItem(fields, title, tup);
              }
-diff --git a/numpy/core/src/multiarray/multiarraymodule.c b/numpy/core/src/multiarray/multiarraymodule.c
-index 6155551..d488816 100644
---- a/numpy/core/src/multiarray/multiarraymodule.c
-+++ b/numpy/core/src/multiarray/multiarraymodule.c
-@@ -4206,6 +4206,7 @@ setup_scalartypes(PyObject *NPY_UNUSED(dict))
-     initialize_casting_tables();
-     initialize_numeric_types();
- 
-+    /* Pyston assumes PyType_Ready doesn't get called on Pyston classes
-     if (PyType_Ready(&PyBool_Type) < 0) {
-         return -1;
-     }
-@@ -4226,6 +4227,7 @@ setup_scalartypes(PyObject *NPY_UNUSED(dict))
-     if (PyType_Ready(&PyUnicode_Type) < 0) {
-         return -1;
-     }
-+    */
- 
- #define SINGLE_INHERIT(child, parent)                                   \
-     Py##child##ArrType_Type.tp_base = &Py##parent##ArrType_Type;        \
-diff --git a/numpy/core/src/multiarray/scalarapi.c b/numpy/core/src/multiarray/scalarapi.c
-index 71a82d7..15a0b36 100644
---- a/numpy/core/src/multiarray/scalarapi.c
-+++ b/numpy/core/src/multiarray/scalarapi.c
-@@ -712,11 +712,18 @@ PyArray_Scalar(void *data, PyArray_Descr *descr, PyObject *base)
-     if (PyTypeNum_ISFLEXIBLE(type_num)) {
-         if (type_num == NPY_STRING) {
-             destptr = PyString_AS_STRING(obj);
-+/*
-+ * Pyston change: commented out for now. Two problems:
-+ * 1) We don't have ob_shash and ob_sstate since we have different structs
-+ * 2) NumPy tries to bypass the CPython API and use a memcpy here. I'm not
-+ *    too sure what all the implications of this are but at the very least,
-+ *    it would require resetting the hash and changing the state to not interned.
-             ((PyStringObject *)obj)->ob_shash = -1;
- #if !defined(NPY_PY3K)
-             ((PyStringObject *)obj)->ob_sstate = SSTATE_NOT_INTERNED;
- #endif
-             memcpy(destptr, data, itemsize);
-+*/
-             return obj;
-         }
- #if PY_VERSION_HEX < 0x03030000
 diff --git a/numpy/core/src/multiarray/scalartypes.c.src b/numpy/core/src/multiarray/scalartypes.c.src
 index b5e0fde..13784b3 100644
 --- a/numpy/core/src/multiarray/scalartypes.c.src
 +++ b/numpy/core/src/multiarray/scalartypes.c.src
-@@ -1673,7 +1673,7 @@ voidtype_setfield(PyVoidScalarObject *self, PyObject *args, PyObject *kwds)
-      * However, as a special case, void-scalar assignment broadcasts
-      * differently from ndarrays when assigning to an object field: Assignment
-      * to an ndarray object field broadcasts, but assignment to a void-scalar
--     * object-field should not, in order to allow nested ndarrays. 
-+     * object-field should not, in order to allow nested ndarrays.
-      * These lines should then behave identically:
-      *
-      *     b = np.zeros(1, dtype=[('x', 'O')])
-@@ -3479,7 +3479,13 @@ NPY_NO_EXPORT PyTypeObject Py@NAME@ArrType_Type = {
-     0,                                          /* ob_size */
- #endif
-     "numpy." NAME_@name@ "@ex@",                /* tp_name*/
--    sizeof(Py@NAME@ScalarObject),               /* tp_basicsize*/
-+    // Pyston change: We don't have PyStringObject defined (incomplete type)
-+    // so we can't use sizeof. As a temporary workaround, just put some
-+    // other reasonable value but we'll want to proper value at some point.
-+    // More doesn't break things, too little does (allocated memory is not
-+    // large enough so it writes past the object).
-+    // sizeof(Py@NAME@ScalarObject),               /* tp_basicsize*/
-+    sizeof(PyObjectScalarObject) * 4,               /* tp_basicsize*/
-     0,                                          /* tp_itemsize */
-     0,                                          /* tp_dealloc */
-     0,                                          /* tp_print */
-@@ -4060,6 +4066,10 @@ static void init_basetypes(void);
+@@ -4060,6 +4060,10 @@ static void init_basetypes(void);
  NPY_NO_EXPORT void
  initialize_numeric_types(void)
  {
