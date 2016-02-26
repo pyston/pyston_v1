@@ -673,7 +673,7 @@ public:
     // For instances with hc attrs:
     size_t getHCAttrsOffset();
     HCAttrs* getHCAttrsPtr();
-    void setDictBacked(Box* d);
+    void setDictBacked(STOLEN(Box*) d);
     // For instances with dict attrs:
     BoxedDict* getDict();
     void setDict(BoxedDict* d);

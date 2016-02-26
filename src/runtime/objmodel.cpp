@@ -6465,14 +6465,26 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         made->setattr(dict_str, dict_descr, NULL);
     }
 
+    bool are_all_dict_keys_strs = true;
     for (const auto& p : *attr_dict) {
-        auto k = coerceUnicodeToStr<CXX>(p.first);
-
-        RELEASE_ASSERT(k->cls == str_cls, "%s", k->cls->tp_name);
-        BoxedString* s = static_cast<BoxedString*>(k);
-        internStringMortalInplace(s);
-        AUTO_DECREF(s);
-        made->setattr(s, p.second, NULL);
+        if (p.first->cls != str_cls) {
+            are_all_dict_keys_strs = false;
+            break;
+        }
+    }
+    if (are_all_dict_keys_strs) {
+        for (const auto& p : *attr_dict) {
+            BoxedString* s = static_cast<BoxedString*>(p.first);
+            Py_INCREF(s);
+            internStringMortalInplace(s);
+            made->setattr(s, p.second, NULL);
+            Py_DECREF(s);
+        }
+    } else {
+        assert(0 && "check refcounting");
+        Box* copy = PyDict_Copy(attr_dict);
+        RELEASE_ASSERT(copy, "");
+        made->setDictBacked(copy);
     }
 
     static BoxedString* module_str = getStaticString("__module__");

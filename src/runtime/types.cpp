@@ -1324,7 +1324,7 @@ static Box* typeSubDict(Box* obj, void* context) {
     abort();
 }
 
-void Box::setDictBacked(Box* val) {
+void Box::setDictBacked(STOLEN(Box*) val) {
     assert(this->cls->instancesHaveHCAttrs());
 
     RELEASE_ASSERT(val->cls == dict_cls || val->cls == attrwrapper_cls, "");
