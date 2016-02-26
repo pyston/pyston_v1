@@ -1635,7 +1635,7 @@ void setupFloat() {
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
     _addFunc("__floordiv__", BOXED_FLOAT, (void*)floatFloorDivFloat, (void*)floatFloorDivInt, (void*)floatFloorDiv);
     float_cls->giveAttr("__rfloordiv__",
-                        new BoxedFunction(FunctionMetadata::create((void*)floatRFloorDiv, BOXED_FLOAT, 2)));
+                        new BoxedFunction(FunctionMetadata::create((void*)floatRFloorDiv, UNKNOWN, 2)));
     _addFunc("__truediv__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatTruediv);
     float_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)floatRTruediv, UNKNOWN, 2)));
 

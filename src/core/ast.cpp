@@ -1560,6 +1560,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::HASNEXT:
             stream << "HASNEXT";
             break;
+        case AST_LangPrimitive::PRINT_EXPR:
+            stream << "PRINT_EXPR";
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }
