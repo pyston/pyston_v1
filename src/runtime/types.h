@@ -204,19 +204,6 @@ public:
     bool instancesHaveHCAttrs() { return attrs_offset != 0; }
     bool instancesHaveDictAttrs() { return tp_dictoffset != 0; }
 
-    // A "safe" tp_dealloc destructor/finalizer is one we believe:
-    //  1) Can be called at any point after the object is dead.
-    //      (implies it's references could be finalized already, including its class)
-    //  2) Won't take a lot of time to run.
-    //  3) Won't take up a lot of memory (requiring another GC run).
-    //  4) Won't resurrect itself.
-    //
-    // We specify that such destructors are safe for optimization purposes (in our GC, we try to
-    // emulate the order of destructor calls and support resurrection by calling them in topological
-    // order through multiple GC passes, which is potentially quite expensive). We call the tp_dealloc
-    // as the object gets freed rather than put it in a pending finalizer list.
-    bool has_safe_tp_dealloc;
-
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
     // Does not necessarily imply that the instances of this class are constant,

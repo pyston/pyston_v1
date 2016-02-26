@@ -866,8 +866,6 @@ void setupDict() {
     dictiterkey_cls->instances_are_nonzero = dictitervalue_cls->instances_are_nonzero
         = dictiteritem_cls->instances_are_nonzero = true;
 
-    dict_cls->has_safe_tp_dealloc = true;
-
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)dictNew, UNKNOWN, 1, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));

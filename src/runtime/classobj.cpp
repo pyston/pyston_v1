@@ -1912,6 +1912,5 @@ void setupClassobj() {
     instance_cls->tp_as_number->nb_index = instance_index;
     instance_cls->tp_as_number->nb_power = instance_pow;
     instance_cls->tp_as_number->nb_inplace_power = instance_ipow;
-    instance_cls->has_safe_tp_dealloc = false;
 }
 }

@@ -1856,8 +1856,6 @@ void file_dealloc(Box* b) noexcept {
 }
 
 void setupFile() {
-    file_cls->has_safe_tp_dealloc = true;
-
     file_cls->giveAttr("read", new BoxedFunction(FunctionMetadata::create((void*)fileRead, STR, 2, false, false),
                                                  { autoDecref(boxInt(-1)) }));
 

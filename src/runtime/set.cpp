@@ -862,7 +862,6 @@ void setupSet() {
     frozenset_cls->tp_as_number = &frozenset_as_number;
 
     set_cls->tp_dealloc = frozenset_cls->tp_dealloc = BoxedSet::dealloc;
-    set_cls->has_safe_tp_dealloc = frozenset_cls->has_safe_tp_dealloc = true;
 
     set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSetIterator), false, "setiterator",
                                           false, (destructor)BoxedSetIterator::dealloc, NULL, true,

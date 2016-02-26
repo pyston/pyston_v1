@@ -6524,27 +6524,6 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 
     made->tp_alloc = PyType_GenericAlloc;
 
-    // On some occasions, Python-implemented classes inherit from C-implement classes. For
-    // example, KeyedRef inherits from weakref, and needs to have it's finalizer called
-    // whenever weakref would. So we inherit the property that a class has a safe tp_dealloc
-    // too. However, we must be careful to do that only when nothing else invalidates that
-    // property, such as the presence of a __del__ (tp_del) method.
-    assert(!made->has_safe_tp_dealloc);
-    if (!made->tp_del) {
-        for (auto b : *bases) {
-            BoxedClass* base = static_cast<BoxedClass*>(b);
-            if (!PyType_Check(base))
-                continue;
-            if (base->tp_del) {
-                break;
-            }
-            if (base->has_safe_tp_dealloc) {
-                made->has_safe_tp_dealloc = true;
-                break;
-            }
-        }
-    }
-
     return made;
 }
 

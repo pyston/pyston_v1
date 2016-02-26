@@ -3762,7 +3762,6 @@ void setupRuntime() {
     _PyObject_GC_TRACK(type_cls);
     type_cls->tp_is_gc = (inquiry)type_is_gc;
 
-    type_cls->has_safe_tp_dealloc = false;
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
 
@@ -3840,7 +3839,6 @@ void setupRuntime() {
     builtin_function_or_method_cls = new (0) BoxedClass(
         object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist), sizeof(BoxedBuiltinFunctionOrMethod), false,
         "builtin_function_or_method", false, functionDtor, NULL, true, (traverseproc)builtin_func_traverse, NOCLEAR);
-    function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
 
     module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false, "module",
                                     true, BoxedModule::dealloc, NULL, true, BoxedModule::traverse, BoxedModule::clear);
