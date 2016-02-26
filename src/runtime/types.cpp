@@ -91,6 +91,7 @@ extern "C" void init_sqlite3();
 extern "C" void PyMarshal_Init();
 extern "C" void initstrop();
 extern "C" void initgc();
+extern "C" void init_ast();
 
 namespace pyston {
 
@@ -4231,7 +4232,6 @@ void setupRuntime() {
     setupImport();
     initgc();
     setupPyston();
-    setupAST();
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
@@ -4277,6 +4277,7 @@ void setupRuntime() {
     init_sqlite3();
     PyMarshal_Init();
     initstrop();
+    init_ast();
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);

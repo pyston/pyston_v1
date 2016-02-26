@@ -75,7 +75,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		core/util.cpp
 		deadlock_debug_helper.cpp
 		runtime/bool.cpp
-		runtime/builtin_modules/ast.cpp
 		runtime/builtin_modules/builtins.cpp
 		runtime/builtin_modules/pyston.cpp
 		runtime/builtin_modules/sys.cpp

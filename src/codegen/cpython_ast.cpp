@@ -651,14 +651,27 @@ public:
         return r;
     }
 
-    AST_Module* convert(mod_ty mod) {
+    AST* convert(mod_ty mod) {
         switch (mod->kind) {
-            case Module_kind:
+            case Module_kind: {
+                AST_Module* rtn = new AST_Module(llvm::make_unique<InternedStringPool>());
+                assert(!this->pool);
+                this->pool = rtn->interned_strings.get();
+                convertAll<stmt_ty>(mod->v.Module.body, rtn->body);
+                return rtn;
+            }
             case Interactive_kind: {
                 AST_Module* rtn = new AST_Module(llvm::make_unique<InternedStringPool>());
                 assert(!this->pool);
                 this->pool = rtn->interned_strings.get();
                 convertAll<stmt_ty>(mod->v.Interactive.body, rtn->body);
+                makeModuleInteractive(rtn);
+                return rtn;
+            }
+            case Expression_kind: {
+                AST_Expression* rtn = new AST_Expression(llvm::make_unique<InternedStringPool>());
+                this->pool = rtn->interned_strings.get();
+                rtn->body = this->convert(mod->v.Expression.body);
                 return rtn;
             }
             default:
@@ -667,7 +680,7 @@ public:
     }
 };
 
-AST_Module* cpythonToPystonAST(mod_ty mod, llvm::StringRef fn) {
+AST* cpythonToPystonAST(mod_ty mod, llvm::StringRef fn) {
     Converter c(fn);
     return c.convert(mod);
 }

@@ -524,7 +524,7 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
     try {
-        setattr(v, internStringMortal(name), w);
+        setattr(v, autoDecref(internStringMortal(name)), incref(w));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
