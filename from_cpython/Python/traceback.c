@@ -272,10 +272,15 @@ tb_printinternal(PyTracebackObject *tb, PyObject *f, long limit)
                 PyString_AsString(tb->tb_frame->f_code->co_name));
             */
             PyCodeObject* code = (PyCodeObject*)PyFrame_GetCode(tb->tb_frame);
+            PyObject* filename = PyCode_GetFilename(code);
+            PyObject* name = PyCode_GetName(code);
             err = tb_displayline(f,
-                PyString_AsString(PyCode_GetFilename(code)),
+                PyString_AsString(filename),
                 tb->tb_lineno,
-                PyString_AsString(PyCode_GetName(code)));
+                PyString_AsString(name));
+            Py_DECREF(name);
+            Py_DECREF(filename);
+            Py_DECREF(code);
         }
         depth--;
         tb = tb->tb_next;

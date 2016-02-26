@@ -28,12 +28,12 @@ BoxedClass* code_cls;
 
 Box* BoxedCode::name(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-    return static_cast<BoxedCode*>(b)->f->source->getName();
+    return incref(static_cast<BoxedCode*>(b)->f->source->getName());
 }
 
 Box* BoxedCode::filename(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-    return static_cast<BoxedCode*>(b)->f->source->getFn();
+    return incref(static_cast<BoxedCode*>(b)->f->source->getFn());
 }
 
 Box* BoxedCode::firstlineno(Box* b, void*) {
