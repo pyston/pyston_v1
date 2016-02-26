@@ -95,7 +95,6 @@ test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
 test_file2k             we abort when you try to open() a directory
 test_file_eintr         not sure
-test_fileio             [unknown]
 test_fork1              [unknown]
 test_frozen             [unknown]
 test_ftplib             [unknown]

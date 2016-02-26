@@ -38,3 +38,6 @@ class Test(object):
 
 t = Test()
 t.a = 1
+
+object.__setattr__(t, u"ustr", "42")
+print t.ustr

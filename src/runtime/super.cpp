@@ -151,7 +151,7 @@ Box* superRepr(Box* _s) {
 
 
 // Ported from the CPython version:
-BoxedClass* supercheck(BoxedClass* type, Box* obj) {
+template <ExceptionStyle S> BoxedClass* superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
     if (PyType_Check(obj) && isSubclass(static_cast<BoxedClass*>(obj), type))
         return static_cast<BoxedClass*>(obj);
 
@@ -166,7 +166,33 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
         return static_cast<BoxedClass*>(class_attr);
     }
 
-    raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
+    if (S == CXX)
+        raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
+    else
+        PyErr_SetString(TypeError, "super(type, obj): obj must be an instance or subtype of type");
+    return NULL;
+}
+
+template <ExceptionStyle S>
+static PyObject* superGet(PyObject* _self, PyObject* obj, PyObject* type) noexcept(S == CAPI) {
+    BoxedSuper* self = static_cast<BoxedSuper*>(_self);
+
+    if (obj == NULL || obj == None || self->obj != NULL) {
+        /* Not binding to an object, or already bound */
+        return self;
+    }
+    if (self->cls != super_cls) {
+        /* If self is an instance of a (strict) subclass of super,
+           call its type */
+        return runtimeCallInternal<S, NOT_REWRITABLE>(self->cls, NULL, ArgPassSpec(2), self->type, obj, NULL, NULL,
+                                                      NULL);
+    } else {
+        /* Inline the common case */
+        BoxedClass* obj_type = superCheck<S>(self->type, obj);
+        if (obj_type == NULL)
+            return NULL;
+        return new BoxedSuper(self->type, obj, obj_type);
+    }
 }
 
 Box* superInit(Box* _self, Box* _type, Box* obj) {
@@ -181,7 +207,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     if (obj == None)
         obj = NULL;
     if (obj != NULL)
-        obj_type = supercheck(type, obj);
+        obj_type = superCheck<CXX>(type, obj);
 
     self->type = type;
     self->obj = obj;
@@ -201,6 +227,7 @@ void setupSuper() {
 
     super_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
+    super_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)superGet<CXX>, UNKNOWN, 3)));
 
     super_cls->giveAttr("__thisclass__",
                         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, type)));
@@ -211,5 +238,6 @@ void setupSuper() {
 
     super_cls->freeze();
     super_cls->tp_getattro = super_getattro;
+    super_cls->tp_descr_get = superGet<CAPI>;
 }
 }

@@ -1477,8 +1477,8 @@ void setupInt() {
     static PyNumberMethods int_as_number;
     int_cls->tp_as_number = &int_as_number;
 
-    for (int i = 0; i < NUM_INTERNED_INTS; i++) {
-        interned_ints[i] = new BoxedInt(i);
+    for (int i = MIN_INTERNED_INT; i <= MAX_INTERNED_INT; i++) {
+        interned_ints[-MIN_INTERNED_INT + i] = new BoxedInt(i);
     }
 
     int_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)int_getnewargs, UNKNOWN, 1,

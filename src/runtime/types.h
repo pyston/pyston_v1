@@ -1285,13 +1285,15 @@ inline BoxedString* boxString(llvm::StringRef s) {
     return new (s.size()) BoxedString(s);
 }
 
-#define NUM_INTERNED_INTS 100
+#define MIN_INTERNED_INT -5  // inclusive
+#define MAX_INTERNED_INT 256 // inclusive
+static_assert(MIN_INTERNED_INT < 0 && MAX_INTERNED_INT > 0, "");
+#define NUM_INTERNED_INTS ((-MIN_INTERNED_INT) + MAX_INTERNED_INT + 1)
+
 extern BoxedInt* interned_ints[NUM_INTERNED_INTS];
 extern "C" inline Box* boxInt(int64_t n) {
-    if (0 <= n && n < NUM_INTERNED_INTS) {
-        auto r = interned_ints[n];
-        Py_INCREF(r);
-        return r;
+    if (n >= MIN_INTERNED_INT && n <= MAX_INTERNED_INT) {
+        return incref(interned_ints[(-MIN_INTERNED_INT) + n]);
     }
     return new BoxedInt(n);
 }

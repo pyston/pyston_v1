@@ -7,7 +7,8 @@ import re
 import os.path
 import tempfile
 import subprocess
-import py_compile
+# Pyston change: we can't import this currently
+# import py_compile
 import contextlib
 import shutil
 try:

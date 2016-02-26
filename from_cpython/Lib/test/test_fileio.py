@@ -1,4 +1,3 @@
-# expected: fail
 # Adapted from test_file.py by Daniel Stutzbach
 
 from __future__ import unicode_literals
@@ -29,6 +28,8 @@ class AutoFileTests(unittest.TestCase):
             self.f.close()
         os.remove(TESTFN)
 
+    # Pyston change: disable this test becasue of GC
+    @unittest.skip("only works with refcounting")
     def testWeakRefs(self):
         # verify weak references
         p = proxy(self.f)
