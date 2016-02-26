@@ -53,17 +53,20 @@ const unsigned char eh_info[]
 static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
 static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
+constexpr int code_size = JitCodeBlock::memory_size - sizeof(eh_info);
+
 JitCodeBlock::JitCodeBlock(llvm::StringRef name)
-    : code(new uint8_t[code_size]),
-      eh_frame(new uint8_t[sizeof(eh_info)]),
+    : memory(new uint8_t[memory_size]),
       entry_offset(0),
-      a(code.get(), code_size),
+      a(memory.get() + sizeof(eh_info), code_size),
       is_currently_writing(false),
       asm_failed(false) {
     static StatCounter num_jit_code_blocks("num_baselinejit_code_blocks");
     num_jit_code_blocks.log();
     static StatCounter num_jit_total_bytes("num_baselinejit_total_bytes");
-    num_jit_total_bytes.log(code_size);
+    num_jit_total_bytes.log(memory_size);
+
+    uint8_t* code = a.curInstPointer();
 
     // emit prolog
     a.push(assembler::R14);
@@ -78,20 +81,20 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
 
     // generate the eh frame...
     const int size = sizeof(eh_info);
-    void* eh_frame_addr = eh_frame.get();
+    void* eh_frame_addr = memory.get();
     memcpy(eh_frame_addr, eh_info, size);
 
     int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
     int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
-    int64_t offset = (int8_t*)code.get() - (int8_t*)offset_ptr;
-    RELEASE_ASSERT(offset >= INT_MIN && offset <= INT_MAX, "");
+    int64_t offset = (int8_t*)code - (int8_t*)offset_ptr;
+    assert(offset >= INT_MIN && offset <= INT_MAX);
     *offset_ptr = offset;
     *size_ptr = code_size;
 
-    registerDynamicEhFrame((uint64_t)code.get(), code_size, (uint64_t)eh_frame_addr, size - 4);
+    registerDynamicEhFrame((uint64_t)code, code_size, (uint64_t)eh_frame_addr, size - 4);
     registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 
-    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code.get(), code_size, NULL);
+    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code, code_size, NULL);
 }
 
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
@@ -621,7 +624,7 @@ int JitFragmentWriter::finishCompilation() {
         int bytes_written = assembler->bytesWritten();
 
         // don't retry JITing very large blocks
-        const auto large_block_threshold = JitCodeBlock::code_size - 4096;
+        const auto large_block_threshold = code_size - 4096;
         if (bytes_written > large_block_threshold) {
             static StatCounter num_jit_large_blocks("num_baselinejit_skipped_large_blocks");
             num_jit_large_blocks.log();
