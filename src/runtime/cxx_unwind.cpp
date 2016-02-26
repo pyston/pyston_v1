@@ -35,6 +35,7 @@
 #define PYSTON_CUSTOM_UNWINDER 1 // set to 0 to use C++ unwinder
 
 #define NORETURN __attribute__((__noreturn__))
+#define HIDDEN __attribute__((visibility("hidden")))
 
 // An action of 0 in the LSDA action table indicates cleanup.
 #define CLEANUP_ACTION 0
@@ -62,7 +63,7 @@
 #define DW_EH_PE_indirect 0x80
 // end dwarf encoding modes
 
-extern "C" void __gxx_personality_v0(); // wrong type signature, but that's ok, it's extern "C"
+extern "C" HIDDEN void __gxx_personality_v0(); // wrong type signature, but that's ok, it's extern "C"
 
 // check(EXPR) is like assert((EXPR) == 0), but evaluates EXPR even in debug mode.
 template <typename T> static inline void check(T x) {
@@ -90,6 +91,10 @@ static thread_local Timer per_thread_cleanup_timer(-1);
 static __thread bool in_cleanup_code = false;
 #endif
 static __thread bool is_unwinding = false;
+
+bool isUnwinding() {
+    return is_unwinding;
+}
 
 extern "C" {
 
@@ -609,16 +614,12 @@ void std::terminate() noexcept {
     RELEASE_ASSERT(0, "std::terminate() called!");
 }
 
-bool std::uncaught_exception() noexcept {
-    return pyston::is_unwinding;
-}
-
 // wrong type signature, but that's okay, it's extern "C"
-extern "C" void __gxx_personality_v0() {
+extern "C" HIDDEN void __gxx_personality_v0() {
     RELEASE_ASSERT(0, "__gxx_personality_v0 should never get called");
 }
 
-extern "C" void _Unwind_Resume(struct _Unwind_Exception* _exc) {
+extern "C" HIDDEN void _Unwind_Resume(struct _Unwind_Exception* _exc) {
     assert(pyston::in_cleanup_code);
 #ifndef NDEBUG
     pyston::in_cleanup_code = false;
@@ -635,7 +636,7 @@ extern "C" void _Unwind_Resume(struct _Unwind_Exception* _exc) {
 // C++ ABI functionality
 namespace __cxxabiv1 {
 
-extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
+extern "C" HIDDEN void* __cxa_allocate_exception(size_t size) noexcept {
     // we should only ever be throwing ExcInfos
     RELEASE_ASSERT(size == sizeof(pyston::ExcInfo), "allocating exception whose size doesn't match ExcInfo");
 
@@ -647,7 +648,7 @@ extern "C" void* __cxa_allocate_exception(size_t size) noexcept {
 
 // Takes the value that resume() sent us in RAX, and returns a pointer to the exception object actually thrown. In our
 // case, these are the same, and should always be &pyston::exception_ferry.
-extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
+extern "C" HIDDEN void* __cxa_begin_catch(void* exc_obj_in) noexcept {
     assert(exc_obj_in);
     pyston::us_unwind_resume_catch.log(pyston::per_thread_resume_catch_timer.end());
 
@@ -659,7 +660,7 @@ extern "C" void* __cxa_begin_catch(void* exc_obj_in) noexcept {
     return e;
 }
 
-extern "C" void __cxa_end_catch() {
+extern "C" HIDDEN void __cxa_end_catch() {
     if (VERBOSITY("cxx_unwind") >= 4)
         printf("***** __cxa_end_catch() *****\n");
     // See comment in __cxa_begin_catch for why we don't clear the exception ferry here.
@@ -673,7 +674,7 @@ extern "C" std::type_info EXCINFO_TYPE_INFO;
 static uint64_t* unwinding_stattimer = pyston::Stats::getStatCounter("us_timer_unwinding");
 #endif
 
-extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
+extern "C" HIDDEN void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(void*)) {
     static pyston::StatCounter num_cxa_throw("num_cxa_throw");
     num_cxa_throw.log();
 
@@ -699,7 +700,7 @@ extern "C" void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*dtor)(v
     pyston::unwind(exc_data);
 }
 
-extern "C" void* __cxa_get_exception_ptr(void* exc_obj_in) noexcept {
+extern "C" HIDDEN void* __cxa_get_exception_ptr(void* exc_obj_in) noexcept {
     assert(exc_obj_in);
     pyston::ExcInfo* e = (pyston::ExcInfo*)exc_obj_in;
     checkExcInfo(e);
@@ -715,9 +716,31 @@ extern "C" void* __cxa_get_exception_ptr(void* exc_obj_in) noexcept {
 //         throw e;
 //     }
 //
-extern "C" void __cxa_rethrow() {
+extern "C" HIDDEN void __cxa_rethrow() {
     RELEASE_ASSERT(0, "__cxa_rethrow() unimplemented; please don't use bare `throw' in Pyston!");
 }
 }
-
 #endif // PYSTON_CUSTOM_UNWINDER
+
+namespace pyston {
+static llvm::StringMap<uint64_t> cxx_unwind_syms;
+uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym) {
+#if PYSTON_CUSTOM_UNWINDER
+    if (unlikely(cxx_unwind_syms.empty())) {
+        cxx_unwind_syms["_Unwind_Resume"] = (uint64_t)_Unwind_Resume;
+        cxx_unwind_syms["__gxx_personality_v0"] = (uint64_t)__gxx_personality_v0;
+        cxx_unwind_syms["__cxa_allocate_exception"] = (uint64_t)__cxxabiv1::__cxa_allocate_exception;
+        cxx_unwind_syms["__cxa_begin_catch"] = (uint64_t)__cxxabiv1::__cxa_begin_catch;
+        cxx_unwind_syms["__cxa_end_catch"] = (uint64_t)__cxxabiv1::__cxa_end_catch;
+        cxx_unwind_syms["__cxa_get_exception_ptr"] = (uint64_t)__cxxabiv1::__cxa_get_exception_ptr;
+        cxx_unwind_syms["__cxa_rethrow"] = (uint64_t)__cxxabiv1::__cxa_rethrow;
+        cxx_unwind_syms["__cxa_throw"] = (uint64_t)__cxxabiv1::__cxa_throw;
+    }
+
+    auto&& it = cxx_unwind_syms.find(sym);
+    if (it != cxx_unwind_syms.end())
+        return it->second;
+#endif
+    return 0;
+}
+}

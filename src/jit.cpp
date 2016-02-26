@@ -379,6 +379,16 @@ static int main(int argc, char** argv) noexcept {
             setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
         }
 
+#ifdef SIGPIPE
+        PyOS_setsig(SIGPIPE, SIG_IGN);
+#endif
+#ifdef SIGXFZ
+        PyOS_setsig(SIGXFZ, SIG_IGN);
+#endif
+#ifdef SIGXFSZ
+        PyOS_setsig(SIGXFSZ, SIG_IGN);
+#endif
+
 #ifndef NDEBUG
         if (LOG_IC_ASSEMBLY || LOG_BJIT_ASSEMBLY) {
             assembler::disassemblyInitialize();

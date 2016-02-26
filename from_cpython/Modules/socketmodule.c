@@ -789,6 +789,9 @@ init_sockobject(PySocketSockObject *s,
 
     s->errorhandler = &set_error;
 
+    // Pyston change: socket close: add refcounting similar to pypys approach
+    s->close_ref_count = 1;
+
     if (defaulttimeout >= 0.0)
         internal_setblocking(s, 0);
 
@@ -2983,6 +2986,21 @@ sock_shutdown(PySocketSockObject *s, PyObject *arg)
     return Py_None;
 }
 
+// Pyston change: socket close: add refcounting similar to pypys approach
+static PyObject *
+sock_reuse(PySocketSockObject *s) {
+    assert(s->close_ref_count > 0);
+    ++s->close_ref_count;
+    return Py_None;
+}
+static PyObject *
+sock_drop(PySocketSockObject *s) {
+    --s->close_ref_count;
+    if (s->close_ref_count <= 0)
+        sock_close(s);
+    return Py_None;
+}
+
 PyDoc_STRVAR(shutdown_doc,
 "shutdown(flag)\n\
 \n\
@@ -3099,6 +3117,11 @@ static PyMethodDef sock_methods[] = {
     {"sleeptaskw",        (PyCFunction)sock_sleeptaskw, METH_O,
                       sleeptaskw_doc},
 #endif
+
+    // Pyston change: socket close: add refcounting similar to pypys approach
+    {"_reuse",          (PyCFunction)sock_reuse, METH_NOARGS, NULL},
+    {"_drop",           (PyCFunction)sock_drop, METH_NOARGS, NULL},
+
     {NULL,                      NULL}           /* sentinel */
 };
 

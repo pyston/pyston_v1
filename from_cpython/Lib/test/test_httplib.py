@@ -1,4 +1,3 @@
-# expected: fail
 import httplib
 import array
 import httplib

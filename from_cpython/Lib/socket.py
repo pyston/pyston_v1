@@ -168,6 +168,12 @@ class _closedsocket(object):
     __slots__ = []
     def _dummy(*args):
         raise error(EBADF, 'Bad file descriptor')
+
+    # Pyston change: socket close: add refcounting similar to pypy approach
+    def _reuse(self):
+        pass
+    def _drop(self):
+        pass
     # All _delegate_methods must also be initialized here.
     send = recv = recv_into = sendto = recvfrom = recvfrom_into = _dummy
     __getattr__ = _dummy
@@ -176,6 +182,9 @@ class _closedsocket(object):
 # a platform-independent dup() functionality. The
 # implementation currently relies on reference counting
 # to close the underlying socket object.
+# Pyston change: socket close: we workaround the socket closing problem similar to pypy
+#                by manually keeping track of the ref count.
+#                When we switch to ref counting we should remove this changes!
 class _socketobject(object):
 
     __doc__ = _realsocket.__doc__
@@ -185,6 +194,11 @@ class _socketobject(object):
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, _sock=None):
         if _sock is None:
             _sock = _realsocket(family, type, proto)
+
+        # Pyston change: socket close: add refcounting similar to pypys approach
+        else:
+            _sock._reuse()
+
         self._sock = _sock
         for method in _delegate_methods:
             setattr(self, method, getattr(_sock, method))
@@ -192,6 +206,10 @@ class _socketobject(object):
     def close(self, _closedsocket=_closedsocket,
               _delegate_methods=_delegate_methods, setattr=setattr):
         # This function should not reference any globals. See issue #808164.
+
+        # Pyston change: socket close: add refcounting similar to pypys approach
+        self._sock._drop()
+
         self._sock = _closedsocket()
         dummy = self._sock._dummy
         for method in _delegate_methods:
@@ -200,7 +218,13 @@ class _socketobject(object):
 
     def accept(self):
         sock, addr = self._sock.accept()
-        return _socketobject(_sock=sock), addr
+
+        # Pyston change: socket close: add refcounting similar to pypys approach
+        # return _socketobject(_sock=sock), addr
+        sockcopy = _socketobject(_sock=sock)
+        sock._drop()
+        return sockcopy, addr
+
     accept.__doc__ = _realsocket.accept.__doc__
 
     def dup(self):
@@ -245,6 +269,10 @@ class _fileobject(object):
 
     def __init__(self, sock, mode='rb', bufsize=-1, close=False):
         self._sock = sock
+
+        # Pyston change: socket close: add refcounting similar to pypys approach
+        sock._reuse()
+
         self.mode = mode # Not actually used in this version
         if bufsize < 0:
             bufsize = self.default_bufsize
@@ -280,6 +308,11 @@ class _fileobject(object):
         finally:
             if self._close:
                 self._sock.close()
+
+            # Pyston change: socket close: add refcounting similar to pypys approach
+            else:
+                self._sock._drop()
+
             self._sock = None
 
     def __del__(self):

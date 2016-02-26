@@ -16,6 +16,7 @@
 #define PYSTON_RUNTIME_REWRITEARGS_H
 
 #include "asm_writing/rewriter.h"
+#include "codegen/unwinding.h"
 
 namespace pyston {
 
@@ -73,7 +74,7 @@ public:
 
 #ifndef NDEBUG
     ~_ReturnConventionBase() {
-        if (out_success && !std::uncaught_exception())
+        if (out_success && !isUnwinding())
             assert(return_convention_checked && "Didn't check the return convention of this rewrite...");
     }
 #endif
