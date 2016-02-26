@@ -1606,6 +1606,8 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
     ETSLOT_2ARG(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, "x." NAME "(y) <==> " DOC)
 
 static slotdef slotdefs[] = {
+    TPSLOT("__str__", tp_print, NULL, NULL, ""),
+    TPSLOT("__repr__", tp_print, NULL, NULL, ""),
     TPSLOT("__getattribute__", tp_getattr, NULL, NULL, ""),
     TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
     TPSLOT("__setattr__", tp_setattr, NULL, NULL, ""),

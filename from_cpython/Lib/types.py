@@ -89,6 +89,6 @@ AttrwrapperType = type(_C().__dict__)
 GetSetDescriptorType = type(FunctionType.func_code)
 # Pyston change:
 # MemberDescriptorType = type(FunctionType.func_globals)
-MemberDescriptorType = type(file.softspace)
+MemberDescriptorType = type(type.__dict__["__flags__"])
 
 del sys, _f, _g, _C, _x                           # Not for export

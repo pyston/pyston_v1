@@ -504,7 +504,7 @@ void JitFragmentWriter::emitPendingCallsCheck() {
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
     if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() start");
     if (!dest)
-        dest = call(false, (void*)getSysStdout)->setType(RefType::BORROWED);
+        dest = imm(0ul);
     if (!var)
         var = imm(0ul);
     call(false, (void*)printHelper, dest, var, imm(nl));

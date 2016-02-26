@@ -39,7 +39,6 @@
 #include "core/types.h"
 #include "runtime/classobj.h"
 #include "runtime/dict.h"
-#include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/hiddenclass.h"
@@ -140,78 +139,62 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     return astInterpretDeopt(deopt_state.cf->md, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
-extern "C" bool softspace(Box* b, bool newval) {
-    assert(b);
-
-    // TODO do we also need to wrap the isSubclass in the try{}?  it
-    // can throw exceptions which would bubble up from print
-    // statements.
-    if (isSubclass(b->cls, file_cls)) {
-        int& ss = static_cast<BoxedFile*>(b)->f_softspace;
-        int r = ss;
-        ss = newval;
-        assert(r == 0 || r == 1);
-        return (bool)r;
+extern "C" void printHelper(Box* w, Box* v, bool nl) {
+    // copied from cpythons PRINT_ITEM and PRINT_NEWLINE op handling code
+    if (w == NULL || w == None) {
+        w = PySys_GetObject("stdout");
+        if (w == NULL)
+            raiseExcHelper(RuntimeError, "lost sys.stdout");
     }
 
-    static BoxedString* softspace_str = getStaticString("softspace");
+    int err = 0;
 
-    bool r;
-    Box* gotten = NULL;
-    try {
-        Box* gotten = getattrInternal<CXX>(b, softspace_str);
-        if (!gotten) {
-            r = 0;
-        } else {
-            r = nonzero(gotten);
-            Py_DECREF(gotten);
+    if (v) {
+        /* PyFile_SoftSpace() can exececute arbitrary code
+           if sys.stdout is an instance with a __getattr__.
+           If __getattr__ raises an exception, w will
+           be freed, so we need to prevent that temporarily. */
+        Py_XINCREF(w);
+        if (w != NULL && PyFile_SoftSpace(w, 0))
+            err = PyFile_WriteString(" ", w);
+        if (err == 0)
+            err = PyFile_WriteObject(v, w, Py_PRINT_RAW);
+        if (err == 0) {
+            /* XXX move into writeobject() ? */
+            if (PyString_Check(v)) {
+                char* s = PyString_AS_STRING(v);
+                Py_ssize_t len = PyString_GET_SIZE(v);
+                if (len == 0 || !isspace(Py_CHARMASK(s[len - 1])) || s[len - 1] == ' ')
+                    PyFile_SoftSpace(w, 1);
+            }
+#ifdef Py_USING_UNICODE
+            else if (PyUnicode_Check(v)) {
+                Py_UNICODE* s = PyUnicode_AS_UNICODE(v);
+                Py_ssize_t len = PyUnicode_GET_SIZE(v);
+                if (len == 0 || !Py_UNICODE_ISSPACE(s[len - 1]) || s[len - 1] == ' ')
+                    PyFile_SoftSpace(w, 1);
+            }
+#endif
+            else
+                PyFile_SoftSpace(w, 1);
         }
-    } catch (ExcInfo e) {
-        r = 0;
-    }
-
-    try {
-        setattr(b, softspace_str, autoDecref(boxInt(newval)));
-    } catch (ExcInfo e) {
-        r = 0;
-    }
-
-    return r;
-}
-
-extern "C" void printHelper(Box* dest, Box* var, bool nl) {
-    static BoxedString* write_str = getStaticString("write");
-    static BoxedString* newline_str = getStaticString("\n");
-    static BoxedString* space_str = getStaticString(" ");
-
-    if (dest == None)
-        dest = getSysStdout();
-
-    if (var) {
-        // begin code for handling of softspace
-        bool new_softspace = !nl;
-        if (softspace(dest, new_softspace))
-            autoDecref(callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
-                                                             space_str, 0, 0, 0, 0));
-
-        Box* str_or_unicode_var = (var->cls == unicode_cls) ? incref(var) : str(var);
-        Box* write_rtn = callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
-                                                               autoDecref(str_or_unicode_var), 0, 0, 0, 0);
-        if (!write_rtn)
-            raiseAttributeError(dest, write_str->s());
-        Py_DECREF(write_rtn);
     }
 
     if (nl) {
-        Box* write_rtn = callattrInternal<CXX, NOT_REWRITABLE>(dest, write_str, CLASS_OR_INST, 0, ArgPassSpec(1),
-                                                               newline_str, 0, 0, 0, 0);
-        if (!write_rtn)
-            raiseAttributeError(dest, write_str->s());
-        Py_DECREF(write_rtn);
-
-        if (!var)
-            softspace(dest, false);
+        if (w != NULL) {
+            /* w.write() may replace sys.stdout, so we
+             * have to keep our reference to it */
+            Py_INCREF(w);
+            err = PyFile_WriteString("\n", w);
+            if (err == 0)
+                PyFile_SoftSpace(w, 0);
+            Py_DECREF(w);
+        }
+        // Py_XDECREF(stream);
     }
+
+    if (err != 0)
+        throwCAPIException();
 }
 
 extern "C" void my_assert(bool b) {
@@ -3049,7 +3032,7 @@ extern "C" bool nonzero(Box* obj) {
                 crewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
             }
             ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
-                       || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == file_cls
+                       || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == &PyFile_Type
                        || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
                        || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls

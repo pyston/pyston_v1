@@ -2841,7 +2841,6 @@ void setupStr() {
     str_iterator_cls->tp_iter = PyObject_SelfIter;
 
     str_cls->tp_as_buffer = &string_as_buffer;
-    str_cls->tp_print = string_print;
 
     str_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)string_getnewargs, UNKNOWN, 1,
                                                                                    ParamNames::empty(), CAPI)));
@@ -2934,6 +2933,7 @@ void setupStr() {
 
     str_cls->tp_repr = str_repr;
     str_cls->tp_str = str_str;
+    str_cls->tp_print = string_print;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
     str_cls->tp_as_sequence->sq_length = str_length;

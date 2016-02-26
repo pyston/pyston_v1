@@ -2132,10 +2132,8 @@ private:
             auto d = evalExpr(node->dest, unw_info);
             dest = d->makeConverted(emitter, d->getBoxType());
         } else {
-            llvm::Value* sys_stdout_val = emitter.createCall(unw_info, g.funcs.getSysStdout, NOEXC);
-            emitter.setType(sys_stdout_val, RefType::BORROWED);
-            dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val);
-            // TODO: speculate that sys.stdout is a file?
+            dest = new ConcreteCompilerVariable(
+                UNKNOWN, emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED), true);
         }
         assert(dest);
 

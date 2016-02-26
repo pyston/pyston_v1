@@ -38,7 +38,6 @@
 #include "runtime/code.h"
 #include "runtime/complex.h"
 #include "runtime/dict.h"
-#include "runtime/file.h"
 #include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
@@ -1374,9 +1373,9 @@ Box* dict_descr = NULL;
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *file_cls, *member_descriptor_cls, *closure_cls, *generator_cls, *null_importer_cls, *complex_cls,
-      *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
-      *capi_getset_cls, *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
+      *member_descriptor_cls, *closure_cls, *generator_cls, *null_importer_cls, *complex_cls, *basestring_cls,
+      *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
+      *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
 }
@@ -3383,6 +3382,7 @@ static Box* getsetDelete(Box* self, Box* obj) {
     return getsetSet(self, obj, NULL);
 }
 
+<<<<<<< HEAD
 void Box::clearAttrs() {
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
@@ -3744,6 +3744,14 @@ extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
 
 extern "C" void _PyUnicode_Fini(void);
 
+||||||| merged common ancestors
+=======
+static int _check_and_flush(FILE* stream) {
+    int prev_fail = ferror(stream);
+    return fflush(stream) || prev_fail ? EOF : 0;
+}
+
+>>>>>>> 1f4a1b
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
@@ -3825,8 +3833,6 @@ void setupRuntime() {
     dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", true, BoxedDict::dealloc, NULL,
                                   true, BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    file_cls = new (0) BoxedClass(object_cls, 0, offsetof(BoxedFile, weakreflist), sizeof(BoxedFile), false, "file",
-                                  true, file_dealloc, NULL, false);
     int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", true, BoxedInt::tp_dealloc,
                                  /*BoxedInt::tp_free*/ NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
@@ -3880,7 +3886,6 @@ void setupRuntime() {
     pyston_getset_cls->tp_mro = BoxedTuple::create({ pyston_getset_cls, object_cls });
     attrwrapper_cls->tp_mro = BoxedTuple::create({ attrwrapper_cls, object_cls });
     dict_cls->tp_mro = BoxedTuple::create({ dict_cls, object_cls });
-    file_cls->tp_mro = BoxedTuple::create({ file_cls, object_cls });
     int_cls->tp_mro = BoxedTuple::create({ int_cls, object_cls });
     bool_cls->tp_mro = BoxedTuple::create({ bool_cls, object_cls });
     complex_cls->tp_mro = BoxedTuple::create({ complex_cls, object_cls });
@@ -3940,7 +3945,6 @@ void setupRuntime() {
     pyston_getset_cls->finishInitialization();
     attrwrapper_cls->finishInitialization();
     dict_cls->finishInitialization();
-    file_cls->finishInitialization();
     int_cls->finishInitialization();
     bool_cls->finishInitialization();
     complex_cls->finishInitialization();
@@ -4089,7 +4093,6 @@ void setupRuntime() {
     setupDict();
     setupSet();
     setupTuple();
-    setupFile();
     setupGenerator();
     setupIter();
     setupClassobj();
@@ -4238,6 +4241,21 @@ void setupRuntime() {
     attrwrapperiter_cls->tp_iter = PyObject_SelfIter;
     attrwrapperiter_cls->tp_iternext = AttrWrapperIter::next_capi;
 
+    PyType_Ready(&PyFile_Type);
+    PyObject* sysin, *sysout, *syserr;
+    sysin = PyFile_FromFile(stdin, "<stdin>", "r", NULL);
+    sysout = PyFile_FromFile(stdout, "<stdout>", "w", _check_and_flush);
+    syserr = PyFile_FromFile(stderr, "<stderr>", "w", _check_and_flush);
+    RELEASE_ASSERT(!PyErr_Occurred(), "");
+
+    sys_module->giveAttr("stdout", sysout);
+    sys_module->giveAttr("stdin", sysin);
+    sys_module->giveAttr("stderr", syserr);
+    sys_module->giveAttr("__stdout__", sys_module->getattr(internStringMortal("stdout")));
+    sys_module->giveAttr("__stdin__", sys_module->getattr(internStringMortal("stdin")));
+    sys_module->giveAttr("__stderr__", sys_module->getattr(internStringMortal("stderr")));
+
+
     setupBuiltins();
     _PyExc_Init();
     setupThread();
@@ -4253,6 +4271,7 @@ void setupRuntime() {
 
     PyType_Ready(&PyCObject_Type);
     PyType_Ready(&PyDictProxy_Type);
+
 
     initerrno();
     init_sha();

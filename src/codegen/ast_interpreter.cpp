@@ -1342,7 +1342,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     if (node->dest)
         printHelper(autoDecref(dest.o), autoXDecref(var.o), node->nl);
     else
-        printHelper(getSysStdout(), autoXDecref(var.o), node->nl);
+        printHelper(NULL, autoXDecref(var.o), node->nl);
 
     return Value();
 }

@@ -776,6 +776,49 @@ static Box* dict_repr(PyObject* self) noexcept {
     }
 }
 
+static int dict_print(PyObject* mp, FILE* fp, int flags) noexcept {
+    Py_ssize_t any;
+    int status;
+
+    status = Py_ReprEnter((PyObject*)mp);
+    if (status != 0) {
+        if (status < 0)
+            return status;
+        Py_BEGIN_ALLOW_THREADS fprintf(fp, "{...}");
+        Py_END_ALLOW_THREADS return 0;
+    }
+
+    Py_BEGIN_ALLOW_THREADS fprintf(fp, "{");
+    Py_END_ALLOW_THREADS any = 0;
+    for (auto&& entry : *(BoxedDict*)mp) {
+        PyObject* pvalue = entry.second;
+        if (pvalue != NULL) {
+            /* Prevent PyObject_Repr from deleting value during
+               key format */
+            Py_INCREF(pvalue);
+            if (any++ > 0) {
+                Py_BEGIN_ALLOW_THREADS fprintf(fp, ", ");
+                Py_END_ALLOW_THREADS
+            }
+            if (PyObject_Print((PyObject*)entry.first, fp, 0) != 0) {
+                Py_DECREF(pvalue);
+                Py_ReprLeave((PyObject*)mp);
+                return -1;
+            }
+            Py_BEGIN_ALLOW_THREADS fprintf(fp, ": ");
+            Py_END_ALLOW_THREADS if (PyObject_Print(pvalue, fp, 0) != 0) {
+                Py_DECREF(pvalue);
+                Py_ReprLeave((PyObject*)mp);
+                return -1;
+            }
+            Py_DECREF(pvalue);
+        }
+    }
+    Py_BEGIN_ALLOW_THREADS fprintf(fp, "}");
+    Py_END_ALLOW_THREADS Py_ReprLeave((PyObject*)mp);
+    return 0;
+}
+
 void BoxedDict::dealloc(Box* b) noexcept {
     if (_PyObject_GC_IS_TRACKED(b))
         _PyObject_GC_UNTRACK(b);
@@ -953,6 +996,7 @@ void setupDict() {
     // subclass Python classes.
     dict_cls->tp_init = dict_init;
     dict_cls->tp_repr = dict_repr;
+    dict_cls->tp_print = dict_print;
     dict_cls->tp_iter = dict_iter;
 
     dict_cls->tp_as_mapping->mp_length = (lenfunc)dict_length;

@@ -49,7 +49,6 @@ __attribute__((format(printf, 2, 3)));
 void raiseExcHelper(BoxedClass*, Box* arg) __attribute__((__noreturn__));
 
 // TODO sort this
-extern "C" bool softspace(Box* b, bool newval);
 extern "C" void printHelper(Box* dest, Box* var, bool nl);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, BoxedString* attr);
