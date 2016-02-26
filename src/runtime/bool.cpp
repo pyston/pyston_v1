@@ -14,6 +14,7 @@
 
 #include "core/common.h"
 #include "core/types.h"
+#include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -54,33 +55,33 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
 }
 
 extern "C" Box* boolAnd(BoxedBool* lhs, BoxedBool* rhs) {
-    if (lhs->cls != bool_cls)
+    if (!PyBool_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'bool' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs->cls != bool_cls)
-        return incref(NotImplemented);
+    if (!PyBool_Check(rhs))
+        return intAnd(lhs, rhs);
 
     return boxBool(lhs->n && rhs->n);
 }
 
 extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
-    if (lhs->cls != bool_cls)
+    if (!PyBool_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'bool' object but received a '%s'", getTypeName(lhs));
 
-    if (rhs->cls != bool_cls)
-        return incref(NotImplemented);
+    if (!PyBool_Check(rhs))
+        return intOr(lhs, rhs);
 
     return boxBool(lhs->n || rhs->n);
 }
 
 extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
-    if (lhs->cls != bool_cls)
+    if (!PyBool_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'bool' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs->cls != bool_cls)
-        return incref(NotImplemented);
+    if (!PyBool_Check(rhs))
+        return intXor(lhs, rhs);
 
     return boxBool(lhs->n ^ rhs->n);
 }
@@ -97,9 +98,10 @@ void setupBool() {
     bool_cls->giveAttr("__new__",
                        new BoxedFunction(FunctionMetadata::create((void*)boolNew, UNKNOWN, 2, false, false), { None }));
 
-    bool_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)boolAnd, BOXED_BOOL, 2)));
-    bool_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)boolOr, BOXED_BOOL, 2)));
-    bool_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)boolXor, BOXED_BOOL, 2)));
+    // TODO: type specialize
+    bool_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)boolAnd, UNKNOWN, 2)));
+    bool_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)boolOr, UNKNOWN, 2)));
+    bool_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)boolXor, UNKNOWN, 2)));
 
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;

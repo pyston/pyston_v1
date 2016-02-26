@@ -31,10 +31,14 @@ print isinstance(True, int)
 print isinstance(False, int)
 
 for lhs in (True, False):
-    for rhs in (True, False):
-        print lhs | rhs
-        print lhs & rhs
-        print lhs ^ rhs
+    for rhs in (True, False, 1, 1.0):
+        try:
+            print lhs.__and__(rhs), lhs.__or__(rhs), lhs.__xor__(rhs)
+            print lhs | rhs
+            print lhs & rhs
+            print lhs ^ rhs
+        except Exception as e:
+            print e
 
 print range(False, True, True)
 

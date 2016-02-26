@@ -19,6 +19,11 @@ class C(B):
     def f(self):
         print "C.f()"
         super(C, self).f()
+        print super(C, self).__thisclass__
+        try:
+            super(C, self).does_not_exist
+        except AttributeError as e:
+            print e
 
 c = C(1, 2)
 print c.arg1

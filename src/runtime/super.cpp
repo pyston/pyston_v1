@@ -121,10 +121,10 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, attr);
-    // TODO implement this
-    RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
-    return processDescriptor(r, s, s->cls);
+    Box* rtn = PyObject_GenericGetAttr(s, attr);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 Box* super_getattro(Box* _s, Box* _attr) noexcept {

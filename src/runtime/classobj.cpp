@@ -595,7 +595,14 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
     }
 
-    _inst->delattr(attr, NULL);
+    if (_inst->hasattr(attr))
+        _inst->delattr(attr, NULL);
+    else {
+        BoxedClassobj* clsobj = (BoxedClassobj*)inst->inst_cls;
+        RELEASE_ASSERT(PyClass_Check(clsobj), "");
+        raiseExcHelper(AttributeError, "%.50s instance has no attribute '%.400s'", clsobj->name->c_str(),
+                       attr->c_str());
+    }
     return None;
 }
 

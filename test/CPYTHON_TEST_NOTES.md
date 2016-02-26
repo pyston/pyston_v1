@@ -37,7 +37,7 @@ test_builtin            execfile scoping issue
 test_bz2                [unknown]
 test_capi               [unknown]
 test_cd                 [unknown]
-test_cfgparser          [unknown]
+test_cfgparser          works when run from inside the from_cpython dir
 test_cgi                [unknown]
 test_class              needs ellipsis
 test_cl                 [unknown]
@@ -57,7 +57,7 @@ test_codecmaps_tw       [unknown]
 test_codecs             [unknown]
 test_codeop             [unknown]
 test_code               [unknown]
-test_coding             [unknown]
+test_coding             works when run from inside the from_cpython dir
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
 test_collections        assertion failed when doing vars(collections.namedtuple('Point', 'x y')(11, 12))
 test_compileall         [unknown]
@@ -77,7 +77,6 @@ test_decorators         decorator bug -- we evaluate decorator obj and its args 
 test_deque              couple unknown issues
 test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
-test_dictcomps          we need to disallow assigning to dictcomps
 test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
 test_dictviews          segfault calling repr on recursive dictview. remove test/tests/test_dictview.py when the orig test passes
 test_difflib            [unknown]
@@ -90,7 +89,6 @@ test_email_codecs       [unknown]
 test_email_renamed      [unknown]
 test_email              [unknown]
 test_enumerate          assert instead of exception in BoxedEnumerate
-test_eof                [unknown]
 test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
 test_file2k             we abort when you try to open() a directory
@@ -134,15 +132,11 @@ test_linuxaudiodev      [unknown]
 test_list               longs as slice indices
 test__locale            No module named _locale
 test_locale             [unknown]
-test_longexp            [unknown]
 test_long_future        [unknown]
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that
-test_mailbox            [unknown]
 test_marshal            [unknown]
-test_memoryio           [unknown]
 test_memoryview         [unknown]
-test_minidom            [unknown]
 test_modulefinder       [unknown]
 test_module             unicode docstrings
 test_msilib             [unknown]
@@ -151,20 +145,17 @@ test_multiprocessing    [unknown]
 test_mutants            unknown failure
 test_new                [unknown]
 test_nis                [unknown]
-test_old_mailbox        [unknown]
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_ossaudiodev        [unknown]
 test_os                 [unknown]
 test_parser             [unknown]
 test_pdb                [unknown]
 test_peepholer          [unknown]
-test_pep263             [unknown]
-test_pep277             segfaults
 test_pep352             various unique bugs
 test_pickletools        [unknown]
 test_pickle             unknown
 test_pkg                unknown bug
-test_poplib             [unknown]
+test_poplib             SSLError (but only on CI)
 test_pprint             [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
@@ -181,9 +172,7 @@ test_sax                [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
-test_shlex              [unknown]
 test_site               [unknown]
-test_smtpnet            [unknown]
 test_socketserver       [unknown]
 test_socket             [unknown]
 test_sort               argument specification issue in listSort?
@@ -192,7 +181,6 @@ test_ssl                [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]
-test_struct             [unknown]
 test_subprocess         exit code 141 [sigpipe?], no error message
 test_sunaudiodev        [unknown]
 test_sunau              [unknown]
@@ -213,7 +201,6 @@ test_threading_local    [unknown]
 test_threading          [unknown]
 test_threadsignals      [unknown]
 test_thread             [unknown]
-test_timeout            [unknown]
 test_tk                 [unknown]
 test_tokenize           [unknown]
 test_tools              [unknown]
@@ -235,17 +222,14 @@ test_urllibnet          [unknown]
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
-test_uuid               long("invalid number")
+test_uuid               segfault in ctypes (but only on CI)
 test_wait3              [unknown]
 test_wait4              [unknown]
 test_warnings           [unknown]
-test_wave               [unknown]
 test_weakref            weird function-picking bug (something around float.__add__)
 test_weakset            unknown issues
 test_winreg             [unknown]
 test_winsound           [unknown]
-test_with               weird codegen assert
-test_wsgiref            unknown issue
 test_xml_etree_c        [unknown]
 test_xml_etree          [unknown]
 test_xmlrpc             [unknown]

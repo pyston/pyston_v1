@@ -387,6 +387,10 @@ try:
     C.doesnt_exist
 except AttributeError as e:
     print e
+try:
+    del C().doesnt_exist
+except AttributeError as e:
+    print e
 
 
 class C():

@@ -1,4 +1,3 @@
-# expected: fail
 from test.test_support import TESTFN, run_unittest
 import unittest
 from test import audiotests
