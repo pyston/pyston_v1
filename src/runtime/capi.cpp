@@ -1133,6 +1133,11 @@ cleanup:
              : 0)
 #endif
 
+extern "C" void PyParser_SetError(perrdetail* err) noexcept {
+    err_input(err);
+}
+
+
 extern "C" grammar _PyParser_Grammar;
 
 /* Preferred access to parser is through AST. */

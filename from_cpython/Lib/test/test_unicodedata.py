@@ -1,4 +1,3 @@
-# expected: fail
 """ Test script for the unicodedata module.
 
     Written by Marc-Andre Lemburg (mal@lemburg.com).
