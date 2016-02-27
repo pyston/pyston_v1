@@ -188,8 +188,11 @@ Box* dictClear(BoxedDict* self) {
 }
 
 extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
-    RELEASE_ASSERT(PyDict_Check(o), "");
+    RELEASE_ASSERT(PyDict_Check(o) || o->cls == attrwrapper_cls, "");
     try {
+        if (o->cls == attrwrapper_cls)
+            return attrwrapperToDict(o);
+
         return dictCopy(static_cast<BoxedDict*>(o));
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -694,15 +697,23 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
 }
 
 extern "C" int PyDict_Merge(PyObject* a, PyObject* b, int override_) noexcept {
-    if (a == NULL || !PyDict_Check(a) || b == NULL) {
-        PyErr_BadInternalCall();
-        return -1;
-    }
-
-    if (override_ != 1)
-        Py_FatalError("unimplemented");
-
     try {
+        if (a == NULL || !PyDict_Check(a) || b == NULL) {
+            if (a && b && a->cls == attrwrapper_cls) {
+                RELEASE_ASSERT(PyDict_Check(b) && override_ == 1, "");
+                for (auto&& item : *(BoxedDict*)b) {
+                    setitem(a, item.first, item.second);
+                }
+                return 0;
+            }
+
+            PyErr_BadInternalCall();
+            return -1;
+        }
+
+        if (override_ != 1)
+            Py_FatalError("unimplemented");
+
         dictMerge(static_cast<BoxedDict*>(a), b);
         return 0;
     } catch (ExcInfo e) {

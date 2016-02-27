@@ -1,4 +1,3 @@
-# expected: fail
 import sys
 import unittest
 import StringIO

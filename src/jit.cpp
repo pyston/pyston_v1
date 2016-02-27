@@ -188,9 +188,10 @@ int handleArg(char code) {
         TRAP = true;
     else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
-    else if (code == 'v')
+    else if (code == 'v') {
+        Py_VerboseFlag++;
         GLOBAL_VERBOSITY++;
-    else if (code == 'd')
+    } else if (code == 'd')
         SHOW_DISASM = true;
     else if (code == 'I')
         FORCE_INTERPRETER = true;
@@ -276,7 +277,7 @@ static int RunMainFromImporter(const char* filename) {
     PyObject* argv0 = NULL, * importer = NULL;
 
     if ((argv0 = PyString_FromString(filename)) && (importer = PyImport_GetImporter(argv0))
-        && (importer->cls != null_importer_cls)) {
+        && (importer->cls != &PyNullImporter_Type)) {
         /* argv0 is usable as an import source, so
                put it in sys.path[0] and import __main__ */
         PyObject* sys_path = NULL;
@@ -438,8 +439,9 @@ static int main(int argc, char** argv) noexcept {
 
         if (!Py_NoSiteFlag) {
             try {
-                std::string module_name = "site";
-                importModuleLevel(module_name, None, None, 0);
+                Box* module = PyImport_ImportModule("site");
+                if (!module)
+                    throwCAPIException();
             } catch (ExcInfo e) {
                 e.printExcAndTraceback();
                 return 1;

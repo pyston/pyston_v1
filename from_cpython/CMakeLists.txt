@@ -92,6 +92,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     exceptions.c
     floatobject.c
     fileobject.c
+    import.c
     iterobject.c
     memoryobject.c
     obmalloc.c
