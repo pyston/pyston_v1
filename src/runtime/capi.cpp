@@ -1656,7 +1656,10 @@ extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
 }
 
 extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
-    Py_FatalError("Unimplemented");
+    if (_PyThreadState_Current == NULL)
+        Py_FatalError("PyThreadState_Get: no current thread");
+
+    return _PyThreadState_Current;
 }
 
 extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {

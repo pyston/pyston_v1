@@ -69,7 +69,7 @@ if not os.path.exists(CYTHON_DIR):
     subprocess.check_call(["wget", url], cwd=SRC_DIR)
     subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
 
-    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython_0001-Pyston-change-we-don-t-support-custom-traceback-entr.patch"))
+    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.22.patch"))
     subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
     print ">>> Applied Cython patch"
 
