@@ -576,8 +576,17 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
             std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
 
             // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN)
+            if (return_convention == ReturnConvention::NO_RETURN) {
+                return_convention = ReturnConvention::NOEXC_POSSIBLE;
                 r_rtn = rewrite_args->rewriter->loadConst(0);
+            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                if (default_value)
+                    rewrite_args = NULL;
+            }
+            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                   || return_convention == ReturnConvention::HAS_RETURN
+                   || return_convention == ReturnConvention::CAPI_RETURN
+                   || (default_value == NULL && return_convention == ReturnConvention::MAYBE_EXC));
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str);
@@ -687,8 +696,15 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
             std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
 
             // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN)
+            if (return_convention == ReturnConvention::NO_RETURN) {
+                return_convention = ReturnConvention::NOEXC_POSSIBLE;
                 r_rtn = rewrite_args->rewriter->loadConst(0);
+            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                rewrite_args = NULL;
+            }
+            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                   || return_convention == ReturnConvention::HAS_RETURN
+                   || return_convention == ReturnConvention::CAPI_RETURN);
         }
     } else {
         rtn = getattrInternal<CAPI>(obj, str);
