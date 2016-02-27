@@ -74,7 +74,7 @@ static Box* sysExit(Box* arg) {
     raiseExc(exc);
 }
 
-BoxedDict* getSysModulesDict() {
+BORROWED(BoxedDict*) getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
     // Box *_sys_modules = sys_module->getattr("modules");
     // assert(_sys_modules);
@@ -82,7 +82,7 @@ BoxedDict* getSysModulesDict() {
     // return static_cast<BoxedDict*>(_sys_modules);
 
     // CPython's behavior: return an internalized reference:
-    return incref(sys_modules_dict);
+    return sys_modules_dict;
 }
 
 BoxedList* getSysPath() {
@@ -402,7 +402,7 @@ extern "C" const char* Py_GetPlatform() noexcept {
 #endif
 }
 
-extern "C" PyObject* PySys_GetModulesDict() noexcept {
+extern "C" BORROWED(PyObject*) PySys_GetModulesDict() noexcept {
     return getSysModulesDict();
 }
 
@@ -759,6 +759,9 @@ void setupSysEnd() {
 
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
+
+    for (Box* b : builtin_module_names)
+        Py_DECREF(b);
 
 #ifndef NDEBUG
     for (const auto& p : *sys_modules_dict) {
