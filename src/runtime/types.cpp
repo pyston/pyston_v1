@@ -2424,7 +2424,8 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            rtn->d[p.first] = attrs->attr_list->attrs[p.second];
+            ASSERT(rtn->d.count(p.first) == 0, "need to decref existing keys");
+            rtn->d[incref(p.first)] = incref(attrs->attr_list->attrs[p.second]);
         }
         return rtn;
     }
