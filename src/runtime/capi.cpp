@@ -65,10 +65,6 @@ int Py_Py3kWarningFlag;
 BoxedClass* capifunc_cls;
 }
 
-extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
-    PyErr_Format(PyExc_SystemError, "%s:%d: bad argument to internal function", filename, lineno);
-}
-
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
     PyObject* empty = NULL;
     PyObject* result = NULL;
@@ -684,102 +680,6 @@ extern "C" int Py_FlushLine(void) noexcept {
     return PyFile_WriteString("\n", f);
 }
 
-extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) noexcept {
-    PyObject* type = *exc;
-    PyObject* value = *val;
-    PyObject* inclass = NULL;
-    PyObject* initial_tb = NULL;
-    PyThreadState* tstate = NULL;
-
-    if (type == NULL) {
-        /* There was no exception, so nothing to do. */
-        return;
-    }
-
-    /* If PyErr_SetNone() was used, the value will have been actually
-       set to NULL.
-    */
-    if (!value) {
-        value = Py_None;
-        Py_INCREF(value);
-    }
-
-    if (PyExceptionInstance_Check(value))
-        inclass = PyExceptionInstance_Class(value);
-
-    /* Normalize the exception so that if the type is a class, the
-       value will be an instance.
-    */
-    if (PyExceptionClass_Check(type)) {
-        /* if the value was not an instance, or is not an instance
-           whose class is (or is derived from) type, then use the
-           value as an argument to instantiation of the type
-           class.
-        */
-        if (!inclass || !PyObject_IsSubclass(inclass, type)) {
-            // Pyston change: rewrote this section
-
-            PyObject* res;
-            if (!PyTuple_Check(value)) {
-                res = PyErr_CreateExceptionInstance(type, value == Py_None ? NULL : value);
-            } else {
-                PyObject* args = value;
-
-                // Pyston change:
-                // res = PyEval_CallObject(type, args);
-                res = PyObject_Call(type, args, NULL);
-            }
-
-            if (res == NULL)
-                goto finally;
-            value = res;
-        }
-        /* if the class of the instance doesn't exactly match the
-           class of the type, believe the instance
-        */
-        else if (inclass != type) {
-            Py_DECREF(type);
-            type = inclass;
-            Py_INCREF(type);
-        }
-    }
-    *exc = type;
-    *val = value;
-    return;
-finally:
-    Py_DECREF(type);
-    Py_DECREF(value);
-    /* If the new exception doesn't set a traceback and the old
-       exception had a traceback, use the old traceback for the
-       new exception.  It's better than nothing.
-    */
-    initial_tb = *tb;
-    PyErr_Fetch(exc, val, tb);
-    if (initial_tb != NULL) {
-        if (*tb == NULL)
-            *tb = initial_tb;
-        else
-            Py_DECREF(initial_tb);
-    }
-    /* normalize recursively */
-    tstate = PyThreadState_GET();
-    if (++tstate->recursion_depth > Py_GetRecursionLimit()) {
-        --tstate->recursion_depth;
-        /* throw away the old exception... */
-        Py_DECREF(*exc);
-        Py_DECREF(*val);
-        /* ... and use the recursion error instead */
-        *exc = PyExc_RuntimeError;
-        *val = PyExc_RecursionErrorInst;
-        Py_INCREF(*exc);
-        Py_INCREF(*val);
-        /* just keeping the old traceback */
-        return;
-    }
-    PyErr_NormalizeException(exc, val, tb);
-    --tstate->recursion_depth;
-}
-
 void setCAPIException(const ExcInfo& e) {
     PyErr_Restore(e.type, e.value, e.traceback);
 }
@@ -844,24 +744,6 @@ extern "C" void Py_Exit(int sts) noexcept {
     exit(sts);
 }
 
-extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
-    auto oldtype = cur_thread_state.curexc_type;
-    auto oldvalue = cur_thread_state.curexc_value;
-    auto oldtraceback = cur_thread_state.curexc_traceback;
-
-    cur_thread_state.curexc_type = type;
-    cur_thread_state.curexc_value = value;
-    cur_thread_state.curexc_traceback = traceback;
-
-    Py_XDECREF(oldtype);
-    Py_XDECREF(oldvalue);
-    Py_XDECREF(oldtraceback);
-}
-
-extern "C" void PyErr_Clear() noexcept {
-    PyErr_Restore(NULL, NULL, NULL);
-}
-
 extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
     ExcInfo* exc = getFrameExcInfo();
     *ptype = exc->type;
@@ -874,56 +756,6 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
     exc->type = type ? type : None;
     exc->value = value ? value : None;
     exc->traceback = traceback ? traceback : None;
-}
-
-extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
-    PyErr_SetObject(exception, autoDecref(boxString(string)));
-}
-
-extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
-    Py_XINCREF(exception);
-    Py_XINCREF(value);
-    PyErr_Restore(exception, value, NULL);
-}
-
-extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) noexcept {
-    va_list vargs;
-    PyObject* string;
-
-#ifdef HAVE_STDARG_PROTOTYPES
-    va_start(vargs, format);
-#else
-    va_start(vargs);
-#endif
-
-    string = PyString_FromFormatV(format, vargs);
-    PyErr_SetObject(exception, string);
-    Py_XDECREF(string);
-    va_end(vargs);
-    return NULL;
-}
-
-extern "C" int PyErr_BadArgument() noexcept {
-    // TODO this is untested
-    PyErr_SetString(PyExc_TypeError, "bad argument type for built-in operation");
-    return 0;
-}
-
-extern "C" PyObject* PyErr_NoMemory() noexcept {
-    if (PyErr_ExceptionMatches(PyExc_MemoryError))
-        /* already current */
-        return NULL;
-
-    /* raise the pre-allocated instance if it still exists */
-    if (PyExc_MemoryErrorInst)
-        PyErr_SetObject(PyExc_MemoryError, PyExc_MemoryErrorInst);
-    else
-        /* this will probably fail since there's no memory and hee,
-           hee, we have to instantiate this class
-        */
-        PyErr_SetNone(PyExc_MemoryError);
-
-    return NULL;
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
@@ -972,66 +804,6 @@ extern "C" int Py_GetRecursionLimit(void) noexcept {
 extern "C" void Py_SetRecursionLimit(int new_limit) noexcept {
     recursion_limit = new_limit;
     _Py_CheckRecursionLimit = recursion_limit;
-}
-
-extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) noexcept {
-    if (err == NULL || exc == NULL) {
-        /* maybe caused by "import exceptions" that failed early on */
-        return 0;
-    }
-    if (PyTuple_Check(exc)) {
-        Py_ssize_t i, n;
-        n = PyTuple_Size(exc);
-        for (i = 0; i < n; i++) {
-            /* Test recursively */
-            if (PyErr_GivenExceptionMatches(err, PyTuple_GET_ITEM(exc, i))) {
-                return 1;
-            }
-        }
-        return 0;
-    }
-    /* err might be an instance, so check its class. */
-    if (PyExceptionInstance_Check(err))
-        err = PyExceptionInstance_Class(err);
-
-    if (PyExceptionClass_Check(err) && PyExceptionClass_Check(exc)) {
-        // Pyston addition: fast-path the check for if the exception exactly-matches the specifier.
-        // Note that we have to check that the exception specifier doesn't have a custom metaclass
-        // (ie it's cls is type_cls), since otherwise we would have to check for subclasscheck overloading.
-        // (TODO actually, that should be fast now)
-        if (exc->cls == type_cls && exc == err)
-            return 1;
-
-        int res = 0, reclimit;
-        PyObject* exception, *value, *tb;
-        PyErr_Fetch(&exception, &value, &tb);
-        /* Temporarily bump the recursion limit, so that in the most
-           common case PyObject_IsSubclass will not raise a recursion
-           error we have to ignore anyway.  Don't do it when the limit
-           is already insanely high, to avoid overflow */
-        reclimit = Py_GetRecursionLimit();
-        if (reclimit < (1 << 30))
-            Py_SetRecursionLimit(reclimit + 5);
-        res = PyObject_IsSubclass(err, exc);
-        Py_SetRecursionLimit(reclimit);
-        /* This function must not fail, so print the error here */
-        if (res == -1) {
-            PyErr_WriteUnraisable(err);
-            res = 0;
-        }
-        PyErr_Restore(exception, value, tb);
-        return res;
-    }
-
-    return err == exc;
-}
-
-extern "C" int PyErr_ExceptionMatches(PyObject* exc) noexcept {
-    return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
-}
-
-extern "C" PyObject* PyErr_Occurred() noexcept {
-    return cur_thread_state.curexc_type;
 }
 
 extern "C" void* PyMem_Malloc(size_t nbytes) noexcept {
