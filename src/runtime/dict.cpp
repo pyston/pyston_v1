@@ -14,6 +14,7 @@
 
 #include "runtime/dict.h"
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -923,6 +924,8 @@ void setupDict() {
     dictiterkey_cls->instances_are_nonzero = dictitervalue_cls->instances_are_nonzero
         = dictiteritem_cls->instances_are_nonzero = true;
 
+    dict_cls->tp_hash = PyObject_HashNotImplemented;
+
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)dictNew, UNKNOWN, 1, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));
@@ -980,6 +983,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)dictNonzero, BOXED_BOOL, 1)));
 
+    add_operators(dict_cls);
     dict_cls->freeze();
 
     // create the dictonary iterator types

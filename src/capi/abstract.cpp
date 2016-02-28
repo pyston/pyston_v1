@@ -1947,15 +1947,15 @@ extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
-    if (o == Py_None)
-        return type_error("bad operand type for abs(): '%.200s'", o);
+    PyNumberMethods* m;
 
-    try {
-        return abs_(o);
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-    }
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_absolute)
+        return m->nb_absolute(o);
+
+    return type_error("bad operand type for abs(): '%.200s'", o);
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {

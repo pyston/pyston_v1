@@ -28,7 +28,7 @@ static_assert(sizeof(int64_t) == sizeof(long), "");
 #define PYSTON_INT_MAX LONG_MAX
 
 extern "C" Box* div_i64_i64(i64 lhs, i64 rhs);
-extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs);
+extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs);
 
 extern "C" Box* add_i64_i64(i64 lhs, i64 rhs);
 extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs);

@@ -1540,8 +1540,12 @@ Box* longHash(BoxedLong* self) {
                        getTypeName(self));
 
     // If the long fits into an int we have to return the same hash in order that we can find the value in a dict.
-    if (mpz_fits_slong_p(self->n))
-        return boxInt(mpz_get_si(self->n));
+    if (mpz_fits_slong_p(self->n)) {
+        auto v = mpz_get_si(self->n);
+        if (v == -1)
+            v = -2;
+        return boxInt(v);
+    }
 
     // CPython use the absolute value of self mod ULONG_MAX.
     unsigned long remainder = mpz_tdiv_ui(self->n, ULONG_MAX);
@@ -1554,6 +1558,14 @@ Box* longHash(BoxedLong* self) {
         remainder = -2;
 
     return boxInt(remainder);
+}
+
+long long_hash(PyObject* self) noexcept {
+    try {
+        return unboxInt(longHash((BoxedLong*)self));
+    } catch (ExcInfo e) {
+        RELEASE_ASSERT(0, "");
+    }
 }
 
 extern "C" Box* longTrunc(BoxedLong* self) {
@@ -1729,5 +1741,6 @@ void setupLong() {
     long_cls->freeze();
 
     long_cls->tp_as_number->nb_power = long_pow;
+    long_cls->tp_hash = long_hash;
 }
 }

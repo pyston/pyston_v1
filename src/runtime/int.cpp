@@ -433,16 +433,20 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
     return boxInt(div_result);
 }
 
-extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
+extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
         raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
-    // I don't think this can overflow:
+
+    // this would overflow:
+    if (lhs == PYSTON_INT_MIN && rhs == -1)
+        return boxLong(0); // long because pypy and cpython both return a long
+
     if (lhs < 0 && rhs > 0)
-        return ((lhs + 1) % rhs) + (rhs - 1);
+        return boxInt(((lhs + 1) % rhs) + (rhs - 1));
     if (lhs > 0 && rhs < 0)
-        return ((lhs - 1) % rhs) + (rhs + 1);
-    return lhs % rhs;
+        return boxInt(((lhs - 1) % rhs) + (rhs + 1));
+    return boxInt(lhs % rhs);
 }
 
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
@@ -777,7 +781,7 @@ Box* intRLShift(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(PyInt_Check(lhs));
     assert(PyInt_Check(rhs));
-    return boxInt(mod_i64_i64(lhs->n, rhs->n));
+    return mod_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
@@ -788,7 +792,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
         return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
+    return mod_i64_i64(lhs->n, rhs_int->n);
 }
 
 Box* intRMod(BoxedInt* lhs, Box* rhs) {
@@ -800,7 +804,7 @@ Box* intRMod(BoxedInt* lhs, Box* rhs) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(mod_i64_i64(rhs_int->n, lhs->n));
+    return mod_i64_i64(rhs_int->n, lhs->n);
 }
 
 extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
@@ -1081,6 +1085,9 @@ extern "C" Box* intHash(BoxedInt* self) {
     if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
+
+    if (self->n == -1)
+        return boxInt(-2);
 
     if (self->cls == int_cls)
         return self;
@@ -1473,6 +1480,30 @@ extern "C" int PyInt_ClearFreeList() noexcept {
     return freelist_size;
 }
 
+static Box* intFormat(PyObject* self, Box* format_spec) {
+    if (PyBytes_Check(format_spec)) {
+        Box* rtn = _PyInt_FormatAdvanced(self, PyBytes_AS_STRING(format_spec), PyBytes_GET_SIZE(format_spec));
+        if (!rtn)
+            throwCAPIException();
+        return rtn;
+    }
+    if (PyUnicode_Check(format_spec)) {
+        /* Convert format_spec to a str */
+        PyObject* result;
+        PyObject* str_spec = PyObject_Str(format_spec);
+
+        if (str_spec == NULL)
+            throwCAPIException();
+
+        result = _PyInt_FormatAdvanced(self, PyBytes_AS_STRING(str_spec), PyBytes_GET_SIZE(str_spec));
+        Py_DECREF(str_spec);
+        if (!result)
+            throwCAPIException();
+        return result;
+    }
+    raiseExcHelper(TypeError, "__format__ requires str or unicode");
+}
+
 void setupInt() {
     static PyNumberMethods int_as_number;
     int_cls->tp_as_number = &int_as_number;
@@ -1492,7 +1523,7 @@ void setupInt() {
     _addFuncIntFloatUnknown("__floordiv__", (void*)intFloordivInt, (void*)intFloordivFloat, (void*)intFloordiv);
     _addFuncIntFloatUnknown("__truediv__", (void*)intTruedivInt, (void*)intTruedivFloat, (void*)intTruediv);
     _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
-    _addFuncIntUnknown("__mod__", BOXED_INT, (void*)intModInt, (void*)intMod);
+    _addFuncIntUnknown("__mod__", UNKNOWN, (void*)intModInt, (void*)intMod);
     _addFuncPow("__pow__", BOXED_INT, (void*)intPowFloat, (void*)intPow);
 
     int_cls->giveAttr("__radd__", new BoxedFunction(FunctionMetadata::create((void*)intRAdd, UNKNOWN, 2)));
@@ -1537,6 +1568,8 @@ void setupInt() {
     int_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)intInt, BOXED_INT, 1)));
     int_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)intFloat, BOXED_FLOAT, 1)));
     int_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)intLong, LONG, 1)));
+
+    int_cls->giveAttr("__format__", new BoxedFunction(FunctionMetadata::create((void*)intFormat, STR, 2)));
 
     int_cls->giveAttr("__doc__",
                       boxString("int(x=0) -> int or long\n"
