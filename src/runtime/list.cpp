@@ -717,9 +717,15 @@ extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) 
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
-    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
-    if (n == -1 && PyErr_Occurred())
-        throwCAPIException();
+    Py_ssize_t n;
+
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+    } else {
+        return incref(NotImplemented);
+    }
 
     int s = self->size;
 
@@ -739,9 +745,15 @@ Box* listMul(BoxedList* self, Box* rhs) {
 }
 
 Box* listImul(BoxedList* self, Box* rhs) {
-    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
-    if (n == -1 && PyErr_Occurred())
-        throwCAPIException();
+    Py_ssize_t n;
+
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+    } else {
+        return incref(NotImplemented);
+    }
 
     int s = self->size;
 

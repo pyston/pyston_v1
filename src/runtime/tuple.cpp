@@ -171,16 +171,7 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     return rtn;
 }
 
-Box* tupleMul(BoxedTuple* self, Box* rhs) {
-    Py_ssize_t n;
-    if (PyIndex_Check(rhs)) {
-        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
-        if (n == -1 && PyErr_Occurred())
-            throwCAPIException();
-    } else {
-        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
-    }
-
+Box* tupleMulInt(BoxedTuple* self, int n) {
     int s = self->size();
 
     if (n < 0)
@@ -196,6 +187,19 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
             rtn_i += s;
         }
         return rtn;
+    }
+}
+
+Box* tupleMul(BoxedTuple* self, Box* rhs) {
+    Py_ssize_t n;
+
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+        return tupleMulInt(self, n);
+    } else {
+        return NotImplemented;
     }
 }
 
@@ -718,8 +722,8 @@ void setupTuple() {
 
     // Return type is UNKNOWN as it could be NotImplemented.
     tuple_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)tupleAdd, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, BOXED_TUPLE, 2)));
-    tuple_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, BOXED_TUPLE, 2)));
+    tuple_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, UNKNOWN, 2)));
 
     tuple_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)tuple_getnewargs, UNKNOWN,
                                                                                      1, ParamNames::empty(), CAPI)));
