@@ -2017,9 +2017,10 @@ void setupBuiltins() {
 
     enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", false,
                                        BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
-    enumerate_cls->giveAttr(
-        "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, false, false),
-                                     { autoDecref(boxInt(0)) }));
+    enumerate_cls->giveAttr("__new__",
+                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3,
+                                                                       ParamNames({ "", "sequence", "start" }, "", "")),
+                                              { autoDecref(boxInt(0)) }));
     enumerate_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::iter,
                                                                                    typeFromClass(enumerate_cls), 1)));
     enumerate_cls->giveAttr("next",

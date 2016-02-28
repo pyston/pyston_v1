@@ -1389,7 +1389,7 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     }
     AUTO_DECREF(v2);
 
-    if (mpz_sgn(v2->n) == 0) {
+    if (mpz_sgn(v1->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
     }
 
