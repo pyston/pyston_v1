@@ -431,7 +431,7 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     return module;
 }
 
-extern "C" PyObject* PyModule_GetDict(BORROWED(PyObject*) _m) noexcept {
+extern "C" BORROWED(PyObject*) PyModule_GetDict(PyObject* _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(PyModule_Check(m));
 

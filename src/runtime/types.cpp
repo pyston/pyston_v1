@@ -4151,7 +4151,6 @@ void setupRuntime() {
     _PyUnicode_Init();
     unicode_cls->is_constant = true;
     unicode_cls->is_user_defined = false;
-    _PyWarnings_Init();
     _string_init();
     setupDescr();
     setupCode();

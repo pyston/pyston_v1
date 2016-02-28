@@ -469,6 +469,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     // which ignores it.  So we don't even pass it through.
 
     name = coerceUnicodeToStr<CXX>(name);
+    AUTO_DECREF(name);
 
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
@@ -1209,8 +1210,9 @@ Box* locals() {
     return fastLocalsToBoxedLocals();
 }
 
-extern "C" PyObject* PyEval_GetLocals(void) noexcept {
+extern "C" BORROWED(PyObject*) PyEval_GetLocals(void) noexcept {
     try {
+        assert(0 && "check refcounting");
         return locals();
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -1218,16 +1220,16 @@ extern "C" PyObject* PyEval_GetLocals(void) noexcept {
     }
 }
 
-extern "C" PyObject* PyEval_GetGlobals(void) noexcept {
+extern "C" BORROWED(PyObject*) PyEval_GetGlobals(void) noexcept {
     try {
-        return globals();
+        return autoXDecref(globals());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
 
-extern "C" PyObject* PyEval_GetBuiltins(void) noexcept {
+extern "C" BORROWED(PyObject*) PyEval_GetBuiltins(void) noexcept {
     return builtins_module;
 }
 

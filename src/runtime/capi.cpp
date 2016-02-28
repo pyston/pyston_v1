@@ -1579,7 +1579,8 @@ extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
     endAllowThreads();
 }
 
-extern "C" struct _frame* PyEval_GetFrame(void) noexcept {
+extern "C" BORROWED(struct _frame*) PyEval_GetFrame(void) noexcept {
+    assert(0 && "check refcounting");
     Box* frame = NULL;
     try {
         frame = getFrame(0);
