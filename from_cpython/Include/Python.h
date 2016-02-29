@@ -159,6 +159,7 @@ PyAPI_FUNC(void) PyGC_Disable() PYSTON_NOEXCEPT;
 #include "abstract.h"
 
 #include "compile.h"
+#include "eval.h"
 
 #include "pyctype.h"
 #include "pystrtod.h"

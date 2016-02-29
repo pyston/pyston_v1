@@ -159,6 +159,12 @@ def cPickle_ext():
             "Modules/cPickle.c",
             ]))
 
+@unique
+def parser_ext():
+    return Extension("parser", sources = map(relpath, [
+            "Modules/parsermodule.c",
+            ]))
+
 ext_modules = [future_builtins_ext(),
                multiprocessing_ext(),
                pyexpat_ext(),
@@ -173,7 +179,8 @@ ext_modules = [future_builtins_ext(),
                termios_ext(),
                mmap_ext(),
                locale_ext(),
-               cPickle_ext()
+               cPickle_ext(),
+               parser_ext()
                ]
 
 

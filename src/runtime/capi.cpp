@@ -1114,6 +1114,11 @@ cleanup:
              : 0)
 #endif
 
+extern "C" void PyParser_SetError(perrdetail* err) noexcept {
+    err_input(err);
+}
+
+
 extern "C" grammar _PyParser_Grammar;
 
 /* Preferred access to parser is through AST. */
@@ -1163,6 +1168,76 @@ extern "C" mod_ty PyParser_ASTFromFile(FILE* fp, const char* filename, int start
             *errcode = err.error;
         return NULL;
     }
+}
+
+extern "C" PyObject* Py_CompileStringFlags(const char* str, const char* filename, int start,
+                                           PyCompilerFlags* flags) noexcept {
+    PyCodeObject* co;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromString(str, filename, start, flags, arena);
+    if (mod == NULL) {
+        PyArena_Free(arena);
+        return NULL;
+    }
+    if (flags && (flags->cf_flags & PyCF_ONLY_AST)) {
+        PyObject* result = PyAST_mod2obj(mod);
+        PyArena_Free(arena);
+        return result;
+    }
+    co = PyAST_Compile(mod, filename, flags, arena);
+    PyArena_Free(arena);
+    return (PyObject*)co;
+}
+
+static PyObject* run_mod(mod_ty mod, const char* filename, PyObject* globals, PyObject* locals, PyCompilerFlags* flags,
+                         PyArena* arena) noexcept {
+    PyCodeObject* co;
+    PyObject* v;
+    co = PyAST_Compile(mod, filename, flags, arena);
+    if (co == NULL)
+        return NULL;
+    v = PyEval_EvalCode(co, globals, locals);
+    Py_DECREF(co);
+    return v;
+}
+
+extern "C" PyObject* PyRun_FileExFlags(FILE* fp, const char* filename, int start, PyObject* globals, PyObject* locals,
+                                       int closeit, PyCompilerFlags* flags) noexcept {
+    PyObject* ret;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromFile(fp, filename, start, 0, 0, flags, NULL, arena);
+    if (closeit)
+        fclose(fp);
+    if (mod == NULL) {
+        PyArena_Free(arena);
+        return NULL;
+    }
+    ret = run_mod(mod, filename, globals, locals, flags, arena);
+    PyArena_Free(arena);
+    return ret;
+}
+
+extern "C" PyObject* PyRun_StringFlags(const char* str, int start, PyObject* globals, PyObject* locals,
+                                       PyCompilerFlags* flags) noexcept {
+    PyObject* ret = NULL;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromString(str, "<string>", start, flags, arena);
+    if (mod != NULL)
+        ret = run_mod(mod, "<string>", globals, locals, flags, arena);
+    PyArena_Free(arena);
+    return ret;
 }
 
 extern "C" int PyRun_InteractiveLoopFlags(FILE* fp, const char* filename, PyCompilerFlags* flags) noexcept {

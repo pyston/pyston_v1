@@ -3453,6 +3453,9 @@ initparser(void)
     if (PyModule_AddObject(module, "ParserError", parser_error) != 0)
         return;
 
+    // Pyston change:
+    PyType_Ready(&PyST_Type);
+
     Py_INCREF(&PyST_Type);
     PyModule_AddObject(module, "ASTType", (PyObject*)&PyST_Type);
     Py_INCREF(&PyST_Type);

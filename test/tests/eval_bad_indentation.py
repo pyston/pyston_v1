@@ -1,5 +1,3 @@
-# expected: fail
-
 try:
     eval("\n 2")
     print "bad, should have thrown an exception"
