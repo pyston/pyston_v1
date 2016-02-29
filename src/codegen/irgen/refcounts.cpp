@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-#include "codegen/compvars.h"
 
 #include <cstdio>
 #include <deque>
@@ -27,6 +25,7 @@
 #include "llvm/Target/TargetMachine.h"
 
 #include "codegen/codegen.h"
+#include "codegen/compvars.h"
 #include "codegen/gcbuilder.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/irgenerator.h"

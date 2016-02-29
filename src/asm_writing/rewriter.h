@@ -27,8 +27,8 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
-#include "core/types.h"
 #include "core/threading.h"
+#include "core/types.h"
 
 namespace pyston {
 

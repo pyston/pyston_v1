@@ -18,8 +18,8 @@
 #include "core/cfg.h"
 #include "core/options.h"
 #include "core/types.h"
-#include "runtime/long.h"
 #include "runtime/hiddenclass.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
