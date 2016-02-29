@@ -141,7 +141,7 @@ import numpy as np
 a = np.array([1, 2**16, 2**32], dtype=int)
 s = a.astype(str)
 print s
-assert repr(s) == "array(['1', '65536', '4294967296'], \n      dtype='|S21')"
+assert repr(s) == "array(['1', '65536', '4294967296'], \\n      dtype='|S21')"
 """
 
 numpy_test = "import numpy as np; np.test(verbose=2)"
@@ -154,7 +154,11 @@ subprocess.check_call([PYTHON_EXE, "-c", mandelbrot], cwd=CYTHON_DIR)
 
 
 print_progress_header("Running NumPy str test...")
-subprocess.check_call([PYTHON_EXE, "-c", mandelbrot], cwd=CYTHON_DIR)
+subprocess.check_call([PYTHON_EXE, "-c", string_test], cwd=CYTHON_DIR)
+
+# fails in release mode
+#print_progress_header("Running NumPy test_abc.py test...")
+#subprocess.check_call([PYTHON_EXE, os.path.join(NUMPY_DIR, "numpy/core/tests/test_abc.py")], cwd=CYTHON_DIR)
 
 print_progress_header("Running NumPy test suite...")
 # Currently we crash running the test suite. Uncomment for testing or
