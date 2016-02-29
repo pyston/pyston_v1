@@ -10,7 +10,7 @@ extern "C" {
 
 /* Public interface */
 struct _node; /* Declare the existence of this type */
-PyAPI_FUNC(PyCodeObject *) PyNode_Compile(struct _node *, const char *);
+PyAPI_FUNC(PyCodeObject *) PyNode_Compile(struct _node *, const char *) PYSTON_NOEXCEPT;
 
 /* Future feature support */
 
@@ -30,8 +30,8 @@ typedef struct {
 
 struct _mod; /* Declare the existence of this type */
 PyAPI_FUNC(PyCodeObject *) PyAST_Compile(struct _mod *, const char *,
-					PyCompilerFlags *, PyArena *);
-PyAPI_FUNC(PyFutureFeatures *) PyFuture_FromAST(struct _mod *, const char *);
+                    PyCompilerFlags *, PyArena *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyFutureFeatures *) PyFuture_FromAST(struct _mod *, const char *) PYSTON_NOEXCEPT;
 
 
 #ifdef __cplusplus

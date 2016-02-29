@@ -19,6 +19,9 @@
 
 #include "llvm/Support/FileSystem.h"
 
+#include "Python.h"
+#include "Python-ast.h"
+
 #include "capi/typeobject.h"
 #include "capi/types.h"
 #include "codegen/ast_interpreter.h"
@@ -1604,18 +1607,14 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
-    char* str;
+    PyObject* line = rawInput(prompt);
 
-    PyObject* line = raw_input(prompt);
-    if (line == NULL)
-        throwCAPIException();
-
+    char* str = NULL;
     if (!PyArg_Parse(line, "s;embedded '\\0' in input line", &str))
         throwCAPIException();
 
-    // CPython trims the string first, but our eval function takes care of that.
-    // while (*str == ' ' || *str == '\t')
-    //    str++;
+    while (*str == ' ' || *str == '\t')
+        str++;
 
     Box* gbls = globals();
     Box* lcls = locals();
@@ -1628,7 +1627,13 @@ Box* input(Box* prompt) {
             throwCAPIException();
     }
 
-    return eval(line, gbls, lcls);
+    PyCompilerFlags cf;
+    cf.cf_flags = 0;
+    PyEval_MergeCompilerFlags(&cf);
+    Box* res = PyRun_StringFlags(str, Py_eval_input, gbls, lcls, &cf);
+    if (!res)
+        throwCAPIException();
+    return res;
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
@@ -1692,6 +1697,259 @@ Box* builtinFormat(Box* value, Box* format_spec) {
     if (!res) {
         throwCAPIException();
     }
+    return res;
+}
+
+static PyObject* builtin_compile(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    char* str;
+    char* filename;
+    char* startstr;
+    int mode = -1;
+    int dont_inherit = 0;
+    int supplied_flags = 0;
+    int is_ast;
+    PyCompilerFlags cf;
+    PyObject* result = NULL, *cmd, * tmp = NULL;
+    Py_ssize_t length;
+    static const char* kwlist[] = { "source", "filename", "mode", "flags", "dont_inherit", NULL };
+    int start[] = { Py_file_input, Py_eval_input, Py_single_input };
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "Oss|ii:compile", const_cast<char**>(kwlist), &cmd, &filename,
+                                     &startstr, &supplied_flags, &dont_inherit))
+        return NULL;
+
+    cf.cf_flags = supplied_flags;
+
+    if (supplied_flags & ~(PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | PyCF_ONLY_AST)) {
+        PyErr_SetString(PyExc_ValueError, "compile(): unrecognised flags");
+        return NULL;
+    }
+    /* XXX Warn if (supplied_flags & PyCF_MASK_OBSOLETE) != 0? */
+
+    if (!dont_inherit) {
+        PyEval_MergeCompilerFlags(&cf);
+    }
+
+    if (strcmp(startstr, "exec") == 0)
+        mode = 0;
+    else if (strcmp(startstr, "eval") == 0)
+        mode = 1;
+    else if (strcmp(startstr, "single") == 0)
+        mode = 2;
+    else {
+        PyErr_SetString(PyExc_ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+        return NULL;
+    }
+
+    is_ast = PyAST_Check(cmd);
+    if (is_ast == -1)
+        return NULL;
+    if (is_ast) {
+        if (supplied_flags & PyCF_ONLY_AST) {
+            Py_INCREF(cmd);
+            result = cmd;
+        } else {
+            PyArena* arena;
+            mod_ty mod;
+
+            arena = PyArena_New();
+            if (arena == NULL)
+                return NULL;
+            mod = PyAST_obj2mod(cmd, arena, mode);
+            if (mod == NULL) {
+                PyArena_Free(arena);
+                return NULL;
+            }
+            result = (PyObject*)PyAST_Compile(mod, filename, &cf, arena);
+            PyArena_Free(arena);
+        }
+        return result;
+    }
+
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(cmd)) {
+        tmp = PyUnicode_AsUTF8String(cmd);
+        if (tmp == NULL)
+            return NULL;
+        cmd = tmp;
+        cf.cf_flags |= PyCF_SOURCE_IS_UTF8;
+    }
+#endif
+
+    if (PyObject_AsReadBuffer(cmd, (const void**)&str, &length))
+        goto cleanup;
+    if ((size_t)length != strlen(str)) {
+        PyErr_SetString(PyExc_TypeError, "compile() expected string without null bytes");
+        goto cleanup;
+    }
+    result = Py_CompileStringFlags(str, filename, start[mode], &cf);
+cleanup:
+    Py_XDECREF(tmp);
+    return result;
+}
+
+static PyObject* builtin_eval(PyObject* self, PyObject* args) noexcept {
+    PyObject* cmd, *result, * tmp = NULL;
+    PyObject* globals = Py_None, * locals = Py_None;
+    char* str;
+    PyCompilerFlags cf;
+
+    if (!PyArg_UnpackTuple(args, "eval", 1, 3, &cmd, &globals, &locals))
+        return NULL;
+    if (locals != Py_None && !PyMapping_Check(locals)) {
+        PyErr_SetString(PyExc_TypeError, "locals must be a mapping");
+        return NULL;
+    }
+    // Pyston change:
+    // if (globals != Py_None && !PyDict_Check(globals)) {
+    if (globals != Py_None && !PyDict_Check(globals) && globals->cls != attrwrapper_cls) {
+        PyErr_SetString(PyExc_TypeError, PyMapping_Check(globals)
+                                             ? "globals must be a real dict; try eval(expr, {}, mapping)"
+                                             : "globals must be a dict");
+        return NULL;
+    }
+    if (globals == Py_None) {
+        globals = PyEval_GetGlobals();
+        if (locals == Py_None)
+            locals = PyEval_GetLocals();
+    } else if (locals == Py_None)
+        locals = globals;
+
+    if (globals == NULL || locals == NULL) {
+        PyErr_SetString(PyExc_TypeError, "eval must be given globals and locals "
+                                         "when called without a frame");
+        return NULL;
+    }
+
+    if (PyDict_GetItemString(globals, "__builtins__") == NULL) {
+        if (PyDict_SetItemString(globals, "__builtins__", PyEval_GetBuiltins()) != 0)
+            return NULL;
+    }
+
+    if (PyCode_Check(cmd)) {
+// Pyston change:
+#if 0
+        if (PyCode_GetNumFree((PyCodeObject *)cmd) > 0) {
+            PyErr_SetString(PyExc_TypeError,
+        "code object passed to eval() may not contain free variables");
+            return NULL;
+        }
+#endif
+        return PyEval_EvalCode((PyCodeObject*)cmd, globals, locals);
+    }
+
+    if (!PyString_Check(cmd) && !PyUnicode_Check(cmd)) {
+        PyErr_SetString(PyExc_TypeError, "eval() arg 1 must be a string or code object");
+        return NULL;
+    }
+    cf.cf_flags = 0;
+
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(cmd)) {
+        tmp = PyUnicode_AsUTF8String(cmd);
+        if (tmp == NULL)
+            return NULL;
+        cmd = tmp;
+        cf.cf_flags |= PyCF_SOURCE_IS_UTF8;
+    }
+#endif
+    if (PyString_AsStringAndSize(cmd, &str, NULL)) {
+        Py_XDECREF(tmp);
+        return NULL;
+    }
+    while (*str == ' ' || *str == '\t')
+        str++;
+
+    (void)PyEval_MergeCompilerFlags(&cf);
+    result = PyRun_StringFlags(str, Py_eval_input, globals, locals, &cf);
+    Py_XDECREF(tmp);
+    return result;
+}
+
+static PyObject* builtin_execfile(PyObject* self, PyObject* args) noexcept {
+    char* filename;
+    PyObject* globals = Py_None, * locals = Py_None;
+    PyObject* res;
+    FILE* fp = NULL;
+    PyCompilerFlags cf;
+    int exists;
+
+    if (PyErr_WarnPy3k("execfile() not supported in 3.x; use exec()", 1) < 0)
+        return NULL;
+
+    if (!PyArg_ParseTuple(args, "s|O!O:execfile", &filename, &PyDict_Type, &globals, &locals))
+        return NULL;
+    if (locals != Py_None && !PyMapping_Check(locals)) {
+        PyErr_SetString(PyExc_TypeError, "locals must be a mapping");
+        return NULL;
+    }
+    if (globals == Py_None) {
+        globals = PyEval_GetGlobals();
+        if (locals == Py_None)
+            locals = PyEval_GetLocals();
+    } else if (locals == Py_None)
+        locals = globals;
+
+    if (PyDict_GetItemString(globals, "__builtins__") == NULL) {
+        if (PyDict_SetItemString(globals, "__builtins__", PyEval_GetBuiltins()) != 0)
+            return NULL;
+    }
+
+    exists = 0;
+/* Test for existence or directory. */
+#if defined(PLAN9)
+    {
+        Dir* d;
+
+        if ((d = dirstat(filename)) != nil) {
+            if (d->mode & DMDIR)
+                werrstr("is a directory");
+            else
+                exists = 1;
+            free(d);
+        }
+    }
+#elif defined(RISCOS)
+    if (object_exists(filename)) {
+        if (isdir(filename))
+            errno = EISDIR;
+        else
+            exists = 1;
+    }
+#else /* standard Posix */
+    {
+        struct stat s;
+        if (stat(filename, &s) == 0) {
+            if (S_ISDIR(s.st_mode))
+#if defined(PYOS_OS2) && defined(PYCC_VACPP)
+                errno = EOS2ERR;
+#else
+                errno = EISDIR;
+#endif
+            else
+                exists = 1;
+        }
+    }
+#endif
+
+    if (exists) {
+        Py_BEGIN_ALLOW_THREADS fp = fopen(filename, "r" PY_STDIOTEXTMODE);
+        Py_END_ALLOW_THREADS
+
+            if (fp == NULL) {
+            exists = 0;
+        }
+    }
+
+    if (!exists) {
+        PyErr_SetFromErrnoWithFilename(PyExc_IOError, filename);
+        return NULL;
+    }
+    cf.cf_flags = 0;
+    if (PyEval_MergeCompilerFlags(&cf))
+        res = PyRun_FileExFlags(fp, filename, Py_file_input, globals, locals, 1, &cf);
+    else
+        res = PyRun_FileEx(fp, filename, Py_file_input, globals, locals, 1);
     return res;
 }
 
@@ -2206,16 +2464,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(
                                             FunctionMetadata::create((void*)divmod, UNKNOWN, 2), "divmod", divmod_doc));
 
-    builtins_module->giveAttr("execfile", new BoxedBuiltinFunctionOrMethod(
-                                              FunctionMetadata::create((void*)execfile, UNKNOWN, 3, false, false),
-                                              "execfile", { NULL, NULL }, NULL, execfile_doc));
-
-    FunctionMetadata* compile_func = new FunctionMetadata(
-        5, false, false, ParamNames({ "source", "filename", "mode", "flags", "dont_inherit" }, "", ""));
-    compile_func->addVersion((void*)compile, UNKNOWN, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
-    builtins_module->giveAttr("compile", new BoxedBuiltinFunctionOrMethod(compile_func, "compile",
-                                                                          { boxInt(0), boxInt(0) }, NULL, compile_doc));
-
     builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(
                                          FunctionMetadata::create((void*)map, LIST, 1, true, false), "map", map_doc));
     builtins_module->giveAttr(
@@ -2267,9 +2515,6 @@ void setupBuiltins() {
     PyType_Ready(&PyBuffer_Type);
     builtins_module->giveAttr("buffer", &PyBuffer_Type);
 
-    builtins_module->giveAttr(
-        "eval", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)eval, UNKNOWN, 3, false, false),
-                                                 "eval", { NULL, NULL }, NULL, eval_doc));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)callable, UNKNOWN, 1),
                                                                "callable", callable_doc));
@@ -2288,6 +2533,9 @@ void setupBuiltins() {
 
 
     static PyMethodDef builtin_methods[] = {
+        { "compile", (PyCFunction)builtin_compile, METH_VARARGS | METH_KEYWORDS, compile_doc },
+        { "eval", builtin_eval, METH_VARARGS, eval_doc },
+        { "execfile", builtin_execfile, METH_VARARGS, execfile_doc },
         { "print", (PyCFunction)builtin_print, METH_VARARGS | METH_KEYWORDS, print_doc },
         { "reload", builtin_reload, METH_O, reload_doc },
     };

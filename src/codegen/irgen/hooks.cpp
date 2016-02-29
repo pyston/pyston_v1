@@ -380,44 +380,8 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, std::vector<AST_stmt*
     return md;
 }
 
-static AST_Module* parseExec(llvm::StringRef source, FutureFlags future_flags, bool interactive = false) {
-    // TODO error message if parse fails or if it isn't an expr
-    // TODO should have a cleaner interface that can parse the Expression directly
-    // TODO this memory leaks
-    const char* code = source.data();
-    AST_Module* parsedModule = parse_string(code, future_flags);
-
-    if (interactive)
-        makeModuleInteractive(parsedModule);
-
-    return parsedModule;
-}
-
 static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
-}
-
-static AST_Expression* parseEval(llvm::StringRef source, FutureFlags future_flags) {
-    const char* code = source.data();
-
-    // TODO error message if parse fails or if it isn't an expr
-    // TODO should have a cleaner interface that can parse the Expression directly
-    // TODO this memory leaks
-
-    // Hack: we need to support things like `eval(" 2")`.
-    // This is over-accepting since it will accept things like `eval("\n 2")`
-    while (*code == ' ' || *code == '\t' || *code == '\n' || *code == '\r')
-        code++;
-
-    AST_Module* parsedModule = parse_string(code, future_flags);
-    if (parsedModule->body.size() == 0)
-        raiseSyntaxError("unexpected EOF while parsing", 0, 0, "<string>", "");
-
-    RELEASE_ASSERT(parsedModule->body.size() == 1, "");
-    RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
-    AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
-    parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
-    return parsedExpr;
 }
 
 static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
@@ -430,140 +394,71 @@ static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn
     return compileForEvalOrExec(parsedExpr, std::move(body), fn, flags);
 }
 
-Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
-    Box* flags = _args[0];
+extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, PyCompilerFlags* flags,
+                                       PyArena* arena) noexcept {
+    try {
+        mod_ty mod = _mod;
+        AST* parsed = cpythonToPystonAST(mod, filename);
+        FunctionMetadata* md = NULL;
+        switch (mod->kind) {
+            case Module_kind:
+            case Interactive_kind:
+                if (parsed->type != AST_TYPE::Module) {
+                    raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
+                }
+                md = compileExec(static_cast<AST_Module*>(parsed), boxString(filename), flags);
+                break;
+            case Expression_kind:
+                if (parsed->type != AST_TYPE::Expression) {
+                    raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
+                }
+                md = compileEval(static_cast<AST_Expression*>(parsed), boxString(filename), flags);
+                break;
+            case Suite_kind:
+                PyErr_SetString(PyExc_SystemError, "suite should not be possible");
+                return NULL;
+            default:
+                PyErr_Format(PyExc_SystemError, "module kind %d should not be possible", mod->kind);
+                return NULL;
+        }
 
-    RELEASE_ASSERT(PyInt_Check(_args[1]), "");
-    bool dont_inherit = (bool)static_cast<BoxedInt*>(_args[1])->n;
-
-    RELEASE_ASSERT(flags->cls == int_cls, "");
-    int64_t iflags = static_cast<BoxedInt*>(flags)->n;
-
-    // source is allowed to be an AST, unicode, or anything that supports the buffer protocol
-    if (source->cls == unicode_cls) {
-        source = PyUnicode_AsUTF8String(source);
-        if (!source)
-            throwCAPIException();
-        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
+        return (PyCodeObject*)md->getCode();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
     }
+}
 
-    if (isSubclass(fn->cls, unicode_cls)) {
-        fn = _PyUnicode_AsDefaultEncodedString(fn, NULL);
-        if (!fn)
-            throwCAPIException();
-    }
-    RELEASE_ASSERT(PyString_Check(fn), "");
+extern "C" int PyEval_MergeCompilerFlags(PyCompilerFlags* cf) noexcept {
+    int result = cf->cf_flags != 0;
 
-    if (isSubclass(type->cls, unicode_cls)) {
-        type = _PyUnicode_AsDefaultEncodedString(type, NULL);
-        if (!type)
-            throwCAPIException();
-    }
-    RELEASE_ASSERT(PyString_Check(type), "");
+    /* Pyston change:
+    PyFrameObject *current_frame = PyEval_GetFrame();
+    int result = cf->cf_flags != 0;
 
-    BoxedString* filename_str = static_cast<BoxedString*>(fn);
-    BoxedString* type_str = static_cast<BoxedString*>(type);
+    if (current_frame != NULL) {
+        const int codeflags = current_frame->f_code->co_flags;
+    */
 
-    if (iflags & ~(PyCF_MASK | PyCF_MASK_OBSOLETE | /* PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
-        raiseExcHelper(ValueError, "compile(): unrecognised flags");
-    }
-
-    bool only_ast = (bool)(iflags & PyCF_ONLY_AST);
-
-    iflags &= ~PyCF_ONLY_AST;
-
-    FutureFlags arg_future_flags = iflags & PyCF_MASK;
-    FutureFlags future_flags;
-    if (dont_inherit) {
-        future_flags = arg_future_flags;
-    } else {
-        FunctionMetadata* caller_cl = getTopPythonFunction();
-        assert(caller_cl != NULL);
+    FunctionMetadata* caller_cl = getTopPythonFunction();
+    if (caller_cl != NULL) {
         assert(caller_cl->source != NULL);
         FutureFlags caller_future_flags = caller_cl->source->future_flags;
-        future_flags = arg_future_flags | caller_future_flags;
-    }
 
-    iflags &= !(PyCF_MASK | PyCF_MASK_OBSOLETE);
-    RELEASE_ASSERT(iflags == 0, "");
-
-    AST* parsed;
-    mod_ty mod;
-
-    ArenaWrapper arena;
-
-    if (PyAST_Check(source)) {
-        int mode;
-        if (type_str->s() == "exec")
-            mode = 0;
-        else if (type_str->s() == "eval")
-            mode = 1;
-        else if (type_str->s() == "single")
-            mode = 2;
-        else {
-            raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+        const int codeflags = caller_future_flags;
+        const int compilerflags = codeflags & PyCF_MASK;
+        if (compilerflags) {
+            result = 1;
+            cf->cf_flags |= compilerflags;
         }
-        if (only_ast) // nothing to do
-            return source;
-
-        mod = PyAST_obj2mod(source, arena, mode);
-        if (PyErr_Occurred())
-            throwCAPIException();
-    } else {
-        RELEASE_ASSERT(PyString_Check(source), "");
-        int mode;
-        if (type_str->s() == "exec")
-            mode = Py_file_input;
-        else if (type_str->s() == "eval")
-            mode = Py_eval_input;
-        else if (type_str->s() == "single")
-            mode = Py_single_input;
-        else {
-            raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+#if 0 /* future keyword */
+        if (codeflags & CO_GENERATOR_ALLOWED) {
+            result = 1;
+            cf->cf_flags |= CO_GENERATOR_ALLOWED;
         }
-
-        PyCompilerFlags cf;
-        cf.cf_flags = future_flags;
-        const char* code = static_cast<BoxedString*>(source)->s().data();
-        assert(arena);
-        const char* fn = filename_str->c_str();
-        mod = PyParser_ASTFromString(code, fn, mode, &cf, arena);
-        if (!mod)
-            throwCAPIException();
+#endif
     }
-
-    if (only_ast) {
-        Box* result = PyAST_mod2obj(mod);
-        if (PyErr_Occurred())
-            throwCAPIException();
-
-        return result;
-    }
-
-    // be careful when moving around this function: it does also do some additional syntax checking (=raises exception),
-    // which we should not do when in AST only mode.
-    parsed = cpythonToPystonAST(mod, filename_str->c_str());
-
-    PyCompilerFlags pcf;
-    pcf.cf_flags = future_flags;
-
-    FunctionMetadata* md;
-    if (type_str->s() == "exec" || type_str->s() == "single") {
-        // TODO: CPython parses execs as Modules
-        if (parsed->type != AST_TYPE::Module) {
-            raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
-        }
-        md = compileExec(static_cast<AST_Module*>(parsed), filename_str, &pcf);
-    } else if (type_str->s() == "eval") {
-        if (parsed->type != AST_TYPE::Expression) {
-            raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
-        }
-        md = compileEval(static_cast<AST_Expression*>(parsed), filename_str, &pcf);
-    } else {
-        raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
-    }
-
-    return (Box*)md->getCode();
+    return result;
 }
 
 static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
@@ -609,151 +504,111 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
     }
 }
 
-static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
-    pickGlobalsAndLocals(globals, locals);
-
-    if (boxedCode->cls == unicode_cls) {
-        boxedCode = PyUnicode_AsUTF8String(boxedCode);
-        if (!boxedCode)
-            throwCAPIException();
-        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
-    }
-
-    FunctionMetadata* md;
-    if (boxedCode->cls == str_cls) {
-        FunctionMetadata* caller_cl = getTopPythonFunction();
-        assert(caller_cl != NULL);
-        assert(caller_cl->source != NULL);
-
-        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
-        static BoxedString* string_string = internStringImmortal("<string>");
-        md = compileEval(parsed, string_string, flags);
-    } else if (boxedCode->cls == code_cls) {
-        md = metadataFromCode(boxedCode);
-    } else {
-        abort();
-    }
-
-    return evalOrExec(md, globals, locals);
-}
-
-Box* eval(Box* boxedCode, Box* globals, Box* locals) {
-    FunctionMetadata* caller_cl = getTopPythonFunction();
-    assert(caller_cl != NULL);
-    assert(caller_cl->source != NULL);
-    FutureFlags caller_future_flags = caller_cl->source->future_flags;
-    PyCompilerFlags pcf;
-    pcf.cf_flags = caller_future_flags;
-
-    return evalMain(boxedCode, globals, locals, &pcf);
-}
-
-Box* execfile(Box* _fn, Box* globals, Box* locals) {
-    if (!PyString_Check(_fn)) {
-        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
-    }
-
-    BoxedString* fn = static_cast<BoxedString*>(_fn);
-
-    pickGlobalsAndLocals(globals, locals);
-
-#if LLVMREV < 217625
-    bool exists;
-    llvm_error_code code = llvm::sys::fs::exists(fn->s, exists);
-
-#if LLVMREV < 210072
-    ASSERT(code == 0, "%s: %s", code.message().c_str(), fn->s.c_str());
-#else
-    assert(!code);
-#endif
-
-#else
-    bool exists = llvm::sys::fs::exists(std::string(fn->s()));
-#endif
-
-    if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s().data());
-
-    AST_Module* parsed = caching_parse_file(fn->s().data(), /* future_flags = */ 0);
-    assert(parsed);
-
-    FunctionMetadata* caller_cl = getTopPythonFunction();
-    assert(caller_cl != NULL);
-    assert(caller_cl->source != NULL);
-    FutureFlags caller_future_flags = caller_cl->source->future_flags;
-    PyCompilerFlags pcf;
-    pcf.cf_flags = caller_future_flags;
-
-    FunctionMetadata* md = compileForEvalOrExec(parsed, parsed->body, fn, &pcf);
-    assert(md);
-
-    return evalOrExec(md, globals, locals);
-}
-
-Box* execMain(Box* boxedCode, Box* globals, Box* locals, PyCompilerFlags* flags) {
-    if (PyTuple_Check(boxedCode)) {
-        RELEASE_ASSERT(!globals, "");
-        RELEASE_ASSERT(!locals, "");
-
-        BoxedTuple* t = static_cast<BoxedTuple*>(boxedCode);
-        RELEASE_ASSERT(t->size() >= 2 && t->size() <= 3, "%ld", t->size());
-        boxedCode = t->elts[0];
-        globals = t->elts[1];
-        if (t->size() >= 3)
-            locals = t->elts[2];
-    }
-
-    pickGlobalsAndLocals(globals, locals);
-
-    if (boxedCode->cls == unicode_cls) {
-        boxedCode = PyUnicode_AsUTF8String(boxedCode);
-        if (!boxedCode)
-            throwCAPIException();
-        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
-    }
-
-    FunctionMetadata* md;
-    if (boxedCode->cls == str_cls) {
-        FunctionMetadata* caller_cl = getTopPythonFunction();
-        assert(caller_cl != NULL);
-        assert(caller_cl->source != NULL);
-
-        auto parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s(), caller_cl->source->future_flags);
-        static BoxedString* string_string = internStringImmortal("<string>");
-        md = compileExec(parsed, string_string, flags);
-    } else if (boxedCode->cls == code_cls) {
-        md = metadataFromCode(boxedCode);
-    } else {
-        abort();
-    }
-    assert(md);
-
-    return evalOrExec(md, globals, locals);
-}
-
-Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
-    PyCompilerFlags pcf;
-    pcf.cf_flags = caller_future_flags;
-    return execMain(boxedCode, globals, locals, &pcf);
-}
-
-extern "C" PyObject* PyRun_StringFlags(const char* str, int start, PyObject* globals, PyObject* locals,
-                                       PyCompilerFlags* flags) noexcept {
+extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObject* locals) noexcept {
     try {
-        // TODO pass future_flags (the information is in PyCompilerFlags but we need to
-        // unify the format...)
-        if (start == Py_file_input)
-            return execMain(boxString(str), globals, locals, flags);
-        else if (start == Py_eval_input)
-            return evalMain(boxString(str), globals, locals, flags);
+        pickGlobalsAndLocals(globals, locals);
+        return evalOrExec(metadataFromCode((Box*)co), globals, locals);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
+}
 
-    // Py_single_input is not yet implemented
-    RELEASE_ASSERT(0, "Unimplemented %d", start);
-    return 0;
+Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
+    if (!globals)
+        globals = None;
+    if (!locals)
+        locals = None;
+
+    // this is based on cpythons exec_statement() but (heavily) adopted
+    Box* v = NULL;
+    int plain = 0;
+    int n;
+    PyObject* prog = boxedCode;
+    if (PyTuple_Check(prog) && globals == Py_None && locals == Py_None && ((n = PyTuple_Size(prog)) == 2 || n == 3)) {
+        /* Backward compatibility hack */
+        globals = PyTuple_GetItem(prog, 1);
+        if (n == 3)
+            locals = PyTuple_GetItem(prog, 2);
+        prog = PyTuple_GetItem(prog, 0);
+    }
+    if (globals == Py_None) {
+        globals = PyEval_GetGlobals();
+        if (locals == Py_None) {
+            locals = PyEval_GetLocals();
+            plain = 1;
+        }
+        if (!globals || !locals) {
+            raiseExcHelper(SystemError, "globals and locals cannot be NULL");
+        }
+    } else if (locals == Py_None)
+        locals = globals;
+    if (!PyString_Check(prog) &&
+#ifdef Py_USING_UNICODE
+        !PyUnicode_Check(prog) &&
+#endif
+        !PyCode_Check(prog) && !PyFile_Check(prog)) {
+        raiseExcHelper(TypeError, "exec: arg 1 must be a string, file, or code object");
+    }
+
+    if (!PyDict_Check(globals) && globals->cls != attrwrapper_cls) {
+        raiseExcHelper(TypeError, "exec: arg 2 must be a dictionary or None");
+    }
+    if (!PyMapping_Check(locals))
+        raiseExcHelper(TypeError, "exec: arg 3 must be a mapping or None");
+
+    if (PyDict_GetItemString(globals, "__builtins__") == NULL)
+        // Pyston change:
+        // PyDict_SetItemString(globals, "__builtins__", f->f_builtins);
+        PyDict_SetItemString(globals, "__builtins__", builtins_module);
+
+    if (PyCode_Check(prog)) {
+        /* Pyston change:
+        if (PyCode_GetNumFree((PyCodeObject *)prog) > 0) {
+            PyErr_SetString(PyExc_TypeError,
+        "code object passed to exec may not contain free variables");
+            return -1;
+        }
+        */
+        v = PyEval_EvalCode((PyCodeObject*)prog, globals, locals);
+    } else if (PyFile_Check(prog)) {
+        FILE* fp = PyFile_AsFile(prog);
+        char* name = PyString_AsString(PyFile_Name(prog));
+        PyCompilerFlags cf;
+        if (name == NULL)
+            throwCAPIException();
+        cf.cf_flags = caller_future_flags & PyCF_MASK;
+        if (cf.cf_flags)
+            v = PyRun_FileFlags(fp, name, Py_file_input, globals, locals, &cf);
+        else
+            v = PyRun_File(fp, name, Py_file_input, globals, locals);
+    } else {
+        PyObject* tmp = NULL;
+        char* str;
+        PyCompilerFlags cf;
+        cf.cf_flags = 0;
+#ifdef Py_USING_UNICODE
+        if (PyUnicode_Check(prog)) {
+            tmp = PyUnicode_AsUTF8String(prog);
+            if (tmp == NULL)
+                throwCAPIException();
+            prog = tmp;
+            cf.cf_flags |= PyCF_SOURCE_IS_UTF8;
+        }
+#endif
+        if (PyString_AsStringAndSize(prog, &str, NULL))
+            return 0;
+        cf.cf_flags |= caller_future_flags & PyCF_MASK;
+        if (cf.cf_flags)
+            v = PyRun_StringFlags(str, Py_file_input, globals, locals, &cf);
+        else
+            v = PyRun_String(str, Py_file_input, globals, locals);
+        Py_XDECREF(tmp);
+    }
+
+    if (!v)
+        throwCAPIException();
+    return v;
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

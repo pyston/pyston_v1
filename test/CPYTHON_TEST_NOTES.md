@@ -136,7 +136,6 @@ test_nis                [unknown]
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_ossaudiodev        [unknown]
 test_os                 [unknown]
-test_parser             [unknown]
 test_pdb                [unknown]
 test_peepholer          [unknown]
 test_pep352             various unique bugs
@@ -157,7 +156,6 @@ test_scope              eval of code object from existing function (not currentl
 test_scriptpackages     [unknown]
 test_shelve             [unknown]
 test_site               [unknown]
-test_socketserver       missing imp.lock_held, otherwise works
 test_socket             [unknown]
 test_sort               argument specification issue in listSort?
 test_sqlite             [unknown]
@@ -194,10 +192,7 @@ test_ttk_textonly       [unknown]
 test_types              PyErr_WarnEx
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?
-test_unicodedata        [unknown]
-test_unicode_file       exit code 139, no error message
 test_unittest           serialize_ast assert
-test_univnewlines2k     [unknown]
 test_univnewlines       [unknown]
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)

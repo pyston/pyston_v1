@@ -132,6 +132,7 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 #include "abstract.h"
 
 #include "compile.h"
+#include "eval.h"
 
 #include "pyctype.h"
 #include "pystrtod.h"
