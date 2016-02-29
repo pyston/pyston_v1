@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1322,6 +1322,24 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
     return new (cls) BoxedInt(n->n);
 }
 
+// Roughly analogous to CPython's int_new.
+// The arguments need to be unpacked from args and kwds.
+static Box* intNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
+    PyObject* x = NULL;
+    int base = -909;
+    static char* kwlist[3] = { NULL, NULL, NULL };
+    kwlist[0] = const_cast<char*>("x");
+    kwlist[1] = const_cast<char*>("base");
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oi:int", kwlist, &x, &base))
+        return NULL;
+
+    if (base == -909)
+        return intNew<CAPI>(type, x, NULL);
+    else
+        return intNew<CAPI>(type, x, boxInt(base));
+}
+
 static const unsigned char BitLengthTable[32]
     = { 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 };
 
@@ -1605,5 +1623,6 @@ void setupInt() {
     int_cls->freeze();
 
     int_cls->tp_repr = (reprfunc)int_to_decimal_string;
+    int_cls->tp_new = (newfunc)intNewPacked;
 }
 }

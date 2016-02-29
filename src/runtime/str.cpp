@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1646,11 +1646,11 @@ extern "C" Box* strNonzero(BoxedString* self) {
     return boxBool(self->size() != 0);
 }
 
-extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
+template <ExceptionStyle S> Box* strNew(BoxedClass* cls, Box* obj) noexcept(S == CAPI) {
     assert(isSubclass(cls, str_cls));
 
     if (cls != str_cls) {
-        Box* tmp = strNew(str_cls, obj);
+        Box* tmp = strNew<S>(str_cls, obj);
         AUTO_DECREF(tmp);
         assert(PyString_Check(tmp));
         BoxedString* tmp_s = static_cast<BoxedString*>(tmp);
@@ -1659,10 +1659,30 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     }
 
     Box* r = PyObject_Str(obj);
-    if (!r)
-        throwCAPIException();
-    assert(PyString_Check(r));
-    return r;
+    if (S == CAPI)
+        return r;
+    else {
+        if (!r)
+            throwCAPIException();
+        assert(PyString_Check(r));
+        return r;
+    }
+}
+
+// Roughly analogous to CPython's string_new.
+// The arguments need to be unpacked from args and kwds.
+static Box* strNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
+    PyObject* x = NULL;
+    static char* kwlist[2] = { NULL, NULL };
+    kwlist[0] = const_cast<char*>("object");
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:str", kwlist, &x))
+        return NULL;
+
+    if (x == NULL)
+        return PyString_FromString("");
+
+    return strNew<CAPI>(type, x);
 }
 
 extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
@@ -2925,8 +2945,9 @@ void setupStr() {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
     }
 
-    str_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)strNew, UNKNOWN, 2, false, false),
-                                                   { EmptyString }));
+    auto str_new = FunctionMetadata::create((void*)strNew<CXX>, UNKNOWN, 2, false, false, ParamNames::empty(), CXX);
+    str_new->addVersion((void*)strNew<CAPI>, UNKNOWN, CAPI);
+    str_cls->giveAttr("__new__", new BoxedFunction(str_new, { EmptyString }));
 
     add_operators(str_cls);
     str_cls->freeze();
@@ -2940,6 +2961,7 @@ void setupStr() {
     str_cls->tp_as_sequence->sq_item = (ssizeargfunc)string_item;
     str_cls->tp_as_sequence->sq_slice = str_slice;
     str_cls->tp_as_sequence->sq_contains = (objobjproc)string_contains;
+    str_cls->tp_new = (newfunc)strNewPacked;
 
     basestring_cls->giveAttr("__doc__",
                              boxString("Type basestring cannot be instantiated; it is the base for str and unicode."));

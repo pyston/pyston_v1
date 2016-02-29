@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -699,7 +699,7 @@ void setupSys() {
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));
 
     sys_module->giveAttr("copyright",
-                         boxString("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
+                         boxString("Copyright 2014-2016 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
                                    "Python Software Foundation.\nAll Rights Reserved.\n\nCopyright (c) 2000 "
                                    "BeOpen.com.\nAll Rights Reserved.\n\nCopyright (c) 1995-2001 Corporation for "
                                    "National Research Initiatives.\nAll Rights Reserved.\n\nCopyright (c) "
