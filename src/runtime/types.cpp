@@ -782,12 +782,17 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                            oargs, keyword_names);
         assert(arg1 == cls);
 
+        AUTO_DECREF(arg1);
+        AUTO_DECREF(arg2);
+        AUTO_XDECREF(arg3);
+
         if (!rewrite_success)
             rewrite_args = NULL;
 
         if (rewrite_args) {
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)cpythonTypeCall, rewrite_args->arg1,
-                                                                 rewrite_args->arg2, rewrite_args->arg3);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)cpythonTypeCall, rewrite_args->arg1, rewrite_args->arg2,
+                                               rewrite_args->arg3)->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         }
 
