@@ -49,6 +49,10 @@ extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
 extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FILE* fp) noexcept {
     BoxedString* name_boxed = boxString(name);
     try {
+        PyObject* m = _PyImport_FindExtension(name, pathname);
+        if (m != NULL)
+            return m;
+
         const char* lastdot = strrchr(name, '.');
         const char* shortname;
         if (lastdot == NULL) {
@@ -57,7 +61,12 @@ extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FIL
             shortname = lastdot + 1;
         }
 
-        return importCExtension(name_boxed, shortname, pathname);
+        m = importCExtension(name_boxed, shortname, pathname);
+
+        if (_PyImport_FixupExtension(name, pathname) == NULL)
+            return NULL;
+
+        return m;
     } catch (ExcInfo e) {
         removeModule(name_boxed);
         setCAPIException(e);
