@@ -310,7 +310,7 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
     return PyDict_SetItem(mp, autoDecref(key_s), item);
 }
 
-extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
+extern "C" BORROWED(PyObject*) PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     ASSERT(PyDict_Check(dict) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
     if (PyDict_Check(dict)) {
         BoxedDict* d = static_cast<BoxedDict*>(dict);
@@ -324,7 +324,7 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
         return b;
     }
 
-    assert(0 && "check refcounting");
+    assert(dict->cls == attrwrapper_cls);
 
     auto&& tstate = _PyThreadState_Current;
     if (tstate != NULL && tstate->curexc_type != NULL) {
@@ -334,11 +334,14 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
         Box* b = getitemInternal<CAPI>(dict, key);
         /* ignore errors */
         PyErr_Restore(err_type, err_value, err_tb);
+        Py_XDECREF(b);
         return b;
     } else {
         Box* b = getitemInternal<CAPI>(dict, key);
         if (b == NULL)
             PyErr_Clear();
+        else
+            Py_DECREF(b);
         return b;
     }
 }
@@ -384,7 +387,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
     return 1;
 }
 
-extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
+extern "C" BORROWED(PyObject*) PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
     if (dict->cls == attrwrapper_cls)
         return unwrapAttrWrapper(dict)->getattr(autoDecref(internStringMortal(key)));
 

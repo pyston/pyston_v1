@@ -2159,7 +2159,7 @@ public:
 
     DEFAULT_CLASS(attrwrapper_cls);
 
-    Box* getUnderlying() { return b; }
+    BORROWED(Box*) getUnderlying() { return b; }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
@@ -2223,9 +2223,9 @@ public:
 
         Box* cur = self->b->getattr(key);
         if (cur)
-            return cur;
+            return incref(cur);
         self->b->setattr(key, value, NULL);
-        return value;
+        return incref(value);
     }
 
     static Box* get(Box* _self, Box* _key, Box* def) {
@@ -2242,7 +2242,7 @@ public:
         Box* r = self->b->getattr(key);
         if (!r)
             return def;
-        return r;
+        return incref(r);
     }
 
     template <ExceptionStyle S> static Box* getitem(Box* _self, Box* _key) noexcept(S == CAPI) {
@@ -2259,13 +2259,15 @@ public:
         AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
-        if (!r) {
-            if (S == CXX)
-                raiseExcHelper(KeyError, "'%s'", key->data());
-            else
-                PyErr_Format(KeyError, "'%s'", key->data());
+        if (r)
+            return incref(r);
+
+        if (S == CXX)
+            raiseExcHelper(KeyError, "'%s'", key->data());
+        else {
+            PyErr_Format(KeyError, "'%s'", key->data());
+            return NULL;
         }
-        return r;
     }
 
     static Box* pop(Box* _self, Box* _key, Box* default_) {
@@ -2282,10 +2284,10 @@ public:
         Box* r = self->b->getattr(key);
         if (r) {
             self->b->delattr(key, NULL);
-            return r;
+            return incref(r);
         } else {
             if (default_)
-                return default_;
+                return incref(default_);
             raiseExcHelper(KeyError, "'%s'", key->data());
         }
     }
@@ -2327,6 +2329,7 @@ public:
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
             os << p.first->s() << ": " << v->s();
+            Py_DECREF(v);
         }
         os << "})";
         return boxString(os.str());
@@ -2346,7 +2349,7 @@ public:
         AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
-        return r ? True : False;
+        return incref(r ? True : False);
     }
 
     static Box* hasKey(Box* _self, Box* _key) {
@@ -2401,6 +2404,7 @@ public:
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             BoxedTuple* t = BoxedTuple::create({ p.first, attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
+            Py_DECREF(t);
         }
         return rtn;
     }
@@ -2467,6 +2471,8 @@ public:
     static Box* update(Box* _self, BoxedTuple* args, BoxedDict* kwargs) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        assert(0 && "check refcounting");
 
         assert(args->cls == tuple_cls);
         assert(!kwargs || kwargs->cls == dict_cls);
@@ -2535,7 +2541,7 @@ public:
                                                      _other, NULL, NULL, NULL, NULL);
     }
 
-    static Box* ne(Box* _self, Box* _other) { return eq(_self, _other) == True ? False : True; }
+    static Box* ne(Box* _self, Box* _other) { return incref(eq(_self, _other) == True ? False : True); }
 
     friend class AttrWrapperIter;
 };
@@ -2614,7 +2620,7 @@ extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {
     return obj->getAttrWrapper();
 }
 
-Box* unwrapAttrWrapper(Box* b) {
+BORROWED(Box*) unwrapAttrWrapper(Box* b) {
     assert(b->cls == attrwrapper_cls);
     return static_cast<AttrWrapper*>(b)->getUnderlying();
 }

@@ -1153,8 +1153,9 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
     attrs->attr_list->attrs[numattrs] = new_attr;
 }
 
-void Box::giveAttr(BoxedString* attr, Box* val) {
+void Box::giveAttr(STOLEN(BoxedString*) attr, STOLEN(Box*) val) {
     assert(!this->hasattr(attr));
+    // Would be nice to have a stealing version of setattr:
     this->setattr(attr, val, NULL);
     Py_DECREF(val);
     Py_DECREF(attr);
@@ -6065,7 +6066,11 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
 
     if (cls->instancesHaveDictAttrs()) {
         BoxedDict* d = getDict();
-        d->d.erase(attr);
+        auto it = d->d.find(attr);
+        assert(it != d->d.end());
+        Py_DECREF(it->first.value);
+        Py_DECREF(it->second);
+        d->d.erase(it);
         return;
     }
 

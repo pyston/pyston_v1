@@ -682,7 +682,7 @@ public:
     // Note, setattr does *not* steal a reference, but it probably should
     void setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
     // giveAttr consumes a reference to val and attr
-    void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
+    void giveAttr(const char* attr, STOLEN(Box*) val) { giveAttr(internStringMortal(attr), val); }
     // giveAttrBorrowed consumes a reference only to attr (but it only has the const char* variant
     // which creates the reference).  should probably switch the names to stay consistent; most functions
     // don't steal references.

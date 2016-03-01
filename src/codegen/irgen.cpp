@@ -849,6 +849,10 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 if (blocks.count(bpred) == 0)
                     continue;
 
+                auto terminator = llvm_exit_blocks[b->predecessors[j]]->getTerminator();
+                if (llvm::isa<llvm::UnreachableInst>(terminator))
+                    continue;
+
                 ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[bpred])[it->first];
                 assert(v);
 
@@ -862,8 +866,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 if (v->getType()->getBoxType() == v->getType()) {
                     // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     irstate->getRefcounts()->setType(llvm_phi, RefType::OWNED);
-                    assert(llvm::isa<llvm::BranchInst>(llvm_exit_blocks[b->predecessors[j]]->getTerminator()));
-                    irstate->getRefcounts()->refConsumed(v->getValue(), llvm_exit_blocks[b->predecessors[j]]->getTerminator());
+                    assert(llvm::isa<llvm::BranchInst>(terminator));
+                    irstate->getRefcounts()->refConsumed(v->getValue(), terminator);
                 }
             }
 

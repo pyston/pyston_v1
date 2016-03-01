@@ -1239,7 +1239,7 @@ public:
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
-Box* unwrapAttrWrapper(Box* b);
+BORROWED(Box*) unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, llvm::StringRef attr);
 void attrwrapperClear(Box* b);
