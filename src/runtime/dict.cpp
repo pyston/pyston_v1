@@ -82,7 +82,10 @@ Box* dictCopy(BoxedDict* self) {
         raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'", getTypeName(self));
 
     BoxedDict* r = new BoxedDict();
-    assert(0 && "check refcounting");
+    for (auto&& p : self->d) {
+        Py_INCREF(p.first.value);
+        Py_INCREF(p.second);
+    }
     r->d = self->d;
     return r;
 }

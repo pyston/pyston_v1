@@ -236,7 +236,6 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 }
 
 void ASTInterpreter::setGlobals(Box* globals) {
-    assert(0 && "Check refcounting (of callers)");
     assert(!this->frame_info.globals);
     this->frame_info.globals = incref(globals);
 }
@@ -892,6 +891,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
         int level = static_cast<AST_Num*>(node->args[0])->n_int;
         Value froms = visit_expr(node->args[1]);
+        AUTO_DECREF(froms.o);
         auto ast_str = ast_cast<AST_Str>(node->args[2]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;

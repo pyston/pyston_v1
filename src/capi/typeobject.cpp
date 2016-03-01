@@ -3372,6 +3372,7 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 
         rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
                                                              rewrite_args->arg1, rewrite_args->arg2);
+        rewrite_args->out_rtn->setType(RefType::OWNED);
         if (S == CXX)
             rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
         rewrite_args->out_success = true;

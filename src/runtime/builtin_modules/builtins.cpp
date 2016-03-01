@@ -493,7 +493,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     return None;
 }
 
-static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
+static Box* getattrFuncHelper(STOLEN(Box*) return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
     assert(PyString_Check(str));
 
     if (return_val)
@@ -506,7 +506,7 @@ static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* 
     if (default_val) {
         if (exc)
             PyErr_Clear();
-        return default_val;
+        return incref(default_val);
     }
     if (!exc)
         raiseAttributeErrorCapi(obj, str->s());
@@ -526,6 +526,10 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     Box* obj = arg1;
     Box* _str = arg2;
     Box* default_value = arg3;
+
+    AUTO_DECREF(obj);
+    AUTO_DECREF(_str);
+    AUTO_XDECREF(default_value);
 
     if (rewrite_args) {
         // We need to make sure that the attribute string will be the same.
@@ -549,6 +553,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     _str = coerceUnicodeToStr<S>(_str);
     if (S == CAPI && !_str)
         return NULL;
+    AUTO_DECREF(_str);
 
     if (!PyString_Check(_str)) {
         if (S == CAPI) {
@@ -594,8 +599,10 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     if (rewrite_args) {
         assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
         RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
-        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn,
-                                                              rewrite_args->arg1, r_str, rewrite_args->arg3);
+        RewriterVar* final_rtn
+            = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, r_str,
+                                           rewrite_args->arg3)->setType(RefType::OWNED);
+        r_rtn->refConsumed();
 
         if (S == CXX)
             rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
