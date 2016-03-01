@@ -4087,7 +4087,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
             if (!param_names || !param_names->takes_param_names) {
                 assert(!rewrite_args); // would need to add it to r_kwargs
-                okwargs->d[(*keyword_names)[i]] = kw_val;
+                okwargs->d[incref((*keyword_names)[i])] = incref(kw_val);
                 continue;
             }
 
@@ -4297,7 +4297,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     AUTO_XDECREF_ARRAY(oargs, num_output_args - 3);
 
     if (rewrite_args && !rewrite_success) {
-        assert(0 && "check refcounting");
 // These are the cases that we weren't able to rewrite.
 // So instead, just rewrite them to be a call to callFunc, which helps a little bit.
 // TODO we should extract the rest of this function from the end of this block,
@@ -4352,7 +4351,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             arg_vec.push_back(args_array);
             for (auto v : arg_vec)
                 assert(v);
-            RewriterVar* r_rtn = rewriter->call(true, (void*)_callFuncHelper<S>, arg_vec);
+            RewriterVar* r_rtn = rewriter->call(true, (void*)_callFuncHelper<S>, arg_vec)->setType(RefType::OWNED);
 
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_rtn;

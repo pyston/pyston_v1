@@ -2472,8 +2472,6 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        assert(0 && "check refcounting");
-
         assert(args->cls == tuple_cls);
         assert(!kwargs || kwargs->cls == dict_cls);
 
@@ -2495,14 +2493,18 @@ public:
                 // Hopefully this does not happen very often.
                 if (!PyDict_Check(_container)) {
                     BoxedDict* new_container = new BoxedDict();
-                    dictUpdate(new_container, BoxedTuple::create({ _container }), new BoxedDict());
+                    dictUpdate(new_container, autoDecref(BoxedTuple::create({ _container })), NULL);
                     _container = new_container;
+                } else {
+                    Py_INCREF(_container);
                 }
+                AUTO_DECREF(_container);
+
                 assert(PyDict_Check(_container));
                 BoxedDict* container = static_cast<BoxedDict*>(_container);
 
                 for (const auto& p : *container) {
-                    AttrWrapper::setitem(self, p.first, p.second);
+                    autoDecref(AttrWrapper::setitem(self, p.first, p.second));
                 }
             }
         };
@@ -2513,7 +2515,7 @@ public:
         if (kwargs)
             handle(kwargs);
 
-        return None;
+        Py_RETURN_NONE;
     }
 
     static Box* iter(Box* _self) noexcept {
