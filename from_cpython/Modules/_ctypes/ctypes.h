@@ -343,7 +343,8 @@ struct tagPyCArgObject {
 #ifdef HAVE_LONG_LONG
         PY_LONG_LONG q;
 #endif
-        long double D;
+        // Pyston change: disable this 16byte type because our allocator doesn't align allocs to 16byte.
+        // long double D;
         double d;
         float f;
         void *p;
