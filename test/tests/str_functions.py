@@ -215,3 +215,6 @@ for i in xrange(-8, 8):
         print i,j, repr(s[i:j])
         for k in (-2, 1, 1, 2):
             print i,j,k, repr(s[i:j:k]), repr(s[slice(i, j, k)])
+
+# Real code needs str to not have an iter!
+print hasattr("", "__iter__")

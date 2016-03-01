@@ -688,7 +688,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = internStringImmortal("keys");
-        if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str)) {
+        if (PyObject_HasAttr(arg, keys_str)) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);

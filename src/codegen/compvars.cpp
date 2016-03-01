@@ -1989,8 +1989,18 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ExceptionStyle exception_style = info.preferredExceptionStyle();
 
+        bool no_attribute = false;
+        bool* no_attr_ptr = NULL;
+        // We only want to pass no_attribute if null_on_nonexistent (otherwise we want the normal attribute-raising
+        // behavior).
+        if (flags.null_on_nonexistent)
+            no_attr_ptr = &no_attribute;
+
         CompilerVariable* called_constant = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, flags.argspec,
-                                                                args, keyword_names, NULL, exception_style);
+                                                                args, keyword_names, no_attr_ptr, exception_style);
+
+        if (flags.null_on_nonexistent && no_attribute)
+            return new ConcreteCompilerVariable(UNKNOWN, embedConstantPtr(NULL, g.llvm_value_type_ptr), true);
 
         if (called_constant)
             return called_constant;

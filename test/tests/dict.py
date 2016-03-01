@@ -235,3 +235,16 @@ print sorted(l)
 d = dict()
 d['two'] = d
 print d
+
+
+# dict() will try to access the "keys" attribute, but it should swallow all exceptions
+class MyObj(object):
+    def __iter__(self):
+        print "iter!"
+        return [(1, 2)].__iter__()
+
+    def __getattr__(self, attr):
+        print "getattr", attr
+        1/0
+
+print dict(MyObj())
