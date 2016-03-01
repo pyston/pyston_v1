@@ -2767,6 +2767,7 @@ public:
 
         if (irstate->getSourceInfo()->is_generator) {
             generator = AI;
+            emitter.setType(generator, RefType::BORROWED);
             ++AI;
         }
 

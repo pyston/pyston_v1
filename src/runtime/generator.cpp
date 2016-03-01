@@ -89,6 +89,9 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
 
+        assert(g->returnValue == None);
+        Py_CLEAR(g->returnValue);
+
         threading::pushGenerator(g, g->stack_begin, g->returnContext);
         try {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
@@ -99,9 +102,11 @@ void generatorEntry(BoxedGenerator* g) {
             BoxedFunctionBase* func = g->function;
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
-            callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
+            auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
                                                             func->closure, g, func->globals, g->arg1, g->arg2, g->arg3,
                                                             args);
+            assert(r == None);
+            Py_DECREF(r);
         } catch (ExcInfo e) {
             // unhandled exception: propagate the exception to the caller
             g->exception = e;
@@ -149,7 +154,8 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
             raiseExcHelper(StopIteration, (const char*)nullptr);
     }
 
-    self->returnValue = v;
+    assert(!self->returnValue);
+    self->returnValue = incref(v);
     self->running = true;
 
 #if STAT_TIMERS
@@ -181,9 +187,13 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
         if (!self->exception.matches(StopIteration)) {
             if (S == CAPI) {
                 setCAPIException(self->exception);
+                self->exception = ExcInfo(NULL, NULL, NULL);
                 return true;
-            } else
-                throw self->exception;
+            } else {
+                auto exc = self->exception;
+                self->exception = ExcInfo(NULL, NULL, NULL);
+                throw exc;
+            }
         }
         return false;
     }
@@ -238,7 +248,10 @@ template <ExceptionStyle S> static Box* generatorSend(Box* s, Box* v) noexcept(S
         }
     }
 
-    return self->returnValue;
+    Box* rtn = self->returnValue;
+    assert(rtn);
+    self->returnValue = NULL;
+    return rtn;
 }
 
 Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) {
@@ -289,7 +302,10 @@ template <ExceptionStyle S> static Box* generatorNext(Box* s) noexcept(S == CAPI
 
     if (self->iterated_from__hasnext__) {
         self->iterated_from__hasnext__ = false;
-        return self->returnValue;
+        Box* rtn = self->returnValue;
+        assert(rtn);
+        self->returnValue = NULL;
+        return rtn;
     }
 
     return generatorSend<S>(s, None);
@@ -317,7 +333,8 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
-    self->returnValue = value;
+    assert(!self->returnValue);
+    self->returnValue = incref(value);
 
     threading::popGenerator();
 
@@ -350,7 +367,10 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
         self->exception = ExcInfo(NULL, NULL, NULL);
         throw e;
     }
-    return self->returnValue;
+
+    Box* r = self->returnValue;
+    self->returnValue = NULL;
+    return r;
 }
 
 
