@@ -1291,6 +1291,7 @@ private:
             }
             llvm::Value* lookupResult
                 = emitter.getBuilder()->CreateLoad(getClosureElementGep(emitter, closureValue, deref_info.offset));
+            emitter.setType(lookupResult, RefType::BORROWED);
 
             // If the value is NULL, the variable is undefined.
             // Create a branch on if the value is NULL.
@@ -1887,7 +1888,9 @@ private:
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
                 llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
-                emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
+                llvm::Value* v = val->makeConverted(emitter, UNKNOWN)->getValue();
+                auto store = emitter.getBuilder()->CreateStore(v, gep);
+                emitter.refConsumed(v, store);
             }
 
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
