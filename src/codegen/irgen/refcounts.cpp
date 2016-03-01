@@ -76,11 +76,41 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     //var.ref_consumers.push_back(inst);
 }
 
-llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, bool multipred_ok = false) {
-    if (!multipred_ok)
-        ASSERT(numPredecessors(BB) <= 1,
-               "We shouldn't be inserting anything at the beginning of blocks with multiple predecessors (%s)",
-               BB->getName().data());
+llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* from_bb,
+                                      llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> cache) {
+    assert(BB);
+    assert(BB != from_bb);
+
+    auto it = cache.find(BB);
+    if (it != cache.end())
+        return it->second;
+
+    // Break critical edges if we need to:
+    if (numPredecessors(BB) > 1) {
+        ASSERT(from_bb, "Don't know how to break the critical edge to(%s)", BB->getName().data());
+
+        llvm::BasicBlock* breaker_block = llvm::BasicBlock::Create(g.context, "", from_bb->getParent(), BB);
+        llvm::BranchInst::Create(BB, breaker_block);
+
+        auto terminator = from_bb->getTerminator();
+
+        if (llvm::BranchInst* br = llvm::dyn_cast<llvm::BranchInst>(terminator)) {
+            if (br->getSuccessor(0) == BB)
+                br->setSuccessor(0, breaker_block);
+            if (br->isConditional() && br->getSuccessor(1) == BB)
+                br->setSuccessor(1, breaker_block);
+        } else if (llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(terminator)) {
+            if (ii->getNormalDest() == BB)
+                ii->setNormalDest(breaker_block);
+            ASSERT(ii->getUnwindDest() != BB, "don't know how break critical unwind edges");
+        } else {
+            llvm::outs() << *terminator << '\n';
+            RELEASE_ASSERT(0, "unhandled terminator type");
+        }
+
+        cache[BB] = breaker_block->getFirstInsertionPt();
+        return cache[BB];
+    }
 
     if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
         // Don't split up the landingpad+extract+cxa_begin_catch
@@ -88,11 +118,14 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, bool multipred_ok = 
         ++it;
         ++it;
         ++it;
+        cache[BB] = it;
         return &*it;
     } else {
         for (llvm::Instruction& I : *BB) {
-            if (!llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I))
+            if (!llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I)) {
+                cache[BB] = &I;
                 return &I;
+            }
         }
         abort();
     }
@@ -459,7 +492,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         llvm::Value* operand;
         bool nullable;
         int num_refs;
-        llvm::Instruction* insertion_pt;
+
+        // Exactly one of these should be NULL:
+        llvm::Instruction* insertion_inst;
+        llvm::BasicBlock* insertion_bb;
+        llvm::BasicBlock* insertion_from_bb;
     };
 
     struct RefState {
@@ -553,10 +590,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     if (this_refs > min_refs) {
                         //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
                                      //<< (this_refs - min_refs) << " refs to " << *v << '\n';
-                        state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, findInsertionPoint(SBB)}));
+                        state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, NULL, SBB, bb}));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(RefOp({v, refstate.nullable, min_refs - this_refs, findInsertionPoint(SBB)}));
+                        state.decrefs.push_back(RefOp({v, refstate.nullable, min_refs - this_refs, NULL, SBB, bb}));
                     }
                 }
 
@@ -609,15 +646,15 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                              //llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getNormalDest())}));
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, findInsertionPoint(invoke->getUnwindDest())}));
+                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, NULL, invoke->getNormalDest(), bb}));
+                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, NULL, invoke->getUnwindDest(), bb}));
                             } else {
                                 assert(&I != I.getParent()->getTerminator());
                                 auto next = I.getNextNode();
                                 //while (llvm::isa<llvm::PHINode>(next))
                                     //next = next->getNextNode();
                                 ASSERT(!llvm::isa<llvm::UnreachableInst>(next), "Can't add decrefs after this function...");
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, next}));
+                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, next, NULL, NULL}));
                             }
                             state.ending_refs[op] = 1;
                         }
@@ -631,6 +668,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         if (VERBOSITY() >= 2) {
             llvm::outs() << "End of " << BB.getName() << '\n';
+            if (VERBOSITY() >= 3) {
+                for (auto&& p : state.ending_refs) {
+                    llvm::outs() << *p.first << ": " << p.second << '\n';
+                }
+            }
         }
 
         // Handle variables that were defined in this BB:
@@ -644,9 +686,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             if ((!ii && inst->getParent() == &BB) || (ii && ii->getNormalDest() == &BB)) {
                 int starting_refs = (p.second.reftype == RefType::OWNED ? 1 : 0);
                 if (state.ending_refs[inst] != starting_refs) {
-                    llvm::Instruction* insertion_pt;
+                    llvm::Instruction* insertion_pt = NULL;
+                    llvm::BasicBlock* insertion_block = NULL, *insertion_from_block = NULL;
                     if (ii) {
-                        insertion_pt = findInsertionPoint(&BB);
+                        insertion_block = bb;
+                        insertion_from_block = inst->getParent();
                     } else {
                         insertion_pt = inst->getNextNode();
                         while (llvm::isa<llvm::PHINode>(insertion_pt)) {
@@ -657,50 +701,15 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     if (state.ending_refs[inst] < starting_refs) {
                         assert(p.second.reftype == RefType::OWNED);
                         state.decrefs.push_back(
-                            RefOp({ inst, p.second.nullable, starting_refs - state.ending_refs[inst], insertion_pt }));
+                            RefOp({ inst, p.second.nullable, starting_refs - state.ending_refs[inst], insertion_pt,
+                                    insertion_block, insertion_from_block }));
                     } else {
                         state.increfs.push_back(
-                            RefOp({ inst, p.second.nullable, state.ending_refs[inst] - starting_refs, insertion_pt }));
+                            RefOp({ inst, p.second.nullable, state.ending_refs[inst] - starting_refs, insertion_pt,
+                                    insertion_block, insertion_from_block }));
                     }
                 }
                 state.ending_refs.erase(inst);
-            }
-        }
-
-        // If we have any predecessor blocks with multiple successors, then let's just zero-out our pending refs.
-        // If we avoid critical edges, we have have the predecessor take care of this, but to allow critical edges
-        // we need to have a shared "interface" that we adhere to.
-        //
-        // Note: I'm not sure if the "try to coalesce refcounting operations" optimizations actually do anything.
-        // In that case there isn't any cost to hitting this case, and since it's simpler maybe we should do
-        // this for everything?
-        bool have_multisucc_predecessor = false;
-        for (auto PBB : llvm::predecessors(&BB)) {
-            if (numSuccessors(PBB) > 1) {
-                have_multisucc_predecessor = true;
-                break;
-            }
-        }
-
-        if (have_multisucc_predecessor) {
-            for (auto&& p : state.ending_refs) {
-                llvm::Value* v = p.first;
-                auto var = rt->vars[v];
-
-                int starting_refs = (var.reftype == RefType::OWNED ? 1 : 0);
-
-                assert(starting_refs <= state.ending_refs[v]);
-                if (state.ending_refs[v] == starting_refs)
-                    continue;
-
-                llvm::Instruction* insertion_pt = findInsertionPoint(&BB, /* multipred_ok */ true);
-
-                state.increfs.push_back(RefOp({ v, var.nullable, state.ending_refs[v] - starting_refs, insertion_pt }));
-
-                if (starting_refs == 0)
-                    state.ending_refs.erase(p.first);
-                else
-                    state.ending_refs[p.first] = starting_refs;
             }
         }
 
@@ -726,7 +735,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 #endif
                 assert(rt->vars[p.first].reftype == RefType::BORROWED);
 
-                state.increfs.push_back(RefOp({p.first, rt->vars[p.first].nullable, p.second, findInsertionPoint(&BB)}));
+                state.increfs.push_back(RefOp({p.first, rt->vars[p.first].nullable, p.second, NULL, &BB, NULL}));
             }
             state.ending_refs.clear();
         }
@@ -743,12 +752,21 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     ASSERT(states.size() == f->size(), "We didn't process all nodes...");
 
+    llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> insertion_pts;
     for (auto&& p : states) {
         auto&& state = p.second;
-        for (auto& op : state.increfs)
-            addIncrefs(op.operand, op.nullable, op.num_refs, op.insertion_pt);
-        for (auto& op : state.decrefs)
-            addDecrefs(op.operand, op.nullable, op.num_refs, op.insertion_pt);
+        for (auto& op : state.increfs) {
+            auto insertion_pt = op.insertion_inst;
+            if (!insertion_pt)
+                insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
+            addIncrefs(op.operand, op.nullable, op.num_refs, insertion_pt);
+        }
+        for (auto& op : state.decrefs) {
+            auto insertion_pt = op.insertion_inst;
+            if (!insertion_pt)
+                insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
+            addDecrefs(op.operand, op.nullable, op.num_refs, insertion_pt);
+        }
     }
 
     if (VERBOSITY() >= 2) {
