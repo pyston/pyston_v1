@@ -3485,6 +3485,14 @@ void BoxedModule::dealloc(Box* b) noexcept {
 
     BoxedModule::clear(self);
 
+    self->str_constants.~ContiguousMap();
+    self->unicode_constants.~ContiguousMap();
+    self->int_constants.~ContiguousMap();
+    self->float_constants.~ContiguousMap();
+    self->imaginary_constants.~ContiguousMap();
+    self->long_constants.~ContiguousMap();
+    assert(!self->keep_alive.size());
+
     b->cls->tp_free(self);
 }
 
@@ -3499,7 +3507,7 @@ void clearContiguousMap(CM& cm) {
     for (auto&& p : cm) {
         Py_DECREF(cm.getMapped(p.second));
     }
-    cm.~ContiguousMap();
+    cm.clear();
 }
 
 int BoxedModule::clear(Box* b) noexcept {

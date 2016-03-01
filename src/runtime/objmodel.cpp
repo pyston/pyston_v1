@@ -5780,7 +5780,8 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
             // support calling a RewriterVar (can only call fixed function addresses).
             r_m->addAttrGuard(offsetof(PyMappingMethods, mp_subscript), (intptr_t)m->mp_subscript);
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice);
+            RewriterVar* r_rtn
+                = rewrite_args->rewriter->call(true, (void*)m->mp_subscript, r_obj, r_slice)->setType(RefType::OWNED);
             if (S == CXX)
                 rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn);
             rewrite_args->out_success = true;
@@ -6506,6 +6507,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     static BoxedString* module_str = getStaticString("__module__");
     if (!made->hasattr(module_str)) {
         Box* gl = getGlobalsDict();
+        AUTO_DECREF(gl);
         static BoxedString* name_str = getStaticString("__name__");
         Box* attr = PyDict_GetItem(gl, name_str);
         if (attr)

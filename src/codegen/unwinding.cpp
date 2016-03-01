@@ -1020,7 +1020,7 @@ extern "C" void abort() {
     // In case displaying the traceback recursively calls abort:
     static bool recursive = false;
 
-    if (!recursive && (uint64_t)PyTraceBack_Type.ob_refcnt > 0) {
+    if (!recursive && !IN_SHUTDOWN) {
         recursive = true;
         Stats::dump();
         fprintf(stderr, "Someone called abort!\n");
