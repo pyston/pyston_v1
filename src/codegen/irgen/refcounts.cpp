@@ -76,6 +76,20 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     //var.ref_consumers.push_back(inst);
 }
 
+void remapPhis(llvm::BasicBlock* in_block, llvm::BasicBlock* from_block, llvm::BasicBlock* new_from_block) {
+    for (llvm::Instruction& i : *in_block) {
+        llvm::Instruction* I = &i;
+        llvm::PHINode* phi = llvm::dyn_cast<llvm::PHINode>(I);
+        if (!phi)
+            break;
+
+        int idx = phi->getBasicBlockIndex(from_block);
+        if (idx == -1)
+            continue;
+        phi->setIncomingBlock(idx, new_from_block);
+    }
+}
+
 llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* from_bb,
                                       llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> cache) {
     assert(BB);
@@ -89,7 +103,7 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
     if (numPredecessors(BB) > 1) {
         ASSERT(from_bb, "Don't know how to break the critical edge to(%s)", BB->getName().data());
 
-        llvm::BasicBlock* breaker_block = llvm::BasicBlock::Create(g.context, "", from_bb->getParent(), BB);
+        llvm::BasicBlock* breaker_block = llvm::BasicBlock::Create(g.context, "breaker", from_bb->getParent(), BB);
         llvm::BranchInst::Create(BB, breaker_block);
 
         auto terminator = from_bb->getTerminator();
@@ -107,6 +121,8 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
             llvm::outs() << *terminator << '\n';
             RELEASE_ASSERT(0, "unhandled terminator type");
         }
+
+        remapPhis(BB, from_bb, breaker_block);
 
         cache[BB] = breaker_block->getFirstInsertionPt();
         return cache[BB];

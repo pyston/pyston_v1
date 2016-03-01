@@ -5197,7 +5197,7 @@ Box* nonzeroAndBox(Box* b, bool negate) {
     if (likely(b->cls == bool_cls)) {
         if (negate)
             return boxBool(b != True);
-        return b;
+        return incref(b);
     }
 
     bool t = b->nonzeroIC();
@@ -5312,8 +5312,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
         if (rewrite_args) {
             auto r_negate = rewrite_args->rewriter->loadConst((int)(op_type == AST_TYPE::NotIn));
-            RewriterVar* r_contained_box
-                = rewrite_args->rewriter->call(true, (void*)nonzeroAndBox, r_contained, r_negate);
+            RewriterVar* r_contained_box = rewrite_args->rewriter->call(true, (void*)nonzeroAndBox, r_contained,
+                                                                        r_negate)->setType(RefType::OWNED);
             rewrite_args->out_rtn = r_contained_box;
             rewrite_args->out_success = true;
         }
