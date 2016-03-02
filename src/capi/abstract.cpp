@@ -1804,7 +1804,7 @@ extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
     return 0;
 }
 
-extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
+extern "C" PyObject* PyMapping_GetItemString(PyObject* o, const char* key) noexcept {
     PyObject* okey, *r;
 
     if (key == NULL)
@@ -1818,7 +1818,7 @@ extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
     return r;
 }
 
-extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* value) noexcept {
+extern "C" int PyMapping_SetItemString(PyObject* o, const char* key, PyObject* value) noexcept {
     PyObject* okey;
     int r;
 

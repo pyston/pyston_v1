@@ -67,9 +67,6 @@ Box* sysExcClear() {
 static Box* sysExit(Box* arg) {
     assert(arg);
     Box* exc = runtimeCall(SystemExit, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
-    // TODO this should be handled by the SystemExit constructor
-    exc->giveAttr("code", arg);
-
     raiseExc(exc);
 }
 
@@ -728,7 +725,7 @@ void setupSys() {
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module, boxString("sys")));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, boxString("sys")));
     }
 
     sys_module->giveAttr("__displayhook__", sys_module->getattr(internStringMortal("displayhook")));
