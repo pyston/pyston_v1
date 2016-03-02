@@ -48,19 +48,18 @@ Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
-    return BoxedTuple::create({ exc->type, exc->value, exc->traceback });
+    Box* tb = exc->traceback ? exc->traceback : None;
+    return BoxedTuple::create({ exc->type, exc->value, tb });
 }
 
 Box* sysExcClear() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
 
     exc->type = None;
     exc->value = None;
-    exc->traceback = None;
+    exc->traceback = NULL;
 
     return None;
 }

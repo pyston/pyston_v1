@@ -73,10 +73,10 @@ namespace pyston {
 
 void checkExcInfo(const ExcInfo* exc) {
     assert(exc);
-    assert(exc->type && exc->value && exc->traceback);
+    assert(exc->type && exc->value);
     ASSERT(gc::isValidGCObject(exc->type), "%p", exc->type);
     ASSERT(gc::isValidGCObject(exc->value), "%p", exc->value);
-    ASSERT(gc::isValidGCObject(exc->traceback), "%p", exc->traceback);
+    ASSERT(!exc->traceback || gc::isValidGCObject(exc->traceback), "%p", exc->traceback);
 }
 
 static StatCounter us_unwind_loop("us_unwind_loop");

@@ -715,8 +715,6 @@ void checkAndThrowCAPIException() {
             value = None;
 
         Box* tb = cur_thread_state.curexc_traceback;
-        if (!tb)
-            tb = None;
 
         // Make sure to call PyErr_Clear() *before* normalizing the exception, since otherwise
         // the normalization can think that it had raised an exception, resulting to a call
@@ -736,7 +734,7 @@ void checkAndThrowCAPIException() {
 
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
-        if (tb != None)
+        if (tb)
             throw ExcInfo(value->cls, value, tb);
         raiseExc(value);
     }
@@ -760,7 +758,7 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
     ExcInfo* exc = getFrameExcInfo();
     exc->type = type ? type : None;
     exc->value = value ? value : None;
-    exc->traceback = traceback ? traceback : None;
+    exc->traceback = traceback;
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
