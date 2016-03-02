@@ -73,7 +73,7 @@ static BORROWED(Box*) classLookup(BoxedClassobj* cls, BoxedString* attr, Getattr
     return NULL;
 }
 
-static Box* classLookup(BoxedClassobj* cls, BoxedString* attr) {
+static BORROWED(Box*) classLookup(BoxedClassobj* cls, BoxedString* attr) {
     return classLookup<NOT_REWRITABLE>(cls, attr, NULL);
 }
 
@@ -85,11 +85,14 @@ extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexce
     BoxedString* name = (BoxedString*)pname;
 
     try {
+        Py_INCREF(name);
         internStringMortalInplace(name);
+        AUTO_DECREF(name);
+
         Box* v = inst->getattr(name);
         if (v == NULL)
             v = classLookup(inst->inst_cls, name);
-        return v;
+        return xincref(v);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -189,8 +192,6 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     Box* init_func = classLookup(cls, init_str);
 
     BoxedInstance* made = new BoxedInstance(cls);
-    Py_DECREF(made);
-    Py_RETURN_NONE;
     if (init_func) {
         Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
         AUTO_DECREF(init_rtn);
@@ -213,7 +214,6 @@ extern "C" PyObject* PyInstance_New(PyObject* klass, PyObject* arg, PyObject* kw
 }
 
 static Box* classobjGetattribute(Box* _cls, Box* _attr) {
-    assert(0 && "check refcounting");
     RELEASE_ASSERT(_cls->cls == classobj_cls, "");
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
 
@@ -226,12 +226,12 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
             return cls->getAttrWrapper();
 
         if (attr->s() == "__bases__")
-            return cls->bases;
+            return incref(cls->bases);
 
         if (attr->s() == "__name__") {
             if (cls->name)
-                return cls->name;
-            return None;
+                return incref(cls->name);
+            return incref(None);
         }
     }
 
@@ -365,7 +365,7 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
     if (r) {
         if (rewrite_args)
             rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
-        return r;
+        return incref(r);
     }
 
     RewriterVar* r_inst = NULL;
@@ -388,12 +388,12 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
         rewrite_args = NULL;
 
     if (r) {
-        assert(0 && "erf this was supposed to return a borrowed ref");
         Box* rtn = processDescriptor(r, inst, inst->inst_cls);
         if (rewrite_args) {
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                true, (void*)processDescriptor, grewriter_inst_args.getReturn(ReturnConvention::HAS_RETURN), r_inst,
-                r_inst_cls);
+            RewriterVar* r_rtn
+                = rewrite_args->rewriter->call(true, (void*)processDescriptor,
+                                               grewriter_inst_args.getReturn(ReturnConvention::HAS_RETURN), r_inst,
+                                               r_inst_cls)->setType(RefType::OWNED);
             rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
         }
         return rtn;
@@ -439,6 +439,7 @@ static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* a
 
     if (getattr) {
         getattr = processDescriptor(getattr, inst, inst->inst_cls);
+        AUTO_DECREF(getattr);
         return runtimeCallInternal<CXX, NOT_REWRITABLE>(getattr, NULL, ArgPassSpec(1), attr_str, NULL, NULL, NULL,
                                                         NULL);
     }
@@ -449,7 +450,6 @@ static Box* instanceGetattributeWithFallback(BoxedInstance* inst, BoxedString* a
 template <Rewritable rewritable>
 static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_on_missing,
                                   GetattrRewriteArgs* rewrite_args) {
-    assert(0 && "check refcounting");
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1225,6 +1225,7 @@ static Box* _instanceBinary(Box* _inst, Box* other, BoxedString* attr) {
     Box* func = _instanceGetattribute(inst, attr, false);
     if (!func)
         return incref(NotImplemented);
+    AUTO_DECREF(func);
     return runtimeCall(func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 
@@ -1470,6 +1471,7 @@ Box* instanceNeg(Box* _inst) {
 
     static BoxedString* neg_str = getStaticString("__neg__");
     Box* neg_func = _instanceGetattribute(inst, neg_str, true);
+    AUTO_DECREF(neg_func);
     return runtimeCall(neg_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1479,6 +1481,7 @@ Box* instancePos(Box* _inst) {
 
     static BoxedString* pos_str = getStaticString("__pos__");
     Box* pos_func = _instanceGetattribute(inst, pos_str, true);
+    AUTO_DECREF(pos_func);
     return runtimeCall(pos_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1488,6 +1491,7 @@ Box* instanceAbs(Box* _inst) {
 
     static BoxedString* abs_str = getStaticString("__abs__");
     Box* abs_func = _instanceGetattribute(inst, abs_str, true);
+    AUTO_DECREF(abs_func);
     return runtimeCall(abs_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1497,6 +1501,7 @@ Box* instanceInvert(Box* _inst) {
 
     static BoxedString* invert_str = getStaticString("__invert__");
     Box* invert_func = _instanceGetattribute(inst, invert_str, true);
+    AUTO_DECREF(invert_func);
     return runtimeCall(invert_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1506,6 +1511,7 @@ Box* instanceTrunc(BoxedInstance* _inst) {
 
     static BoxedString* trunc_str = getStaticString("__trunc__");
     Box* trunc_func = _instanceGetattribute(inst, trunc_str, true);
+    AUTO_DECREF(trunc_func);
 
     return runtimeCall(trunc_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
@@ -1517,10 +1523,12 @@ Box* instanceInt(Box* _inst) {
     static BoxedString* int_str = getStaticString("__int__");
     if (PyObject_HasAttr((PyObject*)inst, int_str)) {
         Box* int_func = _instanceGetattribute(inst, int_str, true);
+        AUTO_DECREF(int_func);
         return runtimeCall(int_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
     Box* truncated = instanceTrunc(inst);
+    AUTO_DECREF(truncated);
     /* __trunc__ is specified to return an Integral type, but
        int() needs to return an int. */
     Box* res = _PyNumber_ConvertIntegralToInt(truncated, "__trunc__ returned non-Integral (type %.200s)");
@@ -1536,6 +1544,7 @@ Box* instanceLong(Box* _inst) {
     static BoxedString* long_str = getStaticString("__long__");
     if (PyObject_HasAttr((PyObject*)inst, long_str)) {
         Box* long_func = _instanceGetattribute(inst, long_str, true);
+        AUTO_DECREF(long_func);
         return runtimeCall(autoDecref(long_func), ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
@@ -1549,6 +1558,7 @@ Box* instanceFloat(Box* _inst) {
 
     static BoxedString* float_str = getStaticString("__float__");
     Box* float_func = _instanceGetattribute(inst, float_str, true);
+    AUTO_DECREF(float_func);
     return runtimeCall(float_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1558,6 +1568,7 @@ Box* instanceOct(Box* _inst) {
 
     static BoxedString* oct_str = getStaticString("__oct__");
     Box* oct_func = _instanceGetattribute(inst, oct_str, true);
+    AUTO_DECREF(oct_func);
     return runtimeCall(oct_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1567,6 +1578,7 @@ Box* instanceHex(Box* _inst) {
 
     static BoxedString* hex_str = getStaticString("__hex__");
     Box* hex_func = _instanceGetattribute(inst, hex_str, true);
+    AUTO_DECREF(hex_func);
     return runtimeCall(hex_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1581,6 +1593,7 @@ Box* instanceIndex(Box* _inst) {
 
     static BoxedString* index_str = getStaticString("__index__");
     Box* index_func = _instanceGetattribute(inst, index_str, true);
+    AUTO_DECREF(index_func);
     return runtimeCall(index_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1593,6 +1606,7 @@ Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     if (!call_func)
         raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->data());
 
+    AUTO_DECREF(call_func);
     return runtimeCall(call_func, ArgPassSpec(0, 0, true, true), _args, _kwargs, NULL, NULL, NULL);
 }
 
@@ -1617,7 +1631,7 @@ extern "C" PyObject* PyClass_New(PyObject* bases, PyObject* dict, PyObject* name
 extern "C" PyObject* PyClass_Name(PyObject* _classobj) noexcept {
     RELEASE_ASSERT(PyClass_Check(_classobj), "");
     BoxedClassobj* classobj = (BoxedClassobj*)_classobj;
-    return classobj->name;
+    return incref(classobj->name);
 }
 
 extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klass) noexcept {

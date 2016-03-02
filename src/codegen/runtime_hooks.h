@@ -58,6 +58,10 @@ struct GlobalFuncs {
     llvm::Value* div_float_float, *floordiv_float_float, *mod_float_float, *pow_float_float;
 
     llvm::Value* dump;
+
+#ifdef Py_TRACE_REFS
+    llvm::Value* _Py_Dealloc;
+#endif
 };
 }
 

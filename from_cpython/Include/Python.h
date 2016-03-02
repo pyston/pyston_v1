@@ -25,6 +25,8 @@
 #define Py_REF_DEBUG
 #define WITH_PYMALLOC
 #define PYMALLOC_DEBUG
+// Uncomment this to get some very heavy ref debugging:
+// #define Py_TRACE_REFS
 #endif
 
 // These include orders come from CPython:

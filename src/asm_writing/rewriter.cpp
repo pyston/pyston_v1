@@ -560,6 +560,9 @@ void Rewriter::_decref(RewriterVar* var) {
     assembler->decq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
+#ifdef Py_TRACE_REFS
+        RELEASE_ASSERT(0, "need to support trace_refs here (call _Py_Dealloc instead of tp_dealloc");
+#endif
         assembler->movq(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
         assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
         //assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);

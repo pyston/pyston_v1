@@ -3403,6 +3403,15 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         return 0;
     }
 
+#ifdef Py_TRACE_REFS
+    /* PyType_Ready is the closest thing we have to a choke point
+     * for type objects, so is the best place I can think of to try
+     * to get type objects into the doubly-linked list of all objects.
+     * Still, not all type objects go thru PyType_Ready.
+     */
+    _Py_AddToAllObjects((PyObject*)cls, 0);
+#endif
+
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
     _Py_INC_REFTOTAL;

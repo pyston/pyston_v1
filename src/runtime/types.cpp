@@ -4457,15 +4457,32 @@ extern "C" void Py_Finalize() noexcept {
     PyGC_Collect(); // To make sure it creates any static objects
     IN_SHUTDOWN = true;
     PyOS_FiniInterrupts();
+
+    // TODO: we might have to do this in a loop:
     PyType_ClearCache();
     _PyUnicode_Fini();
     PyThreadState_Clear(NULL);
     for (auto b : constants) {
         Py_DECREF(b);
     }
+    constants.clear();
+
     // May need to run multiple collections to collect everything:
-    while (PyGC_Collect())
-        ;
+    while (true) {
+        int freed = 0;
+        freed += PyGC_Collect();
+
+        // Doing a gc collection can create more constants (and others -- may have to do this whole thing in a loop)
+        freed += constants.size();
+        for (auto b : constants) {
+            Py_DECREF(b);
+        }
+        constants.clear();
+
+        if (!freed)
+            break;
+    }
+
     _Py_ReleaseInternedStrings();
     for (auto b : classes) {
         if (!PyObject_IS_GC(b)) {
@@ -4538,6 +4555,11 @@ extern "C" void Py_Finalize() noexcept {
     if (VERBOSITY())
         PRINT_TOTAL_REFS();
 #ifdef Py_REF_DEBUG
+#ifdef Py_TRACE_REFS
+    if (_Py_RefTotal > 0)
+        _Py_PrintReferenceAddressesCapped(stderr, 10);
+#endif
+
     RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
 #endif
 }

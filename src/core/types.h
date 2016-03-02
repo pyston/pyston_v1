@@ -603,6 +603,11 @@ inline BoxedString* internStringMortal(llvm::StringRef s) {
 }
 
 // TODO this is an immortal intern for now
+// Ref usage: this transfers a ref from the passed-in string to the new one.
+// Typical usage:
+// Py_INCREF(s);
+// internStringMortalInplace(s);
+// AUTO_DECREF(s);
 inline void internStringMortalInplace(BoxedString*& s) noexcept {
     PyString_InternInPlace((PyObject**)&s);
 }
@@ -663,6 +668,8 @@ public:
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
+    _PyObject_HEAD_EXTRA
+
     Py_ssize_t ob_refcnt;
 
     // Note: cls gets initialized in the new() function.
@@ -717,6 +724,15 @@ public:
     Box* hasnextOrNullIC();
 
     friend class AttrWrapper;
+
+#ifdef Py_TRACE_REFS
+    static Box createRefchain() {
+        Box rtn;
+        rtn._ob_next = &rtn;
+        rtn._ob_prev = &rtn;
+        return rtn;
+    }
+#endif
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 

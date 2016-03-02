@@ -329,5 +329,9 @@ void initGlobalFuncs(GlobalState& g) {
     GET(pow_float_float);
 
     GET(dump);
+
+#ifdef Py_TRACE_REFS
+    GET(_Py_Dealloc);
+#endif
 }
 }

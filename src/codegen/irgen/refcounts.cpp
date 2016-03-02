@@ -147,6 +147,12 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
     }
 }
 
+#ifdef Py_TRACE_REFS
+#define REFCOUNT_IDX 2
+#else
+#define REFCOUNT_IDX 0
+#endif
+
 void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* incref_pt) {
     if (num_refs > 1) {
         // Not bad but I don't think this should happen:
@@ -190,8 +196,7 @@ void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     builder.CreateStore(new_reftotal, reftotal_gv);
 #endif
 
-    llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
-    auto refcount_ptr = builder.CreateConstInBoundsGEP2_32(v, 0, 0);
+    auto refcount_ptr = builder.CreateConstInBoundsGEP2_32(v, 0, REFCOUNT_IDX);
     auto refcount = builder.CreateLoad(refcount_ptr);
     auto new_refcount = builder.CreateAdd(refcount, getConstantInt(num_refs, g.i64));
     builder.CreateStore(new_refcount, refcount_ptr);
@@ -225,7 +230,7 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     new llvm::StoreInst(new_reftotal, reftotal_gv, decref_pt);
 #endif
 
-    llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(0, g.i32) });
+    llvm::ArrayRef<llvm::Value*> idxs({ getConstantInt(0, g.i32), getConstantInt(REFCOUNT_IDX, g.i32) });
     auto refcount_ptr = llvm::GetElementPtrInst::CreateInBounds(v, idxs, "", decref_pt);
     auto refcount = new llvm::LoadInst(refcount_ptr, "", decref_pt);
     auto new_refcount = llvm::BinaryOperator::Create(llvm::BinaryOperator::BinaryOps::Sub, refcount,
@@ -250,7 +255,14 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
 
     builder.SetInsertPoint(dealloc_block);
 
-    auto cls_ptr = builder.CreateConstInBoundsGEP2_32(v, 0, 1);
+#ifdef COUNT_ALLOCS
+#error "Don't support COUNT_ALLOCS here yet"
+#endif
+
+#ifdef Py_TRACE_REFS
+    builder.CreateCall(g.funcs._Py_Dealloc, v);
+#else
+    auto cls_ptr = builder.CreateConstInBoundsGEP2_32(v, 0, 1 + REFCOUNT_IDX);
     auto cls = builder.CreateLoad(cls_ptr);
     auto dtor_ptr = builder.CreateConstInBoundsGEP2_32(cls, 0, 4);
 
@@ -261,6 +273,8 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
 #endif
     auto dtor = builder.CreateLoad(dtor_ptr);
     builder.CreateCall(dtor, v);
+#endif
+
     builder.CreateBr(continue_block);
 
     builder.SetInsertPoint(continue_block);

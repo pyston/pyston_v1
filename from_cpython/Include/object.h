@@ -68,11 +68,26 @@ whose size is determined when the object is allocated.
 #define Py_REF_DEBUG
 #endif
 
+// Pyston change: hacks to allow C++ features
+#ifndef _PYSTON_API
+typedef struct _object PyObject;
+typedef struct _varobject PyVarObject;
+#define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
+#else
+namespace pyston {
+class Box;
+class BoxVar;
+}
+typedef pyston::Box PyObject;
+typedef pyston::BoxVar PyVarObject;
+#define Py_TYPE(ob)             ((ob)->cls)
+#endif
+
 #ifdef Py_TRACE_REFS
 /* Define pointers to support a doubly-linked list of all live heap objects. */
 #define _PyObject_HEAD_EXTRA            \
-    struct _object *_ob_next;           \
-    struct _object *_ob_prev;
+    PyObject *_ob_next;           \
+    PyObject *_ob_prev;
 
 #define _PyObject_EXTRA_INIT 0, 0,
 
@@ -117,21 +132,6 @@ struct _object {
 struct _varobject {
     PyObject_VAR_HEAD
 };
-
-// Pyston change: hacks to allow C++ features
-#ifndef _PYSTON_API
-typedef struct _object PyObject;
-typedef struct _varobject PyVarObject;
-#define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
-#else
-namespace pyston {
-class Box;
-class BoxVar;
-}
-typedef pyston::Box PyObject;
-typedef pyston::BoxVar PyVarObject;
-#define Py_TYPE(ob)             ((ob)->cls)
-#endif
 
 // Pyston change: moved Py_TYPE to above
 #define Py_REFCNT(ob)           (((PyObject*)(ob))->ob_refcnt)
@@ -811,6 +811,9 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _Py_PrintReferences(FILE *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _Py_PrintReferenceAddresses(FILE *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
+
+// Pyston addition:
+PyAPI_FUNC(void) _Py_PrintReferenceAddressesCapped(FILE *, int) PYSTON_NOEXCEPT;
 
 #else
 /* Without Py_TRACE_REFS, there's little enough to do that we expand code

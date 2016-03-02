@@ -39,3 +39,5 @@ If the assertion `assert(var->reftype != RefType::UNKNOWN)` fails in Rewriter::c
 - Now we should be at the point that the RewriterVar got created.  You can do a backtrace to see who created the RewriterVar and thus where the annotation needs to get added.
 
 Similarly, you can get this assertion about an llvm::Value*, in which case you should try `watch -l *(void**)v`.
+
+Py_TRACE_REFS.
