@@ -235,6 +235,9 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
 
     } else {
         // The "normal" case
+        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
+        assert(al->isStaticAlloca());
+
         assert(!vregs);
         getMD()->calculateNumVRegs();
         int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
@@ -247,10 +250,6 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
             vregs = vregs_alloca;
         } else
             vregs = getNullPtr(g.llvm_value_type_ptr_ptr);
-
-        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
-        assert(al->isStaticAlloca());
-
 
         // frame_info.exc.type = NULL
         llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
