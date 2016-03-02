@@ -67,6 +67,7 @@ extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FIL
 
 extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) noexcept {
     BoxedString* name_boxed = boxString(name);
+    AUTO_DECREF(name_boxed);
     try {
         BoxedModule* module = createModule(name_boxed, pathname);
         AST_Module* ast = caching_parse_file(pathname, /* future_flags = */ 0);
@@ -79,7 +80,7 @@ extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) no
         }
         if (Py_VerboseFlag)
             PySys_WriteStderr("import %s # from %s\n", name, pathname);
-        return r;
+        return incref(r);
     } catch (ExcInfo e) {
         removeModule(name_boxed);
         setCAPIException(e);

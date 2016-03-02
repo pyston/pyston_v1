@@ -255,7 +255,7 @@ extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
     return incref(listGetitemUnboxed(self, slice->n));
 }
 
-extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
+extern "C" BORROWED(PyObject*) PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(PyList_Check(op), "");
     RELEASE_ASSERT(i >= 0, ""); // unlike list.__getitem__, PyList_GetItem doesn't do index wrapping
     try {
