@@ -4494,6 +4494,7 @@ extern "C" void Py_Finalize() noexcept {
     // May need to run multiple collections to collect everything:
     while (PyGC_Collect())
         ;
+    assert(!constants.size());
 #endif
 
 // PyGC_Collect());
