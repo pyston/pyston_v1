@@ -397,7 +397,7 @@ all: pyston_dbg pyston_release pyston_gcc unittests check-deps $(RUN_DEPS)
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
-	$(VERB) $(CTAGS) -I noexcept -I noexcept+ -I PYSTON_NOEXCEPT $^
+	$(VERB) $(CTAGS) -I noexcept -I noexcept+ -I PYSTON_NOEXCEPT -I STOLEN -I BORROWED $^
 
 TAGS: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating TAGS...

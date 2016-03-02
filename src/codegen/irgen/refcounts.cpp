@@ -90,12 +90,15 @@ void remapPhis(llvm::BasicBlock* in_block, llvm::BasicBlock* from_block, llvm::B
     }
 }
 
+typedef llvm::DenseMap<std::pair<llvm::BasicBlock*, llvm::BasicBlock*>, llvm::Instruction*> InsertionCache;
 llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* from_bb,
-                                      llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> cache) {
+                                      InsertionCache& cache) {
     assert(BB);
     assert(BB != from_bb);
 
-    auto it = cache.find(BB);
+    auto key = std::make_pair(BB, from_bb);
+
+    auto it = cache.find(key);
     if (it != cache.end())
         return it->second;
 
@@ -105,6 +108,8 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
 
         llvm::BasicBlock* breaker_block = llvm::BasicBlock::Create(g.context, "breaker", from_bb->getParent(), BB);
         llvm::BranchInst::Create(BB, breaker_block);
+        // llvm::outs() << "Breaking edge from " << from_bb->getName() << " to " << BB->getName() << "; name is "
+        //<< breaker_block->getName() << '\n';
 
         auto terminator = from_bb->getTerminator();
 
@@ -124,8 +129,8 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
 
         remapPhis(BB, from_bb, breaker_block);
 
-        cache[BB] = breaker_block->getFirstInsertionPt();
-        return cache[BB];
+        cache[key] = breaker_block->getFirstInsertionPt();
+        return cache[key];
     }
 
     if (llvm::isa<llvm::LandingPadInst>(*BB->begin())) {
@@ -134,12 +139,12 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
         ++it;
         ++it;
         ++it;
-        cache[BB] = it;
+        cache[key] = it;
         return &*it;
     } else {
         for (llvm::Instruction& I : *BB) {
             if (!llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I)) {
-                cache[BB] = &I;
+                cache[key] = &I;
                 return &I;
             }
         }
@@ -782,9 +787,32 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     ASSERT(states.size() == f->size(), "We didn't process all nodes...");
 
-    llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> insertion_pts;
-    for (auto&& p : states) {
-        auto&& state = p.second;
+    // Note: we iterate over the basicblocks in the order they appear in the llvm function;
+    // iterating over states directly is nondeterministic.
+    std::vector<llvm::BasicBlock*> basic_blocks;
+    for (auto&& BB : *f)
+        basic_blocks.push_back(&BB);
+
+    // First, find all insertion points.  This may change the CFG by breaking critical edges.
+    InsertionCache insertion_pts;
+    for (auto bb : basic_blocks) {
+        auto&& state = states[bb];
+        for (auto& op : state.increfs) {
+            auto insertion_pt = op.insertion_inst;
+            if (!insertion_pt)
+                insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
+        }
+        for (auto& op : state.decrefs) {
+            auto insertion_pt = op.insertion_inst;
+            if (!insertion_pt)
+                insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
+        }
+    }
+
+    // Then use the insertion points (it's the same code but this time it will hit the cache).
+    // This may change the CFG by adding decref's
+    for (auto bb : basic_blocks) {
+        auto&& state = states[bb];
         for (auto& op : state.increfs) {
             auto insertion_pt = op.insertion_inst;
             if (!insertion_pt)

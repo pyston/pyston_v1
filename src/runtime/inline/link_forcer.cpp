@@ -74,6 +74,7 @@ void force() {
     FORCE(initFrame);
     FORCE(deinitFrame);
     FORCE(makePendingCalls);
+    FORCE(setFrameExcInfo);
 
     FORCE(getattr);
     FORCE(getattr_capi);

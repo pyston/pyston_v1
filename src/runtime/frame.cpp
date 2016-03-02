@@ -217,6 +217,23 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
         Py_CLEAR(frame_info->frame_obj);
     }
     Py_CLEAR(frame_info->boxedLocals);
+
+    if (frame_info->exc.type) {
+        Py_CLEAR(frame_info->exc.type);
+        Py_CLEAR(frame_info->exc.value);
+        Py_CLEAR(frame_info->exc.traceback);
+    }
+}
+
+extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) {
+    if (frame_info->exc.type) {
+        Py_DECREF(frame_info->exc.type);
+        Py_DECREF(frame_info->exc.value);
+        Py_DECREF(frame_info->exc.traceback);
+    }
+    frame_info->exc.type = type;
+    frame_info->exc.value = value;
+    frame_info->exc.traceback = tb;
 }
 
 extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {

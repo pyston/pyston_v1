@@ -1786,6 +1786,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
                     = rewrite_args->rewriter->call(true, (void*)BaseException->tp_new, rewrite_args->arg1,
                                                    rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
                                                    rewrite_args->rewriter->loadConst(0, Location::forArg(2)));
+                rewrite_args->out_rtn->setType(RefType::OWNED);
                 rewrite_args->out_success = true;
             }
             return rtn;

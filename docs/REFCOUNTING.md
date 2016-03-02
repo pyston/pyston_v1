@@ -19,6 +19,9 @@ AUTO_DECREF, autoDecref, incref
 
 Invariant: all paths through a function should leave each variable with 0 net refs.  (This includes paths out via exceptions.)
 
+Special cases:
+- Most exception-related functions steal refs.  If you throw an exception in C code (via `throw [ExcInfo] e`), it consumes the refs.
+
 ## Refcounting in the rewriter, baseline jit, and llvm jit
 
 ## Debugging

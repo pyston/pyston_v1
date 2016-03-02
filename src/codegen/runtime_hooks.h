@@ -34,7 +34,8 @@ struct GlobalFuncs {
 
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *createFunctionFromMetadata, *getFunctionMetadata,
         *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice,
-        *createUserClass, *createClosure, *createGenerator, *createSet, *initFrame, *deinitFrame, *makePendingCalls;
+        *createUserClass, *createClosure, *createGenerator, *createSet, *initFrame, *deinitFrame, *makePendingCalls,
+        *setFrameExcInfo;
     llvm::Value* getattr, *getattr_capi, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare,
         *augbinop, *unboxedLen, *getitem, *getitem_capi, *getclsattr, *getGlobal, *setitem, *unaryop, *import,
         *importFrom, *importStar, *repr, *exceptionMatches, *yield, *getiterHelper, *hasnext, *setGlobal, *apply_slice;

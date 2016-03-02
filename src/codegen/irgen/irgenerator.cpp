@@ -882,9 +882,7 @@ private:
                     // trigger an exception, but the irgenerator will know that definitely-defined
                     // local symbols will not throw.
                     emitter.getBuilder()->CreateUnreachable();
-                    exc_type = undefVariable();
-                    exc_value = undefVariable();
-                    exc_tb = undefVariable();
+                    exc_type = exc_value = exc_tb = emitter.getNone();
                     endBlock(DEAD);
                 }
 
@@ -993,16 +991,17 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
-                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
                 ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_type->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
                 ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
                 ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_traceback->getValue(),
-                                     builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+
+                auto inst = emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo,
+                                               { frame_info, converted_type->getValue(), converted_value->getValue(),
+                                                 converted_traceback->getValue() });
+                emitter.refConsumed(converted_type->getValue(), inst);
+                emitter.refConsumed(converted_value->getValue(), inst);
+                emitter.refConsumed(converted_traceback->getValue(), inst);
 
                 return emitter.getNone();
             }
@@ -2421,13 +2420,19 @@ private:
             }
         }
 
+        llvm::Instruction* inst;
         if (target_exception_style == CAPI) {
-            emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI);
+            inst = emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI);
             emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
                                                    getNullPtr(g.llvm_value_type_ptr));
         } else {
-            emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
+            inst = emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
         }
+
+        for (auto a : args) {
+            emitter.refConsumed(a, inst);
+        }
+
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);
@@ -2963,7 +2968,6 @@ public:
                 llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
                 llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
 
-                // TODO: nullable?
                 emitter.setType(exc_type, RefType::OWNED);
                 emitter.setType(exc_value, RefType::OWNED);
                 emitter.setType(exc_traceback, RefType::OWNED);

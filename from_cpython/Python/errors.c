@@ -189,6 +189,7 @@ PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb)
 
             if (res == NULL)
                 goto finally;
+            Py_DECREF(value);
             value = res;
         }
         /* if the class of the instance doesn't exactly match the

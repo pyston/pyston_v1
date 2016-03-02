@@ -199,6 +199,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(initFrame);
     GET(deinitFrame);
     GET(makePendingCalls);
+    GET(setFrameExcInfo);
 
     GET(getattr);
     GET(getattr_capi);

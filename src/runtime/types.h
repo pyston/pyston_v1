@@ -1270,6 +1270,7 @@ Box* getFrame(int depth);
 void frameInvalidateBack(BoxedFrame* frame);
 extern "C" void deinitFrame(FrameInfo* frame_info);
 extern "C" void initFrame(FrameInfo* frame_info);
+extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb);
 
 inline BoxedString* boxString(llvm::StringRef s) {
     if (s.size() <= 1) {

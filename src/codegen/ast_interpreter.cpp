@@ -936,6 +936,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
+        assert(0 && "check refcounting -- call setFrameExcInfo instead of setting it directly");
+
         Value type = visit_expr(node->args[0]);
         assert(type.o);
         Value value = visit_expr(node->args[1]);

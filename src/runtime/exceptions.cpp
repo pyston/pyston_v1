@@ -92,13 +92,17 @@ bool ExcInfo::matches(BoxedClass* cls) const {
 }
 
 // takes the three arguments of a `raise' and produces the ExcInfo to throw
-ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
+ExcInfo excInfoForRaise(STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) {
     assert(type && value && tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
     if (tb == None) {
+        Py_DECREF(tb);
         tb = NULL;
     } else if (tb != NULL && !PyTraceBack_Check(tb)) {
+        Py_DECREF(type);
+        Py_DECREF(value);
+        Py_XDECREF(tb);
         raiseExcHelper(TypeError, "raise: arg 3 must be a traceback or None");
     }
 
@@ -115,6 +119,9 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
         PyErr_NormalizeException(&type, &value, &tb);
 
         if (!PyExceptionInstance_Check(value)) {
+            Py_DECREF(type);
+            Py_DECREF(value);
+            Py_XDECREF(tb);
             raiseExcHelper(TypeError, "calling %s() should have returned an instance of "
                                       "BaseException, not '%s'",
                            ((PyTypeObject*)type)->tp_name, Py_TYPE(value)->tp_name);
@@ -122,6 +129,9 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     } else if (PyExceptionInstance_Check(type)) {
         /* Raising an instance.  The value should be a dummy. */
         if (value != Py_None) {
+            Py_DECREF(type);
+            Py_DECREF(value);
+            Py_XDECREF(tb);
             raiseExcHelper(TypeError, "instance exception may not have a separate value");
         } else {
             /* Normalize to raise <class>, <instance> */
@@ -131,6 +141,9 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
             Py_INCREF(type);
         }
     } else {
+        Py_DECREF(type);
+        Py_DECREF(value);
+        Py_XDECREF(tb);
         /* Not something you can raise.  You get an exception
            anyway, just not what you specified :-) */
         raiseExcHelper(TypeError, "exceptions must be old-style classes or "
@@ -141,7 +154,7 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
     assert(PyExceptionClass_Check(type));
 
     if (tb == NULL) {
-        tb = None;
+        tb = incref(None);
     }
 
     return ExcInfo(type, value, tb);
@@ -178,7 +191,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
     PyErr_Restore(frame_exc_info->type, frame_exc_info->value, frame_exc_info->traceback);
 }
 
-extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
+extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) {
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
@@ -189,7 +202,7 @@ extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
     throw exc_info;
 }
 
-extern "C" void raise3_capi(Box* arg0, Box* arg1, Box* arg2) noexcept {
+extern "C" void raise3_capi(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) noexcept {
     bool reraise = arg2 != NULL && arg2 != None;
 
     ExcInfo exc_info(NULL, NULL, NULL);
@@ -262,9 +275,9 @@ extern "C" void caughtCapiException() {
 extern "C" void reraiseCapiExcAsCxx() {
     ensureCAPIExceptionSet();
     // TODO: we are normalizing to many times?
-    ExcInfo e = excInfoForRaise(cur_thread_state.curexc_type, cur_thread_state.curexc_value,
-                                cur_thread_state.curexc_traceback);
-    PyErr_Clear();
+    Box* type, *value, *tb;
+    PyErr_Fetch(&type, &value, &tb);
+    ExcInfo e = excInfoForRaise(type, value, tb);
     startReraise();
     throw e;
 }
