@@ -1099,7 +1099,9 @@ class BoxedStaticmethod : public Box {
 public:
     Box* sm_callable;
 
-    BoxedStaticmethod(Box* callable) : sm_callable(callable) {}
+    BoxedStaticmethod(Box* callable) : sm_callable(callable) {
+        Py_INCREF(sm_callable);
+    }
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls, true);
 

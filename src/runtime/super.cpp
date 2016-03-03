@@ -32,15 +32,32 @@ public:
     Box* obj;             // "the instance invoking super(); make be None"
     BoxedClass* obj_type; // "the type of the instance invoking super(); may be None"
 
-    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {}
+    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {
+        Py_INCREF(type);
+        Py_INCREF(obj);
+        Py_INCREF(obj_type);
+    }
 
     DEFAULT_CLASS(super_cls);
 
     static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedSuper* self = (BoxedSuper*)b;
+
+        _PyObject_GC_UNTRACK(self);
+        Py_XDECREF(self->obj);
+        Py_XDECREF(self->type);
+        Py_XDECREF(self->obj_type);
+
+        Py_TYPE(self)->tp_free(self);
     }
     static int traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedSuper* su = (BoxedSuper*)self;
+
+        Py_VISIT(su->obj);
+        Py_VISIT(su->type);
+        Py_VISIT(su->obj_type);
+
+        return 0;
     }
 };
 
@@ -151,7 +168,7 @@ Box* superRepr(Box* _s) {
 
 
 // Ported from the CPython version:
-template <ExceptionStyle S> BoxedClass* superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
+template <ExceptionStyle S> BORROWED(BoxedClass*) superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
     if (PyType_Check(obj) && isSubclass(static_cast<BoxedClass*>(obj), type))
         return static_cast<BoxedClass*>(obj);
 
@@ -209,11 +226,11 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     if (obj != NULL)
         obj_type = superCheck<CXX>(type, obj);
 
-    self->type = type;
-    self->obj = obj;
-    self->obj_type = obj_type;
+    self->type = incref(type);
+    self->obj = incref(obj);
+    self->obj_type = incref(obj_type);
 
-    return None;
+    return incref(None);
 }
 
 void setupSuper() {

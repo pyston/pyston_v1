@@ -3549,10 +3549,8 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
             rewrite_args.arg2 = rewriter->getArg(4)->setType(RefType::BORROWED);
         if (npassed_args >= 3)
             rewrite_args.arg3 = rewriter->getArg(5)->setType(RefType::BORROWED);
-        if (npassed_args >= 4) {
-            assert(0 && "hmm need to figure out vrefs for this");
+        if (npassed_args >= 4)
             rewrite_args.args = rewriter->getArg(6);
-        }
         rtn = callattrInternal<S, REWRITABLE>(obj, attr, scope, &rewrite_args, argspec, arg1, arg2, arg3, args,
                                               keyword_names);
 
@@ -4893,7 +4891,7 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
         if (npassed_args >= 3)
             rewrite_args.arg3 = rewriter->getArg(4)->setType(RefType::BORROWED);
         if (npassed_args >= 4)
-            rewrite_args.args = rewriter->getArg(5)->setType(RefType::BORROWED);
+            rewrite_args.args = rewriter->getArg(5);
         rtn = runtimeCallInternal<S, REWRITABLE>(obj, &rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
         if (!rewrite_args.out_success) {
