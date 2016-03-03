@@ -91,10 +91,6 @@ Box* BoxedCode::flags(Box* b, void*) {
     return boxInt(flags);
 }
 
-Box* codeForFunction(BoxedFunction* f) {
-    return f->md->getCode();
-}
-
 FunctionMetadata* metadataFromCode(Box* code) {
     assert(code->cls == code_cls);
     return static_cast<BoxedCode*>(code)->f;

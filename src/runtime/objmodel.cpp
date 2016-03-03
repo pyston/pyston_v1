@@ -2379,9 +2379,10 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     throwCAPIException();
 
                 if (rewrite_args) {
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                        true, (void*)local_get, r_val, rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
-                        rewrite_args->obj);
+                    RewriterVar* r_rtn
+                        = rewrite_args->rewriter->call(true, (void*)local_get, r_val,
+                                                       rewrite_args->rewriter->loadConst(0, Location::forArg(1)),
+                                                       rewrite_args->obj)->setType(RefType::OWNED);
                     // rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);
                 }

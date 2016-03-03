@@ -534,6 +534,8 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
         }
     }
 
+    AUTO_DECREF(value);
+
     static BoxedString* setattr_str = getStaticString("__setattr__");
 
     if (rewrite_args) {
@@ -572,10 +574,6 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
     }
 }
 
-void instanceSetattr(Box* _inst, Box* _attr, Box* value) {
-    instanceSetattroInternal(_inst, _attr, value, NULL);
-}
-
 Box* instanceDelattr(Box* _inst, Box* _attr) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -611,10 +609,10 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
     return None;
 }
 
-int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
+int instance_setattro(Box* inst, Box* attr, Box* value) noexcept {
     try {
         if (value) {
-            instanceSetattr(cls, attr, value);
+            instanceSetattroInternal(inst, attr, value, NULL);
             return 0;
         } else {
             RELEASE_ASSERT(0, "");
@@ -1833,8 +1831,6 @@ void setupClassobj() {
 
     instance_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create(
                                                    (void*)instanceGetattroInternal<CXX>, UNKNOWN, 2)));
-    instance_cls->giveAttr("__setattr__",
-                           new BoxedFunction(FunctionMetadata::create((void*)instanceSetattr, UNKNOWN, 3)));
     instance_cls->giveAttr("__delattr__",
                            new BoxedFunction(FunctionMetadata::create((void*)instanceDelattr, UNKNOWN, 2)));
     instance_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)instanceStr, UNKNOWN, 1)));

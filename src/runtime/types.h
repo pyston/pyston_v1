@@ -1261,8 +1261,6 @@ AST* unboxAst(Box* b);
 // are supposed to add one themselves.  type_cls and function_cls do this, for example.
 extern Box* dict_descr;
 
-Box* codeForFunction(BoxedFunction*);
-Box* codeForFunctionMetadata(FunctionMetadata*);
 FunctionMetadata* metadataFromCode(Box* code);
 
 Box* getFrame(FrameInfo* frame_info);

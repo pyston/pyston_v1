@@ -429,7 +429,7 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 return NULL;
         }
 
-        return (PyCodeObject*)md->getCode();
+        return (PyCodeObject*)incref(md->getCode());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;

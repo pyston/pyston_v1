@@ -1536,7 +1536,7 @@ static void funcSetName(Box* b, Box* v, void*) {
         raiseExcHelper(TypeError, "__name__ must be set to a string object");
     }
 
-    func->name = static_cast<BoxedString*>(v);
+    func->name = incref(static_cast<BoxedString*>(v));
 }
 
 static Box* builtinFunctionOrMethodName(Box* b, void*) {
@@ -1548,13 +1548,13 @@ static Box* builtinFunctionOrMethodName(Box* b, void*) {
     assert(b->cls == builtin_function_or_method_cls);
     BoxedBuiltinFunctionOrMethod* func = static_cast<BoxedBuiltinFunctionOrMethod*>(b);
     assert(func->name);
-    return func->name;
+    return incref(func->name);
 }
 
 static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
-    return codeForFunction(func);
+    return incref(func->md->getCode());
 }
 
 extern "C" PyObject* PyFunction_GetCode(PyObject* func) noexcept {
@@ -1689,11 +1689,11 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
     RELEASE_ASSERT(self->cls == instancemethod_cls, "");
 
     if (self->obj != NULL) {
-        return self;
+        return incref(self);
     }
 
     if (!PyObject_IsSubclass(type, self->im_class)) {
-        return self;
+        return incref(self);
     }
 
     if (obj == None)
@@ -1731,6 +1731,7 @@ static Box* instancemethodRepr(Box* b) {
 
     static BoxedString* name_str = getStaticString("__name__");
     funcname = getattrInternal<CXX>(func, name_str);
+    AUTO_XDECREF(funcname);
 
     if (funcname != NULL) {
         if (!PyString_Check(funcname)) {
@@ -1751,12 +1752,14 @@ static Box* instancemethodRepr(Box* b) {
             }
         }
     }
+    AUTO_XDECREF(klassname);
 
     if (self == NULL)
         result = PyString_FromFormat("<unbound method %s.%s>", sklassname, sfuncname);
     else {
         // This was a CPython comment: /* XXX Shouldn't use repr() here! */
         Box* selfrepr = repr(self);
+        AUTO_DECREF(selfrepr);
         assert(PyString_Check(selfrepr));
         result = PyString_FromFormat("<bound method %s.%s of %s>", sklassname, sfuncname, PyString_AS_STRING(selfrepr));
     }
@@ -3354,7 +3357,7 @@ void dealloc_null(Box* box) {
 static Box* getsetGet(Box* self, Box* obj, Box* type) {
     // TODO: should call the full descr_check instead
     if (obj == NULL || obj == None)
-        return self;
+        return incref(self);
 
     BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(self);
 
@@ -3383,12 +3386,12 @@ static Box* getsetSet(Box* self, Box* obj, Box* val) {
 
     if (isSubclass(self->cls, pyston_getset_cls)) {
         getset_descr->set(obj, val, getset_descr->closure);
-        return None;
+        return incref(None);
     } else {
         RELEASE_ASSERT(isSubclass(self->cls, capi_getset_cls), "");
         getset_descr->set(obj, val, getset_descr->closure);
         checkAndThrowCAPIException();
-        return None;
+        return incref(None);
     }
 }
 
