@@ -512,7 +512,9 @@ void RewriterVar::xdecref() {
     }, { this }, ActionType::MUTATION);
 }
 
-void Rewriter::_incref(RewriterVar* var) {
+void Rewriter::_incref(RewriterVar* var, int num_refs) {
+    assert(num_refs > 0);
+
     // Small optimization: skip any time we want to do xincref(NULL)
     if (var->isConstant() && var->constant_value == 0) {
         assert(var->nullable);
@@ -533,7 +535,11 @@ void Rewriter::_incref(RewriterVar* var) {
     assembler->incq(assembler::Immediate(&_Py_RefTotal));
 #endif
     auto reg = var->getInReg();
-    assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+
+    if (num_refs == 1)
+        assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+     else
+        assembler->add(assembler::Immediate(num_refs), assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
@@ -1195,12 +1201,7 @@ RewriterVar* RewriterVar::setType(RefType type) {
                 assert(num_needed_refs >= 0);
                 if (num_needed_refs > 0) {
                     if (rewriter->isDoneGuarding()) {
-                        assert(num_needed_refs == 1); // not bad just curious
-
-                        // XXX do a single add instead of multiple incs
-                        for (int i = 0; i < num_needed_refs; i++) {
-                            this->rewriter->_incref(this);
-                        }
+                        this->rewriter->_incref(this, num_needed_refs);
                     } else {
                         rewriter->pending_increfs.push_back(std::make_pair(this, num_needed_refs));
                     }

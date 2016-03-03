@@ -565,7 +565,7 @@ protected:
     void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());
 
     // These do not call bumpUse on their arguments:
-    void _incref(RewriterVar* var);
+    void _incref(RewriterVar* var, int num_refs=1);
     void _decref(RewriterVar* var);
     void _xdecref(RewriterVar* var);
 

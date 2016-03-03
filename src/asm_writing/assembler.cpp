@@ -103,6 +103,42 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
     }
 }
 
+void Assembler::emitArith(Immediate imm, Indirect mem, int opcode) {
+    int64_t amount = imm.val;
+    assert(fitsInto<int32_t>(amount));
+    assert(0 <= opcode && opcode < 8);
+
+    int rex = REX_W;
+
+    int mem_idx = mem.base.regnum;
+    if (mem_idx >= 8) {
+        rex |= REX_B;
+        mem_idx -= 8;
+    }
+
+    // TODO: needs testing, then remove this trap
+    trap();
+
+    emitRex(rex);
+
+    bool needssib = (mem_idx == 0b100);
+    assert(!needssib && "untested");
+    int mode = getModeFromOffset(mem.offset, mem_idx);
+
+    if (-0x80 <= amount && amount < 0x80) {
+        emitByte(0x83);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
+        emitModRM(mode, opcode, mem_idx);
+        emitByte(amount);
+    } else {
+        emitByte(0x81);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
+        emitModRM(mode, opcode, mem_idx);
+        emitInt(amount, 4);
+    }
+}
 
 void Assembler::emitByte(uint8_t b) {
     if (addr >= end_addr) {
@@ -156,10 +192,12 @@ void Assembler::emitSIB(uint8_t scalebits, uint8_t index, uint8_t base) {
     emitByte((scalebits << 6) | (index << 3) | base);
 }
 
-int Assembler::getModeFromOffset(int offset) const {
-    if (offset == 0)
+int Assembler::getModeFromOffset(int offset, int reg_idx) const {
+    if (offset == 0) {
+        if (reg_idx == 0b101)
+            return 0b01;
         return 0b00;
-    else if (-0x80 <= offset && offset < 0x80)
+    } else if (-0x80 <= offset && offset < 0x80)
         return 0b01;
     else
         return 0b10;
@@ -198,7 +236,7 @@ void Assembler::movq(Immediate src, Indirect dest) {
     emitByte(0xc7);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, 0, dest_idx);
 
     if (needssib)
@@ -258,7 +296,7 @@ void Assembler::mov(Register src, Indirect dest) {
     emitByte(0x89);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -465,7 +503,7 @@ void Assembler::movsd(XMMRegister src, Indirect dest) {
     emitByte(0x11);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -629,6 +667,10 @@ void Assembler::add(Immediate imm, Register reg) {
 
 void Assembler::sub(Immediate imm, Register reg) {
     emitArith(imm, reg, OPCODE_SUB);
+}
+
+void Assembler::add(Immediate imm, Indirect mem) {
+    emitArith(imm, mem, OPCODE_ADD);
 }
 
 void Assembler::incl(Indirect mem) {
@@ -910,7 +952,7 @@ void Assembler::lea(Indirect mem, Register reg) {
     emitByte(0x8D);
 
     bool needssib = (mem_idx == 0b100);
-    int mode = getModeFromOffset(mem.offset);
+    int mode = getModeFromOffset(mem.offset, mem_idx);
     emitModRM(mode, reg_idx, mem_idx);
 
     if (needssib)

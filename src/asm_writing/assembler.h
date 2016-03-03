@@ -88,8 +88,9 @@ private:
     void emitModRM(uint8_t mod, uint8_t reg, uint8_t rm);
     void emitSIB(uint8_t scalebits, uint8_t index, uint8_t base);
     void emitArith(Immediate imm, Register reg, int opcode);
+    void emitArith(Immediate imm, Indirect mem, int opcode);
 
-    int getModeFromOffset(int offset) const;
+    int getModeFromOffset(int offset, int reg_idx) const;
 
 public:
     Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
@@ -153,6 +154,7 @@ public:
     void pop(Register reg);
 
     void add(Immediate imm, Register reg);
+    void add(Immediate imm, Indirect mem);
     void sub(Immediate imm, Register reg);
 
     void incl(Indirect mem);
