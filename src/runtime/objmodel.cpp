@@ -6817,15 +6817,18 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
         while (true) {
             Box* attr_name;
             try {
-                attr_name
-                    = runtimeCallInternal2<CXX, NOT_REWRITABLE>(all_getitem, NULL, ArgPassSpec(2), all, boxInt(idx));
+                attr_name = runtimeCallInternal2<CXX, NOT_REWRITABLE>(all_getitem, NULL, ArgPassSpec(2), all,
+                                                                      autoDecref(boxInt(idx)));
             } catch (ExcInfo e) {
-                if (e.matches(IndexError))
+                if (e.matches(IndexError)) {
+                    e.clear();
                     break;
+                }
                 throw e;
             }
             idx++;
 
+            AUTO_DECREF(attr_name);
             attr_name = coerceUnicodeToStr<CXX>(attr_name);
 
             if (attr_name->cls != str_cls) {
@@ -6840,9 +6843,9 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
 
             if (!attr_value)
                 raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
-            setGlobal(to_globals, casted_attr_name, attr_value);
+            setGlobal(to_globals, casted_attr_name, incref(attr_value));
         }
-        return None;
+        return incref(None);
     }
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
@@ -6850,10 +6853,10 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
         if (p.first->data()[0] == '_')
             continue;
 
-        setGlobal(to_globals, p.first, module_attrs->attr_list->attrs[p.second]);
+        setGlobal(to_globals, p.first, incref(module_attrs->attr_list->attrs[p.second]));
     }
 
-    return None;
+    return incref(None);
 }
 
 // TODO Make these fast, do inline caches and stuff

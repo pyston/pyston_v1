@@ -1328,6 +1328,11 @@ inline Box* Box::getattrString(const char* attr) {
     }
 }
 
+inline void ExcInfo::clear() {
+    Py_DECREF(type);
+    Py_DECREF(value);
+    Py_DECREF(traceback); // XDECREF?
+}
 } // namespace pyston
 
 #endif

@@ -466,7 +466,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
             return NULL;
         }
     }
-    return incref(obj);
+    return NULL;
 }
 
 extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {

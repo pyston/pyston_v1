@@ -930,6 +930,7 @@ struct ExcInfo {
     Box* type, *value, *traceback;
 
     constexpr ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
+    void clear();
     bool matches(BoxedClass* cls) const;
     void printExcAndTraceback() const;
 };
