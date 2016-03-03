@@ -505,6 +505,7 @@ public:
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(unpacked, i);
             llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
             assert(val->getType() == g.llvm_value_type_ptr);
+            emitter.setType(val, RefType::OWNED);
 
             rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val));
         }

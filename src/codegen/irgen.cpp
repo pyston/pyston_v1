@@ -601,6 +601,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             // TODO might be more efficient to do post-call safepoints?
             generator->doSafePoint(block->body[0]);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
+            assert(0 && "check refcounting");
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
             assert(phis);
@@ -618,8 +619,13 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
                 //        analyzed_type->debugName().c_str());
 
+                assert(0 && "check refcounting");
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
                                                                       block->predecessors.size() + 1, p.first.s());
+                if (analyzed_type->getBoxType() == analyzed_type) {
+                    assert(0 && "check refcounting");
+                    irstate->getRefcounts()->setType(phi, RefType::OWNED);
+                }
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
                 generator->giveLocalSymbol(p.first, var);
                 (*phis)[p.first] = std::make_pair(analyzed_type, phi);
@@ -657,7 +663,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
-                if (phi->getType() == g.llvm_value_type_ptr)
+                if (type->getBoxType() == type)
                     irstate->getRefcounts()->setType(phi, RefType::OWNED);
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi);
                 generator->giveLocalSymbol(s, var);
@@ -758,7 +764,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
                                                                           block->predecessors.size(), name.s());
-                    if (phi->getType() == g.llvm_value_type_ptr)
+                    if (cv->getType()->getBoxType() == cv->getType())
                         irstate->getRefcounts()->setType(phi, RefType::OWNED);
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi);
@@ -864,8 +870,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
 
                 if (v->getType()->getBoxType() == v->getType()) {
-                    // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
-                    irstate->getRefcounts()->setType(llvm_phi, RefType::OWNED);
+                     //llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     assert(llvm::isa<llvm::BranchInst>(terminator));
                     irstate->getRefcounts()->refConsumed(v->getValue(), terminator);
                 }

@@ -32,6 +32,7 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts) {
 }
 
 Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
+    assert(0 && "check refcounting");
 
     i64 size = self->size();
     assert(step != 0);
@@ -114,6 +115,7 @@ extern "C" int _PyTuple_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 }
 
 int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
+    assert(0 && "check refcounting");
     assert((*pv)->cls == tuple_cls);
 
     BoxedTuple* t = static_cast<BoxedTuple*>(*pv);
@@ -162,6 +164,7 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     if (!PyTuple_Check(rhs)) {
         return incref(NotImplemented);
     }
+    assert(0 && "check refcounting");
 
     BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);
 
@@ -172,6 +175,7 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleMulInt(BoxedTuple* self, int n) {
+    assert(0 && "check refcounting");
     int s = self->size();
 
     if (n < 0)
@@ -199,7 +203,7 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
             throwCAPIException();
         return tupleMulInt(self, n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -386,6 +390,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
+    assert(0 && "check refcounting");
     RELEASE_ASSERT(PyTuple_Check(op), "");
 
     BoxedTuple* t = static_cast<BoxedTuple*>(op);
@@ -398,6 +403,7 @@ extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) no
 }
 
 extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
+    assert(0 && "check refcounting");
     va_list vargs;
 
     va_start(vargs, n);

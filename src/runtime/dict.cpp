@@ -96,7 +96,7 @@ Box* dictItems(BoxedDict* self) {
     rtn->ensure(self->d.size());
     for (const auto& p : *self) {
         BoxedTuple* t = BoxedTuple::create({ p.first, p.second });
-        listAppendInternal(rtn, t);
+        listAppendInternalStolen(rtn, t);
     }
 
     return rtn;

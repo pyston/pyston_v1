@@ -28,13 +28,13 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == member_descriptor_cls, "");
 
     if (inst == None)
-        return self;
+        return incref(self);
 
     if (self->type == BoxedMemberDescriptor::OBJECT) {
         Box* rtn = *(Box**)(((char*)inst) + self->offset);
         if (!rtn)
             rtn = None;
-        return rtn;
+        return incref(rtn);
     }
 
     Py_FatalError("unimplemented");
@@ -57,8 +57,10 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
 
     if (get_doc) {
         if (prop->cls == property_cls) {
+            Py_XDECREF(prop->prop_doc);
             prop->prop_doc = get_doc;
         } else {
+            AUTO_DECREF(get_doc);
             /* If this is a property subclass, put __doc__
             in dict of the subclass instance instead,
             otherwise it gets shadowed by __doc__ in the
@@ -75,10 +77,10 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     Box* doc = args[1];
 
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
-    self->prop_get = fget == None ? NULL : fget;
-    self->prop_set = fset == None ? NULL : fset;
-    self->prop_del = fdel == None ? NULL : fdel;
-    self->prop_doc = doc;
+    self->prop_get = fget == None ? NULL : incref(fget);
+    self->prop_set = fset == None ? NULL : incref(fset);
+    self->prop_del = fdel == None ? NULL : incref(fdel);
+    self->prop_doc = xincref(doc);
     self->getter_doc = false;
 
     /* if no docstring given and the getter has one, use that one */
@@ -94,7 +96,7 @@ static Box* propertyGet(Box* self, Box* obj, Box* type) {
 
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     if (obj == NULL || obj == None) {
-        return self;
+        return incref(self);
     }
 
     if (prop->prop_get == NULL) {
@@ -124,7 +126,7 @@ static Box* propertySet(Box* self, Box* obj, Box* val) {
     } else {
         runtimeCall(func, ArgPassSpec(2), obj, val, NULL, NULL, NULL);
     }
-    return None;
+    return incref(None);
 }
 
 static Box* propertyDel(Box* self, Box* obj) {
@@ -190,7 +192,7 @@ static Box* staticmethodInit(Box* _self, Box* f) {
     BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
     self->sm_callable = f;
 
-    return None;
+    return incref(None);
 }
 
 static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
@@ -202,7 +204,7 @@ static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
         raiseExcHelper(RuntimeError, "uninitialized staticmethod object");
     }
 
-    return sm->sm_callable;
+    return incref(sm->sm_callable);
 }
 
 extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
@@ -212,9 +214,9 @@ extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
 static Box* classmethodInit(Box* _self, Box* f) {
     RELEASE_ASSERT(isSubclass(_self->cls, classmethod_cls), "");
     BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
-    self->cm_callable = f;
+    self->cm_callable = incref(f);
 
-    return None;
+    return incref(None);
 }
 
 static Box* classmethodGet(Box* self, Box* obj, Box* type) {
@@ -390,14 +392,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
 
-    if (!rtn)
-        throwCAPIException();
-
-    if (rewrite_args) {
-        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-        rewrite_args->out_success = true;
-    }
-
     if (paramspec.totalReceived() >= 1)
         Py_DECREF(arg1);
     if (paramspec.totalReceived() >= 2)
@@ -407,6 +401,14 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     for (int i = 0; i < paramspec.totalReceived() - 3; i++)
         Py_DECREF(oargs[i]);
 
+    if (!rtn)
+        throwCAPIException();
+
+    if (rewrite_args) {
+        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+        rewrite_args->out_success = true;
+    }
+
     return rtn;
 }
 static Box* methodGetName(Box* b, void*) {
@@ -414,14 +416,14 @@ static Box* methodGetName(Box* b, void*) {
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_name;
     if (s)
         return boxString(s);
-    return None;
+    return incref(None);
 }
 static Box* methodGetDoc(Box* b, void*) {
     assert(b->cls == method_cls);
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
     if (s)
         return boxString(s);
-    return None;
+    return incref(None);
 }
 
 static Box* methodRepr(Box* _o) {
@@ -445,7 +447,7 @@ Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Bo
         Py_FatalError("unimplemented");
 
     if (inst == NULL)
-        return self;
+        return incref(self);
     else
         return boxInstanceMethod(inst, self, self->type);
 }
@@ -554,7 +556,7 @@ Box* BoxedWrapperDescriptor::descr_get(Box* _self, Box* inst, Box* owner) noexce
     BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
 
     if (inst == NULL)
-        return self;
+        return incref(self);
 
     if (!isSubclass(inst->cls, self->type)) {
         PyErr_Format(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
@@ -690,8 +692,8 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
             break;
     }
 
-    checkAndThrowCAPIException();
-    assert(rtn && "should have set + thrown an exception!");
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -764,8 +766,8 @@ Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds
         RELEASE_ASSERT(0, "%d", flags);
     }
 
-    checkAndThrowCAPIException();
-    assert(rtn && "should have set + thrown an exception!");
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
