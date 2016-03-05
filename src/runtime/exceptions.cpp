@@ -27,7 +27,7 @@ namespace pyston {
 
 void raiseExc(Box* exc_obj) {
     assert(!PyErr_Occurred());
-    throw ExcInfo(exc_obj->cls, exc_obj, None);
+    throw ExcInfo(exc_obj->cls, exc_obj, NULL);
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -46,7 +46,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
         auto args = BoxedTuple::create({ boxString(file), boxInt(lineno), None, loc });
         Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), boxString(msg), args, NULL, NULL, NULL);
         assert(!PyErr_Occurred());
-        throw ExcInfo(exc->cls, exc, None);
+        throw ExcInfo(exc->cls, exc, NULL);
     } else {
         PyErr_SetString(SyntaxError, msg);
         PyErr_SyntaxLocation(file.str().c_str(), lineno);
@@ -140,10 +140,6 @@ ExcInfo excInfoForRaise(Box* type, Box* value, Box* tb) {
 
     assert(PyExceptionClass_Check(type));
 
-    if (tb == NULL) {
-        tb = None;
-    }
-
     return ExcInfo(type, value, tb);
 }
 
@@ -169,7 +165,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
         frame_exc_info->type = TypeError;
         frame_exc_info->value
             = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");
-        frame_exc_info->traceback = None;
+        frame_exc_info->traceback = NULL;
         PyErr_NormalizeException(&frame_exc_info->type, &frame_exc_info->value, &frame_exc_info->traceback);
     }
 

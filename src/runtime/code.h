@@ -24,8 +24,13 @@ namespace pyston {
 class BoxedCode : public Box {
 public:
     FunctionMetadata* f;
+    Box* _filename;
+    Box* _name;
+    int _firstline;
 
-    BoxedCode(FunctionMetadata* f) : f(f) {}
+    BoxedCode(FunctionMetadata* f) : f(f), _filename(NULL), _name(NULL), _firstline(-1) {}
+    BoxedCode(Box* filename, Box* name, int firstline)
+        : f(NULL), _filename(filename), _name(name), _firstline(firstline) {}
 
     DEFAULT_CLASS(code_cls);
 

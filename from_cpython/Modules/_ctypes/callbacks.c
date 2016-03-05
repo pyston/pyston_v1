@@ -5,9 +5,7 @@
 #include "Python.h"
 #include "compile.h" /* required only for 2.3, as it seems */
 
-// Pyston change: We don't have this file and commented out the function that needs it, but
-// we may want to support that function in the future.
-//#include "frameobject.h"
+#include "frameobject.h"
 
 #include <ffi.h>
 #ifdef MS_WIN32
@@ -152,9 +150,6 @@ failed:
 /* after code that pyrex generates */
 void _ctypes_add_traceback(char *funcname, char *filename, int lineno)
 {
-    // TODO: Pyston change:
-    // Supporting this will require frameobject.h
-#if 0
     PyObject *py_globals = 0;
     PyCodeObject *py_code = 0;
     PyFrameObject *py_frame = 0;
@@ -170,15 +165,16 @@ void _ctypes_add_traceback(char *funcname, char *filename, int lineno)
         0                    /*PyObject *locals*/
         );
     if (!py_frame) goto bad;
-    py_frame->f_lineno = lineno;
+
+    // Pyston change:
+    // py_frame->f_lineno = lineno;
+    PyFrame_SetLineNumber(py_frame, lineno);
+
     PyTraceBack_Here(py_frame);
   bad:
     Py_XDECREF(py_globals);
     Py_XDECREF(py_code);
     Py_XDECREF(py_frame);
-#else
-    assert(false);
-#endif
 }
 
 #ifdef MS_WIN32

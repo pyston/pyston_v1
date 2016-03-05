@@ -719,12 +719,12 @@ ExcInfo* getFrameExcInfo() {
 
     if (!copy_from_exc->type) {
         // No exceptions found:
-        *copy_from_exc = ExcInfo(None, None, None);
+        *copy_from_exc = ExcInfo(None, None, NULL);
     }
 
     assert(gc::isValidGCObject(copy_from_exc->type));
     assert(gc::isValidGCObject(copy_from_exc->value));
-    assert(gc::isValidGCObject(copy_from_exc->traceback));
+    assert(!copy_from_exc->traceback || gc::isValidGCObject(copy_from_exc->traceback));
 
     for (auto* ex : to_update) {
         *ex = *copy_from_exc;

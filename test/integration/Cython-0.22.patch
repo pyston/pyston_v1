@@ -74,27 +74,20 @@ index 9cc38f0..ab05ad1 100644
  // PyPy does not have this function
  static PyObject * __Pyx_CyFunction_Call(PyObject *func, PyObject *arg, PyObject *kw) {
 diff --git a/Cython/Utility/Exceptions.c b/Cython/Utility/Exceptions.c
-index 354a776..8af3cb7 100644
+index 354a776..8af3cb7 100644 static void __Pyx_AddTraceback(const char *funcname, int c_line,
 --- a/Cython/Utility/Exceptions.c
 +++ b/Cython/Utility/Exceptions.c
-@@ -450,7 +450,8 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
- /////////////// AddTraceback ///////////////
- //@requires: ModuleSetupCode.c::CodeObjectCache
- //@substitute: naming
--
-+// Pyston change: We don't support custom traceback entries currently
-+#if 0
- #include "compile.h"
- #include "frameobject.h"
- #include "traceback.h"
-@@ -534,3 +535,7 @@ bad:
+@@ -528,7 +528,9 @@
+         0                    /*PyObject *locals*/
+     );
+     if (!py_frame) goto bad;
+-    py_frame->f_lineno = py_line;
++    // Pyston change:
++    // py_frame->f_lineno = py_line;
++    PyFrame_SetLineNumber(py_frame, py_line);
+     PyTraceBack_Here(py_frame);
+ bad:
      Py_XDECREF(py_code);
-     Py_XDECREF(py_frame);
- }
-+#else
-+static void __Pyx_AddTraceback(const char *funcname, int c_line, int py_line, const char *filename) {
-+}
-+#endif
 diff --git a/Cython/Utility/Generator.c b/Cython/Utility/Generator.c
 index 0310570..70e550c 100644
 --- a/Cython/Utility/Generator.c
@@ -204,4 +197,5 @@ index 6477fb2..75dcdda 100644
  #else
 -- 
 1.9.1
+
 
