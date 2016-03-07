@@ -47,6 +47,14 @@ static const assembler::XMMRegister allocatable_xmm_regs[]
         assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9, assembler::XMM10, assembler::XMM11,
         assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15 };
 
+static const Location caller_save_registers[]{
+    assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
+    assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
+    assembler::XMM1,  assembler::XMM2,  assembler::XMM3,  assembler::XMM4,  assembler::XMM5,
+    assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9,  assembler::XMM10,
+    assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
+};
+
 Location Location::forArg(int argnum) {
     assert(argnum >= 0);
     switch (argnum) {
@@ -567,10 +575,12 @@ void Rewriter::_decref(RewriterVar* var) {
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
 #ifdef Py_TRACE_REFS
-        RELEASE_ASSERT(0, "need to support trace_refs here (call _Py_Dealloc instead of tp_dealloc");
-#endif
+        assembler->mov(assembler::Immediate((void*)_Py_Dealloc), assembler::R11);
+        assembler->callq(assembler::R11);
+#else
         assembler->movq(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
         assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
+#endif
         //assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
         //assembler->callq(assembler::R11);
     }
@@ -923,14 +933,6 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
     args.push_back(arg4);
     return call(has_side_effects, func_addr, args, args_xmm);
 }
-
-static const Location caller_save_registers[]{
-    assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
-    assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
-    assembler::XMM1,  assembler::XMM2,  assembler::XMM3,  assembler::XMM4,  assembler::XMM5,
-    assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9,  assembler::XMM10,
-    assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
-};
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {

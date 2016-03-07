@@ -185,6 +185,7 @@ extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
     else {
         try {
             Box* hasnext = iter->hasnextOrNullIC();
+            AUTO_XDECREF(hasnext);
             if (hasnext && !hasnext->nonzeroIC())
                 return NULL;
         } catch (ExcInfo e) {
