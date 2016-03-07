@@ -33,7 +33,8 @@ If the program ends with a message such as "10 refs remaining!", try to bisect d
 
 If the assertion `assert(var->reftype != RefType::UNKNOWN)` fails in Rewriter::commitReturning(), this means that someone forgot to call `setType` on a refcounted RewriterVar.  Unfortunately, we don't have any tracking of where RewriterVars get created, so we will use GDB to help us.
 
-- Type `run` a few (~3) times to make sure that the program enters steady-state behavior (on-disk caches get filled).
+- First, turn off ENABLE_JIT_OBJECT_CACHE in options.cpp (maybe we should add a command line flag for this).
+-- You may need to type `run` a few (~3) times to make sure that the program enters steady-state behavior (on-disk caches get filled), though with the object cache off this shouldn't be necessary.
 - When the assertion hits, go up to the `commitReturning()` stack frame that contains the assertion.
 - Type `watch -l *(char**)&var->reftype`.  This adds a breakpoint that will get hit whenever the reftype field gets modified.  The `-l` flag tells gdb to evaluate the expression once and then watch the resulting address (rather than symbolically reevaluating it each time).  The `*(char**)&` part is a workaround since otherwise GDB will fail to reset the breakpoint when we do the next step.
 - Type `run` to restart the program.  You should see the breakpoint get hit.  We are only interested in the last time the breakpoint gets hit, so we need to do the following:

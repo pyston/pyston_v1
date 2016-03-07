@@ -1557,7 +1557,7 @@ bool Rewriter::finishAssembly(int continue_offset) {
 void Rewriter::commitReturning(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    assert(var->reftype != RefType::UNKNOWN);
+    ASSERT(var->reftype != RefType::UNKNOWN, "%p", var);
 
     addAction([=]() {
         if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
