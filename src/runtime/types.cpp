@@ -3730,7 +3730,7 @@ int BoxedClosure::traverse(Box* _o, visitproc visit, void* arg) noexcept {
     BoxedClosure* o = (BoxedClosure*)_o;
 
     for (int i = 0; i < o->nelts; i++) {
-        Py_XDECREF(o->elts[i]);
+        Py_VISIT(o->elts[i]);
     }
 
     return 0;

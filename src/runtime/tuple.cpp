@@ -164,13 +164,14 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     if (!PyTuple_Check(rhs)) {
         return incref(NotImplemented);
     }
-    assert(0 && "check refcounting");
 
     BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);
 
     BoxedTuple* rtn = BoxedTuple::create(self->size() + _rhs->size());
     memmove(&rtn->elts[0], &self->elts[0], self->size() * sizeof(Box*));
     memmove(&rtn->elts[self->size()], &_rhs->elts[0], _rhs->size() * sizeof(Box*));
+    for (int i = 0; i < rtn->size(); i++)
+        Py_INCREF(rtn->elts[i]);
     return rtn;
 }
 
@@ -389,8 +390,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     }
 }
 
-extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
-    assert(0 && "check refcounting");
+extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, STOLEN(PyObject*) newitem) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
 
     BoxedTuple* t = static_cast<BoxedTuple*>(op);
@@ -403,7 +403,6 @@ extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) no
 }
 
 extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
-    assert(0 && "check refcounting");
     va_list vargs;
 
     va_start(vargs, n);
