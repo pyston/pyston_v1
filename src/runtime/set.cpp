@@ -32,7 +32,9 @@ public:
     decltype(BoxedSet::s)::iterator it;
     long size;
 
-    BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()), size(s->s.size()) {}
+    BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()), size(s->s.size()) {
+        Py_INCREF(s);
+    }
 
     DEFAULT_CLASS(set_iterator_cls);
 
@@ -41,7 +43,7 @@ public:
     Box* next() {
         Box* rtn = it->value;
         ++it;
-        return rtn;
+        return incref(rtn);
     }
 
     static void dealloc(BoxedSetIterator* o) noexcept {
@@ -87,12 +89,23 @@ Box* setiteratorIter(BoxedSetIterator* self) {
     return self;
 }
 
-Box* setAdd2(Box* _self, Box* b) {
-    RELEASE_ASSERT(isSubclass(_self->cls, set_cls), "");
-    BoxedSet* self = static_cast<BoxedSet*>(_self);
+static void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
+    auto&& p = self->s.insert(val);
+    if (p.second /* already exists */) {
+        Py_DECREF(p.first->value);
+        *p.first = val;
+    }
+}
 
-    self->s.insert(b);
-    return None;
+static void _setAdd(BoxedSet* self, BoxAndHash val) {
+    Py_INCREF(val.value);
+    _setAddStolen(self, val);
+}
+
+static void _setRemove(BoxedSet* self, BoxAndHash val) {
+    bool erased = self->s.erase(val);
+    if (erased)
+        Py_DECREF(val.value);
 }
 
 // Creates a set of type 'cls' from 'container' (NULL to get an empty set).
@@ -105,15 +118,15 @@ BoxedSet* makeNewSet(BoxedClass* cls, Box* container) {
     if (container) {
         if (PyAnySet_Check(container)) {
             for (auto&& elt : ((BoxedSet*)container)->s) {
-                rtn->s.insert(elt);
+                rtn->s.insert(incref(elt));
             }
         } else if (PyDict_CheckExact(container)) {
             for (auto&& elt : ((BoxedDict*)container)->d) {
-                rtn->s.insert(elt.first);
+                rtn->s.insert(incref(elt.first));
             }
         } else {
             for (auto elt : container->pyElements()) {
-                rtn->s.insert(elt);
+                _setAddStolen(rtn, elt);
             }
         }
     }
@@ -134,12 +147,13 @@ Box* frozensetNew(Box* _cls, Box* container, BoxedDict* kwargs) {
 
     if (container != NULL) {
         if (container->cls == frozenset_cls)
-            return container;
+            return incref(container);
 
         BoxedSet* result = makeNewSet(cls, container);
         if (result->s.size() != 0) {
             return result;
         }
+        Py_DECREF(result);
     }
     static Box* emptyfrozenset = new (frozenset_cls) BoxedSet();
     Py_INCREF(emptyfrozenset);
@@ -159,6 +173,19 @@ Box* setNew(Box* _cls, Box* container, BoxedDict* kwargs) {
     return makeNewSet(cls, NULL);
 }
 
+static void setClearInternal(BoxedSet* self) {
+    ASSERT(isSubclass(self->cls, set_cls), "");
+
+    if (self->s.size()) {
+        BoxedSet::Set tmp;
+        std::swap(tmp, self->s);
+        for (auto p : tmp) {
+            Py_DECREF(p.value);
+        }
+        self->s.clear();
+    }
+}
+
 Box* setInit(Box* _self, Box* container, BoxedDict* kwargs) {
     RELEASE_ASSERT(PySet_Check(_self), "");
 
@@ -167,28 +194,28 @@ Box* setInit(Box* _self, Box* container, BoxedDict* kwargs) {
     }
 
     if (!container)
-        return None;
+        return incref(None);
 
     BoxedSet* self = static_cast<BoxedSet*>(_self);
 
-    self->s.clear();
+    setClearInternal(self);
 
     if (PyAnySet_Check(container)) {
         for (auto&& elt : ((BoxedSet*)container)->s) {
-            self->s.insert(elt);
+            self->s.insert(incref(elt));
         }
     } else if (PyDict_CheckExact(container)) {
         for (auto&& elt : ((BoxedDict*)container)->d) {
-            self->s.insert(elt.first);
+            self->s.insert(incref(elt.first));
         }
 
     } else {
         for (auto elt : container->pyElements()) {
-            self->s.insert(elt);
+            _setAddStolen(self, elt);
         }
     }
 
-    return None;
+    return incref(None);
 }
 
 static Box* setRepr(BoxedSet* self) {
@@ -227,6 +254,7 @@ static Box* setRepr(BoxedSet* self) {
                 chars.push_back(' ');
             }
             BoxedString* str = static_cast<BoxedString*>(repr(elt.value));
+            AUTO_DECREF(str);
             chars.insert(chars.end(), str->s().begin(), str->s().end());
 
             first = false;
@@ -248,9 +276,13 @@ static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
     BoxedSet* other_set = static_cast<BoxedSet*>(other);
 
     for (auto elt : other_set->s) {
-        bool found = self->s.erase(elt);
-        if (!found)
-            self->s.insert(elt);
+        auto&& p = self->s.insert(elt);
+        if (p.second /* already exists */) {
+            self->s.erase(p.first);
+            Py_DECREF(elt.value);
+        } else {
+            Py_INCREF(elt.value);
+        }
     }
 }
 
@@ -259,8 +291,12 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
 
     BoxedSet* rtn = makeNewSet(self->cls, NULL);
     for (auto elt : container->pyElements()) {
-        if (self->s.count(elt))
+        if (self->s.count(elt)) {
             rtn->s.insert(elt);
+            // steal the ref
+        } else {
+            Py_DECREF(elt);
+        }
     }
     return rtn;
 }
@@ -268,7 +304,8 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
 static Box* setIntersectionUpdate2(BoxedSet* self, Box* other) {
     Box* tmp = setIntersection2(self, other);
     std::swap(self->s, ((BoxedSet*)tmp)->s);
-    return None;
+    Py_DECREF(tmp);
+    return incref(None);
 }
 
 Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
@@ -278,9 +315,9 @@ Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
 
     // TODO just [write and] call setUnionUpdate2
     for (auto&& elt : rhs->s) {
-        lhs->s.insert(elt);
+        _setAdd(lhs, elt);
     }
-    return lhs;
+    return incref(lhs);
 }
 
 Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
@@ -289,6 +326,7 @@ Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
         return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    AUTO_DECREF(rtn);
     return setIOr(rtn, rhs);
 }
 
@@ -297,8 +335,9 @@ Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
     if (!PyAnySet_Check(rhs))
         return incref(NotImplemented);
 
-    setIntersectionUpdate2(lhs, rhs);
-    return lhs;
+    auto r = setIntersectionUpdate2(lhs, rhs);
+    Py_DECREF(r);
+    return incref(lhs);
 }
 
 Box* setAnd(BoxedSet* lhs, BoxedSet* rhs) {
@@ -316,9 +355,11 @@ Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
 
     // TODO: write and call setDifferenceUpdate2
     for (auto&& elt : rhs->s) {
-        lhs->s.erase(elt);
+        bool found = lhs->s.erase(elt);
+        if (found)
+            Py_DECREF(elt.value);
     }
-    return lhs;
+    return incref(lhs);
 }
 
 Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
@@ -327,6 +368,7 @@ Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
         return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    AUTO_DECREF(rtn);
     return setISub(rtn, rhs);
 }
 
@@ -337,7 +379,7 @@ Box* setIXor(BoxedSet* lhs, BoxedSet* rhs) {
 
     _setSymmetricDifferenceUpdate(lhs, rhs);
 
-    return lhs;
+    return incref(lhs);
 }
 
 Box* setXor(BoxedSet* lhs, BoxedSet* rhs) {
@@ -346,6 +388,7 @@ Box* setXor(BoxedSet* lhs, BoxedSet* rhs) {
         return incref(NotImplemented);
 
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
+    AUTO_DECREF(rtn);
     return setIXor(rtn, rhs);
 }
 
@@ -362,8 +405,8 @@ Box* setLen(BoxedSet* self) {
 Box* setAdd(BoxedSet* self, Box* v) {
     RELEASE_ASSERT(isSubclass(self->cls, set_cls), "%s", self->cls->tp_name);
 
-    self->s.insert(v);
-    return None;
+    _setAdd(self, v);
+    return incref(None);
 }
 
 // Note: PySet_Add is allowed to apply to frozenset objects, though CPython has
@@ -376,7 +419,7 @@ extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
     }
 
     try {
-        static_cast<BoxedSet*>(set)->s.insert(key);
+        _setAdd(static_cast<BoxedSet*>(set), key);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -384,20 +427,6 @@ extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
     }
 }
 
-
-Box* setClearInternal(BoxedSet* self) {
-    ASSERT(isSubclass(self->cls, set_cls), "");
-
-    RELEASE_ASSERT(0, "refcounting");
-
-    BoxedSet::Set tmp;
-    std::swap(tmp, self->s);
-    for (auto p : tmp) {
-        Py_DECREF(p.value);
-    }
-    self->s.clear();
-    return None;
-}
 
 Box* setClear(BoxedSet* self) {
     RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");
@@ -411,7 +440,7 @@ extern "C" int PySet_Clear(PyObject* set) noexcept {
         PyErr_BadInternalCall();
         return -1;
     }
-    ((BoxedSet*)set)->s.clear();
+    setClearInternal(static_cast<BoxedSet*>(set));
     return 0;
 }
 
@@ -423,15 +452,17 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     for (auto l : *args) {
         if (l->cls == set_cls) {
             BoxedSet* s2 = static_cast<BoxedSet*>(l);
-            self->s.insert(s2->s.begin(), s2->s.end());
+            for (auto&& p :s2->s) {
+                _setAdd(self, p);
+            }
         } else {
             for (auto e : l->pyElements()) {
-                self->s.insert(e);
+                _setAddStolen(self, e);
             }
         }
     }
 
-    return None;
+    return incref(None);
 }
 
 Box* setUnion(BoxedSet* self, BoxedTuple* args) {
@@ -439,11 +470,13 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
         raiseExcHelper(TypeError, "descriptor 'union' requires a 'set' object but received a '%s'", getTypeName(self));
 
     BoxedSet* rtn = makeNewSet(self->cls, self);
-    rtn->s.insert(self->s.begin(), self->s.end());
+    for (auto&& p : self->s)
+        _setAdd(rtn, p);
 
     for (auto container : args->pyElements()) {
+        AUTO_DECREF(container);
         for (auto elt : container->pyElements()) {
-            rtn->s.insert(elt);
+            _setAddStolen(rtn, elt);
         }
     }
 
@@ -454,15 +487,16 @@ static void _setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
     for (auto container : args->pyElements()) {
         if (PyAnySet_Check(container)) {
             for (auto&& elt : ((BoxedSet*)container)->s) {
-                self->s.erase(elt);
+                _setRemove(self, elt);
             }
         } else if (PyDict_CheckExact(container)) {
             for (auto&& elt : ((BoxedDict*)container)->d) {
-                self->s.erase(elt.first);
+                _setRemove(self, elt.first);
             }
         } else {
             for (auto elt : container->pyElements()) {
-                self->s.erase(elt);
+                AUTO_DECREF(elt);
+                _setRemove(self, elt);
             }
         }
     }
@@ -474,7 +508,7 @@ Box* setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
                        getTypeName(self));
 
     _setDifferenceUpdate(self, args);
-    return None;
+    return incref(None);
 }
 
 Box* setDifference(BoxedSet* self, BoxedTuple* args) {
@@ -494,7 +528,7 @@ Box* setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
                        getTypeName(self));
 
     _setSymmetricDifferenceUpdate(self, other);
-    return None;
+    return incref(None);
 }
 
 Box* setSymmetricDifference(BoxedSet* self, Box* other) {
@@ -512,7 +546,10 @@ static Box* setIssubset(BoxedSet* self, Box* container) {
 
     if (!PyAnySet_Check(container)) {
         container = makeNewSet(set_cls, container);
+    } else {
+        Py_INCREF(container);
     }
+    AUTO_DECREF(container);
     assert(PyAnySet_Check(container));
 
     BoxedSet* rhs = static_cast<BoxedSet*>(container);
@@ -531,7 +568,10 @@ static Box* setIssuperset(BoxedSet* self, Box* container) {
 
     if (!PyAnySet_Check(container)) {
         container = makeNewSet(set_cls, container);
+    } else {
+        Py_INCREF(container);
     }
+    AUTO_DECREF(container);
     assert(PyAnySet_Check(container));
     return setIssubset((BoxedSet*)container, self);
 }
@@ -540,6 +580,7 @@ static Box* setIsdisjoint(BoxedSet* self, Box* container) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     for (auto e : container->pyElements()) {
+        AUTO_DECREF(e);
         if (self->s.find(e) != self->s.end())
             Py_RETURN_FALSE;
     }
@@ -554,8 +595,9 @@ static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
     if (args->size() == 0)
         return makeNewSet(self->cls, self);
 
-    BoxedSet* rtn = self;
+    BoxedSet* rtn = incref(self);
     for (auto container : *args) {
+        AUTO_DECREF(rtn);
         rtn = setIntersection2(rtn, container);
     }
     return rtn;
@@ -564,13 +606,15 @@ static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
 static Box* setIntersectionUpdate(BoxedSet* self, BoxedTuple* args) {
     Box* tmp = setIntersection(self, args);
     std::swap(self->s, ((BoxedSet*)tmp)->s);
-    return None;
+    return incref(None);
 }
 
 Box* setCopy(BoxedSet* self) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     BoxedSet* rtn = new BoxedSet();
+    for (auto&& p : self->s)
+        Py_INCREF(p.value);
     rtn->s = self->s;
     return rtn;
 }
@@ -579,7 +623,7 @@ Box* frozensetCopy(BoxedSet* self) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     if (self->cls == frozenset_cls) {
-        return self;
+        return incref(self);
     }
     return setCopy(self);
 }
@@ -663,6 +707,7 @@ Box* setContains(BoxedSet* self, Box* key) {
                 throw e;
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
+            AUTO_DECREF(tmpKey);
             return boxBool(self->s.find(tmpKey) != self->s.end());
         }
     }
@@ -679,17 +724,18 @@ Box* setRemove(BoxedSet* self, Box* key) {
             if (self->s.find(k_hash) != self->s.end()) {
                 bool existed = self->s.erase(k_hash);
                 if (existed)
-                    return None;
+                    return incref(None);
             }
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
+            AUTO_DECREF(tmpKey);
             if (self->s.find(tmpKey) != self->s.end()) {
                 bool existed = self->s.erase(tmpKey);
                 if (existed)
-                    return None;
+                    return incref(None);
             }
         }
         raiseExcHelper(KeyError, key);
@@ -701,7 +747,8 @@ Box* setRemove(BoxedSet* self, Box* key) {
     }
 
     self->s.erase(it);
-    return None;
+    Py_DECREF(key);
+    return incref(None);
 }
 
 Box* setDiscard(BoxedSet* self, Box* key) {
@@ -718,18 +765,21 @@ Box* setDiscard(BoxedSet* self, Box* key) {
                 throw e;
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
+            AUTO_DECREF(tmpKey);
             if (self->s.find(tmpKey) != self->s.end()) {
                 self->s.erase(tmpKey);
             }
         }
-        return None;
+        return incref(None);
     }
 
     auto it = self->s.find(key);
-    if (it != self->s.end())
+    if (it != self->s.end()) {
         self->s.erase(it);
+        Py_DECREF(key);
+    }
 
-    return None;
+    return incref(None);
 }
 
 Box* setNocmp(BoxedSet* self, BoxedSet* rhs) {

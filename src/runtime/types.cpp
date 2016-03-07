@@ -4334,6 +4334,7 @@ void setupRuntime() {
     _PyExc_Init();
     _PyImport_Init();
     _PyImportHooks_Init();
+    _PyWarnings_Init();
 
     PyType_Ready(&PyByteArrayIter_Type);
     PyType_Ready(&PyCapsule_Type);
