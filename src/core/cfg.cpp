@@ -1673,13 +1673,6 @@ public:
         remapped->col_offset = node->col_offset;
         push_back(remapped);
 
-        CFGBlock* unreachable = cfg->addBlock();
-        unreachable->info = "unreachable";
-        pushJump(unreachable);
-
-        curblock = unreachable;
-        pushJump(unreachable, true);
-
         curblock = iftrue;
 
         return true;
@@ -2742,7 +2735,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (b->successors.size() == 0) {
             AST_stmt* terminator = b->body.back();
             assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
-                   || terminator->type == AST_TYPE::Raise);
+                   || terminator->type == AST_TYPE::Raise || terminator->type == AST_TYPE::Assert);
         }
 
         if (b->predecessors.size() == 0) {

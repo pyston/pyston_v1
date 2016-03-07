@@ -361,6 +361,19 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
                 }
             }
 
+#ifndef NDEBUG
+            // This can currently get tripped if we generate an LLVM IR that has an infinite loop in it.
+            // This could definitely be supported, but I don't think we should be generating those cases anyway.
+            if (!best) {
+                for (auto& BB : ordering) {
+                    llvm::outs() << "added to " << BB->getName() << '\n';
+                }
+                for (auto& BB : *f) {
+                    if (added.count(&BB) == 0)
+                        llvm::outs() << "never got to " << BB.getName() << '\n';
+                }
+            }
+#endif
             assert(best);
             ordering.push_back(best);
             added.insert(best);

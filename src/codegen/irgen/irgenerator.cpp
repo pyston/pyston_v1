@@ -1996,6 +1996,9 @@ private:
         }
         llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFail, llvm_args);
         call.setDoesNotReturn();
+
+        emitter.getBuilder()->CreateUnreachable();
+        endBlock(DEAD);
     }
 
     void doAssign(AST_Assign* node, const UnwindInfo& unw_info) {
