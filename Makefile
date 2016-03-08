@@ -51,6 +51,7 @@ ETAGS := ctags-exuberant -e
 NINJA := ninja
 
 CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
+CMAKE_DIR_DBG_TO_SRC := ../.. # Relative path from $(CAMKE_DIR_DBG) to $(SRC_DIR).  Not sure how to calculate this automatically.
 CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_DIR_RELEASE_GCC := $(BUILD_DIR)/Release-gcc
@@ -1074,8 +1075,22 @@ lint_%: %.cpp plugins/clang_linter.so
 	$(ECHO) Linting $<
 	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped  -Ibuild_deps/libpypa/src/ -Wno-covered-switch-default -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
 
-refcount_checker:
-	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker
+REFCOUNT_CHECKER_BUILD_PATH := $(CMAKE_DIR_DBG)/plugins/refcount_checker/llvm/bin/refcount_checker
+REFCOUNT_CHECKER_RUN_PATH := $(CMAKE_DIR_DBG)/llvm/bin/refcount_checker
+$(REFCOUNT_CHECKER_BUILD_PATH): plugins/refcount_checker/refcount_checker.cpp
+	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker $(NINJAFLAGS)
+	cp $(REFCOUNT_CHECKER_BUILD_PATH) $(REFCOUNT_CHECKER_RUN_PATH)
+
+.PHONY: refcount_checker
+refcount_checker: $(REFCOUNT_CHECKER_RUN_PATH)
+
+.PHONY: refcheck_%
+refcheck_%: %.cpp refcount_checker
+	cd $(CMAKE_DIR_DBG); $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
+.PHONY: dbg_refcheck_%
+dbg_refcheck_%: %.cpp refcount_checker
+	cd $(CMAKE_DIR_DBG); $(GDB) --args $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
+
 
 .PHONY: clang_lint
 clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))
