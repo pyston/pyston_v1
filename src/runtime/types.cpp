@@ -398,6 +398,9 @@ static void functionDtor(Box* b) {
 
     BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
     PyObject_GC_UnTrack(self);
+
+    PyObject_ClearWeakRefs((PyObject*)self);
+
     self->dependent_ics.invalidateAll();
     self->dependent_ics.~ICInvalidator();
 

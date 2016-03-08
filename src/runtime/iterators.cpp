@@ -82,25 +82,32 @@ private:
     uint64_t index;
 
     static bool hasnext(BoxedList* o, uint64_t i) { return i < o->size; }
-    static Box* getValue(BoxedList* o, uint64_t i) { return o->elts->elts[i]; }
+    static Box* getValue(BoxedList* o, uint64_t i) { return incref(o->elts->elts[i]); }
 
     static bool hasnext(BoxedTuple* o, uint64_t i) { return i < o->size(); }
-    static Box* getValue(BoxedTuple* o, uint64_t i) { return o->elts[i]; }
+    static Box* getValue(BoxedTuple* o, uint64_t i) { return incref(o->elts[i]); }
 
     static bool hasnext(BoxedString* o, uint64_t i) { return i < o->size(); }
     static Box* getValue(BoxedString* o, uint64_t i) { return boxString(llvm::StringRef(o->data() + i, 1)); }
 
 public:
     BoxIteratorIndex(T* obj) : obj(obj), index(0) {
+        Py_XINCREF(obj);
         if (obj && !hasnext(obj, index))
             *this = *end();
+    }
+
+    ~BoxIteratorIndex() {
+        Py_XDECREF(obj);
     }
 
     void next() override {
         if (!end()->isSame(this)) {
             ++index;
-            if (!hasnext(obj, index))
+            if (!hasnext(obj, index)) {
+                Py_CLEAR(obj);
                 *this = *end();
+            }
         }
     }
 

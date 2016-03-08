@@ -631,6 +631,8 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
 }
 
 static Box* hasattrFuncHelper(Box* return_val) noexcept {
+    AUTO_XDECREF(return_val);
+
     if (return_val)
         Py_RETURN_TRUE;
 
@@ -651,6 +653,9 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
                        argspec, arg1, arg2, arg3, args, NULL, keyword_names);
     if (!rewrite_success)
         rewrite_args = NULL;
+
+    AUTO_DECREF(arg1);
+    AUTO_DECREF(arg2);
 
     Box* obj = arg1;
     Box* _str = arg2;
@@ -677,6 +682,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     _str = coerceUnicodeToStr<S>(_str);
     if (S == CAPI && !_str)
         return NULL;
+    AUTO_DECREF(_str);
 
     if (!PyString_Check(_str)) {
         if (S == CAPI) {
@@ -687,8 +693,11 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
+
+    Py_INCREF(str);
     if (!PyString_CHECK_INTERNED(str))
         internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     Box* rtn;
     RewriterVar* r_rtn;
@@ -717,7 +726,8 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     }
 
     if (rewrite_args) {
-        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn);
+        RewriterVar* final_rtn
+            = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn)->setType(RefType::OWNED);
 
         if (S == CXX)
             rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);

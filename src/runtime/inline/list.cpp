@@ -27,7 +27,7 @@ BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start)
 }
 
 Box* listIterIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 Box* listIter(Box* s) noexcept {

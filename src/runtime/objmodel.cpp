@@ -4169,6 +4169,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
+        RELEASE_ASSERT(0, "TODO: decref everything that we incref'd as part of this process");
         raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name_cb(), paramspec.num_args,
                        argspec.num_args + argspec.num_keywords + varargs_size);
     }
@@ -5250,9 +5251,9 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
                     // This could be inlined:
                     RewriterVar* r_r;
                     if (op_type == AST_TYPE::NotIn)
-                        r_r = rewrite_args->rewriter->call(false, (void*)boxBoolNegated, r_b);
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBoolNegated, r_b)->setType(RefType::OWNED);
                     else
-                        r_r = rewrite_args->rewriter->call(false, (void*)boxBool, r_b);
+                        r_r = rewrite_args->rewriter->call(false, (void*)boxBool, r_b)->setType(RefType::OWNED);
 
                     rewrite_args->out_success = true;
                     rewrite_args->out_rtn = r_r;
@@ -5313,11 +5314,17 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             rewrite_args->out_success = true;
         }
 
-        bool b;
-        if (contained->cls == bool_cls)
-            b = contained == True;
-        else
-            b = contained->nonzeroIC();
+        if (contained->cls == bool_cls) {
+            if (op_type == AST_TYPE::NotIn) {
+                Py_DECREF(contained);
+                return boxBool(contained == False);
+            } else {
+                return contained;
+            }
+        }
+
+        AUTO_DECREF(contained);
+        bool b = contained->nonzeroIC();
         if (op_type == AST_TYPE::NotIn)
             return boxBool(!b);
         return boxBool(b);

@@ -782,6 +782,7 @@ static llvm_compat_bool slotTppHasnext(PyObject* self) {
 
     Box* r = self->hasnextOrNullIC();
     assert(r);
+    AUTO_DECREF(r);
     return r->nonzeroIC();
 }
 
@@ -3354,6 +3355,11 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
         } else
             throw e;
     }
+
+    AUTO_DECREF(arg1);
+    if (!paramspec.takes_kwargs)
+        arg2 = NULL;
+    AUTO_XDECREF(arg2);
 
     if (!rewrite_success)
         rewrite_args = NULL;

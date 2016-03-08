@@ -1118,7 +1118,7 @@ Box* intCoerce(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);

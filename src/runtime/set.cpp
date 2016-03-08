@@ -86,12 +86,12 @@ Box* setiter_next(Box* _self) noexcept {
 
 Box* setiteratorIter(BoxedSetIterator* self) {
     RELEASE_ASSERT(self->cls == set_iterator_cls, "");
-    return self;
+    return incref(self);
 }
 
 static void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
     auto&& p = self->s.insert(val);
-    if (p.second /* already exists */) {
+    if (!p.second /* already exists */) {
         Py_DECREF(p.first->value);
         *p.first = val;
     }
@@ -155,7 +155,13 @@ Box* frozensetNew(Box* _cls, Box* container, BoxedDict* kwargs) {
         }
         Py_DECREF(result);
     }
-    static Box* emptyfrozenset = new (frozenset_cls) BoxedSet();
+
+    static Box* emptyfrozenset = NULL;
+    if (!emptyfrozenset) {
+        emptyfrozenset = new (frozenset_cls) BoxedSet();
+        PyGC_RegisterStaticConstant(emptyfrozenset);
+    }
+
     Py_INCREF(emptyfrozenset);
     return emptyfrozenset;
 }
@@ -277,7 +283,7 @@ static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
 
     for (auto elt : other_set->s) {
         auto&& p = self->s.insert(elt);
-        if (p.second /* already exists */) {
+        if (!p.second /* already exists */) {
             self->s.erase(p.first);
             Py_DECREF(elt.value);
         } else {

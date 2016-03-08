@@ -1421,7 +1421,9 @@ public:
             }
         }
 
-        bool is_raise = (node->type == AST_TYPE::Raise);
+        // We remapped asserts to just be assertion failures at this point.
+        bool is_raise = (node->type == AST_TYPE::Raise || node->type == AST_TYPE::Assert);
+
         // If we invoke a raise statement, generate an invoke where both destinations
         // are the exception handler, since we know the non-exceptional path won't be taken.
         // TODO: would be much better (both more efficient and require less special casing)
@@ -1657,9 +1659,6 @@ public:
 
         curblock = iffalse;
 
-        // The rest of this is pretty hacky:
-        // Emit a "assert(0, msg()); while (1) {}" section that basically captures
-        // what the assert will do but in a very hacky way.
         AST_Assert* remapped = new AST_Assert();
         if (node->msg)
             remapped->msg = remapExpr(node->msg);
