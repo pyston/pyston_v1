@@ -93,8 +93,10 @@ private:
 public:
     BoxIteratorIndex(T* obj) : obj(obj), index(0) {
         Py_XINCREF(obj);
-        if (obj && !hasnext(obj, index))
+        if (obj && !hasnext(obj, index)) {
+            Py_CLEAR(obj);
             *this = *end();
+        }
     }
 
     ~BoxIteratorIndex() {

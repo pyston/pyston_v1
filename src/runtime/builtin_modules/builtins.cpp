@@ -426,7 +426,7 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
 
     BoxedList* rtn = new BoxedList();
     for (Box* e : obj->pyElements()) {
-        listAppendInternal(rtn, e);
+        listAppendInternalStolen(rtn, e);
     }
 
     listSort(rtn, cmp, key, reverse);
