@@ -551,7 +551,7 @@ PyErr_Format(PyObject *exception, const char *format, ...)
 
 
 PyObject *
-PyErr_NewException(char *name, PyObject *base, PyObject *dict)
+PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
 {
     char *dot;
     PyObject *modulename = NULL;
