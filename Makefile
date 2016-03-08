@@ -1077,7 +1077,7 @@ lint_%: %.cpp plugins/clang_linter.so
 
 REFCOUNT_CHECKER_BUILD_PATH := $(CMAKE_DIR_DBG)/plugins/refcount_checker/llvm/bin/refcount_checker
 REFCOUNT_CHECKER_RUN_PATH := $(CMAKE_DIR_DBG)/llvm/bin/refcount_checker
-$(REFCOUNT_CHECKER_BUILD_PATH): plugins/refcount_checker/refcount_checker.cpp
+$(REFCOUNT_CHECKER_RUN_PATH): plugins/refcount_checker/refcount_checker.cpp
 	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker $(NINJAFLAGS)
 	cp $(REFCOUNT_CHECKER_BUILD_PATH) $(REFCOUNT_CHECKER_RUN_PATH)
 
