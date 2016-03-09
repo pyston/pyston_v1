@@ -25,6 +25,8 @@
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
 
+#include "core/common.h"
+
 using namespace clang;
 using namespace clang::tooling;
 using namespace llvm;
@@ -181,18 +183,109 @@ private:
         DenseMap<void*, RefState> vars;
     };
 
-    void handle(Stmt* stmt) {
+    void checkSame(const BlockState& state1, const BlockState& state2) {
         assert(0);
     }
 
+    void checkClean(const BlockState& state) {
+        assert(0);
+    }
+
+    bool isRefcountedType(const QualType& t) {
+        if (!t->isPointerType())
+            return false;
+
+        auto pointed_to = t->getPointeeType();
+
+        auto cxx_record_decl = pointed_to->getAsCXXRecordDecl();
+        assert(cxx_record_decl);
+
+        return cxx_record_decl->getName().startswith("Box");
+    }
+
+    void handle(Stmt* stmt, BlockState& state) {
+        if (auto cstmt = dyn_cast<CompoundStmt>(stmt)) {
+            for (auto sub_stmt : cstmt->body())
+                handle(sub_stmt, state);
+            return;
+        }
+
+        if (auto dostmt = dyn_cast<DoStmt>(stmt)) {
+            Expr* cond = dostmt->getCond();
+            auto cond_casted = dyn_cast<CXXBoolLiteralExpr>(cond);
+            RELEASE_ASSERT(
+                cond_casted && cond_casted->getValue() == false,
+                "Only support `do {} while(false);` statements for now");
+            handle(dostmt->getBody(), state);
+            return;
+        }
+
+        if (auto ifstmt = dyn_cast<IfStmt>(stmt)) {
+            handle(ifstmt->getCond(), state);
+
+            BlockState else_state(state);
+            handle(ifstmt->getThen(), state);
+            handle(ifstmt->getElse(), else_state);
+            checkSame(state, else_state);
+            return;
+        }
+
+        if (auto unaryop = dyn_cast<UnaryOperator>(stmt)) {
+            handle(unaryop->getSubExpr(), state);
+            ASSERT(!isRefcountedType(unaryop->getType()), "implement me");
+            return;
+        }
+
+        if (auto parenexpr = dyn_cast<ParenExpr>(stmt)) {
+            handle(parenexpr->getSubExpr(), state);
+            ASSERT(!isRefcountedType(parenexpr->getType()), "implement me");
+            return;
+        }
+
+        if (auto binaryop = dyn_cast<BinaryOperator>(stmt)) {
+            handle(binaryop->getLHS(), state);
+            handle(binaryop->getRHS(), state);
+            ASSERT(!isRefcountedType(binaryop->getType()), "implement me");
+            return;
+        }
+
+        if (auto castexpr = dyn_cast<ImplicitCastExpr>(stmt)) {
+            handle(castexpr->getSubExpr(), state);
+            ASSERT(!isRefcountedType(castexpr->getType()), "implement me");
+            return;
+        }
+
+        if (auto membexpr = dyn_cast<MemberExpr>(stmt)) {
+            handle(membexpr->getBase(), state);
+            ASSERT(!isRefcountedType(membexpr->getType()), "implement me");
+            return;
+        }
+
+        if (auto refexpr = dyn_cast<DeclRefExpr>(stmt)) {
+            ASSERT(!isRefcountedType(refexpr->getType()), "implement me");
+            return;
+        }
+
+        RELEASE_ASSERT(0, "unhandled statement type: %s\n", stmt->getStmtClassName());
+    }
+
     void checkFunction(FunctionDecl* func) {
+        errs() << func->hasTrivialBody() << '\n';
+        errs() << func->isDefined() << '\n';
+        errs() << func->hasSkippedBody() << '\n';
+        errs() << (func == func->getCanonicalDecl()) << '\n';
+        errs() << func->isOutOfLine() << '\n';
+        errs() << func->getBody() << '\n';
+        errs() << func->isThisDeclarationADefinition() << '\n';
+        errs() << func->doesThisDeclarationHaveABody() << '\n';
         errs() << "printing:\n";
         func->print(errs());
         errs() << "dumping:\n";
         func->dump(errs());
 
         BlockState state;
-        handle(func->getBody());
+        handle(func->getBody(), state);
+        checkClean(state);
     }
 
 public:
@@ -204,6 +297,8 @@ public:
 
     virtual bool VisitFunctionDecl(FunctionDecl* func) {
         if (!func->hasBody())
+            return true /* keep going */;
+        if (!func->isThisDeclarationADefinition())
             return true /* keep going */;
 
         auto filename = Context->getSourceManager().getFilename(func->getNameInfo().getLoc());
