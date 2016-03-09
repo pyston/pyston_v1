@@ -169,19 +169,37 @@ class MyVisitor : public RecursiveASTVisitor<MyVisitor> {
 private:
     ASTContext *Context;
 
+    struct RefState {
+        enum {
+            UNKNOWN,
+            BORROWED,
+            OWNED,
+        } type;
+        int num_refs;
+    };
+    struct BlockState {
+        DenseMap<void*, RefState> vars;
+    };
+
+    void handle(Stmt* stmt) {
+        assert(0);
+    }
+
+    void checkFunction(FunctionDecl* func) {
+        errs() << "printing:\n";
+        func->print(errs());
+        errs() << "dumping:\n";
+        func->dump(errs());
+
+        BlockState state;
+        handle(func->getBody());
+    }
+
 public:
     explicit MyVisitor(ASTContext *Context) : Context(Context) {
     }
 
     virtual ~MyVisitor() {
-    }
-
-    void checkFunction(FunctionDecl* func) {
-        //dumper()->TraverseDecl(func);
-        errs() << "printing:\n";
-        func->print(errs());
-        errs() << "dumping:\n";
-        func->dump(errs());
     }
 
     virtual bool VisitFunctionDecl(FunctionDecl* func) {
