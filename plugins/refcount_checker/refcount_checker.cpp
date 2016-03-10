@@ -30,6 +30,7 @@
 using namespace clang;
 using namespace clang::tooling;
 using namespace llvm;
+using namespace std;
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
@@ -71,124 +72,118 @@ static void dump(DeclContext* ctx) {
     }
 }
 
-namespace {
-  class ASTPrinter : public ASTConsumer,
-                     public RecursiveASTVisitor<ASTPrinter> {
-    typedef RecursiveASTVisitor<ASTPrinter> base;
-
-  public:
-    ASTPrinter(raw_ostream *Out = nullptr, bool Dump = false,
-               StringRef FilterString = "", bool DumpLookups = false)
-        : Out(Out ? *Out : llvm::outs()), Dump(Dump),
-          FilterString(FilterString), DumpLookups(DumpLookups) {}
-
-    void HandleTranslationUnit(ASTContext &Context) override {
-      TranslationUnitDecl *D = Context.getTranslationUnitDecl();
-
-      if (FilterString.empty())
-        return print(D);
-
-      TraverseDecl(D);
-    }
-
-    bool shouldWalkTypesOfTypeLocs() const { return false; }
-
-    bool TraverseDecl(Decl *D) {
-      if (D && filterMatches(D)) {
-        bool ShowColors = Out.has_colors();
-        if (ShowColors)
-          Out.changeColor(raw_ostream::BLUE);
-        Out << ((Dump || DumpLookups) ? "Dumping " : "Printing ") << getName(D)
-            << ":\n";
-        if (ShowColors)
-          Out.resetColor();
-        print(D);
-        Out << "\n";
-        // Don't traverse child nodes to avoid output duplication.
-        return true;
-      }
-      return base::TraverseDecl(D);
-    }
-
-    std::string getName(Decl *D) {
-      if (isa<NamedDecl>(D))
-        return cast<NamedDecl>(D)->getQualifiedNameAsString();
-      return "";
-    }
-    bool filterMatches(Decl *D) {
-      return getName(D).find(FilterString) != std::string::npos;
-    }
-    void print(Decl *D) {
-      if (DumpLookups) {
-        if (DeclContext *DC = dyn_cast<DeclContext>(D)) {
-          if (DC == DC->getPrimaryContext())
-            DC->dumpLookups(Out, Dump);
-          else
-            Out << "Lookup map is in primary DeclContext "
-                << DC->getPrimaryContext() << "\n";
-        } else
-          Out << "Not a DeclContext\n";
-      } else if (Dump)
-        D->dump(Out);
-      else
-        D->print(Out, /*Indentation=*/0, /*PrintInstantiation=*/true);
-    }
-
-    raw_ostream &Out;
-    bool Dump;
-    std::string FilterString;
-    bool DumpLookups;
-  };
-
-  class ASTDeclNodeLister : public ASTConsumer,
-                     public RecursiveASTVisitor<ASTDeclNodeLister> {
-  public:
-    ASTDeclNodeLister(raw_ostream *Out = nullptr)
-        : Out(Out ? *Out : llvm::outs()) {}
-
-    void HandleTranslationUnit(ASTContext &Context) override {
-      TraverseDecl(Context.getTranslationUnitDecl());
-    }
-
-    bool shouldWalkTypesOfTypeLocs() const { return false; }
-
-    bool VisitNamedDecl(NamedDecl *D) {
-      D->printQualifiedName(Out);
-      Out << '\n';
-      return true;
-    }
-
-  private:
-    raw_ostream &Out;
-  };
-
-static std::unique_ptr<ASTPrinter> dumper() {
-    return std::unique_ptr<ASTPrinter>(new ASTPrinter(&errs(), true, "", true));
-}
-} // end anonymous namespace
-
 class MyVisitor : public RecursiveASTVisitor<MyVisitor> {
 private:
     ASTContext *Context;
 
+    enum RefType {
+        UNKNOWN,
+        BORROWED,
+        OWNED,
+    };
     struct RefState {
-        enum {
-            UNKNOWN,
-            BORROWED,
-            OWNED,
-        } type;
+        RefType type;
         int num_refs;
     };
     struct BlockState {
-        DenseMap<void*, RefState> vars;
+        deque<RefState> states;
+        DenseMap<ValueDecl*, RefState*> vars;
+
+        RefState* addState() {
+            states.emplace_back();
+            return &states.back();
+        }
+
+        RefState* createBorrowed() {
+            auto rtn = addState();
+            rtn->type = BORROWED;
+            rtn->num_refs = 0;
+            return rtn;
+        }
+
+        RefState* createOwned() {
+            auto rtn = addState();
+            rtn->type = OWNED;
+            rtn->num_refs = 1;
+            return rtn;
+        }
+
+        BlockState() {}
+        BlockState(const BlockState &rhs) {
+            states = rhs.states;
+            for (auto&& p : rhs.vars) {
+                auto it = states.begin();
+                auto it_rhs = rhs.states.begin();
+                while (&*it_rhs != p.second) {
+                    ++it;
+                    ++it_rhs;
+                }
+                vars[p.first] = &*it;
+            }
+        }
+        // TODO:
+        BlockState(BlockState&& rhs) = delete;
+        BlockState& operator=(const BlockState& rhs) = delete;
+        BlockState& operator=(BlockState&& rhs) = delete;
     };
 
-    void checkSame(const BlockState& state1, const BlockState& state2) {
-        assert(0);
+    void checkSameAndMerge(BlockState& state1, BlockState& state2) {
+        DenseSet<ValueDecl*> decls;
+        for (auto&& p : state1.vars)
+            decls.insert(p.first);
+        for (auto&& p : state2.vars)
+            decls.insert(p.first);
+
+        for (auto&& decl : decls) {
+            if (!state2.vars.count(decl)) {
+                assert(state1.vars[decl]->num_refs == 0);
+                state1.vars.erase(decl);
+            } else if (!state1.vars.count(decl)) {
+                assert(state2.vars[decl]->num_refs == 0);
+                state2.vars.erase(decl);
+            } else {
+                auto s1 = state1.vars[decl];
+                auto s2 = state2.vars[decl];
+
+                assert(s1->num_refs == s2->num_refs);
+
+                if (s1->type != s2->type) {
+                    assert(s1->type != UNKNOWN);
+                    assert(s2->type != UNKNOWN);
+
+                    s1->type = OWNED;
+                    s2->type = OWNED;
+                }
+
+                if (s1->num_refs == 0) {
+                    state1.vars.erase(decl);
+                    state2.vars.erase(decl);
+                }
+            }
+        }
+
+        for (auto&& bstate : {state1, state2}) {
+            for (auto&& state : state1.states) {
+                if (state.num_refs == 0)
+                    continue;
+
+                bool found = false;
+                for (auto&& p : state1.vars) {
+                    if (p.second == &state) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                assert(found);
+            }
+        }
     }
 
     void checkClean(const BlockState& state) {
-        assert(0);
+        for (auto&& s : state.states) {
+            assert(s.num_refs == 0);
+        }
     }
 
     bool isRefcountedType(const QualType& t) {
@@ -196,14 +191,127 @@ private:
             return false;
 
         auto pointed_to = t->getPointeeType();
+        if (isa<BuiltinType>(pointed_to) || isa<FunctionType>(pointed_to))
+            return false;
 
         auto cxx_record_decl = pointed_to->getAsCXXRecordDecl();
+        if (!cxx_record_decl)
+            t->dump();
         assert(cxx_record_decl);
 
         return cxx_record_decl->getName().startswith("Box");
     }
 
+    RefState* handle(Expr* expr, BlockState& state) {
+        if (isa<StringLiteral>(expr)) {
+            return NULL;
+        }
+
+        if (auto unaryop = dyn_cast<UnaryOperator>(expr)) {
+            handle(unaryop->getSubExpr(), state);
+            ASSERT(!isRefcountedType(unaryop->getType()), "implement me");
+            return NULL;
+        }
+
+        if (auto parenexpr = dyn_cast<ParenExpr>(expr)) {
+            handle(parenexpr->getSubExpr(), state);
+            ASSERT(!isRefcountedType(parenexpr->getType()), "implement me");
+            return NULL;
+        }
+
+        if (auto binaryop = dyn_cast<BinaryOperator>(expr)) {
+            handle(binaryop->getLHS(), state);
+            handle(binaryop->getRHS(), state);
+            ASSERT(!isRefcountedType(binaryop->getType()), "implement me");
+            return NULL;
+        }
+
+        if (auto castexpr = dyn_cast<CastExpr>(expr)) {
+            assert(isRefcountedType(castexpr->getType()) == isRefcountedType(castexpr->getSubExpr()->getType()));
+            return handle(castexpr->getSubExpr(), state);
+        }
+
+        if (auto membexpr = dyn_cast<MemberExpr>(expr)) {
+            handle(membexpr->getBase(), state);
+            if (!isRefcountedType(membexpr->getType()))
+                return NULL;
+            return state.createBorrowed();
+        }
+
+        if (auto refexpr = dyn_cast<DeclRefExpr>(expr)) {
+            if (!isRefcountedType(refexpr->getType())) {
+                return NULL;
+            }
+
+            auto decl = refexpr->getDecl();
+            if (state.vars.count(decl))
+                return state.vars[decl];
+
+            auto context = decl->getDeclContext();
+            while (context->getDeclKind() == Decl::LinkageSpec)
+                context = context->getParent();
+
+            // A global variable:
+            if (context->getDeclKind() == Decl::Namespace) {
+                state.vars[decl] = state.createBorrowed();
+                return state.vars[decl];
+            }
+
+            errs() << "\n\n";
+            expr->dump();
+            dump(decl->getDeclContext());
+            errs() << state.vars.size() << " known decls:\n";
+            for (auto&& p : state.vars) {
+                p.first->dump();
+            }
+            ASSERT(0, "Don't know how to handle");
+        }
+
+        if (auto callexpr = dyn_cast<CallExpr>(expr)) {
+            auto callee = callexpr->getCallee();
+
+            auto ft_ptr = callee->getType();
+            assert(ft_ptr->isPointerType());
+            auto ft = cast<FunctionProtoType>(ft_ptr->getPointeeType());
+
+            handle(callee, state);
+
+            for (auto param : ft->param_types()) {
+                // TODO: process stolen-ness
+            }
+
+            for (auto arg : callexpr->arguments()) {
+                handle(arg, state);
+            }
+
+            bool can_throw = !ft->isNothrow(*Context, false);
+            if (can_throw)
+                checkClean(state);
+
+            if (isRefcountedType(callexpr->getType())) {
+                // TODO: look for BORROWED annotations
+                return state.createOwned();
+            }
+            return NULL;
+        }
+
+        if (auto predexpr = dyn_cast<PredefinedExpr>(expr)) {
+            assert(!isRefcountedType(predexpr->getType()));
+            return NULL;
+        }
+
+        expr->dump();
+        RELEASE_ASSERT(0, "unhandled expr type: %s\n", expr->getStmtClassName());
+    }
+
     void handle(Stmt* stmt, BlockState& state) {
+        assert(stmt);
+
+        if (auto expr = dyn_cast<Expr>(stmt)) {
+            handle(expr, state);
+            return;
+        }
+
         if (auto cstmt = dyn_cast<CompoundStmt>(stmt)) {
             for (auto sub_stmt : cstmt->body())
                 handle(sub_stmt, state);
@@ -224,52 +332,39 @@ private:
             handle(ifstmt->getCond(), state);
 
             BlockState else_state(state);
-            handle(ifstmt->getThen(), state);
-            handle(ifstmt->getElse(), else_state);
-            checkSame(state, else_state);
+            if (ifstmt->getThen()) handle(ifstmt->getThen(), state);
+            if (ifstmt->getElse()) handle(ifstmt->getElse(), else_state);
+            checkSameAndMerge(state, else_state);
             return;
         }
 
-        if (auto unaryop = dyn_cast<UnaryOperator>(stmt)) {
-            handle(unaryop->getSubExpr(), state);
-            ASSERT(!isRefcountedType(unaryop->getType()), "implement me");
+        if (auto declstmt = dyn_cast<DeclStmt>(stmt)) {
+            assert(declstmt->isSingleDecl());
+
+            auto decl = declstmt->getSingleDecl();
+            assert(decl);
+
+            auto vardecl = cast<VarDecl>(decl);
+            assert(vardecl);
+
+            assert(!state.vars.count(vardecl));
+
+            RefState* init_state;
+            if (vardecl->hasInit()) {
+                init_state = handle(vardecl->getInit(), state);
+            } else {
+                init_state = state.createBorrowed();
+            }
+            state.vars[vardecl] = init_state;
             return;
         }
 
-        if (auto parenexpr = dyn_cast<ParenExpr>(stmt)) {
-            handle(parenexpr->getSubExpr(), state);
-            ASSERT(!isRefcountedType(parenexpr->getType()), "implement me");
-            return;
-        }
-
-        if (auto binaryop = dyn_cast<BinaryOperator>(stmt)) {
-            handle(binaryop->getLHS(), state);
-            handle(binaryop->getRHS(), state);
-            ASSERT(!isRefcountedType(binaryop->getType()), "implement me");
-            return;
-        }
-
-        if (auto castexpr = dyn_cast<ImplicitCastExpr>(stmt)) {
-            handle(castexpr->getSubExpr(), state);
-            ASSERT(!isRefcountedType(castexpr->getType()), "implement me");
-            return;
-        }
-
-        if (auto membexpr = dyn_cast<MemberExpr>(stmt)) {
-            handle(membexpr->getBase(), state);
-            ASSERT(!isRefcountedType(membexpr->getType()), "implement me");
-            return;
-        }
-
-        if (auto refexpr = dyn_cast<DeclRefExpr>(stmt)) {
-            ASSERT(!isRefcountedType(refexpr->getType()), "implement me");
-            return;
-        }
-
+        stmt->dump();
         RELEASE_ASSERT(0, "unhandled statement type: %s\n", stmt->getStmtClassName());
     }
 
     void checkFunction(FunctionDecl* func) {
+        /*
         errs() << func->hasTrivialBody() << '\n';
         errs() << func->isDefined() << '\n';
         errs() << func->hasSkippedBody() << '\n';
@@ -278,12 +373,20 @@ private:
         errs() << func->getBody() << '\n';
         errs() << func->isThisDeclarationADefinition() << '\n';
         errs() << func->doesThisDeclarationHaveABody() << '\n';
+        */
         errs() << "printing:\n";
         func->print(errs());
         errs() << "dumping:\n";
         func->dump(errs());
 
         BlockState state;
+        for (auto param : func->params()) {
+            if (isRefcountedType(param->getType())) {
+                auto& rstate = state.vars[param];
+                assert(!rstate);
+                rstate = state.createBorrowed();
+            }
+        }
         handle(func->getBody(), state);
         checkClean(state);
     }
