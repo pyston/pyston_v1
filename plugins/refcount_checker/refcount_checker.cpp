@@ -216,7 +216,8 @@ private:
         }
 
         if (isa<UnresolvedLookupExpr>(expr) || isa<CXXUnresolvedConstructExpr>(expr)
-            || isa<CXXDependentScopeMemberExpr>(expr) || isa<CXXDependencScopeDeclRefExpr>(expr)) {
+            || isa<CXXDependentScopeMemberExpr>(expr) || isa<DependentScopeDeclRefExpr>(expr)
+            || isa<CXXConstructExpr>(expr) || isa<PredefinedExpr>(expr)) {
             // Not really sure about this:
             assert(!isRefcountedType(expr->getType()));
             return NULL;
@@ -229,9 +230,7 @@ private:
         }
 
         if (auto parenexpr = dyn_cast<ParenExpr>(expr)) {
-            handle(parenexpr->getSubExpr(), state);
-            ASSERT(!isRefcountedType(parenexpr->getType()), "implement me");
-            return NULL;
+            return handle(parenexpr->getSubExpr(), state);
         }
 
         if (auto binaryop = dyn_cast<BinaryOperator>(expr)) {
@@ -242,7 +241,7 @@ private:
         }
 
         if (auto castexpr = dyn_cast<CastExpr>(expr)) {
-            assert(isRefcountedType(castexpr->getType()) == isRefcountedType(castexpr->getSubExpr()->getType()));
+            assert(!(isRefcountedType(castexpr->getType()) && !isRefcountedType(castexpr->getSubExpr()->getType())));
             return handle(castexpr->getSubExpr(), state);
         }
 
@@ -332,9 +331,20 @@ private:
             return NULL;
         }
 
-        if (auto predexpr = dyn_cast<PredefinedExpr>(expr)) {
-            assert(!isRefcountedType(predexpr->getType()));
-            return NULL;
+        if (auto condop = dyn_cast<ConditionalOperator>(expr)) {
+            handle(condop->getCond(), state);
+
+            BlockState false_state(state);
+            RefState* s1 = handle(condop->getTrueExpr(), state);
+            RefState* s2 = handle(condop->getFalseExpr(), false_state);
+            checkSameAndMerge(state, false_state);
+
+            assert((s1 == NULL) == (s2 == NULL));
+            if (s1) {
+                assert(s1->num_refs == s2->num_refs);
+                ASSERT(s1->type == s2->type, "maybe could deal with this");
+            }
+            return s1;
         }
 
         expr->dump();
@@ -403,7 +413,7 @@ private:
         if (auto rtnstmt = dyn_cast<ReturnStmt>(stmt)) {
             auto rstate = handle(rtnstmt->getRetValue(), state);
             if (isRefcountedType(rtnstmt->getRetValue()->getType())) {
-                assert(rstate->num_refs > 0);
+                ASSERT(rstate->num_refs > 0, "Returning an object with 0 refs!");
                 // TODO: handle borrowed returns
                 rstate->num_refs--;
             }
