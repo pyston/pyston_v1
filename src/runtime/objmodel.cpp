@@ -4956,7 +4956,6 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
 
     Box* irtn = NULL;
     if (inplace) {
-        assert(0 && "check refcounting");
         // XXX I think we need to make sure that we keep these strings alive?
         DecrefHandle<BoxedString> iop_name(getInplaceOpName(op_type));
         if (rewrite_args) {
@@ -4990,6 +4989,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
                 }
                 return irtn;
             } else {
+                Py_DECREF(irtn);
                 assert(!rewrite_args);
             }
         }

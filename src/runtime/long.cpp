@@ -1003,14 +1003,14 @@ static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
 
 Box* convertToLong(Box* val) {
     if (PyLong_Check(val)) {
-        return val;
+        return incref(val);
     } else if (PyInt_Check(val)) {
         BoxedInt* val_int = static_cast<BoxedInt*>(val);
         BoxedLong* r = new BoxedLong();
         mpz_init_set_si(r->n, val_int->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 

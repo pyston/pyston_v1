@@ -452,7 +452,7 @@ extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs) {
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
     if (mod != None) {
         if (!PyInt_Check(mod)) {
-            return NotImplemented;
+            return incref(NotImplemented);
         }
         BoxedInt* mod_int = static_cast<BoxedInt*>(mod);
         if (mod_int->n == 0) {
