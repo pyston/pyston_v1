@@ -46,3 +46,6 @@ for obj in [(1, 2), "hello world", u"hola world", 1.0, 1j, 1L, 2, {1:2}, set([3]
 import cStringIO
 StringIO = cPickle.loads(cPickle.dumps(cStringIO.StringIO))
 print type(StringIO())
+
+import thread
+print cPickle.loads(cPickle.dumps(thread.error))

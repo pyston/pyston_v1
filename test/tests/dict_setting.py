@@ -51,6 +51,19 @@ print hasattr(c, "attr")
 print hasattr(c, "foo")
 print c.__dict__ is d1
 
+c = C()
+a = c.__dict__
+c.__dict__ = c.__dict__
+c.__dict__[u"uni"] = "u"
+c.__dict__[u"\u20ac"] = "u"
+c.__dict__[(1, 2, 3)] = "t"
+print sorted(c.__dict__.keys()), sorted(a.keys())
+print "all non str attributes:", sorted([item for item in dir(c) if not isinstance(item, str)])
+print "can we retrieve unicode attributes by there ascii value?", c.uni, c.__dict__["uni"]
+print "attrwrapper:", a["uni"], a[(1, 2, 3)]
+setattr(c, "uni", 1)
+print "test setattr()", c.uni, c.__dict__["uni"], a["uni"], len(c.__dict__), len(a)
+
 dictproxy = C.__dict__
 print type(dictproxy)
 print "foo" in dictproxy

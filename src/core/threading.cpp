@@ -522,11 +522,34 @@ void registerMainThread() {
     assert(!PyErr_Occurred());
 }
 
+/* Wait until threading._shutdown completes, provided
+   the threading module was imported in the first place.
+   The shutdown routine will wait until all non-daemon
+   "threading" threads have completed. */
+static void wait_for_thread_shutdown(void) noexcept {
+#ifdef WITH_THREAD
+    PyObject* result;
+    PyThreadState* tstate = PyThreadState_GET();
+    PyObject* threading = PyMapping_GetItemString(getSysModulesDict(), "threading");
+    if (threading == NULL) {
+        /* threading not imported */
+        PyErr_Clear();
+        return;
+    }
+    result = PyObject_CallMethod(threading, "_shutdown", "");
+    if (result == NULL)
+        PyErr_WriteUnraisable(threading);
+    else
+        Py_DECREF(result);
+    Py_DECREF(threading);
+#endif
+}
+
 void finishMainThread() {
     assert(current_internal_thread_state);
     current_internal_thread_state->assertNoGenerators();
 
-    // TODO maybe this is the place to wait for non-daemon threads?
+    wait_for_thread_shutdown();
 }
 
 bool isMainThread() {
@@ -601,6 +624,22 @@ extern "C" void PyEval_ReInitThreads() noexcept {
     threads_waiting_on_gil = 0;
 
     PerThreadSetBase::runAllForkHandlers();
+
+    /* Update the threading module with the new state.
+     */
+    Box* threading = PyMapping_GetItemString(getSysModulesDict(), "threading");
+    if (threading == NULL) {
+        /* threading not imported */
+        PyErr_Clear();
+        return;
+    }
+    Box* result = PyObject_CallMethod(threading, "_after_fork", NULL);
+    if (result == NULL)
+        PyErr_WriteUnraisable(threading);
+    else
+        Py_DECREF(result);
+    Py_DECREF(threading);
+
 }
 
 void acquireGLWrite() {

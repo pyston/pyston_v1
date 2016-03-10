@@ -2540,7 +2540,7 @@ void setupBuiltins() {
         { "reload", builtin_reload, METH_O, reload_doc },
     };
     for (auto& md : builtin_methods) {
-        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, builtins_module, boxString("__builtin__")));
+        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, boxString("__builtin__")));
     }
 }
 }
