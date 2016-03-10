@@ -74,7 +74,7 @@ static void dump(DeclContext* ctx) {
 
 class RefcheckingVisitor : public RecursiveASTVisitor<RefcheckingVisitor> {
 private:
-    ASTContext *Context;
+    ASTContext* Context;
 
     enum RefType {
         UNKNOWN,
@@ -118,7 +118,7 @@ private:
         }
 
         BlockState() {}
-        BlockState(const BlockState &rhs) {
+        BlockState(const BlockState& rhs) {
             states = rhs.states;
             for (auto&& p : rhs.vars) {
                 auto it = states.begin();
@@ -167,7 +167,7 @@ private:
             }
         }
 
-        for (auto&& bstate : {state1, state2}) {
+        for (auto&& bstate : { state1, state2 }) {
             for (auto&& state : state1.states) {
                 if (state.num_refs == 0)
                     continue;
@@ -358,9 +358,8 @@ private:
         if (auto dostmt = dyn_cast<DoStmt>(stmt)) {
             Expr* cond = dostmt->getCond();
             auto cond_casted = dyn_cast<CXXBoolLiteralExpr>(cond);
-            RELEASE_ASSERT(
-                cond_casted && cond_casted->getValue() == false,
-                "Only support `do {} while(false);` statements for now");
+            RELEASE_ASSERT(cond_casted && cond_casted->getValue() == false,
+                           "Only support `do {} while(false);` statements for now");
             handle(dostmt->getBody(), state);
             return;
         }
@@ -369,8 +368,10 @@ private:
             handle(ifstmt->getCond(), state);
 
             BlockState else_state(state);
-            if (ifstmt->getThen()) handle(ifstmt->getThen(), state);
-            if (ifstmt->getElse()) handle(ifstmt->getElse(), else_state);
+            if (ifstmt->getThen())
+                handle(ifstmt->getThen(), state);
+            if (ifstmt->getElse())
+                handle(ifstmt->getElse(), else_state);
             checkSameAndMerge(state, else_state);
             return;
         }
@@ -443,11 +444,9 @@ private:
     }
 
 public:
-    explicit RefcheckingVisitor(ASTContext *Context) : Context(Context) {
-    }
+    explicit RefcheckingVisitor(ASTContext* Context) : Context(Context) {}
 
-    virtual ~RefcheckingVisitor() {
-    }
+    virtual ~RefcheckingVisitor() {}
 
     virtual bool VisitFunctionDecl(FunctionDecl* func) {
         if (!func->hasBody())
@@ -467,10 +466,10 @@ public:
         if (filename.find("lib/clang") != StringRef::npos)
             return true;
 
-        //errs() << filename << '\n';
+        // errs() << filename << '\n';
 
-        //if (func->getNameInfo().getAsString() != "firstlineno")
-            //return true;
+        // if (func->getNameInfo().getAsString() != "firstlineno")
+        // return true;
 
         checkFunction(func);
 
@@ -483,25 +482,23 @@ private:
     RefcheckingVisitor visitor;
 
 public:
-    explicit RefcheckingASTConsumer(ASTContext *Context) : visitor(Context) {
-    }
+    explicit RefcheckingASTConsumer(ASTContext* Context) : visitor(Context) {}
 
-    virtual void HandleTranslationUnit(ASTContext &Context) {
+    virtual void HandleTranslationUnit(ASTContext& Context) {
         visitor.TraverseDecl(Context.getTranslationUnitDecl());
-        //dumper()->TraverseDecl(Context.getTranslationUnitDecl());
+        // dumper()->TraverseDecl(Context.getTranslationUnitDecl());
     }
 };
 
 class RefcheckingFrontendAction : public ASTFrontendAction {
 public:
-    virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef fname) {
+    virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance& CI, StringRef fname) {
         return std::unique_ptr<ASTConsumer>(new RefcheckingASTConsumer(&CI.getASTContext()));
     }
 };
 
-int main(int argc, const char **argv) {
-  CommonOptionsParser OptionsParser(argc, argv, RefcheckingToolCategory);
-  ClangTool Tool(OptionsParser.getCompilations(),
-                 OptionsParser.getSourcePathList());
-  return Tool.run(newFrontendActionFactory<RefcheckingFrontendAction>().get());
+int main(int argc, const char** argv) {
+    CommonOptionsParser OptionsParser(argc, argv, RefcheckingToolCategory);
+    ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+    return Tool.run(newFrontendActionFactory<RefcheckingFrontendAction>().get());
 }
