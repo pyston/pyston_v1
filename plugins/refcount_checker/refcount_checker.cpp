@@ -196,6 +196,9 @@ private:
             return false;
 
         auto pointed_to = t->getPointeeType();
+        while (auto pt = dyn_cast<ParenType>(pointed_to))
+            pointed_to = pt->getInnerType();
+
         if (isa<BuiltinType>(pointed_to) || isa<FunctionType>(pointed_to))
             return false;
 
@@ -209,6 +212,13 @@ private:
 
     RefState* handle(Expr* expr, BlockState& state) {
         if (isa<StringLiteral>(expr) || isa<IntegerLiteral>(expr)) {
+            return NULL;
+        }
+
+        if (isa<UnresolvedLookupExpr>(expr) || isa<CXXUnresolvedConstructExpr>(expr)
+            || isa<CXXDependentScopeMemberExpr>(expr) || isa<CXXDependencScopeDeclRefExpr>(expr)) {
+            // Not really sure about this:
+            assert(!isRefcountedType(expr->getType()));
             return NULL;
         }
 
@@ -239,6 +249,12 @@ private:
         if (auto membexpr = dyn_cast<MemberExpr>(expr)) {
             handle(membexpr->getBase(), state);
             if (!isRefcountedType(membexpr->getType()))
+                return NULL;
+            return state.createBorrowed();
+        }
+
+        if (auto thisexpr = dyn_cast<CXXThisExpr>(expr)) {
+            if (!isRefcountedType(thisexpr->getType()))
                 return NULL;
             return state.createBorrowed();
         }
@@ -280,9 +296,17 @@ private:
 
             if (isa<BuiltinType>(ft_ptr)) {
                 ft = NULL;
+            } else if (isa<TemplateSpecializationType>(ft_ptr)) {
+                // Not really sure about this:
+                ft = NULL;
             } else {
+                ft_ptr->dump();
                 assert(ft_ptr->isPointerType());
-                ft = cast<FunctionProtoType>(ft_ptr->getPointeeType());
+                auto pointed_to = ft_ptr->getPointeeType();
+                while (auto pt = dyn_cast<ParenType>(pointed_to))
+                    pointed_to = pt->getInnerType();
+                assert(isa<FunctionProtoType>(pointed_to));
+                ft = cast<FunctionProtoType>(pointed_to);
             }
 
             handle(callee, state);
@@ -445,8 +469,8 @@ public:
 
         //errs() << filename << '\n';
 
-        if (func->getNameInfo().getAsString() != "firstlineno")
-            return true;
+        //if (func->getNameInfo().getAsString() != "firstlineno")
+            //return true;
 
         checkFunction(func);
 
