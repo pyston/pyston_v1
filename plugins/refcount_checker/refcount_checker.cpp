@@ -108,6 +108,15 @@ private:
             return rtn;
         }
 
+        void doAssign(VarDecl* decl, RefState* newstate) {
+            assert(newstate);
+            assert(vars.count(decl));
+            assert(vars[decl]->num_refs == 0);
+
+            vars[decl]->type = newstate->type;
+            std::swap(vars[decl]->num_refs, newstate->num_refs);
+        }
+
         BlockState() {}
         BlockState(const BlockState &rhs) {
             states = rhs.states;
@@ -118,6 +127,7 @@ private:
                     ++it;
                     ++it_rhs;
                 }
+                assert(!vars.count(p.first));
                 vars[p.first] = &*it;
             }
         }
@@ -153,11 +163,6 @@ private:
 
                     s1->type = OWNED;
                     s2->type = OWNED;
-                }
-
-                if (s1->num_refs == 0) {
-                    state1.vars.erase(decl);
-                    state2.vars.erase(decl);
                 }
             }
         }
@@ -203,7 +208,7 @@ private:
     }
 
     RefState* handle(Expr* expr, BlockState& state) {
-        if (isa<StringLiteral>(expr)) {
+        if (isa<StringLiteral>(expr) || isa<IntegerLiteral>(expr)) {
             return NULL;
         }
 
@@ -271,20 +276,28 @@ private:
             auto callee = callexpr->getCallee();
 
             auto ft_ptr = callee->getType();
-            assert(ft_ptr->isPointerType());
-            auto ft = cast<FunctionProtoType>(ft_ptr->getPointeeType());
+            const FunctionProtoType* ft;
+
+            if (isa<BuiltinType>(ft_ptr)) {
+                ft = NULL;
+            } else {
+                assert(ft_ptr->isPointerType());
+                ft = cast<FunctionProtoType>(ft_ptr->getPointeeType());
+            }
 
             handle(callee, state);
 
-            for (auto param : ft->param_types()) {
-                // TODO: process stolen-ness
+            if (ft) {
+                for (auto param : ft->param_types()) {
+                    // TODO: process stolen-ness
+                }
             }
 
             for (auto arg : callexpr->arguments()) {
                 handle(arg, state);
             }
 
-            bool can_throw = !ft->isNothrow(*Context, false);
+            bool can_throw = ft && !ft->isNothrow(*Context, false);
             if (can_throw)
                 checkClean(state);
 
@@ -349,13 +362,26 @@ private:
 
             assert(!state.vars.count(vardecl));
 
-            RefState* init_state;
+            bool is_refcounted = isRefcountedType(vardecl->getType());
+
+            if (is_refcounted)
+                state.vars[vardecl] = state.createBorrowed();
+
             if (vardecl->hasInit()) {
-                init_state = handle(vardecl->getInit(), state);
-            } else {
-                init_state = state.createBorrowed();
+                RefState* assigning = handle(vardecl->getInit(), state);
+                if (is_refcounted)
+                    state.doAssign(vardecl, assigning);
             }
-            state.vars[vardecl] = init_state;
+            return;
+        }
+
+        if (auto rtnstmt = dyn_cast<ReturnStmt>(stmt)) {
+            auto rstate = handle(rtnstmt->getRetValue(), state);
+            if (isRefcountedType(rtnstmt->getRetValue()->getType())) {
+                assert(rstate->num_refs > 0);
+                // TODO: handle borrowed returns
+                rstate->num_refs--;
+            }
             return;
         }
 
@@ -387,6 +413,7 @@ private:
                 rstate = state.createBorrowed();
             }
         }
+        errs() << "Starting.  state has " << state.vars.size() << " vars\n";
         handle(func->getBody(), state);
         checkClean(state);
     }
