@@ -34,7 +34,7 @@ using namespace std;
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
-static cl::OptionCategory MyToolCategory("my-tool options");
+static cl::OptionCategory RefcheckingToolCategory("my-tool options");
 
 // CommonOptionsParser declares HelpMessage with a description of the common
 // command-line options related to the compilation database and input files.
@@ -72,7 +72,7 @@ static void dump(DeclContext* ctx) {
     }
 }
 
-class MyVisitor : public RecursiveASTVisitor<MyVisitor> {
+class RefcheckingVisitor : public RecursiveASTVisitor<RefcheckingVisitor> {
 private:
     ASTContext *Context;
 
@@ -392,10 +392,10 @@ private:
     }
 
 public:
-    explicit MyVisitor(ASTContext *Context) : Context(Context) {
+    explicit RefcheckingVisitor(ASTContext *Context) : Context(Context) {
     }
 
-    virtual ~MyVisitor() {
+    virtual ~RefcheckingVisitor() {
     }
 
     virtual bool VisitFunctionDecl(FunctionDecl* func) {
@@ -427,12 +427,12 @@ public:
     }
 };
 
-class MyASTConsumer : public ASTConsumer {
+class RefcheckingASTConsumer : public ASTConsumer {
 private:
-    MyVisitor visitor;
+    RefcheckingVisitor visitor;
 
 public:
-    explicit MyASTConsumer(ASTContext *Context) : visitor(Context) {
+    explicit RefcheckingASTConsumer(ASTContext *Context) : visitor(Context) {
     }
 
     virtual void HandleTranslationUnit(ASTContext &Context) {
@@ -441,16 +441,16 @@ public:
     }
 };
 
-class MyFrontendAction : public ASTFrontendAction {
+class RefcheckingFrontendAction : public ASTFrontendAction {
 public:
     virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef fname) {
-        return std::unique_ptr<ASTConsumer>(new MyASTConsumer(&CI.getASTContext()));
+        return std::unique_ptr<ASTConsumer>(new RefcheckingASTConsumer(&CI.getASTContext()));
     }
 };
 
 int main(int argc, const char **argv) {
-  CommonOptionsParser OptionsParser(argc, argv, MyToolCategory);
+  CommonOptionsParser OptionsParser(argc, argv, RefcheckingToolCategory);
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
-  return Tool.run(newFrontendActionFactory<MyFrontendAction>().get());
+  return Tool.run(newFrontendActionFactory<RefcheckingFrontendAction>().get());
 }
