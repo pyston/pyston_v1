@@ -469,9 +469,7 @@ void JitFragmentWriter::emitJump(CFGBlock* b) {
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
-    RewriterVar* node_var = imm(node);
-    RewriterVar* result = createNewVar();
-    addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, ActionType::NORMAL);
+    addAction([=]() { _emitOSRPoint(); }, { getInterp() }, ActionType::NORMAL);
 }
 
 void JitFragmentWriter::emitPendingCallsCheck() {
@@ -822,24 +820,30 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
     block_next->bumpUse();
 }
 
-void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var) {
-    RewriterVar::SmallVector args;
-    args.push_back(getInterp());
-    args.push_back(node_var);
-    _call(result, false, (void*)ASTInterpreterJitInterface::doOSRHelper, args, RewriterVar::SmallVector());
-    auto result_reg = result->getInReg(assembler::RDX);
-    result->bumpUse();
-
-    assembler->test(result_reg, result_reg);
+void JitFragmentWriter::_emitOSRPoint() {
+    // We can't directly do OSR from the bjit frame because it will cause issues with exception handling.
+    // Reason is that the bjit and the OSRed code share the same python frame and the way invokes are implemented in the
+    // bjit. During unwinding we will see the OSR frame and will remove it and continue to unwind but the try catch
+    // block inside ASTInterpreter::execJITedBlock will rethrow the exception which causes another frame deinit,
+    // which is wrong because it already got removed.
+    // Instead we return back to the interpreter loop with special value (osr_dummy_value) which will trigger the OSR.
+    // this generates code for:
+    // if (++interpreter.edgecount < OSR_THRESHOLD_BASELINE)
+    //     return std::make_pair((CFGBlock*)0, ASTInterpreterJitInterface::osr_dummy_value);
+    assembler::Register interp_reg = getInterp()->getInReg(); // will always be R12
+    assembler::Indirect edgecount = assembler::Indirect(interp_reg, ASTInterpreterJitInterface::getEdgeCountOffset());
+    assembler->incl(edgecount);                                               // 32bit inc
+    assembler->cmpl(edgecount, assembler::Immediate(OSR_THRESHOLD_BASELINE)); // 32bit cmp
     {
-        assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
-        assembler->clear_reg(assembler::RAX);
+        assembler::ForwardJump jl(*assembler, assembler::COND_BELOW);
+        assembler->clear_reg(assembler::RAX); // = next block to execute
+        assembler->mov(assembler::Immediate(ASTInterpreterJitInterface::osr_dummy_value), assembler::RDX);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
         assembler->pop(assembler::R12);
         assembler->pop(assembler::R14);
         assembler->retq();
     }
-
+    interp->bumpUse();
     assertConsistent();
 }
 
