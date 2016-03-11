@@ -21,6 +21,7 @@
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Lex/Lexer.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
@@ -72,9 +73,18 @@ static void dump(DeclContext* ctx) {
     }
 }
 
-class RefcheckingVisitor : public RecursiveASTVisitor<RefcheckingVisitor> {
+class FunctionRefchecker {
 private:
+    CompilerInstance& CI;
     ASTContext* Context;
+    SourceManager* SM;
+
+    enum class AnnotationType {
+        NONE,
+        BORROWED,
+        STOLEN,
+    };
+    AnnotationType return_ann;
 
     enum RefType {
         UNKNOWN,
@@ -196,11 +206,25 @@ private:
             return false;
 
         auto pointed_to = t->getPointeeType();
-        while (auto pt = dyn_cast<ParenType>(pointed_to))
-            pointed_to = pt->getInnerType();
+        do {
+            if (auto pt = dyn_cast<ParenType>(pointed_to)) {
+                pointed_to = pt->getInnerType();
+                continue;
+            }
+
+            if (auto pt = dyn_cast<TypedefType>(pointed_to)) {
+                pointed_to = pt->desugar();
+                continue;
+            }
+        } while (0);
 
         if (isa<BuiltinType>(pointed_to) || isa<FunctionType>(pointed_to))
             return false;
+
+        if (isa<TemplateTypeParmType>(pointed_to)) {
+            // TODO Hmm not sure what to do about templates
+            return false;
+        }
 
         auto cxx_record_decl = pointed_to->getAsCXXRecordDecl();
         if (!cxx_record_decl)
@@ -211,17 +235,40 @@ private:
     }
 
     RefState* handle(Expr* expr, BlockState& state) {
-        if (isa<StringLiteral>(expr) || isa<IntegerLiteral>(expr)) {
+        if (isa<StringLiteral>(expr) || isa<IntegerLiteral>(expr) || isa<CXXBoolLiteralExpr>(expr)) {
             return NULL;
         }
 
-        if (isa<UnresolvedLookupExpr>(expr) || isa<CXXUnresolvedConstructExpr>(expr)
+        if (isa<UnresolvedLookupExpr>(expr) || isa<UnresolvedMemberExpr>(expr) || isa<CXXUnresolvedConstructExpr>(expr)
             || isa<CXXDependentScopeMemberExpr>(expr) || isa<DependentScopeDeclRefExpr>(expr)
-            || isa<CXXConstructExpr>(expr) || isa<PredefinedExpr>(expr)) {
+            || isa<CXXConstructExpr>(expr) || isa<PredefinedExpr>(expr) || isa<PackExpansionExpr>(expr)) {
             // Not really sure about this:
             assert(!isRefcountedType(expr->getType()));
             return NULL;
         }
+
+        if (isa<CXXDefaultArgExpr>(expr)) {
+            // Not really sure about this:
+            assert(!isRefcountedType(expr->getType()));
+            return NULL;
+        }
+
+        if (auto exprwc = dyn_cast<ExprWithCleanups>(expr)) {
+            // TODO: probably will need to be checking things here
+            return handle(exprwc->getSubExpr(), state);
+        }
+
+        if (auto mattmp = dyn_cast<MaterializeTemporaryExpr>(expr)) {
+            // not sure about this
+            return handle(mattmp->GetTemporaryExpr(), state);
+        }
+
+        if (auto bindtmp = dyn_cast<CXXBindTemporaryExpr>(expr)) {
+            // not sure about this
+            return handle(bindtmp->getSubExpr(), state);
+        }
+
+
 
         if (auto unaryop = dyn_cast<UnaryOperator>(expr)) {
             handle(unaryop->getSubExpr(), state);
@@ -320,7 +367,8 @@ private:
                 handle(arg, state);
             }
 
-            bool can_throw = ft && !ft->isNothrow(*Context, false);
+            bool can_throw = ft && !isUnresolvedExceptionSpec(ft->getExceptionSpecType())
+                             && !ft->isNothrow(*Context, false);
             if (can_throw)
                 checkClean(state);
 
@@ -328,6 +376,19 @@ private:
                 // TODO: look for BORROWED annotations
                 return state.createOwned();
             }
+            return NULL;
+        }
+
+        if (auto newexpr = dyn_cast<CXXNewExpr>(expr)) {
+            for (auto plc :
+                 iterator_range<CXXNewExpr::arg_iterator>(newexpr->placement_arg_begin(), newexpr->placement_arg_end()))
+                handle(plc, state);
+
+            if (newexpr->hasInitializer())
+                handle(newexpr->getInitializer(), state);
+
+            if (isRefcountedType(newexpr->getType()))
+                return state.createBorrowed();
             return NULL;
         }
 
@@ -374,6 +435,31 @@ private:
             return;
         }
 
+        if (auto forstmt = dyn_cast<ForStmt>(stmt)) {
+            handle(forstmt->getInit(), state);
+            handle(forstmt->getCond(), state);
+
+            if (forstmt->getConditionVariable())
+                assert(!isRefcountedType(forstmt->getConditionVariable()->getType()));
+
+            BlockState old_state(state);
+            handle(forstmt->getBody(), state);
+            checkSameAndMerge(state, old_state);
+            return;
+        }
+
+        if (auto whilestmt = dyn_cast<WhileStmt>(stmt)) {
+            handle(whilestmt->getCond(), state);
+
+            if (whilestmt->getConditionVariable())
+                assert(!isRefcountedType(whilestmt->getConditionVariable()->getType()));
+
+            BlockState old_state(state);
+            handle(whilestmt->getBody(), state);
+            checkSameAndMerge(state, old_state);
+            return;
+        }
+
         if (auto ifstmt = dyn_cast<IfStmt>(stmt)) {
             handle(ifstmt->getCond(), state);
 
@@ -387,25 +473,22 @@ private:
         }
 
         if (auto declstmt = dyn_cast<DeclStmt>(stmt)) {
-            assert(declstmt->isSingleDecl());
+            for (auto decl : declstmt->decls()) {
+                auto vardecl = cast<VarDecl>(decl);
+                assert(vardecl);
 
-            auto decl = declstmt->getSingleDecl();
-            assert(decl);
+                assert(!state.vars.count(vardecl));
 
-            auto vardecl = cast<VarDecl>(decl);
-            assert(vardecl);
+                bool is_refcounted = isRefcountedType(vardecl->getType());
 
-            assert(!state.vars.count(vardecl));
-
-            bool is_refcounted = isRefcountedType(vardecl->getType());
-
-            if (is_refcounted)
-                state.vars[vardecl] = state.createBorrowed();
-
-            if (vardecl->hasInit()) {
-                RefState* assigning = handle(vardecl->getInit(), state);
                 if (is_refcounted)
-                    state.doAssign(vardecl, assigning);
+                    state.vars[vardecl] = state.createBorrowed();
+
+                if (vardecl->hasInit()) {
+                    RefState* assigning = handle(vardecl->getInit(), state);
+                    if (is_refcounted)
+                        state.doAssign(vardecl, assigning);
+                }
             }
             return;
         }
@@ -413,15 +496,36 @@ private:
         if (auto rtnstmt = dyn_cast<ReturnStmt>(stmt)) {
             auto rstate = handle(rtnstmt->getRetValue(), state);
             if (isRefcountedType(rtnstmt->getRetValue()->getType())) {
-                ASSERT(rstate->num_refs > 0, "Returning an object with 0 refs!");
-                // TODO: handle borrowed returns
-                rstate->num_refs--;
+                if (return_ann != AnnotationType::BORROWED) {
+                    ASSERT(rstate->num_refs > 0, "Returning an object with 0 refs!");
+                    rstate->num_refs--;
+                }
             }
+            return;
+        }
+
+        if (auto asmstmt = dyn_cast<AsmStmt>(stmt)) {
+            for (auto input : asmstmt->inputs())
+                handle(input, state);
+            for (auto input : asmstmt->outputs())
+                handle(input, state);
             return;
         }
 
         stmt->dump();
         RELEASE_ASSERT(0, "unhandled statement type: %s\n", stmt->getStmtClassName());
+    }
+
+    AnnotationType getAnnotationType(SourceLocation loc) {
+        // see clang::DiagnosticRenderer::emitMacroExpansions for more info:
+        if (!loc.isMacroID())
+            return AnnotationType::NONE;
+        StringRef MacroName = Lexer::getImmediateMacroName(loc, *SM, CI.getLangOpts());
+        if (MacroName == "BORROWED")
+            return AnnotationType::BORROWED;
+        if (MacroName == "STOLEN")
+            return AnnotationType::STOLEN;
+        return getAnnotationType(SM->getImmediateMacroCallerLoc(loc));
     }
 
     void checkFunction(FunctionDecl* func) {
@@ -440,6 +544,8 @@ private:
         errs() << "dumping:\n";
         func->dump(errs());
 
+        return_ann = getAnnotationType(func->getReturnTypeSourceRange().getBegin());
+
         BlockState state;
         for (auto param : func->params()) {
             if (isRefcountedType(param->getType())) {
@@ -453,8 +559,24 @@ private:
         checkClean(state);
     }
 
+    explicit FunctionRefchecker(CompilerInstance& CI)
+        : CI(CI), Context(&CI.getASTContext()), SM(&CI.getSourceManager()) {}
+
 public:
-    explicit RefcheckingVisitor(ASTContext* Context) : Context(Context) {}
+    static void checkFunction(FunctionDecl* func, CompilerInstance& CI) {
+        FunctionRefchecker(CI).checkFunction(func);
+    }
+};
+
+class RefcheckingVisitor : public RecursiveASTVisitor<RefcheckingVisitor> {
+private:
+    CompilerInstance& CI;
+    ASTContext* Context;
+    SourceManager* SM;
+
+public:
+    explicit RefcheckingVisitor(CompilerInstance& CI)
+        : CI(CI), Context(&CI.getASTContext()), SM(&CI.getSourceManager()) {}
 
     virtual ~RefcheckingVisitor() {}
 
@@ -481,7 +603,7 @@ public:
         // if (func->getNameInfo().getAsString() != "firstlineno")
         // return true;
 
-        checkFunction(func);
+        FunctionRefchecker::checkFunction(func, CI);
 
         return true /* keep going */;
     }
@@ -492,7 +614,7 @@ private:
     RefcheckingVisitor visitor;
 
 public:
-    explicit RefcheckingASTConsumer(ASTContext* Context) : visitor(Context) {}
+    explicit RefcheckingASTConsumer(CompilerInstance& CI) : visitor(CI) {}
 
     virtual void HandleTranslationUnit(ASTContext& Context) {
         visitor.TraverseDecl(Context.getTranslationUnitDecl());
@@ -503,12 +625,37 @@ public:
 class RefcheckingFrontendAction : public ASTFrontendAction {
 public:
     virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance& CI, StringRef fname) {
-        return std::unique_ptr<ASTConsumer>(new RefcheckingASTConsumer(&CI.getASTContext()));
+        return std::unique_ptr<ASTConsumer>(new RefcheckingASTConsumer(CI));
+    }
+};
+
+// A way to inject refchecker-only compilation flags.
+// Not currently used, but uncomment the line in getCompileCommands() to define the `REFCHECKER` directive.
+class MyCompilationDatabase : public CompilationDatabase {
+private:
+    CompilationDatabase& base;
+public:
+    MyCompilationDatabase(CompilationDatabase& base) : base(base) {
+    }
+
+    virtual vector<CompileCommand> getCompileCommands(StringRef FilePath) const {
+        auto rtn = base.getCompileCommands(FilePath);
+        assert(rtn.size() == 1);
+        // rtn[0].CommandLine.push_back("-DREFCHECKER");
+        return rtn;
+    }
+
+    virtual vector<std::string> getAllFiles() const {
+        assert(0);
+    }
+
+    virtual vector<CompileCommand> getAllCompileCommands() const {
+        assert(0);
     }
 };
 
 int main(int argc, const char** argv) {
     CommonOptionsParser OptionsParser(argc, argv, RefcheckingToolCategory);
-    ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+    ClangTool Tool(MyCompilationDatabase(OptionsParser.getCompilations()), OptionsParser.getSourcePathList());
     return Tool.run(newFrontendActionFactory<RefcheckingFrontendAction>().get());
 }
