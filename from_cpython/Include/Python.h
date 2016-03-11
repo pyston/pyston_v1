@@ -184,8 +184,6 @@ PyAPI_FUNC(void) PyGC_Disable() PYSTON_NOEXCEPT;
 extern "C" {
 #endif
 
-PyObject* PyModule_GetDict(PyObject*) PYSTON_NOEXCEPT;
-
 // Pyston change : expose these type objects
 extern PyTypeObject Pattern_Type;
 extern PyTypeObject Match_Type;

@@ -2127,7 +2127,7 @@ public:
 // or PyModule_GetDict to return real dicts.
 class AttrWrapper : public Box {
 private:
-    WEAK(Box*) b; // The parent object ('b') will keep the attrwrapper alive (forever)
+    BORROWED(Box*) b; // The parent object ('b') will keep the attrwrapper alive (forever)
 
     void convertToDictBacked() {
         HCAttrs* attrs = this->b->getHCAttrsPtr();

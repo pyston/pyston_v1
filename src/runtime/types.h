@@ -1317,11 +1317,11 @@ inline BoxedString* getStaticString(llvm::StringRef s) {
 
 extern "C" volatile int _pendingcalls_to_do;
 
-inline Box* Box::getattrString(const char* attr) {
+inline BORROWED(Box*) Box::getattrString(const char* attr) {
     // XXX need to auto-decref
     BoxedString* s = internStringMortal(attr);
     try {
-        Box* r =  getattr<NOT_REWRITABLE>(s, NULL);
+        Box* r = getattr<NOT_REWRITABLE>(s, NULL);
         Py_DECREF(s);
         return r;
     } catch (ExcInfo e) {

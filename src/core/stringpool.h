@@ -81,7 +81,7 @@ public:
 
     llvm::StringRef s() const;
     operator llvm::StringRef() const { return s(); }
-    operator BoxedString*() const { return getBox(); }
+    operator BORROWED(BoxedString*)() const { return getBox(); }
 
     bool isCompilerCreatedName() const;
 
