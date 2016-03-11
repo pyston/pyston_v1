@@ -234,6 +234,22 @@ private:
         return cxx_record_decl->getName().startswith("Box");
     }
 
+    AnnotationType getAnnotationType(SourceLocation loc) {
+        // see clang::DiagnosticRenderer::emitMacroExpansions for more info:
+        if (!loc.isMacroID())
+            return AnnotationType::NONE;
+        StringRef MacroName = Lexer::getImmediateMacroName(loc, *SM, CI.getLangOpts());
+        if (MacroName == "BORROWED")
+            return AnnotationType::BORROWED;
+        if (MacroName == "STOLEN")
+            return AnnotationType::STOLEN;
+        return getAnnotationType(SM->getImmediateMacroCallerLoc(loc));
+    }
+
+    AnnotationType getReturnAnnotationType(FunctionDecl* fdecl) {
+        return getAnnotationType(fdecl->getReturnTypeSourceRange().getBegin());
+    }
+
     RefState* handle(Expr* expr, BlockState& state) {
         if (isa<StringLiteral>(expr) || isa<IntegerLiteral>(expr) || isa<CXXBoolLiteralExpr>(expr)) {
             return NULL;
@@ -346,7 +362,7 @@ private:
                 // Not really sure about this:
                 ft = NULL;
             } else {
-                ft_ptr->dump();
+                //ft_ptr->dump();
                 assert(ft_ptr->isPointerType());
                 auto pointed_to = ft_ptr->getPointeeType();
                 while (auto pt = dyn_cast<ParenType>(pointed_to))
@@ -355,13 +371,30 @@ private:
                 ft = cast<FunctionProtoType>(pointed_to);
             }
 
-            handle(callee, state);
-
-            if (ft) {
-                for (auto param : ft->param_types()) {
-                    // TODO: process stolen-ness
+            do {
+                if (auto castexpr = dyn_cast<CastExpr>(callee)) {
+                    callee = castexpr->getSubExpr();
+                    continue;
                 }
+            } while (0);
+
+            bool is_member;
+            ValueDecl* callee_decl;
+            if (auto me = dyn_cast<MemberExpr>(callee)) {
+                callee_decl = me->getMemberDecl();
+                is_member = true;
+            } else if (auto ref = dyn_cast<DeclRefExpr>(callee)) {
+                callee_decl = ref->getDecl();
+                is_member = false;
+            } else {
+                RELEASE_ASSERT(0, "%s", callee->getStmtClassName());
             }
+            //errs() << callee_decl->getDeclKindName() << '\n';
+
+            auto callee_fdecl = dyn_cast<FunctionDecl>(callee_decl);
+            assert(callee_fdecl);
+
+            handle(callee, state);
 
             for (auto arg : callexpr->arguments()) {
                 handle(arg, state);
@@ -373,8 +406,12 @@ private:
                 checkClean(state);
 
             if (isRefcountedType(callexpr->getType())) {
-                // TODO: look for BORROWED annotations
-                return state.createOwned();
+                auto return_ann = getReturnAnnotationType(callee_fdecl);
+
+                if (return_ann == AnnotationType::BORROWED)
+                    return state.createBorrowed();
+                else
+                    return state.createOwned();
             }
             return NULL;
         }
@@ -474,6 +511,8 @@ private:
 
         if (auto declstmt = dyn_cast<DeclStmt>(stmt)) {
             for (auto decl : declstmt->decls()) {
+                if (!isa<VarDecl>(decl))
+                    errs() << decl->getDeclKindName() << '\n';
                 auto vardecl = cast<VarDecl>(decl);
                 assert(vardecl);
 
@@ -516,18 +555,6 @@ private:
         RELEASE_ASSERT(0, "unhandled statement type: %s\n", stmt->getStmtClassName());
     }
 
-    AnnotationType getAnnotationType(SourceLocation loc) {
-        // see clang::DiagnosticRenderer::emitMacroExpansions for more info:
-        if (!loc.isMacroID())
-            return AnnotationType::NONE;
-        StringRef MacroName = Lexer::getImmediateMacroName(loc, *SM, CI.getLangOpts());
-        if (MacroName == "BORROWED")
-            return AnnotationType::BORROWED;
-        if (MacroName == "STOLEN")
-            return AnnotationType::STOLEN;
-        return getAnnotationType(SM->getImmediateMacroCallerLoc(loc));
-    }
-
     void checkFunction(FunctionDecl* func) {
         /*
         errs() << func->hasTrivialBody() << '\n';
@@ -544,7 +571,7 @@ private:
         errs() << "dumping:\n";
         func->dump(errs());
 
-        return_ann = getAnnotationType(func->getReturnTypeSourceRange().getBegin());
+        return_ann = getReturnAnnotationType(func);
 
         BlockState state;
         for (auto param : func->params()) {
@@ -580,13 +607,21 @@ public:
 
     virtual ~RefcheckingVisitor() {}
 
+    StringRef getFilename(SourceLocation Loc) {
+        // From ASTDumper::dumpLocation:
+        SourceLocation SpellingLoc = SM->getSpellingLoc(Loc);
+        PresumedLoc PLoc = SM->getPresumedLoc(SpellingLoc);
+        return PLoc.getFilename();
+    }
+
     virtual bool VisitFunctionDecl(FunctionDecl* func) {
         if (!func->hasBody())
             return true /* keep going */;
         if (!func->isThisDeclarationADefinition())
             return true /* keep going */;
 
-        auto filename = Context->getSourceManager().getFilename(func->getNameInfo().getLoc());
+        //auto filename = Context->getSourceManager().getFilename(func->getSourceRange().getBegin());
+        auto filename = getFilename(func->getSourceRange().getBegin());
 
         // Filter out functions defined in libraries:
         if (filename.find("include/c++") != StringRef::npos)
@@ -598,7 +633,10 @@ public:
         if (filename.find("lib/clang") != StringRef::npos)
             return true;
 
-        // errs() << filename << '\n';
+        if (filename.endswith(".h"))
+            return true;
+
+        // errs() << "filename:" << filename << '\n';
 
         // if (func->getNameInfo().getAsString() != "firstlineno")
         // return true;

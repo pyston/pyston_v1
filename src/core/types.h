@@ -407,7 +407,7 @@ public:
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
-    BoxedString* getName();
+    BORROWED(BoxedString*) getName();
     BORROWED(BoxedString*) getFn() { return fn; }
 
     InternedString mangleName(InternedString id);

@@ -65,7 +65,7 @@ Box* BoxedCode::varnames(Box* b, void*) {
 
     auto& param_names = code->f->param_names;
     if (!param_names.takes_param_names)
-        return EmptyTuple;
+        return incref(EmptyTuple);
 
     std::vector<Box*> elts;
     for (auto sr : param_names.args)
