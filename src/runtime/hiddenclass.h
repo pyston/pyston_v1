@@ -92,7 +92,7 @@ public:
     // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
     // array.
     // Only valid for NORMAL or SINGLETON hidden classes
-    const llvm::DenseMap<BoxedString*, int>& getStrAttrOffsets() {
+    BORROWED(const llvm::DenseMap<BoxedString*, int>&) getStrAttrOffsets() {
         assert(type == NORMAL || type == SINGLETON);
         return attr_offsets;
     }

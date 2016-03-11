@@ -1086,8 +1086,12 @@ public:
     Box* prop_doc;
     bool getter_doc;
 
-    BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
-        : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
+    BoxedProperty(Box* get, Box* set, Box* del, Box* doc) : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {
+        Py_XINCREF(get);
+        Py_XINCREF(set);
+        Py_XINCREF(del);
+        Py_XINCREF(doc);
+    }
 
     static void dealloc(Box* b) noexcept;
     static int traverse(Box* self, visitproc visit, void *arg) noexcept;
@@ -1114,7 +1118,9 @@ class BoxedClassmethod : public Box {
 public:
     Box* cm_callable;
 
-    BoxedClassmethod(Box* callable) : cm_callable(callable) {}
+    BoxedClassmethod(Box* callable) : cm_callable(callable) {
+        Py_INCREF(cm_callable);
+    }
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls, true);
 
@@ -1130,7 +1136,9 @@ public:
     size_t nelts;
     Box* elts[0];
 
-    BoxedClosure(BoxedClosure* parent) : parent(parent) {}
+    BoxedClosure(BoxedClosure* parent) : parent(parent) {
+        Py_XINCREF(parent);
+    }
 
     // TODO: convert this to a var-object and use DEFAULT_CLASS_VAR_SIMPLE
     void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
@@ -1191,7 +1199,11 @@ public:
     BoxedClass* type;
     void* wrapped;
     BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type, void* wrapped)
-        : wrapper(wrapper), type(type), wrapped(wrapped) {}
+        : wrapper(wrapper), type(type), wrapped(wrapped) {
+        Py_INCREF(type);
+    }
+
+    void dealloc(Box* b) noexcept;
 
     DEFAULT_CLASS(wrapperdescr_cls);
 
@@ -1207,7 +1219,10 @@ public:
     BoxedWrapperDescriptor* descr;
     Box* obj;
 
-    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : descr(descr), obj(obj) {}
+    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : descr(descr), obj(obj) {
+        Py_INCREF(descr);
+        Py_INCREF(obj);
+    }
 
     DEFAULT_CLASS(wrapperobject_cls);
 
@@ -1309,7 +1324,7 @@ inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
     return args[idx - 3];
 }
 
-inline BoxedString* getStaticString(llvm::StringRef s) {
+inline BORROWED(BoxedString*) getStaticString(llvm::StringRef s) {
     BoxedString* r = internStringImmortal(s);
     constants.push_back(r);
     return r;

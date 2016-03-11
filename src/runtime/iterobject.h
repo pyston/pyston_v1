@@ -33,7 +33,9 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {}
+    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {
+        Py_INCREF(b);
+    }
 
     DEFAULT_CLASS(seqiter_cls);
 
@@ -59,7 +61,9 @@ public:
     Box* iter;
     Box* next;
 
-    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {}
+    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {
+        Py_INCREF(iter);
+    }
 
     DEFAULT_CLASS(iterwrapper_cls);
 

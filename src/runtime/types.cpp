@@ -3941,7 +3941,7 @@ void setupRuntime() {
         BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper", false,
                    BoxedWrapperObject::dealloc, NULL, true, BoxedWrapperObject::traverse, NOCLEAR);
     wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor",
-                                          false, NULL, NULL, false);
+                                          false, BoxedWrapperDescriptor::dealloc, NULL, false);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);
