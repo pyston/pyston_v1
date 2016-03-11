@@ -60,6 +60,8 @@ Box* BoxedCode::argcount(Box* b, void*) {
 }
 
 Box* BoxedCode::varnames(Box* b, void*) {
+    NOREFCHECK;
+
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
@@ -74,7 +76,10 @@ Box* BoxedCode::varnames(Box* b, void*) {
         elts.push_back(boxString(param_names.vararg));
     if (param_names.kwarg.size())
         elts.push_back(boxString(param_names.kwarg));
-    return BoxedTuple::create(elts.size(), &elts[0]);
+    auto rtn = BoxedTuple::create(elts.size(), &elts[0]);
+    for (auto e : elts)
+        Py_DECREF(e);
+    return rtn;
 }
 
 Box* BoxedCode::flags(Box* b, void*) {
@@ -103,7 +108,7 @@ extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, Py
 
 extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
-    return unboxInt(BoxedCode::argcount((Box*)op, NULL));
+    return unboxInt(autoDecref(BoxedCode::argcount((Box*)op, NULL)));
 }
 
 extern "C" PyObject* PyCode_GetFilename(PyCodeObject* op) noexcept {

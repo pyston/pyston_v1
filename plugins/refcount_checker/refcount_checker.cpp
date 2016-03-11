@@ -79,10 +79,13 @@ private:
     ASTContext* Context;
     SourceManager* SM;
 
+    bool done = false;
+
     enum class AnnotationType {
         NONE,
         BORROWED,
         STOLEN,
+        SKIP,
     };
     AnnotationType return_ann;
 
@@ -178,12 +181,12 @@ private:
         }
 
         for (auto&& bstate : { state1, state2 }) {
-            for (auto&& state : state1.states) {
+            for (auto&& state : bstate.states) {
                 if (state.num_refs == 0)
                     continue;
 
                 bool found = false;
-                for (auto&& p : state1.vars) {
+                for (auto&& p : bstate.vars) {
                     if (p.second == &state) {
                         found = true;
                         break;
@@ -201,22 +204,49 @@ private:
         }
     }
 
+    void checkUsable(RefState* rstate) {
+        if (!rstate)
+            return;
+
+        assert(rstate->num_refs >= 0);
+        assert(rstate->type == BORROWED || rstate->num_refs > 0);
+    }
+
+    bool isRefcountedName(StringRef name) {
+        return name.startswith("Box") || ((name.startswith("Py") || name.startswith("_Py")) && name.endswith("Object"));
+    }
+
     bool isRefcountedType(const QualType& t) {
         if (!t->isPointerType())
             return false;
+        //errs() << '\n';
 
         auto pointed_to = t->getPointeeType();
-        do {
+        while (1) {
+            //errs() << "is refcounted?   ";
+            //pointed_to->dump();
             if (auto pt = dyn_cast<ParenType>(pointed_to)) {
                 pointed_to = pt->getInnerType();
                 continue;
             }
 
             if (auto pt = dyn_cast<TypedefType>(pointed_to)) {
+                if (isRefcountedName(pt->getDecl()->getName()))
+                    return true;
                 pointed_to = pt->desugar();
                 continue;
             }
-        } while (0);
+
+            if (auto pt = dyn_cast<ElaboratedType>(pointed_to)) {
+                pointed_to = pt->desugar();
+                continue;
+            }
+
+            break;
+        };
+
+        //errs() << "final:   ";
+        //pointed_to->dump();
 
         if (isa<BuiltinType>(pointed_to) || isa<FunctionType>(pointed_to))
             return false;
@@ -231,7 +261,8 @@ private:
             t->dump();
         assert(cxx_record_decl);
 
-        return cxx_record_decl->getName().startswith("Box");
+        auto name = cxx_record_decl->getName();
+        return isRefcountedName(name);
     }
 
     AnnotationType getAnnotationType(SourceLocation loc) {
@@ -243,6 +274,8 @@ private:
             return AnnotationType::BORROWED;
         if (MacroName == "STOLEN")
             return AnnotationType::STOLEN;
+        if (MacroName == "NOREFCHECK")
+            return AnnotationType::SKIP;
         return getAnnotationType(SM->getImmediateMacroCallerLoc(loc));
     }
 
@@ -269,8 +302,28 @@ private:
             return NULL;
         }
 
+        if (isa<GNUNullExpr>(expr)) {
+            if (isRefcountedType(expr->getType()))
+                return state.createBorrowed();
+            return NULL;
+        }
+
         if (auto exprwc = dyn_cast<ExprWithCleanups>(expr)) {
             // TODO: probably will need to be checking things here
+            errs() << "exprwithcleanup; " << exprwc->getNumObjects() << " cleanup objects\n";
+            for (auto cleanup_object : exprwc->getObjects()) {
+                errs() << "cleanup object:\n";
+                for (auto param : cleanup_object->params()) {
+                    errs() << "param: ";
+                    param->dump();
+                }
+                for (auto capture : cleanup_object->captures()) {
+                    errs() << "capture: ";
+                    capture.getVariable()->dump();
+                    errs() << "capture expr : ";
+                    capture.getCopyExpr()->dump();
+                }
+            }
             return handle(exprwc->getSubExpr(), state);
         }
 
@@ -288,6 +341,10 @@ private:
 
         if (auto unaryop = dyn_cast<UnaryOperator>(expr)) {
             handle(unaryop->getSubExpr(), state);
+            if (isRefcountedType(unaryop->getType())) {
+                if (unaryop->getOpcode() == UO_AddrOf)
+                    return state.createBorrowed();
+            }
             ASSERT(!isRefcountedType(unaryop->getType()), "implement me");
             return NULL;
         }
@@ -304,6 +361,8 @@ private:
         }
 
         if (auto castexpr = dyn_cast<CastExpr>(expr)) {
+            //castexpr->getType()->dump();
+            //castexpr->getSubExpr()->getType()->dump();
             assert(!(isRefcountedType(castexpr->getType()) && !isRefcountedType(castexpr->getSubExpr()->getType())));
             return handle(castexpr->getSubExpr(), state);
         }
@@ -452,6 +511,9 @@ private:
     void handle(Stmt* stmt, BlockState& state) {
         assert(stmt);
 
+        if (done)
+            return;
+
         if (auto expr = dyn_cast<Expr>(stmt)) {
             handle(expr, state);
             return;
@@ -472,12 +534,26 @@ private:
             return;
         }
 
+            // Not really sure about these:
         if (auto forstmt = dyn_cast<ForStmt>(stmt)) {
             handle(forstmt->getInit(), state);
             handle(forstmt->getCond(), state);
 
             if (forstmt->getConditionVariable())
                 assert(!isRefcountedType(forstmt->getConditionVariable()->getType()));
+
+            BlockState old_state(state);
+            handle(forstmt->getBody(), state);
+            handle(forstmt->getInc(), state);
+            checkSameAndMerge(state, old_state);
+            return;
+        }
+
+        if (auto forstmt = dyn_cast<CXXForRangeStmt>(stmt)) {
+            // Not really sure about these:
+            handle(forstmt->getRangeInit(), state);
+            handle(forstmt->getCond(), state);
+            handle(forstmt->getInc(), state);
 
             BlockState old_state(state);
             handle(forstmt->getBody(), state);
@@ -548,6 +624,15 @@ private:
                 handle(input, state);
             for (auto input : asmstmt->outputs())
                 handle(input, state);
+            return;
+        }
+
+        if (auto nullstmt = dyn_cast<NullStmt>(stmt)) {
+            AnnotationType ann = getAnnotationType(nullstmt->getSemiLoc());
+            if (ann == AnnotationType::SKIP) {
+                done = true;
+                return;
+            }
             return;
         }
 
