@@ -36,3 +36,34 @@ try:
     assert False
 except SyntaxError:
     pass
+
+# test duplicate args
+try:
+    exec compile('lambda x, x: none', 'foo', 'exec')
+except SyntaxError as e:
+    print(e)
+else:
+    raise Exception('SyntaxError not raised')
+
+# test nests duplicate args
+try:
+    exec compile('lambda a, (b, (c, a)): none', 'foo', 'exec')
+except SyntaxError as e:
+    print(e)
+else:
+    raise Exception('SyntaxError not raised')
+
+# test duplicate vararg and kwarg
+try:
+    eval('lambda *a, **a: 0')
+except SyntaxError as e:
+    print(e)
+else:
+    raise Exception('SyntaxError not raised')
+
+try:
+    eval('lambda a, *a: 0')
+except SyntaxError as e:
+    print(e)
+else:
+    raise Exception('SyntaxError not raised')
