@@ -873,6 +873,7 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args, bool for_call,
                                Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1108,6 +1109,7 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
         Box* new_attr = typeLookup(self, _new_str);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
+        AUTO_DECREF(new_attr);
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
     } catch (ExcInfo e) {
@@ -3338,6 +3340,7 @@ template <ExceptionStyle S>
 static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                              Box* arg3, Box** args,
                              const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     ParamReceiveSpec paramspec(0, 0, true, true);
     if (!argspec.has_kwargs && argspec.num_keywords == 0) {
         paramspec.takes_kwargs = false;

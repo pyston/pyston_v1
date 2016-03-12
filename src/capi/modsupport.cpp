@@ -455,7 +455,7 @@ extern "C" BORROWED(PyObject*) PyModule_GetDict(PyObject* _m) noexcept {
     return autoDecref(m->getAttrWrapper());
 }
 
-extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) noexcept {
+extern "C" int PyModule_AddObject(PyObject* _m, const char* name, STOLEN(PyObject*) value) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 

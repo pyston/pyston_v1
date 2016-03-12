@@ -64,7 +64,7 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       internal_callable(NULL, NULL) {
 }
 
-BoxedCode* FunctionMetadata::getCode() {
+BORROWED(BoxedCode*) FunctionMetadata::getCode() {
     if (!code_obj) {
         code_obj = new BoxedCode(this);
         // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.

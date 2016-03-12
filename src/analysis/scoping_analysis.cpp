@@ -61,10 +61,10 @@ BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
     assert(private_name);
     int len = id->size();
     if (len < 2 || id->s()[0] != '_' || id->s()[1] != '_')
-        return id;
+        return incref(id);
 
     if ((id->s()[len - 2] == '_' && id->s()[len - 1] == '_') || id->s().find('.') != llvm::StringRef::npos)
-        return id;
+        return incref(id);
 
     const char* p = private_name->data();
     while (*p == '_') {
@@ -72,7 +72,7 @@ BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name) {
         len--;
     }
     if (*p == '\0')
-        return id;
+        return incref(id);
 
     return static_cast<BoxedString*>(boxStringTwine("_" + (p + id->s())));
 }

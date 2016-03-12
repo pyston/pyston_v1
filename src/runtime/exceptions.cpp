@@ -42,11 +42,12 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
             Py_INCREF(Py_None);
             loc = Py_None;
         }
+        AUTO_DECREF(loc);
 
         auto args = BoxedTuple::create({ autoDecref(boxString(file)), autoDecref(boxInt(lineno)), None, loc });
         Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), autoDecref(boxString(msg)), args, NULL, NULL, NULL);
         assert(!PyErr_Occurred());
-        throw ExcInfo(exc->cls, exc, None);
+        throw ExcInfo(incref(exc->cls), exc, incref(None));
     } else {
         PyErr_SetString(SyntaxError, msg);
         PyErr_SyntaxLocation(file.str().c_str(), lineno);
@@ -161,6 +162,7 @@ ExcInfo excInfoForRaise(STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) 
 }
 
 extern "C" void raise0(ExcInfo* frame_exc_info) {
+    assert(0 && "check refcounting");
     updateFrameExcInfoIfNeeded(frame_exc_info);
     assert(frame_exc_info->type);
 
@@ -174,6 +176,7 @@ extern "C" void raise0(ExcInfo* frame_exc_info) {
 }
 
 extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
+    assert(0 && "check refcounting");
     updateFrameExcInfoIfNeeded(frame_exc_info);
     assert(frame_exc_info->type);
 
@@ -192,6 +195,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
 }
 
 extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) {
+    assert(0 && "Check refcounting");
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
@@ -203,6 +207,7 @@ extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) 
 }
 
 extern "C" void raise3_capi(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) noexcept {
+    assert(0 && "Check refcounting");
     bool reraise = arg2 != NULL && arg2 != None;
 
     ExcInfo exc_info(NULL, NULL, NULL);
@@ -296,11 +301,6 @@ void caughtCxxException(ExcInfo* exc_info) {
 }
 
 
-
-struct ExcState {
-    bool is_reraise;
-    constexpr ExcState() : is_reraise(false) {}
-} static __thread exc_state;
 
 bool exceptionAtLineCheck() {
     if (exc_state.is_reraise) {

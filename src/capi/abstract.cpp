@@ -57,7 +57,7 @@ extern "C" int PyObject_Cmp(PyObject* o1, PyObject* o2, int* result) noexcept {
 extern "C" PyObject* PyObject_Type(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
-    return o->cls;
+    return incref(o->cls);
 }
 
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
@@ -747,6 +747,7 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
     BoxedInt* r = lenInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, NULL);
     if (!r)
         return -1;
+    AUTO_DECREF(r);
     return r->n;
 }
 

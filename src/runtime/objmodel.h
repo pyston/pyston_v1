@@ -219,9 +219,6 @@ inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int
 // Corresponds to a name lookup with GLOBAL scope.  Checks the passed globals object, then the builtins,
 // and if not found raises an exception.
 extern "C" Box* getGlobal(Box* globals, BoxedString* name);
-// Checks for the name just in the passed globals object, and returns NULL if it is not found.
-// This includes if the globals object defined a custom __getattr__ method that threw an AttributeError.
-Box* getFromGlobals(Box* globals, BoxedString* name);
 extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value);
 extern "C" void delGlobal(Box* globals, BoxedString* name);
 

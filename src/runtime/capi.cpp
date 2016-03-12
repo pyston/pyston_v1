@@ -224,7 +224,9 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr) noexcept {
     }
 
     BoxedString* s = static_cast<BoxedString*>(attr);
+    Py_INCREF(s);
     internStringMortalInplace(s);
+    AUTO_DECREF(s);
 
     Box* r = getattrInternal<ExceptionStyle::CAPI>(o, s);
 
@@ -239,7 +241,9 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr) noexcept {
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
     try {
         BoxedString* s = static_cast<BoxedString*>(name);
+        Py_INCREF(s);
         internStringMortalInplace(s);
+        AUTO_DECREF(s);
         Box* r = getattrInternalGeneric<false, NOT_REWRITABLE>(o, s, NULL, false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
@@ -680,7 +684,7 @@ extern "C" int Py_FlushLine(void) noexcept {
     return PyFile_WriteString("\n", f);
 }
 
-void setCAPIException(const ExcInfo& e) {
+void setCAPIException(STOLEN(const ExcInfo&) e) {
     PyErr_Restore(e.type, e.value, e.traceback);
 }
 
@@ -745,6 +749,7 @@ extern "C" void Py_Exit(int sts) noexcept {
 }
 
 extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
+    assert(0 && "check refcounting");
     ExcInfo* exc = getFrameExcInfo();
     *ptype = exc->type;
     *pvalue = exc->value;
@@ -752,6 +757,7 @@ extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject**
 }
 
 extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
+    assert(0 && "check refcounting");
     ExcInfo* exc = getFrameExcInfo();
     exc->type = type ? type : None;
     exc->value = value ? value : None;
@@ -1579,7 +1585,7 @@ extern "C" PyCFunction PyCFunction_GetFunction(PyObject* op) noexcept {
     return static_cast<BoxedCApiFunction*>(op)->getFunction();
 }
 
-extern "C" PyObject* PyCFunction_GetSelf(PyObject* op) noexcept {
+extern "C" PyObject* PyCFunction_GetSelf(BORROWED(PyObject*) op) noexcept {
     if (!PyCFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
@@ -1712,6 +1718,7 @@ template <ExceptionStyle S>
 Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                 Box* arg3, Box** args,
                                 const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     if (S == CAPI) {
         try {
             return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);

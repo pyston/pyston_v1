@@ -201,6 +201,7 @@ Box* getFrame(int depth) {
 
 void frameInvalidateBack(BoxedFrame* frame) {
     RELEASE_ASSERT(!frame->hasExited(), "should not happen");
+    assert(!frame->_back && "have to decref it");
     frame->_back = NULL;
 }
 
@@ -226,14 +227,19 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
 }
 
 extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) {
-    if (frame_info->exc.type) {
-        Py_DECREF(frame_info->exc.type);
-        Py_DECREF(frame_info->exc.value);
-        Py_DECREF(frame_info->exc.traceback);
-    }
+    Box* old_type = frame_info->exc.type;
+    Box* old_value = frame_info->exc.type;
+    Box* old_traceback = frame_info->exc.type;
+
     frame_info->exc.type = type;
     frame_info->exc.value = value;
     frame_info->exc.traceback = tb;
+
+    if (old_type) {
+        Py_DECREF(old_type);
+        Py_DECREF(old_value);
+        Py_DECREF(old_traceback);
+    }
 }
 
 extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {

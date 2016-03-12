@@ -1304,7 +1304,7 @@ extern "C" Box* str_str(Box* _self) noexcept {
     BoxedString* self = (BoxedString*)_self;
 
     if (self->cls == str_cls)
-        return self;
+        return incref(self);
 
     return boxString(self->s());
 }
@@ -2281,8 +2281,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'decode' requires a 'str' object but received a '%s'", getTypeName(self));
 
-    BORROWED(BoxedString*) encoding_str = (BoxedString*)encoding;
-    BORROWED(BoxedString*) error_str = (BoxedString*)error;
+    BoxedString* encoding_str = (BoxedString*)encoding;
+    BoxedString* error_str = (BoxedString*)error;
 
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
@@ -2566,6 +2566,8 @@ extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) no
     try {
         if (*pv == NULL)
             return;
+
+        AUTO_DECREF(*pv);
 
         if (w == NULL || !PyString_Check(*pv)) {
             *pv = NULL;

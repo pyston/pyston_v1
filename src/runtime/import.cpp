@@ -34,10 +34,10 @@ namespace pyston {
 
 static void removeModule(BoxedString* name) {
     BoxedDict* d = getSysModulesDict();
-    d->d.erase(name);
+    PyDict_DelItem(d, name);
 }
 
-extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
+extern "C" BORROWED(PyObject*) PyImport_GetModuleDict(void) noexcept {
     try {
         return getSysModulesDict();
     } catch (ExcInfo e) {
@@ -48,6 +48,7 @@ extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
 
 extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FILE* fp) noexcept {
     BoxedString* name_boxed = boxString(name);
+    AUTO_DECREF(name_boxed);
     try {
         const char* lastdot = strrchr(name, '.');
         const char* shortname;
@@ -90,6 +91,7 @@ extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) no
 
 extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, char* pathname) noexcept {
     BoxedString* s = boxString(name);
+    AUTO_DECREF(s);
     try {
         RELEASE_ASSERT(co->cls == str_cls, "");
         BoxedString* code = (BoxedString*)co;
@@ -99,10 +101,10 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, c
             return NULL;
 
         static BoxedString* file_str = getStaticString("__file__");
-        module->setattr(file_str, boxString(pathname), NULL);
+        module->setattr(file_str, autoDecref(boxString(pathname)), NULL);
         AST_Module* ast = parse_string(code->data(), /* future_flags = */ 0);
         compileAndRunModule(ast, module);
-        return module;
+        return incref(module);
     } catch (ExcInfo e) {
         removeModule(s);
         setCAPIException(e);
@@ -155,11 +157,11 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     static BoxedString* file_str = getStaticString("__file__");
-    m->setattr(file_str, boxString(path), NULL);
+    m->setattr(file_str, autoDecref(boxString(path)), NULL);
 
     if (Py_VerboseFlag)
         PySys_WriteStderr("import %s # dynamically loaded from %s\n", full_name->c_str(), path.c_str());
 
-    return m;
+    return incref(m);
 }
 }

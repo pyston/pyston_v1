@@ -121,7 +121,7 @@ void generatorEntry(BoxedGenerator* g) {
 }
 
 Box* generatorIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 // called from both generatorHasNext and generatorSend/generatorNext (but only if generatorHasNext hasn't been called)
@@ -203,6 +203,7 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
         // Reset the current exception.
         // We could directly create the StopIteration exception but we delay creating it because often the caller is not
         // interested in the exception (=generatorHasnext). If we really need it we will create it inside generatorSend.
+        assert(!self->exception.type && "need to decref existing exception");
         self->exception = ExcInfo(NULL, NULL, NULL);
         return false;
     }
@@ -269,7 +270,7 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
     if (!exc_tb)
         exc_tb = None;
 
-    ExcInfo exc_info = excInfoForRaise(exc_cls, exc_val, exc_tb);
+    ExcInfo exc_info = excInfoForRaise(incref(exc_cls), incref(exc_val), incref(exc_tb));
     if (self->entryExited)
         throw exc_info;
 
@@ -283,14 +284,14 @@ Box* generatorClose(Box* s) {
 
     // check if the generator already exited
     if (self->entryExited)
-        return None;
+        return incref(None);
 
     try {
-        generatorThrow(self, GeneratorExit, nullptr, nullptr);
+        autoDecref(generatorThrow(self, GeneratorExit, nullptr, nullptr));
         raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
     } catch (ExcInfo e) {
         if (e.matches(StopIteration) || e.matches(GeneratorExit))
-            return None;
+            return incref(None);
         throw e;
     }
     assert(0); // unreachable
@@ -475,7 +476,7 @@ Box* generatorName(Box* _self, void* context) {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return self->function->md->source->getName();
+    return incref(self->function->md->source->getName());
 }
 
 extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {

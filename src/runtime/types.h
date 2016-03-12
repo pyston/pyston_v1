@@ -253,9 +253,6 @@ public:
         return true;
     }
 
-    // Checks if this class or one of its parents has a non-default tp_dealloc
-    bool hasNonDefaultTpDealloc();
-
     void freeze();
 
     typedef size_t SlotOffset;

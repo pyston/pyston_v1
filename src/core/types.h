@@ -605,7 +605,7 @@ inline BoxedString* internStringMortal(llvm::StringRef s) {
 // TODO this is an immortal intern for now
 // Ref usage: this transfers a ref from the passed-in string to the new one.
 // Typical usage:
-// Py_INCREF(s);
+// Py_INCREF(s); // or otherwise make sure it was owned
 // internStringMortalInplace(s);
 // AUTO_DECREF(s);
 inline void internStringMortalInplace(BoxedString*& s) noexcept {
@@ -896,7 +896,7 @@ class BoxedClass;
 // TODO these shouldn't be here
 void setupRuntime();
 Box* createAndRunModule(BoxedString* name, const std::string& fn);
-BoxedModule* createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL) noexcept;
+BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL) noexcept;
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this

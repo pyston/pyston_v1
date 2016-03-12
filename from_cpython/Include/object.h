@@ -515,7 +515,7 @@ PyAPI_FUNC(int) PyType_Ready(PyTypeObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
                                                PyObject *, PyObject *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) _PyType_Lookup(PyTypeObject *, PyObject *) PYSTON_NOEXCEPT;
 // Pyston change: modified this to take a const char*
 PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, const char *, PyObject **) PYSTON_NOEXCEPT;
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void) PYSTON_NOEXCEPT;

@@ -143,7 +143,7 @@ extern "C" void dumpEx(void* p, int levels) {
             printf("Freed memory\n");
             return;
         }
-        if (lowbyte == 0xcb) {
+        if (lowbyte == 0xfb) {
             printf("Forbidden (redzone) memory\n");
             return;
         }
@@ -227,6 +227,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (PyLong_Check(b)) {
             PyObject* str = longRepr(static_cast<BoxedLong*>(b));
+            AUTO_DECREF(str);
             printf("Long value: %s\n", static_cast<BoxedString*>(str)->c_str());
         }
 

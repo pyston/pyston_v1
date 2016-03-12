@@ -269,6 +269,7 @@ BoxedString* Box::reprICAsString() {
         checkAndThrowCAPIException();
     }
     if (r->cls != str_cls) {
+        Py_DECREF(r);
         raiseExcHelper(TypeError, "__repr__ did not return a string!");
     }
     return static_cast<BoxedString*>(r);
@@ -298,7 +299,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
 
         assert(0 && "check the refcounting here");
         static BoxedString* name_str = getStaticString("__name__");
-        this->modname = globals_for_name->getattr(name_str);
+        this->modname = incref(globals_for_name->getattr(name_str));
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
@@ -462,6 +463,7 @@ BORROWED(BoxedString*) BoxedModule::getStringConstant(llvm::StringRef ast_str, b
         // that we would keep the previously-created string alive.
         // So, make sure to put it onto the keep_alive list.
         if (r && !PyString_CHECK_INTERNED(r)) {
+            assert(0 && "check refcounting");
             keep_alive.push_back(r);
             r = NULL;
         }
@@ -567,6 +569,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 template <ExceptionStyle S>
 static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     int npassed_args = argspec.totalPassed();
 
     // Common CAPI path call this function with *args, **kw.
@@ -613,6 +616,7 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
 static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                              Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+    assert(0 && "check refcounting");
     if (rewrite_args)
         assert(rewrite_args->func_guarded);
 
@@ -643,6 +647,7 @@ static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwd
 }
 
 static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, Box** _args) {
+    assert(0 && "check refcounting");
     Box* errors_obj = _args[0];
 
     assert(isSubclass(type, unicode_cls));
@@ -712,6 +717,7 @@ static Box* objectNewNoArgs(BoxedClass* cls) noexcept {
 template <ExceptionStyle S>
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                           Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     int npassed_args = argspec.totalPassed();
     int npositional = argspec.num_args;
 
@@ -1296,6 +1302,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 }
 
 Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
+    assert(0 && "check refcounting");
     assert(vararg->cls == tuple_cls);
 
     bool pass_kwargs = (kwargs && kwargs->d.size());
@@ -1334,6 +1341,7 @@ static Box* typeSubDict(Box* obj, void* context) {
 }
 
 void Box::setDictBacked(STOLEN(Box*) val) {
+    assert(0 && "check refcounting");
     assert(this->cls->instancesHaveHCAttrs());
 
     RELEASE_ASSERT(val->cls == dict_cls || val->cls == attrwrapper_cls, "");
@@ -1348,6 +1356,7 @@ void Box::setDictBacked(STOLEN(Box*) val) {
 }
 
 static void typeSubSetDict(Box* obj, Box* val, void* context) {
+    assert(0 && "check refcounting");
     if (obj->cls->instancesHaveDictAttrs()) {
         RELEASE_ASSERT(val->cls == dict_cls, "");
         obj->setDict(static_cast<BoxedDict*>(val));
@@ -1373,6 +1382,7 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
 }
 
 extern "C" void PyType_SetDict(PyTypeObject* type, PyObject* dict) noexcept {
+    assert(0 && "check refcounting");
     typeSubSetDict(type, dict, NULL);
     type->tp_dict = dict;
 }
@@ -1540,6 +1550,7 @@ static void funcSetName(Box* b, Box* v, void*) {
         raiseExcHelper(TypeError, "__name__ must be set to a string object");
     }
 
+    RELEASE_ASSERT(!func->name, "");
     func->name = incref(static_cast<BoxedString*>(v));
 }
 
@@ -1592,11 +1603,11 @@ static Box* functionDefaults(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (!func->defaults)
-        return None;
+        return incref(None);
     for (auto e : *func->defaults) {
         RELEASE_ASSERT(e, "this function's defaults should not be available");
     }
-    return func->defaults;
+    return incref(func->defaults);
 }
 
 static Box* functionGlobals(Box* self, void*) {
@@ -1604,7 +1615,7 @@ static Box* functionGlobals(Box* self, void*) {
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (func->globals) {
         assert(!func->md->source || !func->md->source->scoping->areGlobalsFromModule());
-        return func->globals;
+        return incref(func->globals);
     }
     assert(func->md->source);
     assert(func->md->source->scoping->areGlobalsFromModule());
@@ -1632,7 +1643,9 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
 
     BoxedTuple* t = static_cast<BoxedTuple*>(v);
 
-    func->defaults = t;
+    auto old_defaults = func->defaults;
+    func->defaults = incref(t);
+    Py_DECREF(old_defaults);
     func->dependent_ics.invalidateAll();
 }
 
@@ -1822,7 +1835,7 @@ Box* sliceIndices(BoxedSlice* self, Box* len) {
     if (PySlice_GetIndicesEx((PySliceObject*)self, ilen, &start, &stop, &step, &slicelength) < 0) {
         throwCAPIException();
     }
-    return BoxedTuple::create({ boxInt(start), boxInt(stop), boxInt(step) });
+    return BoxedTuple::create({ autoDecref(boxInt(start)), autoDecref(boxInt(stop)), autoDecref(boxInt(step)) });
 }
 
 static int slice_compare(PySliceObject* v, PySliceObject* w) noexcept {
@@ -2127,9 +2140,12 @@ public:
 // or PyModule_GetDict to return real dicts.
 class AttrWrapper : public Box {
 private:
+    // TODO: need to merge this with marius's change.  this will need to become
+    // an owned reference.
     BORROWED(Box*) b; // The parent object ('b') will keep the attrwrapper alive (forever)
 
     void convertToDictBacked() {
+        assert(0 && "check refcounting");
         HCAttrs* attrs = this->b->getHCAttrsPtr();
         if (attrs->hcls->type == HiddenClass::DICT_BACKED)
             return;
@@ -2248,7 +2264,7 @@ public:
 
         Box* r = self->b->getattr(key);
         if (!r)
-            return def;
+            return incref(def);
         return incref(r);
     }
 
@@ -2369,6 +2385,7 @@ public:
         Box* rtn = contains<CAPI>(_self, _key);
         if (!rtn)
             return -1;
+        AUTO_DECREF(rtn);
         return rtn == True;
     }
 
@@ -2410,8 +2427,7 @@ public:
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             BoxedTuple* t = BoxedTuple::create({ p.first, attrs->attr_list->attrs[p.second] });
-            listAppend(rtn, t);
-            Py_DECREF(t);
+            listAppendStolen(rtn, t);
         }
         return rtn;
     }
@@ -2453,6 +2469,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         attrs->clear();
+        AOEU
 
         // Add the existing attrwrapper object (ie self) back as the attrwrapper:
         self->b->appendNewHCAttr(self, NULL);
@@ -3445,14 +3462,18 @@ void HCAttrs::clear() noexcept {
 
     assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
-    // TODO: should swap in the new HCAttrs before doing any decrefs.
-    for (int i = 0; i < hcls->attributeArraySize(); i++) {
-        Py_DECREF(this->attr_list->attrs[i]);
-    }
+    auto old_attr_list = this->attr_list;
+    auto old_attr_list_size = hcls->attributeArraySize();
 
-    if (this->attr_list)
-        PyMem_FREE(this->attr_list);
     new ((void*)this) HCAttrs(root_hcls);
+
+    if (old_attr_list) {
+        for (int i = 0; i < old_attr_list_size; i++) {
+            Py_DECREF(old_attr_list->attrs[i]);
+        }
+
+        PyMem_FREE(old_attr_list);
+    }
 }
 
 static void tupledealloc(PyTupleObject* op) noexcept {
@@ -3508,15 +3529,18 @@ void BoxedModule::dealloc(Box* b) noexcept {
 int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     Py_VISIT_HCATTRS(m->attrs);
+    assert(!self->keep_alive.size());
     return 0;
 }
 
 template <typename CM>
 void clearContiguousMap(CM& cm) {
-    for (auto&& p : cm) {
-        Py_DECREF(cm.getMapped(p.second));
+    CM tmp;
+    std::swap(cm, tmp);
+
+    for (auto&& p : tmp) {
+        Py_DECREF(tmp.getMapped(p.second));
     }
-    cm.clear();
 }
 
 int BoxedModule::clear(Box* b) noexcept {
@@ -4401,7 +4425,7 @@ void setupRuntime() {
 #endif
 }
 
-BoxedModule* createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
+BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();

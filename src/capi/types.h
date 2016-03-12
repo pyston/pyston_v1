@@ -56,7 +56,7 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
             return boxString(s);
-        return None;
+        return incref(None);
     }
 
     static Box* doc(Box* b, void*) {
@@ -64,7 +64,7 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_doc;
         if (s)
             return boxString(s);
-        return None;
+        return incref(None);
     }
 
     static void dealloc(Box* _o) noexcept {

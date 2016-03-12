@@ -190,7 +190,8 @@ static Box* propertyDeleter(Box* self, Box* obj) {
 static Box* staticmethodInit(Box* _self, Box* f) {
     RELEASE_ASSERT(isSubclass(_self->cls, staticmethod_cls), "");
     BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
-    self->sm_callable = f;
+    Py_CLEAR(self->sm_callable);
+    self->sm_callable = incref(f);
 
     return incref(None);
 }
@@ -246,6 +247,7 @@ template <ExceptionStyle S>
 Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                     Box* arg2, Box* arg3, Box** args,
                                     const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     if (S == CAPI) {
         try {
             return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -577,6 +579,7 @@ Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* s
                        getFullNameOfClass(descr->type).c_str(), getFullTypeName(self).c_str());
 
     auto wrapper = new BoxedWrapperObject(descr, self);
+    AUTO_DECREF(wrapper);
     return BoxedWrapperObject::__call__(wrapper, args, kw);
 }
 
@@ -584,6 +587,7 @@ template <ExceptionStyle S>
 Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                      Box* arg2, Box* arg3, Box** args,
                                      const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "Check refcounting");
     if (S == CAPI) {
         try {
             return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -735,6 +739,7 @@ static Box* wrapperObjectRepr(Box* _o) {
 }
 
 Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
+    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (self->cls->is_user_defined ? 10 : 20));
 
     assert(self->cls == wrapperobject_cls);
@@ -775,6 +780,7 @@ template <ExceptionStyle S>
 Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                  Box* arg3, Box** args,
                                  const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == wrapperobject_cls);

@@ -196,7 +196,7 @@ static PyObject* superGet(PyObject* _self, PyObject* obj, PyObject* type) noexce
 
     if (obj == NULL || obj == None || self->obj != NULL) {
         /* Not binding to an object, or already bound */
-        return self;
+        return incref(self);
     }
     if (self->cls != super_cls) {
         /* If self is an instance of a (strict) subclass of super,

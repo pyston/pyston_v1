@@ -510,6 +510,7 @@ template Box* instanceGetattroInternal<CAPI>(Box*, Box*, GetattrRewriteArgs*) no
 template Box* instanceGetattroInternal<CXX>(Box*, Box*, GetattrRewriteArgs*);
 
 void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, SetattrRewriteArgs* rewrite_args) {
+    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_instance_setattro", 0);
 
     RELEASE_ASSERT(_inst->cls == instance_cls, "");

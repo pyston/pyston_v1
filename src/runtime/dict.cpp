@@ -266,7 +266,7 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
         }
 
         if (S == CAPI) {
-            PyErr_SetObject(KeyError, BoxedTuple::create1(k));
+            PyErr_SetObject(KeyError, autoDecref(BoxedTuple::create1(k)));
             return NULL;
         } else
             raiseExcHelper(KeyError, k);
@@ -456,7 +456,27 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
 }
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
-    ASSERT(PyDict_Check(op) || op->cls == attrwrapper_cls, "%s", getTypeName(op));
+    if (PyDict_Check(op)) {
+        assert(0 && "untested");
+        try {
+            auto it = self->d.find(k);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return -1;
+        }
+        if (it == self->d.end())
+            PyErr_SetObject(KeyError, autoDecref(BoxedTuple::create1(key)));
+            return -1;
+        }
+
+        Box* v = it->second;
+        self->d.erase(it);
+        Py_DECREF(v);
+
+        return 0;
+    }
+
+    ASSERT(op->cls == attrwrapper_cls, "%s", getTypeName(op));
     try {
         delitem(op, key);
         return 0;

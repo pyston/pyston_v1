@@ -37,7 +37,7 @@ BoxedClass* iterwrapper_cls;
 
 Box* seqiterIter(Box* s) {
     RELEASE_ASSERT(s->cls == seqiter_cls || s->cls == seqreviter_cls, "");
-    return s;
+    return incref(s);
 }
 
 static Box* seqiterHasnext_capi(Box* s) noexcept {
@@ -52,13 +52,14 @@ static Box* seqiterHasnext_capi(Box* s) noexcept {
     if (!next) {
         if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
             PyErr_Clear();
-            self->b = NULL;
+            Py_CLEAR(self->b);
             Py_RETURN_FALSE;
         }
         return NULL;
     }
 
     self->idx++;
+    RELEASE_ASSERT(!self->next, "");
     self->next = next;
     Py_RETURN_TRUE;
 }
@@ -85,12 +86,13 @@ Box* seqreviterHasnext_capi(Box* s) noexcept {
     if (!next) {
         if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
             PyErr_Clear();
-            self->b = NULL;
+            Py_CLEAR(self->b);
             Py_RETURN_FALSE;
         }
         return NULL;
     }
     self->idx--;
+    RELEASE_ASSERT(!self->next, "");
     self->next = next;
     Py_RETURN_TRUE;
 }
@@ -114,6 +116,7 @@ Box* seqiter_next(Box* s) noexcept {
             hasnext = seqreviterHasnext_capi(s);
         else
             RELEASE_ASSERT(0, "");
+        AUTO_DECREF(hasnext);
         if (hasnext != True)
             return NULL;
     }
@@ -136,6 +139,7 @@ llvm_compat_bool iterwrapperHasnextUnboxed(Box* s) {
     BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
 
     Box* next = PyIter_Next(self->iter);
+    RELEASE_ASSERT(!self->next, "");
     self->next = next;
     if (!next) {
         if (PyErr_Occurred() && !PyErr_ExceptionMatches(PyExc_StopIteration))
