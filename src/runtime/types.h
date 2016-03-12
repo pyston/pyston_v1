@@ -1200,7 +1200,8 @@ public:
         Py_INCREF(type);
     }
 
-    void dealloc(Box* b) noexcept;
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* _self, visitproc visit, void *arg) noexcept;
 
     DEFAULT_CLASS(wrapperdescr_cls);
 

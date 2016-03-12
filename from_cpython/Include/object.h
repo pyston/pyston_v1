@@ -8,8 +8,8 @@ extern "C" {
 
 
 // Pyston addition: refcounting annotations:
-#define BORROWED(T) T
-#define STOLEN(T) T
+#define BORROWED(...) __VA_ARGS__
+#define STOLEN(...) __VA_ARGS__
 #define NOREFCHECK ;
 
 /* Object and type object interface */

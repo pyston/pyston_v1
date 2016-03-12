@@ -469,6 +469,21 @@ int BoxedMethodDescriptor::traverse(Box* _self, visitproc visit, void *arg) noex
     return 0;
 }
 
+void BoxedWrapperDescriptor::dealloc(Box* _self) noexcept {
+    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
+
+    PyObject_GC_UnTrack(self);
+    Py_XDECREF(self->type);
+    self->cls->tp_free(self);
+}
+
+int BoxedWrapperDescriptor::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+    BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
+
+    Py_VISIT(self->type);
+    return 0;
+}
+
 void BoxedWrapperObject::dealloc(Box* _self) noexcept {
     BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
 

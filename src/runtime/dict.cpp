@@ -457,14 +457,16 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
     if (PyDict_Check(op)) {
+        BoxedDict* self = static_cast<BoxedDict*>(op);
         assert(0 && "untested");
+        decltype(self->d)::iterator it;
         try {
-            auto it = self->d.find(k);
+            it = self->d.find(key);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return -1;
         }
-        if (it == self->d.end())
+        if (it == self->d.end()) {
             PyErr_SetObject(KeyError, autoDecref(BoxedTuple::create1(key)));
             return -1;
         }

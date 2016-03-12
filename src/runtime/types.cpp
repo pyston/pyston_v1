@@ -40,6 +40,7 @@
 #include "runtime/dict.h"
 #include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
+#include "runtime/inline/list.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"
 #include "runtime/long.h"
@@ -2398,7 +2399,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            listAppend(rtn, p.first);
+            listAppendInternal(rtn, p.first);
         }
         return rtn;
     }
@@ -2412,7 +2413,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            listAppend(rtn, attrs->attr_list->attrs[p.second]);
+            listAppendInternal(rtn, attrs->attr_list->attrs[p.second]);
         }
         return rtn;
     }
@@ -2427,7 +2428,7 @@ public:
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             BoxedTuple* t = BoxedTuple::create({ p.first, attrs->attr_list->attrs[p.second] });
-            listAppendStolen(rtn, t);
+            listAppendInternalStolen(rtn, t);
         }
         return rtn;
     }
@@ -2469,7 +2470,6 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         attrs->clear();
-        AOEU
 
         // Add the existing attrwrapper object (ie self) back as the attrwrapper:
         self->b->appendNewHCAttr(self, NULL);
@@ -3529,7 +3529,7 @@ void BoxedModule::dealloc(Box* b) noexcept {
 int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     Py_VISIT_HCATTRS(m->attrs);
-    assert(!self->keep_alive.size());
+    assert(!m->keep_alive.size());
     return 0;
 }
 
@@ -3964,8 +3964,9 @@ void setupRuntime() {
     wrapperobject_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper", false,
                    BoxedWrapperObject::dealloc, NULL, true, BoxedWrapperObject::traverse, NOCLEAR);
-    wrapperdescr_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor",
-                                          false, BoxedWrapperDescriptor::dealloc, NULL, false);
+    wrapperdescr_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor", false,
+                   BoxedWrapperDescriptor::dealloc, NULL, true, BoxedWrapperDescriptor::traverse, NOCLEAR);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);

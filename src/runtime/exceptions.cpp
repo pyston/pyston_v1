@@ -302,6 +302,11 @@ void caughtCxxException(ExcInfo* exc_info) {
 
 
 
+struct ExcState {
+    bool is_reraise;
+    constexpr ExcState() : is_reraise(false) {}
+} static __thread exc_state;
+
 bool exceptionAtLineCheck() {
     if (exc_state.is_reraise) {
         exc_state.is_reraise = false;

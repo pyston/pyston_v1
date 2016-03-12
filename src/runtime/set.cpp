@@ -48,7 +48,7 @@ public:
 
     static void dealloc(BoxedSetIterator* o) noexcept {
         PyObject_GC_UnTrack(o);
-        PyObject_ClearWeakRefs((PyObject*)self);
+        PyObject_ClearWeakRefs((PyObject*)o);
 
         Py_DECREF(o->s);
 

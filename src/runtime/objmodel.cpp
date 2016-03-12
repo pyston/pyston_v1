@@ -143,7 +143,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 }
 
 extern "C" void printHelper(Box* w, Box* v, bool nl) {
-    assert(0 && "is this tested?");`
+    assert(0 && "is this tested?");
     // copied from cpythons PRINT_ITEM and PRINT_NEWLINE op handling code
     if (w == NULL || w == None) {
         w = PySys_GetObject("stdout");
@@ -2878,7 +2878,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
         return;
     }
 
-    AUTO_DECREF(val);
+    AUTO_DECREF(attr_val);
 
     if (rewriter.get()) {
         assert(setattr);
@@ -5312,8 +5312,9 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
         bool negate = (op_type == AST_TYPE::NotIn);
         if (rewrite_args) {
-            RewriterVar* r_contained_box = rewrite_args->rewriter->call(true, (void*)nonzeroAndBox<negate>, r_contained,
-                                                                        r_negate)->setType(RefType::OWNED);
+            RewriterVar* r_contained_box
+                = rewrite_args->rewriter->call(true, (void*)(negate ? nonzeroAndBox<true> : nonzeroAndBox<false>),
+                                               r_contained)->setType(RefType::OWNED);
             rewrite_args->out_rtn = r_contained_box;
             rewrite_args->out_success = true;
         }
@@ -5430,7 +5431,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             }
             return lrtn;
         } else {
-            Py_DECREF(ltn);
+            Py_DECREF(lrtn);
             rewrite_args = NULL;
         }
     }
@@ -6921,8 +6922,8 @@ extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr) {
         assert(attr->data()[attr->size()] == '\0');
         assertNameDefined(0, attr->data(), NameError, false /* local_var_msg */);
     }
-    Box* key = it.first.value;
-    Box* value = it.second;
+    Box* key = it->first.value;
+    Box* value = it->second;
     d.erase(it);
     Py_DECREF(key);
     Py_DECREF(value);
