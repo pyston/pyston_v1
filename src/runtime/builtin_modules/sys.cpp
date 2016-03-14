@@ -458,6 +458,30 @@ static PyObject* sys_displayhook(PyObject* self, PyObject* o) noexcept {
     return Py_None;
 }
 
+static PyObject* sys_clear_type_cache(PyObject* self, PyObject* args) {
+    PyType_ClearCache();
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(sys_clear_type_cache__doc__, "_clear_type_cache() -> None\n\
+        Clear the internal type lookup cache.");
+
+static PyObject* sys_getrefcount(PyObject* self, PyObject* arg) {
+    return PyInt_FromSsize_t(arg->ob_refcnt);
+}
+
+#ifdef Py_REF_DEBUG
+static PyObject* sys_gettotalrefcount(PyObject* self) {
+    return PyInt_FromSsize_t(_Py_GetRefTotal());
+}
+#endif /* Py_REF_DEBUG */
+
+PyDoc_STRVAR(getrefcount_doc, "getrefcount(object) -> integer\n\
+        \n\
+        Return the reference count of object.  The count returned is generally\n\
+        one higher than you might expect, because it includes the (temporary)\n\
+        reference as an argument to getrefcount().");
+
 PyDoc_STRVAR(excepthook_doc, "excepthook(exctype, value, traceback) -> None\n"
                              "\n"
                              "Handle an exception by displaying it with a traceback on sys.stderr.\n");
@@ -469,6 +493,8 @@ PyDoc_STRVAR(displayhook_doc, "displayhook(object) -> None\n"
 static PyMethodDef sys_methods[] = {
     { "excepthook", sys_excepthook, METH_VARARGS, excepthook_doc },
     { "displayhook", sys_displayhook, METH_O, displayhook_doc },
+    { "_clear_type_cache", sys_clear_type_cache, METH_NOARGS, sys_clear_type_cache__doc__ },
+    { "getrefcount", (PyCFunction)sys_getrefcount, METH_O, getrefcount_doc },
 };
 
 PyDoc_STRVAR(version_info__doc__, "sys.version_info\n\

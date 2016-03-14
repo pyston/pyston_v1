@@ -1314,6 +1314,7 @@ struct method_cache_entry {
 
 static struct method_cache_entry method_cache[1 << MCACHE_SIZE_EXP];
 static unsigned int next_version_tag = 0;
+static bool is_wrap_around = false; // Pyston addition
 
 extern "C" unsigned int PyType_ClearCache() noexcept {
     Py_ssize_t i;
@@ -1327,6 +1328,7 @@ extern "C" unsigned int PyType_ClearCache() noexcept {
     next_version_tag = 0;
     /* mark all version tags as invalid */
     PyType_Modified(&PyBaseObject_Type);
+    is_wrap_around = false;
     return cur_version_tag;
 }
 
@@ -1351,7 +1353,6 @@ int assign_version_tag(PyTypeObject* type) noexcept {
 
     if (unlikely(type->tp_version_tag == 0)) {
         // Pyston change: check for a wrap around because they are not allowed to happen with our 64bit version tag
-        static bool is_wrap_around = false;
         if (is_wrap_around)
             abort();
         is_wrap_around = true;
@@ -2739,18 +2740,20 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
     // __set__ with `val` rather than directly calling setattr
     if (descr && _set_) {
         AUTO_DECREF(val);
+        Box* set_rtn;
         if (rewrite_args) {
             CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_set, Location::any());
             crewrite_args.arg1 = r_descr;
             crewrite_args.arg2 = rewrite_args->obj;
             crewrite_args.arg3 = rewrite_args->attrval;
-            runtimeCallInternal<CXX, REWRITABLE>(_set_, &crewrite_args, ArgPassSpec(3), descr, obj, val, NULL, NULL);
+            set_rtn = runtimeCallInternal<CXX, REWRITABLE>(_set_, &crewrite_args, ArgPassSpec(3), descr, obj, val, NULL, NULL);
             if (crewrite_args.out_success) {
                 rewrite_args->out_success = true;
             }
         } else {
-            runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
+            set_rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
         }
+        Py_DECREF(set_rtn);
 
         // We don't need to to the invalidation stuff in this case.
         return;
@@ -6107,6 +6110,7 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
         if (delAttr != NULL) {
             Box* rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(delAttr, NULL, ArgPassSpec(2), clsAttr, obj, NULL, NULL,
                                                                 NULL);
+            Py_DECREF(rtn);
             return;
         }
     }
@@ -6154,6 +6158,7 @@ extern "C" void delattrInternal(Box* obj, BoxedString* attr, DelattrRewriteArgs*
     assert(0 && "how to keep delAttr alive (esp in rewrite)");
     if (delAttr != NULL) {
         Box* rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(delAttr, NULL, ArgPassSpec(2), obj, attr, NULL, NULL, NULL);
+        Py_DECREF(rtn);
         return;
     }
 
