@@ -6154,7 +6154,13 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
 
 extern "C" void delattrInternal(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
     static BoxedString* delattr_str = getStaticString("__delattr__");
+
+    // TODO: need to pass rewrite args to typeLookup to have it check guards.
+    // But we currently don't rewrite delattr anyway.
+    rewrite_args = NULL;
+
     Box* delAttr = typeLookup(obj->cls, delattr_str);
+
     if (delAttr != NULL) {
         KEEP_ALIVE(delAttr);
 
