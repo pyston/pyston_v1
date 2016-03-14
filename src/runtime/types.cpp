@@ -1647,7 +1647,7 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
 
     auto old_defaults = func->defaults;
     func->defaults = incref(t);
-    Py_DECREF(old_defaults);
+    Py_XDECREF(old_defaults);
     func->dependent_ics.invalidateAll();
 }
 

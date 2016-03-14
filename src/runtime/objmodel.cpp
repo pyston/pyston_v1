@@ -6155,8 +6155,9 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
 extern "C" void delattrInternal(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
     static BoxedString* delattr_str = getStaticString("__delattr__");
     Box* delAttr = typeLookup(obj->cls, delattr_str);
-    assert(0 && "how to keep delAttr alive (esp in rewrite)");
     if (delAttr != NULL) {
+        KEEP_ALIVE(delAttr);
+
         Box* rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(delAttr, NULL, ArgPassSpec(2), obj, attr, NULL, NULL, NULL);
         Py_DECREF(rtn);
         return;

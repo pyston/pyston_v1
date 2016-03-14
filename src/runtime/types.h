@@ -379,6 +379,8 @@ template <typename B> DecrefHandle<B, true> autoXDecref(B* b) {
 #define AUTO_DECREF(x) DecrefHandle<Box, false> CAT(_autodecref_, __LINE__)((x))
 #define AUTO_XDECREF(x) DecrefHandle<Box, true> CAT(_autodecref_, __LINE__)((x))
 
+#define KEEP_ALIVE(x) AUTO_DECREF(incref(x))
+
 template <bool Nullable = false> class AutoDecrefArray {
 private:
     Box** array;
