@@ -570,7 +570,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 template <ExceptionStyle S>
 static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "check refcounting");
     int npassed_args = argspec.totalPassed();
 
     // Common CAPI path call this function with *args, **kw.
@@ -585,9 +584,9 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             else
                 throwCAPIException();
         }
+        AUTO_DECREF(arg1);
 
         Box* r = cpython_type_call(static_cast<BoxedClass*>(self), arg1, argspec.has_kwargs ? arg2 : NULL);
-        Py_DECREF(arg1);
         if (S == CXX && !r)
             throwCAPIException();
         return r;
@@ -718,7 +717,6 @@ static Box* objectNewNoArgs(BoxedClass* cls) noexcept {
 template <ExceptionStyle S>
 static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                           Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "check refcounting");
     int npassed_args = argspec.totalPassed();
     int npositional = argspec.num_args;
 
@@ -761,9 +759,12 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         static Box* defaults[3] = { NULL, NULL, NULL };
         Box* oargs[1];
 
+
         rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
                            arg2, arg3, args, oargs, keyword_names);
         assert(arg1 == cls);
+
+        AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
         if (!rewrite_success)
             rewrite_args = NULL;
@@ -1126,8 +1127,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 throw e;
         }
 
-        AUTO_XDECREF(made);
-        AUTO_XDECREF(arg2);
+        AUTO_DECREF(made);
+        AUTO_DECREF(arg2);
         AUTO_XDECREF(arg3);
 
         if (!rewrite_success)

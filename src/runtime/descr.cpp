@@ -247,7 +247,6 @@ template <ExceptionStyle S>
 Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                     Box* arg2, Box* arg3, Box** args,
                                     const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "check refcounting");
     if (S == CAPI) {
         try {
             return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -313,6 +312,8 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
                        arg2, arg3, args, oargs, keyword_names);
+
+    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;
@@ -393,15 +394,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
-
-    if (paramspec.totalReceived() >= 1)
-        Py_DECREF(arg1);
-    if (paramspec.totalReceived() >= 2)
-        Py_DECREF(arg2);
-    if (paramspec.totalReceived() >= 3)
-        Py_DECREF(arg3);
-    for (int i = 0; i < paramspec.totalReceived() - 3; i++)
-        Py_DECREF(oargs[i]);
 
     if (!rtn)
         throwCAPIException();
@@ -602,7 +594,6 @@ template <ExceptionStyle S>
 Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                      Box* arg2, Box* arg3, Box** args,
                                      const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "Check refcounting");
     if (S == CAPI) {
         try {
             return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -639,6 +630,8 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
                        arg2, arg3, args, oargs, keyword_names);
+
+    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
     if (paramspec.takes_varargs)
         assert(arg2 && arg2->cls == tuple_cls);
@@ -695,20 +688,6 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         }
     } else {
         RELEASE_ASSERT(0, "%d", flags);
-    }
-
-    assert(paramspec.totalReceived() <= 3);
-    assert(!oargs);
-
-    switch (paramspec.totalReceived()) {
-        case 3:
-            Py_XDECREF(arg3);
-        case 2:
-            Py_XDECREF(arg2);
-        case 1:
-            Py_XDECREF(arg1);
-        default:
-            break;
     }
 
     if (!rtn)
