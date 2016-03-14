@@ -650,6 +650,10 @@ public:
         irstate->getRefcounts()->refConsumed(v, inst);
     }
 
+    void refUsed(llvm::Value* v, llvm::Instruction* inst) override {
+        irstate->getRefcounts()->refUsed(v, inst);
+    }
+
     llvm::Value* setType(llvm::Value* v, RefType reftype) override {
         assert(llvm::isa<PointerType>(v->getType()));
 

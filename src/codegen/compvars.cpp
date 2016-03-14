@@ -602,6 +602,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
     }
 
+    llvm::SmallVector<llvm::Value*, 4> array_passed_args;
+
     if (args.size() >= 4) {
         llvm::Value* arg_array;
 
@@ -616,6 +618,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         for (int i = 3; i < args.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i - 3);
             emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
+            array_passed_args.push_back(converted_args[i]->getValue());
         }
         llvm_args.push_back(arg_array);
 
@@ -633,6 +636,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     //}
 
     llvm::Value* rtn;
+    llvm::Instruction* inst;
 
     // func->dump();
     // for (auto a : llvm_args)
@@ -645,7 +649,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
         ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo());
 
-        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style);
+        llvm::Instruction* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style);
+        inst = uncasted;
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
@@ -659,7 +664,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
-        rtn = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
+        inst = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
+        rtn = inst;
     }
 
     if (rtn_type->getBoxType() == rtn_type)
@@ -669,6 +675,9 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     if (target_exception_style == CAPI) {
         emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
     }
+
+    for (auto v : array_passed_args)
+        emitter.refUsed(v, inst);
 
     return new ConcreteCompilerVariable(rtn_type, rtn);
 }
@@ -815,6 +824,8 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
         emitter.setType(closure_v, RefType::BORROWED);
     }
 
+    llvm::SmallVector<llvm::Value*, 4> array_passed_args;
+
     llvm::Value* scratch;
     if (defaults.size()) {
         scratch = emitter.getScratch(defaults.size() * sizeof(Box*));
@@ -822,6 +833,7 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
         int i = 0;
         for (auto d : defaults) {
             llvm::Value* v = d->getValue();
+            array_passed_args.push_back(v);
             llvm::Value* p = emitter.getBuilder()->CreateConstGEP1_32(scratch, i);
             emitter.getBuilder()->CreateStore(v, p);
             i++;
@@ -834,11 +846,16 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
 
     // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
     // emitter.createCall().
-    llvm::Value* boxed = emitter.getBuilder()->CreateCall(
+    llvm::Instruction* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.createFunctionFromMetadata,
         std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure_v, globals,
                                    scratch, getConstantInt(defaults.size(), g.i64) });
     emitter.setType(boxed, RefType::OWNED);
+
+    // The refcounter needs to know that this call "uses" the arguments that got passed via scratch.
+    for (auto v : array_passed_args) {
+        emitter.refUsed(v, boxed);
+    }
 
     return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed);
 }
@@ -2467,6 +2484,8 @@ public:
         llvm::Value* _scratch = emitter.getScratch(v.size() * sizeof(void*));
         auto scratch = emitter.getBuilder()->CreateBitCast(_scratch, g.llvm_value_type_ptr->getPointerTo());
 
+        llvm::SmallVector<llvm::Value*, 4> array_passed_args;
+
         // First, convert all the args, before putting any in the scratch.
         // Do it this way in case any of the conversions themselves need scratch space
         // (ie nested tuples).
@@ -2481,10 +2500,14 @@ public:
         for (int i = 0; i < v.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(scratch, i);
             emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
+            array_passed_args.push_back(converted_args[i]->getValue());
         }
 
-        llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
+        llvm::Instruction* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
         emitter.setType(rtn, RefType::OWNED);
+
+        for (auto v : array_passed_args)
+            emitter.refUsed(v, rtn);
 
         return new ConcreteCompilerVariable(other_type, rtn);
     }

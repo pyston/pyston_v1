@@ -73,7 +73,12 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     assert(this->vars[v].reftype != RefType::UNKNOWN);
 
     this->refs_consumed[inst].push_back(v);
-    //var.ref_consumers.push_back(inst);
+}
+
+void RefcountTracker::refUsed(llvm::Value* v, llvm::Instruction* inst) {
+    assert(this->vars[v].reftype != RefType::UNKNOWN);
+
+    this->refs_used[inst].push_back(v);
 }
 
 void remapPhis(llvm::BasicBlock* in_block, llvm::BasicBlock* from_block, llvm::BasicBlock* new_from_block) {
@@ -670,6 +675,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 num_consumed_by_inst[v]++;
                 assert(rt->vars[v].reftype != RefType::UNKNOWN);
                 num_times_as_op[v]; // just make sure it appears in there
+            }
+
+            for (auto v : rt->refs_used[&I]) {
+                assert(rt->vars[v].reftype != RefType::UNKNOWN);
+                num_times_as_op[v]++;
             }
 
             for (llvm::Value* op : I.operands()) {
