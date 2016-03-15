@@ -3058,6 +3058,7 @@ public:
             // just not created an Invoke and let the exception machinery propagate it for us.
             assert(irstate->getExceptionStyle() == CAPI);
             builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         }
 

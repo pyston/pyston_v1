@@ -1857,10 +1857,11 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     return v ? v : None;
 }
 
-static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) __attribute__((noinline));
-static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) {
+// caution when changing the function arguments: this function gets called from an assembler wrapper!
+extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt,
+                                         Box* expr_val, FrameStackState frame_state) {
+    static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
+
     assert(md);
     assert(enclosing_stmt);
     assert(frame_state.locals);
@@ -1956,11 +1957,6 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : None;
-}
-
-Box* astInterpretDeopt(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                       FrameStackState frame_state) {
-    return astInterpretDeoptInner(md, after_expr, enclosing_stmt, expr_val, frame_state);
 }
 
 extern "C" void printExprHelper(Box* obj) {
