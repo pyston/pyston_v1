@@ -22,6 +22,10 @@ Invariant: all paths through a function should leave each variable with 0 net re
 Special cases:
 - Most exception-related functions steal refs.  If you throw an exception in C code (via `throw [ExcInfo] e`), it consumes the refs.
 
+Some things need to be ok with their arguments going away.
+- Function objects can generally get deallocated while they are running.
+- tp_descr_get functions need to keep their first argument alive.
+
 ## Refcounting in the rewriter, baseline jit, and llvm jit
 
 ## Debugging

@@ -817,8 +817,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
-    // TODO: is this ok?  what if new causes init to get freed?
-    BORROWED(Box*) init_attr = NULL;
+    // TODO: shouldn't cache it like this.  What if __new__ changes __init__
+    DecrefHandle<Box, true> init_attr(nullptr);
     if (rewrite_args) {
         assert(!argspec.has_starargs);
         assert(!argspec.has_kwargs);
@@ -997,7 +997,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // tp_init if we can manage to rewrite it.
         if (rewrite_args && which_init != UNKNOWN) {
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
-            init_attr = typeLookup(cls, init_str, &grewrite_args);
+            init_attr = incref(typeLookup(cls, init_str, &grewrite_args));
 
             if (!grewrite_args.isSuccessful())
                 rewrite_args = NULL;
@@ -1010,7 +1010,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 }
             }
         } else {
-            init_attr = typeLookup(cls, init_str);
+            init_attr = incref(typeLookup(cls, init_str));
         }
     }
 

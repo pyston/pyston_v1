@@ -2174,10 +2174,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
         descr = typeLookup(obj->cls, attr);
     }
 
-    assert(0 && "figure out what to do about `descr`, especially in the rewrite version (and maybe _get_ too)");
-    // Keep it alive just to be safe:
-    //Py_INCREF(descr);
-    //AUTO_DECREF(descr);
+    XKEEP_ALIVE(descr);
 
     // Check if it's a data descriptor
     descrgetfunc descr_get = NULL;
@@ -2273,6 +2270,8 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
             }
         }
     }
+
+    XKEEP_ALIVE(_get_); // Maybe not necessary?
 
     if (!cls_only) {
         if (!IsType) {
@@ -2709,7 +2708,7 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
         descr = typeLookup(obj->cls, attr);
     }
 
-    assert(0 && "figure out what to do about `descr`, especially in the rewrite version (and maybe _set_ too)");
+    XKEEP_ALIVE(descr);
 
     Box* _set_ = NULL;
     RewriterVar* r_set = NULL;
@@ -4491,6 +4490,8 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         rewrite_args = NULL;
     }
 
+    assert(0 && "I think this is where the KEEP_ALIVE should go.  should also keep the rewritten version alive.");
+
     CompiledFunction* chosen_cf = pickVersion(md, S, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
@@ -5661,11 +5662,11 @@ static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString*
     }
 
     // Guard on the type of the object (need to have the slice operator attribute to call it).
-    Box* slice_attr = NULL;
+    bool has_slice_attr = false;
     if (rewrite_args) {
         RewriterVar* target_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, target_cls, Location::any());
-        slice_attr = typeLookup(target->cls, slice_str, &grewrite_args);
+        has_slice_attr = (bool)typeLookup(target->cls, slice_str, &grewrite_args);
         if (!grewrite_args.isSuccessful()) {
             rewrite_args = NULL;
         } else {
@@ -5676,17 +5677,15 @@ static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString*
                 rewrite_args = NULL;
 
             if (rewrite_args)
-                assert((bool)slice_attr == (return_convention == ReturnConvention::HAS_RETURN));
+                assert(has_slice_attr == (return_convention == ReturnConvention::HAS_RETURN));
         }
     } else {
-        slice_attr = typeLookup(target->cls, slice_str);
+        has_slice_attr = (bool)typeLookup(target->cls, slice_str);
     }
 
-    if (!slice_attr) {
+    if (!has_slice_attr) {
         return callItemAttr<S, rewritable>(target, item_str, slice, value, rewrite_args);
     }
-
-    assert(0 && "how to keep slice_attr alive? (esp for rewrites)");
 
     // Need a slice object to use the slice operators.
     if (rewrite_args) {
@@ -6105,8 +6104,6 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
         static BoxedString* delete_str = getStaticString("__delete__");
         Box* delAttr = typeLookup(static_cast<BoxedClass*>(clsAttr->cls), delete_str);
 
-        assert(0 && "how to keep delAttr alive (esp in rewrite)");
-
         if (delAttr != NULL) {
             Box* rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(delAttr, NULL, ArgPassSpec(2), clsAttr, obj, NULL, NULL,
                                                                 NULL);
@@ -6114,8 +6111,6 @@ extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* 
             return;
         }
     }
-
-    assert(0 && "how to keep clsAttr alive (esp in rewrite)");
 
     // check if the attribute is in the instance's __dict__
     Box* attrVal = obj->getattr(attr);
@@ -6843,8 +6838,7 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
         if (!all_getitem)
             raiseExcHelper(TypeError, "'%s' object does not support indexing", getTypeName(all));
 
-        Py_INCREF(all_getitem);
-        AUTO_DECREF(all_getitem);
+        KEEP_ALIVE(all_getitem);
 
         int idx = 0;
         while (true) {

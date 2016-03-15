@@ -13,14 +13,18 @@
 #   So also test it by creating a closure and make sure that that stays alive.
 # - This file wraps each individual test in a function and then calls it twice -- this is to try to test
 #   any rewritten (traced) variants as well.
+#
+# Actually, looking more into CPython's behavior, it seems like CPython is very tolerant of executing a
+# function object that gets deallocated during its own execution: CPython copies all the relevant info
+# into the frame and then accesses it from there.
 
 import sys
 
 def make_closure(f):
     def inner(*args, **kw):
-        print f.__name__
+        print "starting", f.__name__
         r = f(*args, **kw)
-        print f.__name__
+        print "ending", f.__name__
         return r
     return inner
 
@@ -159,7 +163,42 @@ f()
 f()
 f()
 
+def f():
+    class D(object):
+        @make_closure
+        def __get__(self, *args):
+            print "D.__get__"
+            del C.__contains__
+            del D.__get__
+            print self
+            return lambda *args: 1
 
+    class C(object):
+        __contains__ = make_closure(D())
+
+    print 1 in C()
+f()
+f()
+f()
+
+
+def f():
+    class D(object):
+        @make_closure
+        def __get__(self, *args):
+            print "D.__getattribute__"
+            del C.__getattribute__
+            del D.__get__
+            print self
+            return lambda *args: 1
+
+    class C(object):
+        __getattribute__ = D()
+
+    print C().a
+f()
+f()
+f()
 
 # Related:
 def f():
