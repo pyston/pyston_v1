@@ -15,7 +15,7 @@ Unless specified, arguments are borrowed and return values are owned.  This can 
 Exception safety
 
 Helpers:
-AUTO_DECREF, autoDecref, incref
+AUTO_DECREF, autoDecref, incref. DecrefHandle
 
 Invariant: all paths through a function should leave each variable with 0 net refs.  (This includes paths out via exceptions.)
 

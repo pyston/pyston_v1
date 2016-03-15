@@ -24,16 +24,20 @@ def make_closure(f):
         return r
     return inner
 
-# The standard case, when the function is obtained via standard evaluation rules:
-class C(object):
-    @make_closure
-    def f(self, other_arg=2.5**10):
-        print "f"
-        print other_arg
-        del C.f
-        print other_arg
-c = C()
-c.f()
+def f():
+    # The standard case, when the function is obtained via standard evaluation rules:
+    class C(object):
+        @make_closure
+        def f(self, other_arg=2.5**10):
+            print "f"
+            print other_arg
+            del C.f
+            print other_arg
+    c = C()
+    c.f()
+f()
+f()
+f()
 
 def f():
     class C(object):
@@ -51,6 +55,7 @@ def f():
         del c.a
     except Exception as e:
         print e
+f()
 f()
 f()
 
@@ -73,6 +78,7 @@ def f():
         print e
 f()
 f()
+f()
 
 def f():
     class C(object):
@@ -92,9 +98,12 @@ def f():
         print e
 f()
 f()
+f()
 
 
 def f():
+    class C(object):
+        pass
     class D(object):
         @make_closure
         def __get__(self, obj, type, other_arg=2.4**10):
@@ -125,14 +134,41 @@ def f():
     print c.x
 f()
 f()
+f()
 
-# TODO: lots of other cases that could/should get tested.
+
+# Deleting the descriptor object itself:
+def f():
+    class C(object):
+        pass
+    class D(object):
+        def __get__(self, obj, type, other_arg=2.4**10):
+            print "D.__get__"
+            print other_arg
+            del C.x
+            print other_arg
+            sys._clear_type_cache()
+            print other_arg
+            return 1
+
+    C.x = D()
+    c = C()
+    print c.x
+    print c.x
+f()
+f()
+f()
+
 
 
 # Related:
-@make_closure
-def f(a1=2.0**10, a2=2.1**10):
-    f.func_defaults = ()
-    print a1, a2
-    del globals()['f']
+def f():
+    @make_closure
+    def g(a1=2.0**10, a2=2.1**10):
+        f.func_defaults = ()
+        print a1, a2
+        del globals()['f']
+    g()
+f()
+f()
 f()
