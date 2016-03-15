@@ -1238,6 +1238,7 @@ AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags) {
         FileHandle cache_fp(cache_fn.c_str(), "r");
         if (cache_fp) {
             while (true) {
+                break; // XXX JUST FOR TESTING
                 int read = fread(buf, 1, 1024, cache_fp);
                 file_data.insert(file_data.end(), buf, buf + read);
 
