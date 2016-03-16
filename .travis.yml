@@ -1,5 +1,9 @@
 language: cpp
 
+branches:
+  except:
+    - refcounting
+
 compiler:
   - clang
   - gcc

@@ -3188,10 +3188,27 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
         return (BoxedInt*)boxInt(r);
     }
 
+    class FixupLenReturn {
+    public:
+        static BoxedInt* call(Box* rtn) {
+            // TODO: support returning longs as the length
+            if (rtn->cls != int_cls) {
+                Py_DECREF(rtn);
+                if (S == CAPI) {
+                    PyErr_Format(TypeError, "an integer is required");
+                    return NULL;
+                } else
+                    raiseExcHelper(TypeError, "an integer is required");
+            }
+
+            return static_cast<BoxedInt*>(rtn);
+        };
+    };
+
     Box* rtn;
+    RewriterVar* r_rtn = NULL;
     try {
         if (rewrite_args) {
-            assert(0 && "how do we know this is going to return an int?");
             CallattrRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             rtn = callattrInternal0<CXX, REWRITABLE>(obj, len_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
             if (!crewrite_args.isSuccessful())
@@ -3204,7 +3221,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
                     && return_convention != ReturnConvention::NO_RETURN)
                     rewrite_args = NULL;
                 else {
-                    rewrite_args->out_rtn = rtn;
+                    r_rtn = rtn;
                 }
 
                 if (rewrite_args)
@@ -3231,18 +3248,17 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
             raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj));
     }
 
-    if (rtn->cls != int_cls) {
-        Py_DECREF(rtn);
-        if (S == CAPI) {
-            PyErr_Format(TypeError, "an integer is required");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "an integer is required");
+    if (rewrite_args) {
+        if (S == CXX) {
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)FixupLenReturn::call, r_rtn)->setType(RefType::OWNED);
+            rewrite_args->out_success = true;
+        } else {
+            // Don't know how to propagate the exception
+            rewrite_args = NULL;
+        }
     }
 
-    if (rewrite_args)
-        rewrite_args->out_success = true;
-    return static_cast<BoxedInt*>(rtn);
+    return FixupLenReturn::call(rtn);
 }
 
 // force template instantiation:
