@@ -5452,7 +5452,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     Box* rrtn = callattrInternal1<CXX, NOT_REWRITABLE>(rhs, rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
     if (rrtn != NULL && rrtn != NotImplemented)
         return rrtn;
-    Py_DECREF(rrtn);
+    Py_XDECREF(rrtn); // in case it is NotImplemented
 
     static BoxedString* cmp_str = getStaticString("__cmp__");
     lrtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
