@@ -3158,7 +3158,7 @@ static Box* typeBases(Box* b, void*) {
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
     assert(type->tp_bases);
-    return type->tp_bases;
+    return incref(type->tp_bases);
 }
 
 static void typeSetBases(Box* b, Box* v, void* c) {

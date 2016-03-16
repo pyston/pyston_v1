@@ -48,7 +48,6 @@ public:
 
     static void dealloc(BoxedSetIterator* o) noexcept {
         PyObject_GC_UnTrack(o);
-        PyObject_ClearWeakRefs((PyObject*)o);
 
         Py_DECREF(o->s);
 
@@ -183,7 +182,7 @@ Box* setNew(Box* _cls, Box* container, BoxedDict* kwargs) {
 }
 
 static void setClearInternal(BoxedSet* self) {
-    ASSERT(isSubclass(self->cls, set_cls), "");
+    ASSERT(PyAnySet_Check(self), "");
 
     if (self->s.size()) {
         BoxedSet::Set tmp;

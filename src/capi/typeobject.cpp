@@ -3339,7 +3339,6 @@ template <ExceptionStyle S>
 static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                              Box* arg3, Box** args,
                              const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "check refcounting");
     ParamReceiveSpec paramspec(0, 0, true, true);
     if (!argspec.has_kwargs && argspec.num_keywords == 0) {
         paramspec.takes_kwargs = false;

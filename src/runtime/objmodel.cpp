@@ -3063,7 +3063,6 @@ extern "C" bool nonzero(Box* obj) {
     }
 
     if (crewrite_args.isSuccessful()) {
-        assert(0 && "untested");
         RewriterVar* rtn = crewrite_args.getReturn(ReturnConvention::HAS_RETURN);
         RewriterVar* b = rewriter->call(false, (void*)nonzeroHelper, rtn);
         rtn->refConsumed();
