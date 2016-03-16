@@ -228,8 +228,8 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
 
 extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) {
     Box* old_type = frame_info->exc.type;
-    Box* old_value = frame_info->exc.type;
-    Box* old_traceback = frame_info->exc.type;
+    Box* old_value = frame_info->exc.value;
+    Box* old_traceback = frame_info->exc.traceback;
 
     frame_info->exc.type = type;
     frame_info->exc.value = value;
