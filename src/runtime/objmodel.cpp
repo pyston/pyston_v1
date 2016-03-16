@@ -143,7 +143,6 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 }
 
 extern "C" void printHelper(Box* w, Box* v, bool nl) {
-    assert(0 && "is this tested?");
     // copied from cpythons PRINT_ITEM and PRINT_NEWLINE op handling code
     if (w == NULL || w == None) {
         w = PySys_GetObject("stdout");

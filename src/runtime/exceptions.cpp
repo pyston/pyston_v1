@@ -195,7 +195,6 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
 }
 
 extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) {
-    assert(0 && "Check refcounting");
     bool reraise = arg2 != NULL && arg2 != None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 

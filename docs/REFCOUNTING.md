@@ -83,6 +83,12 @@ Usually this is just a matter of calling PyGC_RegisterStaticConstant() around an
 
 Similarly, this can happen in our code.  If you store sometihng in a `static` variable, you will typically have to call PyGC_RegisterStaticConstant.  There is a helper function for the common case -- getStaticString() is equivalent to `PyGC_RegisterStaticConstant(PyString_InternFromString())`, which happens a decent amount.
 
+## Testing
+
+Some misc testing notes:
+
+- Most literals will get interned.  This also includes the constants produced via some simple constant folding.  This means that it is hard to use them as the object that you think might get collected or not (ie `does_this_get_freed_too_early(1)`).  I tend to use something like `2.0 ** 5`, since this is something that the JITs will not try to constant-fold.
+
 ## Debugging
 
 First, this is all much much much easier when everything is super deterministic.

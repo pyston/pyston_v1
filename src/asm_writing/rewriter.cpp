@@ -1717,7 +1717,6 @@ void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int
 }
 
 RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
-    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     if (n_rest > 0)
