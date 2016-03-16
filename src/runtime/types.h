@@ -255,9 +255,6 @@ public:
 
     void freeze();
 
-    typedef size_t SlotOffset;
-    SlotOffset* slotOffsets() { return (BoxedClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
-
     // These should only be used for builtin types:
     static BoxedClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset, int weaklist_offset,
                               int instance_size, bool is_user_defined, const char* name, bool is_subclassable = true,
@@ -269,7 +266,7 @@ public:
                traverseproc traverse = NULL, inquiry clear = NULL);
 
 
-    DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
+    DEFAULT_CLASS_VAR(type_cls, sizeof(PyMemberDef));
 
     static void dealloc(Box* self) noexcept;
 

@@ -3149,7 +3149,7 @@ static void typeSetName(Box* b, Box* v, void*) {
     }
 
     BoxedHeapClass* ht = static_cast<BoxedHeapClass*>(type);
-    ht->ht_name = s;
+    ht->ht_name = incref(s);
     ht->tp_name = s->data();
 }
 
@@ -3245,11 +3245,11 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(tp);
         if (heap_cls->nslots() > 0) {
-            BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
+            PyMemberDef* mp = PyHeapType_GET_MEMBERS(heap_cls);
             for (int i = 0; i < heap_cls->nslots(); i++) {
                 // This should be set to 0 on allocation:
                 // (If it wasn't, we would need to initialize it to 0 here.)
-                assert(*(Box**)((char*)op + slotOffsets[i]) == NULL);
+                assert(*(Box**)((char*)op + mp[i].offset) == NULL);
             }
         }
     }
@@ -3607,6 +3607,8 @@ bool IN_SHUTDOWN = false;
 void BoxedClass::dealloc(Box* b) noexcept {
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
+    bool is_heaptype = (type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+
     if (PyObject_IS_GC(type))
         _PyObject_GC_UNTRACK(type);
     type->clearAttrs();
@@ -3616,6 +3618,12 @@ void BoxedClass::dealloc(Box* b) noexcept {
     Py_XDECREF(type->tp_subclasses);
     Py_XDECREF(type->tp_mro);
     Py_XDECREF(type->tp_base);
+
+    if (is_heaptype) {
+        BoxedHeapClass* htype = static_cast<BoxedHeapClass*>(type);
+        Py_XDECREF(htype->ht_name);
+        Py_XDECREF(htype->ht_slots);
+    }
 
     // During shutdown, don't free class objects since that would make
     // debugging very hard.
@@ -3877,7 +3885,7 @@ void setupRuntime() {
     type_cls->tp_is_gc = (inquiry)type_is_gc;
 
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
-    type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
+    type_cls->tp_itemsize = sizeof(PyMemberDef);
 
     // XXX silly that we have to set this again
     new (&object_cls->attrs) HCAttrs(HiddenClass::makeSingleton());

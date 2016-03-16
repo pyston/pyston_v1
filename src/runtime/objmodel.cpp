@@ -344,7 +344,6 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep
 }
 
 static void clear_slots(PyTypeObject* type, PyObject* self) noexcept {
-    assert(0 && "hmm is this right? -- check slots implementation");
     Py_ssize_t i, n;
     PyMemberDef* mp;
 
@@ -776,7 +775,6 @@ void BoxedClass::finishInitialization() {
 }
 
 static int traverse_slots(BoxedClass* type, PyObject* self, visitproc visit, void* arg) noexcept {
-    assert(0 && "hmm is this right? -- check slots implementation");
     Py_ssize_t i, n;
     PyMemberDef* mp;
 
@@ -863,7 +861,7 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_
                                bool is_user_defined, BoxedString* name)
     : BoxedClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name->data(), true,
                  subtype_dealloc, PyObject_GC_Del, true, subtype_traverse, subtype_clear),
-      ht_name(name),
+      ht_name(incref(name)),
       ht_slots(NULL) {
     assert(is_user_defined);
 
@@ -1738,7 +1736,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         switch (member_desc->type) {
             case BoxedMemberDescriptor::OBJECT_EX: {
                 if (rewrite_args) {
-                    RewriterVar* r_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    RewriterVar* r_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination)
+                                             ->setType(RefType::BORROWED);
                     r_rtn->addGuardNotEq(0);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
@@ -5257,7 +5256,6 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
-        assert(0 && "check refcounting");
         static BoxedString* contains_str = getStaticString("__contains__");
 
         // The checks for this branch are taken from CPython's PySequence_Contains
@@ -6292,7 +6290,6 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 
 void assertValidSlotIdentifier(Box* s) {
     // Ported from `valid_identifier` in cpython
-    assert(0 && "check slot handling code");
 
     unsigned char* p;
     size_t i, n;
@@ -6377,17 +6374,20 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         }
     } else {
         // Get a pointer to an array of slots.
-        std::vector<BORROWED(Box*)> slots;
+        std::vector<Box*> slots;
         if (PyString_Check(boxedSlots) || PyUnicode_Check(boxedSlots)) {
-            slots = { boxedSlots };
+            slots = { incref(boxedSlots) };
         } else {
             BoxedTuple* tuple = static_cast<BoxedTuple*>(PySequence_Tuple(boxedSlots));
-            checkAndThrowCAPIException();
+            if (!tuple)
+                throwCAPIException();
             slots = std::vector<Box*>(tuple->size());
             for (size_t i = 0; i < tuple->size(); i++) {
-                slots[i] = (*tuple)[i];
+                slots[i] = incref((*tuple)[i]);
             }
+            Py_DECREF(tuple);
         }
+        AUTO_DECREF_ARRAY(&slots[0], slots.size());
 
         // Check that slots are allowed
         if (slots.size() > 0 && base->tp_itemsize != 0) {
@@ -6399,7 +6399,9 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
             Box* slot_name = slots[i];
             if (PyUnicode_Check(slot_name)) {
                 slots[i] = _PyUnicode_AsDefaultEncodedString(slot_name, NULL);
-                checkAndThrowCAPIException();
+                if (!slots[i])
+                    throwCAPIException();
+                Py_DECREF(slot_name);
             }
         }
 
@@ -6496,8 +6498,8 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         Py_DECREF(tmp);
     }
 
-    size_t total_slots = final_slot_names.size()
-                         + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);
+    size_t total_slots = final_slot_names.size();
+                         /*+ (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);*/
     BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, attrs_offset, weaklist_offset, basic_size, true,
                                                   name, bases, total_slots);
     made->tp_dictoffset = dict_offset;
@@ -6508,33 +6510,25 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         for (size_t i = 0; i < final_slot_names.size(); i++)
             (*slotsTuple)[i] = final_slot_names[i]; // transfer ref
         assert(made->tp_flags & Py_TPFLAGS_HEAPTYPE);
+        assert(!static_cast<BoxedHeapClass*>(made)->ht_slots);
         static_cast<BoxedHeapClass*>(made)->ht_slots = slotsTuple;
 
-        BoxedHeapClass::SlotOffset* slot_offsets = made->slotOffsets();
-        size_t slot_offset_offset = made->tp_basicsize;
+        PyMemberDef* mp = PyHeapType_GET_MEMBERS(made);
 
         // Add the member descriptors
         size_t offset = base->tp_basicsize;
         for (size_t i = 0; i < final_slot_names.size(); i++) {
             made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->data(),
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT_EX, offset, false /* read only */));
-            slot_offsets[i] = offset;
+
+            mp[i].name = static_cast<BoxedString*>(slotsTuple->elts[i])->data();
+            mp[i].type = T_OBJECT_EX;
+            mp[i].offset = offset;
+
             offset += sizeof(Box*);
         }
     } else {
         assert(!final_slot_names.size()); // would need to decref them here
-    }
-
-    // Add slot offsets for slots of the base
-    // NOTE: CPython does this, but I don't want to have to traverse the class hierarchy to
-    // traverse all the slots, so I'm putting them all here.
-    if (base->tp_flags & Py_TPFLAGS_HEAPTYPE) {
-        assert(0 && "check this against slot_traverse or whatever");
-        BoxedHeapClass::SlotOffset* slot_offsets = made->slotOffsets();
-        BoxedHeapClass* base_heap_cls = static_cast<BoxedHeapClass*>(base);
-        BoxedHeapClass::SlotOffset* base_slot_offsets = base_heap_cls->slotOffsets();
-        memcpy(&slot_offsets[final_slot_names.size()], base_slot_offsets,
-               base_heap_cls->nslots() * sizeof(BoxedHeapClass::SlotOffset));
     }
 
     if (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()) {
