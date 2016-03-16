@@ -496,8 +496,9 @@ public:
     }
 
     std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into) override {
-        llvm::Value* unpacked = emitter.createCall2(info.unw_info, g.funcs.unpackIntoArray, var->getValue(),
-                                                    getConstantInt(num_into, g.i64));
+        llvm::Value* scratch = emitter.getBuilder()->CreateBitCast(emitter.getScratch(sizeof(Box*)), g.llvm_value_type_ptr_ptr);
+        llvm::Value* unpacked = emitter.createCall3(info.unw_info, g.funcs.unpackIntoArray, var->getValue(),
+                                                    getConstantInt(num_into, g.i64), scratch);
         assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
 
         std::vector<CompilerVariable*> rtn;
@@ -509,6 +510,8 @@ public:
 
             rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val));
         }
+
+        emitter.setType(emitter.getBuilder()->CreateLoad(scratch), RefType::OWNED);
         return rtn;
     }
 

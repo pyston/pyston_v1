@@ -497,42 +497,52 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         AUTO_DECREF(o.o);
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
     } else if (node->type == AST_TYPE::Tuple) {
-        AST_Tuple* tuple = (AST_Tuple*)node;
-        Box** array = unpackIntoArray(value.o, tuple->elts.size());
+        AUTO_DECREF(value.o);
 
-        RewriterVar* array_var = NULL;
+        AST_Tuple* tuple = (AST_Tuple*)node;
+        Box* keep_alive;
+        Box** array = unpackIntoArray(value.o, tuple->elts.size(), &keep_alive);
+        AUTO_DECREF(keep_alive);
+
+        std::vector<RewriterVar*> array_vars;
         if (jit) {
-            array_var = jit->emitUnpackIntoArray(value, tuple->elts.size());
+            array_vars = jit->emitUnpackIntoArray(value, tuple->elts.size());
+            assert(array_vars.size() == tuple->elts.size());
         }
 
         unsigned i = 0;
         for (AST_expr* e : tuple->elts) {
-            doStore(e, Value(array[i], jit ? array_var->getAttr(i * sizeof(void*))->setType(RefType::OWNED) : NULL));
+            doStore(e, Value(array[i], jit ? array_vars[i] : NULL));
             ++i;
         }
-        Py_DECREF(value.o);
     } else if (node->type == AST_TYPE::List) {
-        AST_List* list = (AST_List*)node;
-        Box** array = unpackIntoArray(value.o, list->elts.size());
+        AUTO_DECREF(value.o);
 
-        RewriterVar* array_var = NULL;
-        if (jit)
-            array_var = jit->emitUnpackIntoArray(value, list->elts.size());
+        AST_List* list = (AST_List*)node;
+        Box* keep_alive;
+        Box** array = unpackIntoArray(value.o, list->elts.size(), &keep_alive);
+        AUTO_DECREF(keep_alive);
+
+        std::vector<RewriterVar*> array_vars;
+        if (jit) {
+            array_vars = jit->emitUnpackIntoArray(value, list->elts.size());
+            assert(array_vars.size() == list->elts.size());
+        }
 
         unsigned i = 0;
         for (AST_expr* e : list->elts) {
-            doStore(e, Value(array[i], jit ? array_var->getAttr(i * sizeof(void*)) : NULL));
+            doStore(e, Value(array[i], jit ? array_vars[i] : NULL));
             ++i;
         }
     } else if (node->type == AST_TYPE::Subscript) {
+        AUTO_DECREF(value.o);
         AST_Subscript* subscript = (AST_Subscript*)node;
 
         Value target = visit_expr(subscript->value);
-        Value slice = visit_slice(subscript->slice);
-
         AUTO_DECREF(target.o);
+
+        Value slice = visit_slice(subscript->slice);
         AUTO_DECREF(slice.o);
-        AUTO_DECREF(value.o);
 
         if (jit)
             jit->emitSetItem(target, slice, value);

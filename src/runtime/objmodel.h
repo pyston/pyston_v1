@@ -89,7 +89,7 @@ extern "C" Box* getclsattrMaybeNonstring(Box* obj, Box* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* importFrom(Box* obj, BoxedString* attr);
 extern "C" Box* importStar(Box* from_module, Box* to_globals);
-extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size);
+extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep_alive);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
 extern "C" void assertFailDerefNameDefined(const char* name);
 extern "C" void assertFail(Box* assertion_type, Box* msg);

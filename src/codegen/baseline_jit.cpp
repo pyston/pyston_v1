@@ -441,9 +441,21 @@ RewriterVar* JitFragmentWriter::emitUnaryop(RewriterVar* v, int op_type) {
     return emitPPCall((void*)unaryop, { v, imm(op_type) }, 2, 160)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v, uint64_t num) {
-    RewriterVar* array = call(false, (void*)unpackIntoArray, v, imm(num));
-    return array;
+std::vector<RewriterVar*> JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v, uint64_t num) {
+    assert(0 && "untested");
+    trap();
+
+    RewriterVar* keep_alive = allocate(1);
+
+    RewriterVar* array = call(false, (void*)unpackIntoArray, v, imm(num), keep_alive);
+
+    std::vector<RewriterVar*> rtn;
+    for (int i = 0; i < num; i++) {
+        rtn.push_back(array->getAttr(i * sizeof(void*))->setType(RefType::OWNED));
+    }
+
+    keep_alive->getAttr(0)->setType(RefType::OWNED);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {

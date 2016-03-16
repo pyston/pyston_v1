@@ -304,35 +304,43 @@ static void _checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
-    assert(0 && "need to fix refcounting here -- need to return the Box that keeps the array alive");
+extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep_alive) {
+    if (obj->cls != tuple_cls && obj->cls != list_cls) {
+        Box* converted = PySequence_Fast(obj, "Invalid type for tuple unpacking");
+        if (!converted)
+            throwCAPIException();
+        *out_keep_alive = converted;
+        obj = converted;
+    } else {
+        *out_keep_alive = incref(obj);
+    }
+
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
-        _checkUnpackingLength(expected_size, t->size());
+
+        auto got_size = t->size();
+        if (expected_size != got_size)
+            Py_DECREF(*out_keep_alive);
+        _checkUnpackingLength(expected_size, got_size);
+
         for (auto e : *t)
             Py_INCREF(e);
         return &t->elts[0];
-    }
+    } else {
+        assert(obj->cls == list_cls);
 
-    if (obj->cls == list_cls) {
         BoxedList* l = static_cast<BoxedList*>(obj);
-        _checkUnpackingLength(expected_size, l->size);
+
+        auto got_size = l->size;
+        if (expected_size != got_size)
+            Py_DECREF(*out_keep_alive);
+        _checkUnpackingLength(expected_size, got_size);
+
         for (size_t i = 0; i < l->size; i++)
             Py_INCREF(l->elts->elts[i]);
         return &l->elts->elts[0];
     }
 
-    RELEASE_ASSERT(0, "I don't think this is safe since elts will die");
-
-    std::vector<Box*> elts;
-    for (auto e : obj->pyElements()) {
-        elts.push_back(e);
-        if (elts.size() > expected_size)
-            break;
-    }
-
-    _checkUnpackingLength(expected_size, elts.size());
-    return &elts[0];
 }
 
 static void clear_slots(PyTypeObject* type, PyObject* self) noexcept {

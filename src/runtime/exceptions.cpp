@@ -206,7 +206,6 @@ extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) 
 }
 
 extern "C" void raise3_capi(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) noexcept {
-    assert(0 && "Check refcounting");
     bool reraise = arg2 != NULL && arg2 != None;
 
     ExcInfo exc_info(NULL, NULL, NULL);

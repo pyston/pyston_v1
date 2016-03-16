@@ -27,21 +27,23 @@ int MAX_OPT_ITERATIONS = 1;
 bool LOG_IC_ASSEMBLY = 0;
 bool LOG_BJIT_ASSEMBLY = 0;
 
-bool CONTINUE_AFTER_FATAL = false;
 bool FORCE_INTERPRETER = false;
 bool FORCE_OPTIMIZE = false;
+bool ENABLE_INTERPRETER = false; // XXX
+bool ENABLE_BASELINEJIT = false; // XXX
+
+bool CONTINUE_AFTER_FATAL = false;
 bool SHOW_DISASM = false;
 bool PROFILE = false;
 bool DUMPJIT = false;
 bool TRAP = false;
 bool USE_STRIPPED_STDLIB = true; // always true
-bool ENABLE_INTERPRETER = false; // XXX
-bool ENABLE_BASELINEJIT = false; // XXX
 bool ENABLE_PYPA_PARSER = true;
 bool ENABLE_CPYTHON_PARSER = true;
 bool USE_REGALLOC_BASIC = false;
 bool PAUSE_AT_ABORT = false;
 bool ENABLE_TRACEBACKS = true;
+
 // Forces the llvm jit to use capi exceptions whenever it can, as opposed to whenever it thinks
 // it is faster.  The CALLS version is for calls that the llvm jit will make, and the THROWS version
 // is for the exceptions it will throw.

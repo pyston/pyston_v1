@@ -243,7 +243,7 @@ public:
     RewriterVar* emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
                                  const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitUnaryop(RewriterVar* v, int op_type);
-    RewriterVar* emitUnpackIntoArray(RewriterVar* v, uint64_t num);
+    std::vector<RewriterVar*> emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
 
     void emitDelAttr(RewriterVar* target, BoxedString* attr);
