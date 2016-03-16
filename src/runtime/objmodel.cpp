@@ -2342,8 +2342,6 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     return res;
                 }
 
-                assert(0 && "have to figure out how to keep the descriptor alive here");
-
                 // Lookup __get__
                 descrgetfunc local_get = val->cls->tp_descr_get;
                 if (rewrite_args) {
@@ -2357,6 +2355,8 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     Py_INCREF(val);
                     return val;
                 }
+
+                KEEP_ALIVE(val); // CPython doesn't have this but I think it's good:
 
                 // Call __get__(val, None, obj)
                 Box* r = local_get(val, NULL, obj);
