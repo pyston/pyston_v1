@@ -109,7 +109,7 @@ public:
     }
 
     static InstanceMethodType* get(CompilerType* obj_type, CompilerType* function_type) {
-        InstanceMethodType* rtn = made[std::make_pair(obj_type, function_type)];
+        InstanceMethodType*& rtn = made[std::make_pair(obj_type, function_type)];
         if (rtn == NULL)
             rtn = new InstanceMethodType(obj_type, function_type);
         return rtn;
@@ -195,14 +195,18 @@ public:
     void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
         var->getValue()->obj->serializeToFrame(stackmap_args);
         var->getValue()->func->serializeToFrame(stackmap_args);
+        var->getValue()->im_class->serializeToFrame(stackmap_args);
     }
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
-        assert(vals.size() == numFrameArgs());
-        abort();
+        assert(vals.size() == numFrameArgs() && vals.size() == 3);
+        Box* obj = reinterpret_cast<Box*>(vals[0]);
+        Box* func = reinterpret_cast<Box*>(vals[1]);
+        Box* im_class = reinterpret_cast<Box*>(vals[2]);
+        return boxInstanceMethod(obj, func, im_class);
     }
 
-    int numFrameArgs() override { return obj_type->numFrameArgs() + function_type->numFrameArgs(); }
+    int numFrameArgs() override { return obj_type->numFrameArgs() + function_type->numFrameArgs() + 1 /* im_class */; }
 };
 std::unordered_map<std::pair<CompilerType*, CompilerType*>, InstanceMethodType*> InstanceMethodType::made;
 
