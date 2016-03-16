@@ -626,6 +626,7 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     if (argspec.has_starargs || argspec.num_args == 0) {
         // Get callFunc to expand the arguments.
         // TODO: update this to use rearrangeArguments instead.
+        KEEP_ALIVE(f);
         return callFunc<CXX>(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 

@@ -100,6 +100,7 @@ void generatorEntry(BoxedGenerator* g) {
 
             // call body of the generator
             BoxedFunctionBase* func = g->function;
+            KEEP_ALIVE(func);
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
             auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),

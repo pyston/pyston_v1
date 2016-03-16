@@ -4490,8 +4490,6 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         rewrite_args = NULL;
     }
 
-    assert(0 && "I think this is where the KEEP_ALIVE should go.  should also keep the rewritten version alive.");
-
     CompiledFunction* chosen_cf = pickVersion(md, S, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
@@ -4664,8 +4662,10 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
         // TODO: maybe eventually runtimeCallInternal should just be the default tpp_call?
         if (obj->cls->tpp_call.get(S)) {
+            KEEP_ALIVE(obj); // CPython doesn't have this, but I think they should
             return obj->cls->tpp_call.call<S>(obj, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         } else if (S == CAPI && obj->cls->tpp_call.get<CXX>()) {
+            KEEP_ALIVE(obj);
             try {
                 return obj->cls->tpp_call.call<CXX>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
             } catch (ExcInfo e) {
@@ -4673,6 +4673,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                 return NULL;
             }
         } else if (S == CXX && obj->cls->tpp_call.get<CAPI>()) {
+            KEEP_ALIVE(obj);
             Box* r = obj->cls->tpp_call.call<CAPI>(obj, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
             if (!r)
                 throwCAPIException();
@@ -4784,6 +4785,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             callable = callFunc<S>;
         }
 
+        KEEP_ALIVE(f);
         Box* res = callable(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         return res;
     } else if (obj->cls == instancemethod_cls) {
