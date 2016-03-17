@@ -1258,8 +1258,10 @@ extern "C" void _Py_PrintReferenceAddressesCapped(FILE* fp, int max_to_print) no
     int found = 0;
     for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
         found++;
-        if (found <= max_to_print)
-            fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] %s\n", op, op->ob_refcnt, Py_TYPE(op)->tp_name);
+        if (found <= max_to_print) {
+            fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op, op->ob_refcnt,
+                    Py_TYPE(op)->tp_name, op);
+        }
     }
     if (found > max_to_print) {
         fprintf(fp, "%d more found (but not printed)\n", found - max_to_print);

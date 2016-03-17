@@ -383,6 +383,7 @@ public:
                     r->num_type = AST_Num::LONG;
                     // XXX This is pretty silly:
                     auto s = _PyLong_Format(o, 10, 0, 0);
+                    AUTO_DECREF(s);
                     RELEASE_ASSERT(s, "");
                     r->n_long = PyString_AsString(s);
                     return r;
