@@ -156,8 +156,9 @@ public:
         Py_XDECREF(frame_info.boxedLocals);
 
         int nvregs = getMD()->calculateNumVRegs();
-
-        for (int i = 0; i < nvregs; i++) {
+        int nvregs_user_visible = getMD()->calculateNumUserVisibleVRegs();
+        // skip the user visible ones because they will get decrefed in deinitFrame
+        for (int i = nvregs_user_visible; i < nvregs; i++) {
             Py_XDECREF(vregs[i]);
         }
 

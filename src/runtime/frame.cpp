@@ -17,6 +17,7 @@
 
 #include "codegen/unwinding.h"
 #include "core/ast.h"
+#include "core/cfg.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -163,12 +164,7 @@ public:
         BoxedFrame* f = static_cast<BoxedFrame*>(b);
 
         _PyObject_GC_UNTRACK(f);
-
-        Py_DECREF(f->_back);
-        Py_DECREF(f->_code);
-        Py_DECREF(f->_globals);
-        Py_DECREF(f->_locals);
-
+        clear(b);
         f->cls->tp_free(b);
     }
     static int traverse(Box* self, visitproc visit, void *arg) noexcept {
@@ -180,7 +176,13 @@ public:
         return 0;
     }
     static int clear(Box* self) noexcept {
-        Py_FatalError("unimplemented");
+        BoxedFrame* o = static_cast<BoxedFrame*>(self);
+        assert(o->hasExited());
+        Py_CLEAR(o->_back);
+        Py_CLEAR(o->_code);
+        Py_CLEAR(o->_globals);
+        Py_CLEAR(o->_locals);
+        return 0;
     }
 };
 
@@ -216,6 +218,12 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
     if (frame) {
         frame->handleFrameExit();
         Py_CLEAR(frame_info->frame_obj);
+    }
+    if (frame_info->vregs) {
+        int num_user_visible_vregs = frame_info->md->calculateNumUserVisibleVRegs();
+        for (int i = 0; i < num_user_visible_vregs; i++) {
+            Py_XDECREF(frame_info->vregs[i]);
+        }
     }
     Py_CLEAR(frame_info->boxedLocals);
 

@@ -239,8 +239,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         assert(al->isStaticAlloca());
 
         assert(!vregs);
-        getMD()->calculateNumVRegs();
-        int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
+        int num_user_visible_vregs = getMD()->calculateNumUserVisibleVRegs();
         if (num_user_visible_vregs > 0) {
             auto* vregs_alloca
                 = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
@@ -1827,7 +1826,7 @@ private:
         return rtn;
     }
 
-    template <typename GetLLVMValCB> void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb) {
+    template <typename GetLLVMValCB> void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev) {
         auto cfg = irstate->getSourceInfo()->cfg;
         if (!cfg->hasVregsAssigned())
             irstate->getMD()->calculateNumVRegs();
@@ -1839,7 +1838,14 @@ private:
             // looks like this store don't have to be volatile because llvm knows that the vregs are visible thru the
             // FrameInfo which escapes.
             auto* gep = emitter.getBuilder()->CreateConstInBoundsGEP1_64(irstate->getVRegsVar(), vreg);
-            emitter.getBuilder()->CreateStore(get_llvm_val_cb(), gep);
+            if (prev) {
+                auto* old_value = emitter.getBuilder()->CreateLoad(gep);
+                emitter.setType(old_value, RefType::OWNED);
+            }
+
+            llvm::Value* new_val = get_llvm_val_cb();
+            auto* store = emitter.getBuilder()->CreateStore(new_val, gep);
+            emitter.refConsumed(new_val, store);
         }
     }
 
@@ -1875,8 +1881,8 @@ private:
         } else {
             // FAST or CLOSURE
 
-            CompilerVariable*& prev = symbol_table[name];
-            prev = val;
+            CompilerVariable* prev = symbol_table[name];
+            symbol_table[name] = val;
 
             // Clear out the is_defined name since it is now definitely defined:
             assert(!isIsDefinedName(name.s()));
@@ -1896,7 +1902,7 @@ private:
             }
 
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
-            _setVRegIfUserVisible(name, get_llvm_val);
+            _setVRegIfUserVisible(name, get_llvm_val, prev);
         }
     }
 
@@ -2082,7 +2088,8 @@ private:
         // SyntaxError: can not delete variable 'x' referenced in nested scope
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
-        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); });
+        CompilerVariable* prev = symbol_table.count(target->id) ? symbol_table[target->id] : NULL;
+        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev);
 
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call = emitter.createCall(
