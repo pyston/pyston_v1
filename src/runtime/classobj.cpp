@@ -510,7 +510,6 @@ template Box* instanceGetattroInternal<CAPI>(Box*, Box*, GetattrRewriteArgs*) no
 template Box* instanceGetattroInternal<CXX>(Box*, Box*, GetattrRewriteArgs*);
 
 void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, SetattrRewriteArgs* rewrite_args) {
-    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_instance_setattro", 0);
 
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
@@ -530,7 +529,9 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
             if (value->cls != classobj_cls)
                 raiseExcHelper(TypeError, "__class__ must be set to a class");
 
+            auto old_cls = inst->inst_cls;
             inst->inst_cls = static_cast<BoxedClassobj*>(value);
+            Py_DECREF(old_cls);
             return;
         }
     }

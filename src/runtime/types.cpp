@@ -688,13 +688,15 @@ static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, B
 
     Box* args;
     if (!string)
-        args = EmptyTuple;
+        args = incref(EmptyTuple);
     else if (!encoding_obj)
         args = BoxedTuple::create1(string);
     else if (!errors_obj)
         args = BoxedTuple::create2(string, encoding_obj);
     else
         args = BoxedTuple::create3(string, encoding_obj, errors_obj);
+
+    AUTO_DECREF(args);
 
     int init_code = r->cls->tp_init(r, args, NULL);
     if (init_code == -1)
@@ -772,7 +774,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (rewrite_args) {
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)unicodeNewHelper, rewrite_args->arg1, rewrite_args->arg2,
-                                               rewrite_args->arg3, rewrite_args->args);
+                                               rewrite_args->arg3, rewrite_args->args)->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         }
 

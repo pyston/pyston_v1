@@ -6847,10 +6847,9 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
     static BoxedString* all_str = getStaticString("__all__");
     Box* all = from_module->getattr(all_str);
 
-    Py_INCREF(all);
-    AUTO_DECREF(all);
-
     if (all) {
+        KEEP_ALIVE(all);
+
         static BoxedString* getitem_str = getStaticString("__getitem__");
         Box* all_getitem = typeLookup(all->cls, getitem_str);
         if (!all_getitem)
