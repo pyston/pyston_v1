@@ -562,18 +562,7 @@ public:
     BoxIteratorImpl* impl;
 
     BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
-    BoxIterator(const BoxIterator& rhs) = default;
-    BoxIterator(BoxIterator&& rhs) {
-        impl = rhs.impl;
-        rhs.impl = NULL;
-    }
 
-    ~BoxIterator() {
-        if (impl)
-            impl->~BoxIteratorImpl();
-    }
-
-    static llvm::iterator_range<BoxIterator> getRange(Box* container);
     bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
     bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
 
@@ -584,6 +573,23 @@ public:
 
     Box* operator*() const { return impl->getValue(); }
     Box* operator*() { return impl->getValue(); }
+};
+
+// A custom "range" container that helps manage lifetimes.  We need to free the underlying Impl object
+// when the range loop is done; previously we had the iterator itself handle this, but that started
+// to get complicated since they get copied around, and the management of the begin() and end() iterators
+// is slightly different.
+// So to simplify, have the range object take care of it.
+class BoxIteratorRange {
+private:
+    std::unique_ptr<BoxIteratorImpl> begin_impl;
+    BoxIteratorImpl* end_impl;
+
+public:
+    BoxIteratorRange(std::unique_ptr<BoxIteratorImpl> begin, BoxIteratorImpl* end)
+        : begin_impl(std::move(begin)), end_impl(end) {}
+    BoxIterator begin() { return BoxIterator(begin_impl.get()); }
+    BoxIterator end() { return BoxIterator(end_impl); }
 };
 
 class HiddenClass;
@@ -676,7 +682,7 @@ public:
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
 
-    llvm::iterator_range<BoxIterator> pyElements();
+    BoxIteratorRange pyElements();
 
     // For instances with hc attrs:
     size_t getHCAttrsOffset();

@@ -1195,13 +1195,13 @@ Box* zip(BoxedTuple* containers) {
     if (containers->size() == 0)
         return rtn;
 
-    std::vector<llvm::iterator_range<BoxIterator>> ranges;
+    std::vector<BoxIteratorRange> ranges;
     for (auto container : *containers) {
         ranges.push_back(container->pyElements());
     }
 
     std::vector<BoxIterator> iterators;
-    for (auto range : ranges) {
+    for (auto&& range : ranges) {
         iterators.push_back(range.begin());
     }
 
@@ -1307,13 +1307,14 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
 BoxedClass* enumerate_cls;
 class BoxedEnumerate : public Box {
 private:
+    BoxIteratorRange range;
     BoxIterator iterator, iterator_end;
     int64_t idx;
     BoxedLong* idx_long;
 
 public:
-    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx, BoxedLong* idx_long)
-        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx), idx_long(idx_long) {}
+    BoxedEnumerate(BoxIteratorRange range, int64_t idx, BoxedLong* idx_long)
+        : range(std::move(range)), iterator(range.begin()), iterator_end(range.end()), idx(idx), idx_long(idx_long) {}
 
     DEFAULT_CLASS(enumerate_cls);
 
@@ -1327,8 +1328,8 @@ public:
             assert(PyLong_Check(start));
             idx_long = (BoxedLong*)start;
         }
-        llvm::iterator_range<BoxIterator> range = obj->pyElements();
-        return new BoxedEnumerate(range.begin(), range.end(), idx, idx_long);
+        auto&& range = obj->pyElements();
+        return new BoxedEnumerate(std::move(range), idx, idx_long);
     }
 
     static Box* iter(Box* _self) noexcept {

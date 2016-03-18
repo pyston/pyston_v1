@@ -99,8 +99,23 @@ public:
         }
     }
 
+    BoxIteratorIndex(const BoxIteratorIndex& rhs) : obj(rhs.obj), index(rhs.index) { Py_XINCREF(obj); }
+    BoxIteratorIndex(BoxIteratorIndex&& rhs) : obj(rhs.obj), index(rhs.index) { Py_XINCREF(obj); }
+    BoxIteratorIndex& operator=(const BoxIteratorIndex& rhs) {
+        obj = rhs.obj;
+        index = rhs.index;
+        Py_XINCREF(obj);
+        return *this;
+    }
+    BoxIteratorIndex& operator=(BoxIteratorIndex&& rhs) {
+        obj = rhs.obj;
+        index = rhs.index;
+        Py_XINCREF(obj);
+        return *this;
+    }
+
     ~BoxIteratorIndex() {
-        Py_XDECREF(obj);
+        Py_CLEAR(obj);
     }
 
     void next() override {
@@ -130,25 +145,26 @@ public:
 };
 }
 
-llvm::iterator_range<BoxIterator> BoxIterator::getRange(Box* container) {
-    if (container->cls == list_cls) {
+BoxIteratorRange Box::pyElements() {
+    if (this->cls == list_cls) {
         using BoxIteratorList = BoxIteratorIndex<BoxedList>;
-        BoxIterator begin = new BoxIteratorList((BoxedList*)container);
-        BoxIterator end = BoxIteratorList::end();
-        return llvm::iterator_range<BoxIterator>(std::move(begin), end);
-    } else if (container->cls == tuple_cls) {
+        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorList((BoxedList*)this));
+        BoxIteratorImpl* end = BoxIteratorList::end();
+        return BoxIteratorRange(std::move(begin), end);
+    } else if (this->cls == tuple_cls) {
         using BoxIteratorTuple = BoxIteratorIndex<BoxedTuple>;
-        BoxIterator begin = new BoxIteratorTuple((BoxedTuple*)container);
-        BoxIterator end = BoxIteratorTuple::end();
-        return llvm::iterator_range<BoxIterator>(std::move(begin), end);
-    } else if (container->cls == str_cls) {
+        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorTuple((BoxedTuple*)this));
+        BoxIteratorImpl* end = BoxIteratorTuple::end();
+        return BoxIteratorRange(std::move(begin), end);
+    } else if (this->cls == str_cls) {
         using BoxIteratorString = BoxIteratorIndex<BoxedString>;
-        BoxIterator begin = new BoxIteratorString((BoxedString*)container);
-        BoxIterator end = BoxIteratorString::end();
-        return llvm::iterator_range<BoxIterator>(std::move(begin), end);
+        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorString((BoxedString*)this));
+        BoxIteratorImpl* end = BoxIteratorString::end();
+        return BoxIteratorRange(std::move(begin), end);
+    } else {
+        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorGeneric(this));
+        BoxIteratorImpl* end = BoxIteratorGeneric::end();
+        return BoxIteratorRange(std::move(begin), end);
     }
-    BoxIterator begin = new BoxIteratorGeneric(container);
-    BoxIterator end = BoxIteratorGeneric::end();
-    return llvm::iterator_range<BoxIterator>(std::move(begin), end);
 }
 }

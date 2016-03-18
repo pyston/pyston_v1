@@ -6283,10 +6283,6 @@ Box* getiter(Box* o) {
     return getiterHelper(o);
 }
 
-llvm::iterator_range<BoxIterator> Box::pyElements() {
-    return BoxIterator::getRange(this);
-}
-
 void assertValidSlotIdentifier(Box* s) {
     // Ported from `valid_identifier` in cpython
 
