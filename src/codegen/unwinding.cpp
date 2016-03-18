@@ -940,11 +940,7 @@ Box* FrameInfo::updateBoxedLocals() {
     // But we also need to loop through all the uninitialized variables that we have
     // access to and delete them from the locals dict
     if (frame_info->boxedLocals->cls == dict_cls) {
-        BoxedDict* boxed_locals = (BoxedDict*)frame_info->boxedLocals;
-        for (auto&& new_elem : d->d) {
-            assert(0 && "refcounting here is wrong if the key already exists");
-            boxed_locals->d[incref(new_elem.first)] = incref(new_elem.second);
-        }
+        PyDict_Update((BoxedDict*)frame_info->boxedLocals, d);
     } else {
         for (const auto& p : *d) {
             Box* varname = p.first;
@@ -953,7 +949,7 @@ Box* FrameInfo::updateBoxedLocals() {
         }
     }
 
-    return frame_info->boxedLocals;
+    return incref(frame_info->boxedLocals);
 }
 
 AST_stmt* PythonFrameIterator::getCurrentStatement() {

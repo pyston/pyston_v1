@@ -495,6 +495,7 @@ public:
                     ExceptionStyle exception_style = CXX);
 
     int calculateNumVRegs();
+    int calculateNumUserVisibleVRegs();
 
     // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
     // once to it.
