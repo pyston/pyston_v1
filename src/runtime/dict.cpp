@@ -458,7 +458,6 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
     if (PyDict_Check(op)) {
         BoxedDict* self = static_cast<BoxedDict*>(op);
-        assert(0 && "untested");
         decltype(self->d)::iterator it;
         try {
             it = self->d.find(key);
@@ -472,8 +471,10 @@ extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
         }
 
         Box* v = it->second;
+        Box* k = it->first.value;
         self->d.erase(it);
         Py_DECREF(v);
+        Py_DECREF(k);
 
         return 0;
     }
