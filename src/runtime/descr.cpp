@@ -88,7 +88,7 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
         propertyDocCopy(self, fget);
     }
 
-    return None;
+    return incref(None);
 }
 
 static Box* propertyGet(Box* self, Box* obj, Box* type) {

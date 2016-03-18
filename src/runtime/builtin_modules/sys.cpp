@@ -58,18 +58,24 @@ Box* sysExcClear() {
     assert(exc->value);
     assert(exc->traceback);
 
-    exc->type = None;
-    exc->value = None;
-    exc->traceback = None;
+    Box* old_type = exc->type;
+    Box* old_value = exc->value;
+    Box* old_tracebck = exc->traceback;
+    exc->type = incref(None);
+    exc->value = incref(None);
+    exc->traceback = incref(None);
+    Py_DECREF(old_type);
+    Py_DECREF(old_value);
+    Py_DECREF(old_traceback);
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 static Box* sysExit(Box* arg) {
     assert(arg);
     Box* exc = runtimeCall(SystemExit, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
     // TODO this should be handled by the SystemExit constructor
-    exc->giveAttr("code", arg);
+    exc->giveAttrBorrowed("code", arg);
 
     raiseExc(exc);
 }
@@ -85,7 +91,7 @@ BORROWED(BoxedDict*) getSysModulesDict() {
     return sys_modules_dict;
 }
 
-BoxedList* getSysPath() {
+BORROWED(BoxedList*) getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
     auto path_str = getStaticString("path");
 
@@ -130,7 +136,7 @@ Box* sysGetDefaultEncoding() {
 Box* sysGetFilesystemEncoding() {
     if (Py_FileSystemDefaultEncoding)
         return boxString(Py_FileSystemDefaultEncoding);
-    return None;
+    Py_RETURN_NONE;
 }
 
 Box* sysGetRecursionLimit() {
@@ -211,12 +217,12 @@ void addToSysArgv(const char* str) {
     Box* sys_argv = sys_module->getattr(argv_str);
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
-    listAppendInternal(sys_argv, autoDecref(boxString(str)));
+    listAppendInternalStolen(sys_argv, boxString(str));
 }
 
 void appendToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    listAppendInternal(sys_path, autoDecref(boxString(path)));
+    listAppendInternalStolen(sys_path, boxString(path));
 }
 
 void prependToSysPath(llvm::StringRef path) {

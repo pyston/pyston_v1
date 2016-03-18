@@ -833,8 +833,8 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 }
 
 Box* listExtend(BoxedList* self, Box* _rhs) {
-    listIAdd(self, _rhs);
-    return None;
+    autoDecref(listIAdd(self, _rhs));
+    return incref(None);
 }
 
 Box* listAdd(BoxedList* self, Box* _rhs) {

@@ -372,7 +372,7 @@ static PyObject* va_build_value(const char* fmt, va_list va, int flags) noexcept
         return NULL;
 
     if (n == 0)
-        return None;
+        return incref(None);
 
     va_list lva;
     __va_copy(lva, va);

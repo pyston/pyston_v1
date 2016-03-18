@@ -91,7 +91,7 @@ private:
     static Box* getValue(BoxedString* o, uint64_t i) { return boxString(llvm::StringRef(o->data() + i, 1)); }
 
 public:
-    BoxIteratorIndex(T* obj) : obj(obj), index(0) {
+    explicit BoxIteratorIndex(T* obj) : obj(obj), index(0) {
         Py_XINCREF(obj);
         if (obj && !hasnext(obj, index)) {
             Py_CLEAR(obj);

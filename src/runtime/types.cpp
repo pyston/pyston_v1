@@ -2752,7 +2752,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
     setattrGeneric<NOT_REWRITABLE>(obj, attr_str, value, NULL);
-    return None;
+    return incref(None);
 }
 
 Box* objectSubclasshook(Box* cls, Box* a) {

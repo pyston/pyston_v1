@@ -45,7 +45,7 @@ Box* dictIterItems(Box* s) {
 }
 
 Box* dictIterIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 llvm_compat_bool dictIterHasnextUnboxed(Box* s) {
@@ -66,9 +66,9 @@ Box* dictiter_next(Box* s) noexcept {
 
     Box* rtn = nullptr;
     if (self->cls == &PyDictIterKey_Type) {
-        rtn = self->it->first.value;
+        rtn = incref(self->it->first.value);
     } else if (self->cls == &PyDictIterValue_Type) {
-        rtn = self->it->second;
+        rtn = incref(self->it->second);
     } else if (self->cls == &PyDictIterItem_Type) {
         rtn = BoxedTuple::create({ self->it->first.value, self->it->second });
     } else {

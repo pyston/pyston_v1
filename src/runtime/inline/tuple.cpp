@@ -24,7 +24,7 @@ BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : t(t), pos(0) {
 }
 
 Box* tupleIterIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 Box* tupleIter(Box* s) noexcept {

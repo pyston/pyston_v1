@@ -219,7 +219,7 @@ extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
         raiseDivZeroExcIfZero(lhs->d);
         return boxFloat(rhs_f / lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -271,7 +271,7 @@ extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
         }
         return floatFloorDivFloat(lhs, new BoxedFloat(rhs_f));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1032,7 +1032,7 @@ Box* floatCoerce(BoxedFloat* _self, Box* other) {
     if (result == 0)
         return BoxedTuple::create({ self, other });
     else if (result == 1)
-        return NotImplemented;
+        return incref(NotImplemented);
     else
         throwCAPIException();
 }

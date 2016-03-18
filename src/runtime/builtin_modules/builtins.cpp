@@ -140,6 +140,7 @@ extern "C" Box* octFunc(Box* x) {
 
 extern "C" Box* all(Box* container) {
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         if (!nonzero(e)) {
             return boxBool(false);
         }
@@ -149,6 +150,7 @@ extern "C" Box* all(Box* container) {
 
 extern "C" Box* any(Box* container) {
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         if (nonzero(e)) {
             return boxBool(true);
         }
@@ -157,6 +159,7 @@ extern "C" Box* any(Box* container) {
 }
 
 Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
+    assert(0 && "check refcounting");
     assert(args->cls == tuple_cls);
     if (kwargs)
         assert(kwargs->cls == dict_cls);
@@ -222,6 +225,7 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
 }
 
 extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
+    assert(0 && "check refcounting");
     if (arg0 == None && args->size() == 0) {
         raiseExcHelper(TypeError, "min expected 1 arguments, got 0");
     }
@@ -235,6 +239,7 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
+    assert(0 && "check refcounting");
     if (arg0 == None && args->size() == 0) {
         raiseExcHelper(TypeError, "max expected 1 arguments, got 0");
     }
@@ -248,6 +253,7 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* next(Box* iterator, Box* _default) noexcept {
+    assert(0 && "check refcounting");
     if (!PyIter_Check(iterator)) {
         PyErr_Format(PyExc_TypeError, "%.200s object is not an iterator", iterator->cls->tp_name);
         return NULL;
@@ -280,6 +286,7 @@ extern "C" Box* next(Box* iterator, Box* _default) noexcept {
 }
 
 extern "C" Box* sum(Box* container, Box* initial) {
+    assert(0 && "check refcounting");
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
 
@@ -307,6 +314,7 @@ Box* open(Box* arg1, Box* arg2, Box* arg3) {
 }
 
 extern "C" Box* chr(Box* arg) {
+    assert(0 && "check refcounting");
     i64 n = PyInt_AsLong(arg);
     if (n == -1 && PyErr_Occurred())
         throwCAPIException();
@@ -320,6 +328,7 @@ extern "C" Box* chr(Box* arg) {
 }
 
 extern "C" Box* unichr(Box* arg) {
+    assert(0 && "check refcounting");
     int n = -1;
     if (!PyArg_ParseSingle(arg, 0, "unichr", "i", &n))
         throwCAPIException();
@@ -331,6 +340,7 @@ extern "C" Box* unichr(Box* arg) {
 }
 
 Box* coerceFunc(Box* vv, Box* ww) {
+    assert(0 && "check refcounting");
     Box* res;
 
     if (PyErr_WarnPy3k("coerce() not supported in 3.x", 1) < 0)
@@ -343,6 +353,7 @@ Box* coerceFunc(Box* vv, Box* ww) {
 }
 
 extern "C" Box* ord(Box* obj) {
+    assert(0 && "check refcounting");
     long ord;
     Py_ssize_t size;
 
@@ -422,6 +433,7 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
+    assert(0 && "check refcounting");
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
@@ -448,8 +460,10 @@ Box* issubclass_func(Box* child, Box* parent) {
 }
 
 Box* intern_func(Box* str) {
+    assert(0 && "check refcounting");
     if (!PyString_CheckExact(str)) // have to use exact check!
         raiseExcHelper(TypeError, "can't intern subclass of string");
+    Py_INCREF(str);
     PyString_InternInPlace(&str);
     checkAndThrowCAPIException();
     return str;
@@ -482,6 +496,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
+    assert(0 && "check refcounting");
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls)
@@ -490,7 +505,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     internStringMortalInplace(str);
 
     delattr(obj, str);
-    return None;
+    return incref(None);
 }
 
 static Box* getattrFuncHelper(STOLEN(Box*) return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
@@ -617,6 +632,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
+    assert(0 && "check refcounting");
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
@@ -627,7 +643,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     internStringMortalInplace(str);
 
     setattr(obj, str, value);
-    return None;
+    return incref(None);
 }
 
 static Box* hasattrFuncHelper(Box* return_val) noexcept {
@@ -742,6 +758,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 }
 
 Box* map2(Box* f, Box* container) {
+    assert(0 && "check refcounting");
     Box* rtn = new BoxedList();
     bool use_identity_func = f == None;
     for (Box* e : container->pyElements()) {
@@ -756,6 +773,7 @@ Box* map2(Box* f, Box* container) {
 }
 
 Box* map(Box* f, BoxedTuple* args) {
+    assert(0 && "check refcounting");
     assert(args->cls == tuple_cls);
     auto num_iterable = args->size();
     if (num_iterable < 1)
@@ -811,6 +829,7 @@ Box* map(Box* f, BoxedTuple* args) {
 }
 
 Box* reduce(Box* f, Box* container, Box* initial) {
+    assert(0 && "check refcounting");
     Box* current = initial;
 
     for (Box* e : container->pyElements()) {
@@ -831,6 +850,7 @@ Box* reduce(Box* f, Box* container, Box* initial) {
 
 // from cpython, bltinmodule.c
 PyObject* filterstring(PyObject* func, BoxedString* strobj) {
+    assert(0 && "check refcounting");
     PyObject* result;
     Py_ssize_t i, j;
     Py_ssize_t len = PyString_Size(strobj);
@@ -950,6 +970,7 @@ Fail_1:
 }
 
 static PyObject* filterunicode(PyObject* func, PyObject* strobj) {
+    assert(0 && "check refcounting");
     PyObject* result;
     Py_ssize_t i, j;
     Py_ssize_t len = PyUnicode_GetSize(strobj);
@@ -1055,6 +1076,7 @@ Fail_1:
 }
 
 static PyObject* filtertuple(PyObject* func, PyObject* tuple) {
+    assert(0 && "check refcounting");
     PyObject* result;
     Py_ssize_t i, j;
     Py_ssize_t len = PyTuple_Size(tuple);
@@ -1121,6 +1143,7 @@ Fail_1:
 }
 
 Box* filter2(Box* f, Box* container) {
+    assert(0 && "check refcounting");
     // If the filter-function argument is None, filter() works by only returning
     // the elements that are truthy.  This is equivalent to using the bool() constructor.
     // - actually since we call nonzero() afterwards, we could use an ident() function
@@ -1165,6 +1188,7 @@ Box* filter2(Box* f, Box* container) {
 }
 
 Box* zip(BoxedTuple* containers) {
+    assert(0 && "check refcounting");
     assert(containers->cls == tuple_cls);
 
     BoxedList* rtn = new BoxedList();
@@ -1216,6 +1240,7 @@ public:
 };
 
 Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
+    assert(0 && "check refcounting");
     if (!PyType_Check(cls))
         raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls));
 
@@ -1234,6 +1259,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
 }
 
 Box* exceptionStr(Box* b) {
+    assert(0 && "check refcounting");
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
     static BoxedString* message_str = getStaticString("message");
     Box* message = b->getattr(message_str);
@@ -1245,6 +1271,7 @@ Box* exceptionStr(Box* b) {
 }
 
 Box* exceptionRepr(Box* b) {
+    assert(0 && "check refcounting");
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
     static BoxedString* message_str = getStaticString("message");
     Box* message = b->getattr(message_str);
@@ -1257,6 +1284,7 @@ Box* exceptionRepr(Box* b) {
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
+    assert(0 && "check refcounting");
     if (size == 0)
         size = base->tp_basicsize;
 
@@ -1503,6 +1531,7 @@ static PyObject* builtin_reload(PyObject* self, PyObject* v) noexcept {
 }
 
 Box* getreversed(Box* o) {
+    assert(0 && "check refcounting");
     static BoxedString* reversed_str = getStaticString("__reversed__");
 
     // common case:
@@ -1527,7 +1556,7 @@ Box* getreversed(Box* o) {
 
 Box* pydump(Box* p, BoxedInt* level) {
     dumpEx(p, level->n);
-    return None;
+    return incref(None);
 }
 
 Box* pydumpAddr(Box* p) {
@@ -1535,7 +1564,7 @@ Box* pydumpAddr(Box* p) {
         raiseExcHelper(TypeError, "Requires an int");
 
     dump((void*)static_cast<BoxedInt*>(p)->n);
-    return None;
+    return incref(None);
 }
 
 Box* builtinIter(Box* obj, Box* sentinel) {
@@ -1624,6 +1653,7 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
+    assert(0 && "check refcounting");
     PyObject* line = rawInput(prompt);
 
     char* str = NULL;
@@ -1698,6 +1728,7 @@ Box* builtinCmp(Box* a, Box* b) {
 }
 
 Box* builtinApply(Box* func, Box* args, Box* keywords) {
+    assert(0 && "check refcounting");
     if (!PyTuple_Check(args)) {
         if (!PySequence_Check(args))
             raiseExcHelper(TypeError, "apply() arg 2 expected sequence, found %s", getTypeName(args));

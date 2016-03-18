@@ -515,7 +515,7 @@ Box* intRAdd(BoxedInt* lhs, Box* rhs) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return add_i64_i64(lhs->n, rhs_int->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -542,7 +542,7 @@ Box* intRAnd(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
@@ -570,7 +570,7 @@ Box* intROr(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__ror__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n | rhs_int->n);
@@ -599,7 +599,7 @@ Box* intRXor(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n ^ rhs_int->n);
@@ -642,7 +642,7 @@ Box* intRDiv(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -682,7 +682,7 @@ Box* intRFloordiv(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
@@ -730,7 +730,7 @@ Box* intRTruediv(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         return intTruedivInt(static_cast<BoxedInt*>(rhs), lhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -772,7 +772,7 @@ Box* intRLShift(BoxedInt* lhs, Box* rhs) {
 
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intLShiftInt(rhs_int, lhs);
@@ -801,7 +801,7 @@ Box* intRMod(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return mod_i64_i64(rhs_int->n, lhs->n);
@@ -838,7 +838,7 @@ Box* intRDivmod(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return intDivmod(static_cast<BoxedInt*>(rhs), lhs);
 }
@@ -876,7 +876,7 @@ Box* intRMul(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return intMul(lhs, rhs);
 }
@@ -938,7 +938,7 @@ Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     if (mod != None) {
         if (lhs->n < 0)
@@ -984,7 +984,7 @@ Box* intRRShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intRShiftInt(rhs_int, lhs);
@@ -1026,7 +1026,7 @@ Box* intRSub(BoxedInt* lhs, Box* rhs) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return sub_i64_i64(rhs_int->n, lhs->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 

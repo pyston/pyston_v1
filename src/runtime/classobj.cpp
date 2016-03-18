@@ -297,12 +297,12 @@ static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     assert(_value);
 
     _classobjSetattr(_cls, _attr, _value);
-    return None;
+    return incref(None);
 }
 
 static Box* classobjDelattr(Box* _cls, Box* _attr) {
     _classobjSetattr(_cls, _attr, NULL);
-    return None;
+    return incref(None);
 }
 
 static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
@@ -608,7 +608,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         raiseExcHelper(AttributeError, "%.50s instance has no attribute '%.400s'", clsobj->name->c_str(),
                        attr->c_str());
     }
-    return None;
+    return incref(None);
 }
 
 int instance_setattro(Box* inst, Box* attr, Box* value) noexcept {

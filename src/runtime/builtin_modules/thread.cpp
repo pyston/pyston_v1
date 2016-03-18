@@ -73,7 +73,7 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
     ++nb_threads;
 
     try {
-        runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL);
+        autoDecref(runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL));
     } catch (ExcInfo e) {
         e.printExcAndTraceback();
     }
@@ -147,11 +147,11 @@ public:
         if (PyThread_acquire_lock(self->lock_lock, 0)) {
             PyThread_release_lock(self->lock_lock);
             raiseExcHelper(ThreadError, "release unlocked lock");
-            return None;
+            return incref(None);
         }
 
         PyThread_release_lock(self->lock_lock);
-        return None;
+        return incref(None);
     }
 
     static Box* exit(Box* _self, Box* arg1, Box* arg2, Box** args) { return release(_self); }

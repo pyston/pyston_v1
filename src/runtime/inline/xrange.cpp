@@ -243,7 +243,7 @@ Box* xrangeRepr(BoxedXrange* self) {
 
 Box* xrangeReduce(Box* self) {
     if (!self) {
-        return None;
+        return incref(None);
     }
     BoxedXrange* r = static_cast<BoxedXrange*>(self);
     BoxedTuple* range = BoxedTuple::create(
