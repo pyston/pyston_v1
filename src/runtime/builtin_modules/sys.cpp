@@ -60,7 +60,7 @@ Box* sysExcClear() {
 
     Box* old_type = exc->type;
     Box* old_value = exc->value;
-    Box* old_tracebck = exc->traceback;
+    Box* old_traceback = exc->traceback;
     exc->type = incref(None);
     exc->value = incref(None);
     exc->traceback = incref(None);
