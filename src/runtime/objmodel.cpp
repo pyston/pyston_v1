@@ -6874,9 +6874,9 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
 
             AUTO_DECREF(attr_name);
             attr_name = coerceUnicodeToStr<CXX>(attr_name);
-            AUTO_DECREF(attr_name);
 
             if (attr_name->cls != str_cls) {
+                AUTO_DECREF(attr_name);
                 raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));
             }
 
