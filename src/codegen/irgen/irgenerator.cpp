@@ -2627,6 +2627,7 @@ private:
                 llvm::Value* v;
                 if (phi_type == phi_type->getBoxType()) {
                     v = emitter.getNone()->getValue();
+                    _setVRegIfUserVisible(*it, [&]() { return v; }, NULL);
                 } else {
                     v = llvm::UndefValue::get(phi_type->llvmType());
                 }
