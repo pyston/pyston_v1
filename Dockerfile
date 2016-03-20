@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is a hack for debugging deadlocks. It makes pthread_mutex_lock() complain if it takes more than given time
-// (TIMEOUT_S) to grab a lock. Perhaps it will be useful in future
 FROM ubuntu:14.04
 RUN apt-get update
 RUN apt-get install -y build-essential
