@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,19 +48,18 @@ Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
-    return BoxedTuple::create({ exc->type, exc->value, exc->traceback });
+    Box* tb = exc->traceback ? exc->traceback : None;
+    return BoxedTuple::create({ exc->type, exc->value, tb });
 }
 
 Box* sysExcClear() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
 
     exc->type = None;
     exc->value = None;
-    exc->traceback = None;
+    exc->traceback = NULL;
 
     return None;
 }
@@ -68,9 +67,6 @@ Box* sysExcClear() {
 static Box* sysExit(Box* arg) {
     assert(arg);
     Box* exc = runtimeCall(SystemExit, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
-    // TODO this should be handled by the SystemExit constructor
-    exc->giveAttr("code", arg);
-
     raiseExc(exc);
 }
 
@@ -681,10 +677,6 @@ void setupSys() {
                                                   FunctionMetadata::create((void*)sysGetRecursionLimit, UNKNOWN, 0),
                                                   "getrecursionlimit", getrecursionlimit_doc));
 
-    sys_module->giveAttr("meta_path", new BoxedList());
-    sys_module->giveAttr("path_hooks", new BoxedList());
-    sys_module->giveAttr("path_importer_cache", new BoxedDict());
-
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
     sys_module->giveAttr("dont_write_bytecode", True);
 
@@ -692,7 +684,7 @@ void setupSys() {
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));
 
     sys_module->giveAttr("copyright",
-                         boxString("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
+                         boxString("Copyright 2014-2016 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
                                    "Python Software Foundation.\nAll Rights Reserved.\n\nCopyright (c) 2000 "
                                    "BeOpen.com.\nAll Rights Reserved.\n\nCopyright (c) 1995-2001 Corporation for "
                                    "National Research Initiatives.\nAll Rights Reserved.\n\nCopyright (c) "
@@ -733,7 +725,7 @@ void setupSys() {
     sys_flags_cls->freeze();
 
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, boxString("sys")));
     }
 
     sys_module->giveAttr("__displayhook__", sys_module->getattr(internStringMortal("displayhook")));
@@ -742,15 +734,30 @@ void setupSys() {
 
 void setupSysEnd() {
     std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
-    for (const auto& p : *sys_modules_dict) {
-        builtin_module_names.push_back(p.first);
-    }
+    for (int i = 0; PyImport_Inittab[i].name != NULL; i++)
+        builtin_module_names.push_back(boxString(PyImport_Inittab[i].name));
 
     std::sort<decltype(builtin_module_names)::iterator, PyLt>(builtin_module_names.begin(), builtin_module_names.end(),
                                                               PyLt());
 
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
+
+#ifndef NDEBUG
+    for (const auto& p : *sys_modules_dict) {
+        assert(PyString_Check(p.first));
+
+        bool found = false;
+        for (int i = 0; PyImport_Inittab[i].name != NULL; i++) {
+            if (((BoxedString*)p.first)->s() == PyImport_Inittab[i].name) {
+                found = true;
+            }
+        }
+        if (!found)
+            assert(0 && "found a module which is inside sys.modules but not listed inside PyImport_Inittab!");
+    }
+#endif
+
     sys_flags_cls->finishInitialization();
 
     /* version_info */

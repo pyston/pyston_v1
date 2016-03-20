@@ -38,6 +38,7 @@ addons:
     - g++-4.8
     - gdb
     - libbz2-dev
+    - libgeoip-dev
     - libgmp3-dev
     - libmpfr-dev
     - liblzma-dev
@@ -74,7 +75,7 @@ before_script:
 
 script:
   - ccache -z
-  - ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G travis_wait 30 ctest --output-on-failure
+  - ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G travis_wait 45 ctest --output-on-failure
   - ccache -s
   - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 

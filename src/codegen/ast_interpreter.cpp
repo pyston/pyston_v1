@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -137,6 +137,7 @@ private:
     // instructions
     CFGBlock* next_block, *current_block;
     FrameInfo frame_info;
+    unsigned edgecount;
 
     SourceInfo* source_info;
     ScopeInfo* scope_info;
@@ -145,7 +146,6 @@ private:
     ExcInfo last_exception;
     BoxedClosure* created_closure;
     BoxedGenerator* generator;
-    unsigned edgecount;
     BoxedModule* parent_module;
 
     std::unique_ptr<JitFragmentWriter> jit;
@@ -229,6 +229,7 @@ void ASTInterpreter::setGlobals(Box* globals) {
 ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
+      edgecount(0),
       source_info(md->source.get()),
       scope_info(0),
       phis(NULL),
@@ -236,7 +237,6 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
       last_exception(NULL, NULL, NULL),
       created_closure(0),
       generator(0),
-      edgecount(0),
       parent_module(source_info->parent_module),
       should_jit(false) {
 
@@ -320,8 +320,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
         std::pair<CFGBlock*, Box*> rtn = b->entry_code(this, b, vregs);
         next_block = rtn.first;
-        if (!next_block)
-            return rtn.second;
+        return rtn.second;
     } catch (ExcInfo e) {
         AST_stmt* stmt = getCurrentStatement();
         if (stmt->type != AST_TYPE::Invoke)
@@ -329,9 +328,8 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        auto source = getMD()->source.get();
         stmt->cxx_exception_count++;
-        caughtCxxException(LineInfo(stmt->lineno, stmt->col_offset, source->getFn(), source->getName()), &e);
+        caughtCxxException(&e);
 
         next_block = ((AST_Invoke*)stmt)->exc_dest;
         last_exception = e;
@@ -385,6 +383,15 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
                 Box* rtn = interpreter.execJITedBlock(b);
                 if (interpreter.next_block)
                     continue;
+
+                // check if we returned from the baseline JIT because we should do a OSR.
+                if (unlikely(rtn == (Box*)ASTInterpreterJitInterface::osr_dummy_value)) {
+                    AST_Jump* cur_stmt = (AST_Jump*)interpreter.getCurrentStatement();
+                    RELEASE_ASSERT(cur_stmt->type == AST_TYPE::Jump, "");
+                    // WARNING: do not put a try catch + rethrow block around this code here.
+                    //          it will confuse our unwinder!
+                    rtn = interpreter.doOSR(cur_stmt);
+                }
                 return rtn;
             }
         }
@@ -608,7 +615,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     }
 
     if (jit) {
-        if (backedge)
+        if (backedge && ENABLE_OSR && !FORCE_INTERPRETER)
             jit->emitOSRPoint(node);
         jit->emitJump(node->target);
         finishJITing(node->target);
@@ -777,13 +784,13 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
             finishJITing(next_block);
         }
     } catch (ExcInfo e) {
+        assert(node == getCurrentStatement());
         abortJITing();
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        auto source = getMD()->source.get();
         node->cxx_exception_count++;
-        caughtCxxException(LineInfo(node->lineno, node->col_offset, source->getFn(), source->getName()), &e);
+        caughtCxxException(&e);
 
         next_block = node->exc_dest;
         last_exception = e;
@@ -1615,6 +1622,11 @@ int ASTInterpreterJitInterface::getCurrentInstOffset() {
     return offsetof(ASTInterpreter, frame_info.stmt);
 }
 
+int ASTInterpreterJitInterface::getEdgeCountOffset() {
+    static_assert(sizeof(ASTInterpreter::edgecount) == 4, "caller assumes that");
+    return offsetof(ASTInterpreter, edgecount);
+}
+
 int ASTInterpreterJitInterface::getGeneratorOffset() {
     return offsetof(ASTInterpreter, generator);
 }
@@ -1654,14 +1666,6 @@ Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, InternedString 
         raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", s.c_str());
     }
     return val;
-}
-
-Box* ASTInterpreterJitInterface::doOSRHelper(void* _interpreter, AST_Jump* node) {
-    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    ++interpreter->edgecount;
-    if (interpreter->edgecount >= OSR_THRESHOLD_BASELINE)
-        return interpreter->doOSR(node);
-    return NULL;
 }
 
 Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
@@ -1853,10 +1857,11 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     return v ? v : None;
 }
 
-static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) __attribute__((noinline));
-static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                   FrameStackState frame_state) {
+// caution when changing the function arguments: this function gets called from an assembler wrapper!
+extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt,
+                                         Box* expr_val, FrameStackState frame_state) {
+    static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
+
     assert(md);
     assert(enclosing_stmt);
     assert(frame_state.locals);
@@ -1952,11 +1957,6 @@ static Box* astInterpretDeoptInner(FunctionMetadata* md, AST_expr* after_expr, A
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : None;
-}
-
-Box* astInterpretDeopt(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                       FrameStackState frame_state) {
-    return astInterpretDeoptInner(md, after_expr, enclosing_stmt, expr_val, frame_state);
 }
 
 extern "C" void printExprHelper(Box* obj) {

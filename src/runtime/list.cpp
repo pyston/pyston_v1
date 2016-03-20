@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -691,11 +691,15 @@ extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) 
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
-    static BoxedString* index_str = internStringImmortal("__index__");
+    Py_ssize_t n;
 
-    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
-    if (n == -1 && PyErr_Occurred())
-        throwCAPIException();
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+    } else {
+        return NotImplemented;
+    }
 
     int s = self->size;
 
@@ -715,11 +719,15 @@ Box* listMul(BoxedList* self, Box* rhs) {
 }
 
 Box* listImul(BoxedList* self, Box* rhs) {
-    static BoxedString* index_str = internStringImmortal("__index__");
+    Py_ssize_t n;
 
-    Py_ssize_t n = PyNumber_AsSsize_t(rhs, PyExc_IndexError);
-    if (n == -1 && PyErr_Occurred())
-        throwCAPIException();
+    if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
+    } else {
+        return NotImplemented;
+    }
 
     int s = self->size;
 
@@ -1244,11 +1252,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     ASSERT(PyList_Check(l), "%s", l->cls->tp_name);
 
     try {
-        BoxedSlice* slice = (BoxedSlice*)createSlice(boxInt(ilow), boxInt(ihigh), None);
-        if (v)
-            listSetitemSlice(l, slice, v);
-        else
-            listDelitemSlice(l, slice);
+        adjustNegativeIndicesOnObject(l, &ilow, &ihigh);
+        listSetitemSliceInt64(l, ilow, ihigh, 1, v);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);

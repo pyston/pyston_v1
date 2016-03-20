@@ -1,4 +1,3 @@
-# expected: fail
 import pickle
 import pickletools
 from test import test_support

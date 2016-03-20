@@ -1,4 +1,3 @@
-# expected: fail
 """
 Test suite for SocketServer.py.
 """

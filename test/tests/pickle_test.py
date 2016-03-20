@@ -42,3 +42,7 @@ for obj in [(1, 2), "hello world", u"hola world", 1.0, 1j, 1L, 2, {1:2}, set([3]
 
         o2 = pickle.loads(s)
         print repr(o2), type(o2)
+
+import cStringIO
+StringIO = pickle.loads(pickle.dumps(cStringIO.StringIO))
+print type(StringIO())

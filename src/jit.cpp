@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -188,9 +188,10 @@ int handleArg(char code) {
         TRAP = true;
     else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
-    else if (code == 'v')
+    else if (code == 'v') {
+        Py_VerboseFlag++;
         GLOBAL_VERBOSITY++;
-    else if (code == 'd')
+    } else if (code == 'd')
         SHOW_DISASM = true;
     else if (code == 'I')
         FORCE_INTERPRETER = true;
@@ -276,7 +277,7 @@ static int RunMainFromImporter(const char* filename) {
     PyObject* argv0 = NULL, * importer = NULL;
 
     if ((argv0 = PyString_FromString(filename)) && (importer = PyImport_GetImporter(argv0))
-        && (importer->cls != null_importer_cls)) {
+        && (importer->cls != &PyNullImporter_Type)) {
         /* argv0 is usable as an import source, so
                put it in sys.path[0] and import __main__ */
         PyObject* sys_path = NULL;
@@ -379,6 +380,16 @@ static int main(int argc, char** argv) {
             setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
         }
 
+#ifdef SIGPIPE
+        PyOS_setsig(SIGPIPE, SIG_IGN);
+#endif
+#ifdef SIGXFZ
+        PyOS_setsig(SIGXFZ, SIG_IGN);
+#endif
+#ifdef SIGXFSZ
+        PyOS_setsig(SIGXFSZ, SIG_IGN);
+#endif
+
         if (ASSEMBLY_LOGGING) {
             assembler::disassemblyInitialize();
         }
@@ -426,8 +437,9 @@ static int main(int argc, char** argv) {
 
         if (!Py_NoSiteFlag) {
             try {
-                std::string module_name = "site";
-                importModuleLevel(module_name, None, None, 0);
+                Box* module = PyImport_ImportModule("site");
+                if (!module)
+                    throwCAPIException();
             } catch (ExcInfo e) {
                 e.printExcAndTraceback();
                 return 1;

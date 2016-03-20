@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,7 +43,6 @@
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
-#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -64,10 +63,6 @@ extern "C" {
 int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
-}
-
-extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
-    PyErr_Format(PyExc_SystemError, "%s:%d: bad argument to internal function", filename, lineno);
 }
 
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
@@ -685,102 +680,6 @@ extern "C" int Py_FlushLine(void) noexcept {
     return PyFile_WriteString("\n", f);
 }
 
-extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) noexcept {
-    PyObject* type = *exc;
-    PyObject* value = *val;
-    PyObject* inclass = NULL;
-    PyObject* initial_tb = NULL;
-    PyThreadState* tstate = NULL;
-
-    if (type == NULL) {
-        /* There was no exception, so nothing to do. */
-        return;
-    }
-
-    /* If PyErr_SetNone() was used, the value will have been actually
-       set to NULL.
-    */
-    if (!value) {
-        value = Py_None;
-        Py_INCREF(value);
-    }
-
-    if (PyExceptionInstance_Check(value))
-        inclass = PyExceptionInstance_Class(value);
-
-    /* Normalize the exception so that if the type is a class, the
-       value will be an instance.
-    */
-    if (PyExceptionClass_Check(type)) {
-        /* if the value was not an instance, or is not an instance
-           whose class is (or is derived from) type, then use the
-           value as an argument to instantiation of the type
-           class.
-        */
-        if (!inclass || !PyObject_IsSubclass(inclass, type)) {
-            // Pyston change: rewrote this section
-
-            PyObject* res;
-            if (!PyTuple_Check(value)) {
-                res = PyErr_CreateExceptionInstance(type, value == Py_None ? NULL : value);
-            } else {
-                PyObject* args = value;
-
-                // Pyston change:
-                // res = PyEval_CallObject(type, args);
-                res = PyObject_Call(type, args, NULL);
-            }
-
-            if (res == NULL)
-                goto finally;
-            value = res;
-        }
-        /* if the class of the instance doesn't exactly match the
-           class of the type, believe the instance
-        */
-        else if (inclass != type) {
-            Py_DECREF(type);
-            type = inclass;
-            Py_INCREF(type);
-        }
-    }
-    *exc = type;
-    *val = value;
-    return;
-finally:
-    Py_DECREF(type);
-    Py_DECREF(value);
-    /* If the new exception doesn't set a traceback and the old
-       exception had a traceback, use the old traceback for the
-       new exception.  It's better than nothing.
-    */
-    initial_tb = *tb;
-    PyErr_Fetch(exc, val, tb);
-    if (initial_tb != NULL) {
-        if (*tb == NULL)
-            *tb = initial_tb;
-        else
-            Py_DECREF(initial_tb);
-    }
-    /* normalize recursively */
-    tstate = PyThreadState_GET();
-    if (++tstate->recursion_depth > Py_GetRecursionLimit()) {
-        --tstate->recursion_depth;
-        /* throw away the old exception... */
-        Py_DECREF(*exc);
-        Py_DECREF(*val);
-        /* ... and use the recursion error instead */
-        *exc = PyExc_RuntimeError;
-        *val = PyExc_RecursionErrorInst;
-        Py_INCREF(*exc);
-        Py_INCREF(*val);
-        /* just keeping the old traceback */
-        return;
-    }
-    PyErr_NormalizeException(exc, val, tb);
-    --tstate->recursion_depth;
-}
-
 void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_type = e.type;
     cur_thread_state.curexc_value = e.value;
@@ -816,8 +715,6 @@ void checkAndThrowCAPIException() {
             value = None;
 
         Box* tb = cur_thread_state.curexc_traceback;
-        if (!tb)
-            tb = None;
 
         // Make sure to call PyErr_Clear() *before* normalizing the exception, since otherwise
         // the normalization can think that it had raised an exception, resulting to a call
@@ -837,7 +734,7 @@ void checkAndThrowCAPIException() {
 
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
-        if (tb != None)
+        if (tb)
             throw ExcInfo(value->cls, value, tb);
         raiseExc(value);
     }
@@ -848,16 +745,6 @@ extern "C" void Py_Exit(int sts) noexcept {
 
     Stats::dump(false);
     exit(sts);
-}
-
-extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
-    cur_thread_state.curexc_type = type;
-    cur_thread_state.curexc_value = value;
-    cur_thread_state.curexc_traceback = traceback;
-}
-
-extern "C" void PyErr_Clear() noexcept {
-    PyErr_Restore(NULL, NULL, NULL);
 }
 
 extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
@@ -871,55 +758,7 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
     ExcInfo* exc = getFrameExcInfo();
     exc->type = type ? type : None;
     exc->value = value ? value : None;
-    exc->traceback = traceback ? traceback : None;
-}
-
-extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
-    PyErr_SetObject(exception, boxString(string));
-}
-
-extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
-    PyErr_Restore(exception, value, NULL);
-}
-
-extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) noexcept {
-    va_list vargs;
-    PyObject* string;
-
-#ifdef HAVE_STDARG_PROTOTYPES
-    va_start(vargs, format);
-#else
-    va_start(vargs);
-#endif
-
-    string = PyString_FromFormatV(format, vargs);
-    PyErr_SetObject(exception, string);
-    Py_XDECREF(string);
-    va_end(vargs);
-    return NULL;
-}
-
-extern "C" int PyErr_BadArgument() noexcept {
-    // TODO this is untested
-    PyErr_SetString(PyExc_TypeError, "bad argument type for built-in operation");
-    return 0;
-}
-
-extern "C" PyObject* PyErr_NoMemory() noexcept {
-    if (PyErr_ExceptionMatches(PyExc_MemoryError))
-        /* already current */
-        return NULL;
-
-    /* raise the pre-allocated instance if it still exists */
-    if (PyExc_MemoryErrorInst)
-        PyErr_SetObject(PyExc_MemoryError, PyExc_MemoryErrorInst);
-    else
-        /* this will probably fail since there's no memory and hee,
-           hee, we have to instantiate this class
-        */
-        PyErr_SetNone(PyExc_MemoryError);
-
-    return NULL;
+    exc->traceback = traceback;
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
@@ -929,13 +768,6 @@ extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
 
 extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
     return PyInstance_Check(o) ? (Box*)static_cast<BoxedInstance*>(o)->inst_cls : o->cls;
-}
-
-extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) noexcept {
-    RELEASE_ASSERT(f->cls == &PyFile_Type && ((PyFileObject*)f)->f_fp == stderr,
-                   "sorry will only print tracebacks to stderr right now");
-    printTraceback(v);
-    return 0;
 }
 
 #define Py_DEFAULT_RECURSION_LIMIT 1000
@@ -975,66 +807,6 @@ extern "C" int Py_GetRecursionLimit(void) noexcept {
 extern "C" void Py_SetRecursionLimit(int new_limit) noexcept {
     recursion_limit = new_limit;
     _Py_CheckRecursionLimit = recursion_limit;
-}
-
-extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) noexcept {
-    if (err == NULL || exc == NULL) {
-        /* maybe caused by "import exceptions" that failed early on */
-        return 0;
-    }
-    if (PyTuple_Check(exc)) {
-        Py_ssize_t i, n;
-        n = PyTuple_Size(exc);
-        for (i = 0; i < n; i++) {
-            /* Test recursively */
-            if (PyErr_GivenExceptionMatches(err, PyTuple_GET_ITEM(exc, i))) {
-                return 1;
-            }
-        }
-        return 0;
-    }
-    /* err might be an instance, so check its class. */
-    if (PyExceptionInstance_Check(err))
-        err = PyExceptionInstance_Class(err);
-
-    if (PyExceptionClass_Check(err) && PyExceptionClass_Check(exc)) {
-        // Pyston addition: fast-path the check for if the exception exactly-matches the specifier.
-        // Note that we have to check that the exception specifier doesn't have a custom metaclass
-        // (ie it's cls is type_cls), since otherwise we would have to check for subclasscheck overloading.
-        // (TODO actually, that should be fast now)
-        if (exc->cls == type_cls && exc == err)
-            return 1;
-
-        int res = 0, reclimit;
-        PyObject* exception, *value, *tb;
-        PyErr_Fetch(&exception, &value, &tb);
-        /* Temporarily bump the recursion limit, so that in the most
-           common case PyObject_IsSubclass will not raise a recursion
-           error we have to ignore anyway.  Don't do it when the limit
-           is already insanely high, to avoid overflow */
-        reclimit = Py_GetRecursionLimit();
-        if (reclimit < (1 << 30))
-            Py_SetRecursionLimit(reclimit + 5);
-        res = PyObject_IsSubclass(err, exc);
-        Py_SetRecursionLimit(reclimit);
-        /* This function must not fail, so print the error here */
-        if (res == -1) {
-            PyErr_WriteUnraisable(err);
-            res = 0;
-        }
-        PyErr_Restore(exception, value, tb);
-        return res;
-    }
-
-    return err == exc;
-}
-
-extern "C" int PyErr_ExceptionMatches(PyObject* exc) noexcept {
-    return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
-}
-
-extern "C" PyObject* PyErr_Occurred() noexcept {
-    return cur_thread_state.curexc_type;
 }
 
 extern "C" void* PyObject_Malloc(size_t sz) noexcept {
@@ -1359,6 +1131,11 @@ cleanup:
              : 0)
 #endif
 
+extern "C" void PyParser_SetError(perrdetail* err) noexcept {
+    err_input(err);
+}
+
+
 extern "C" grammar _PyParser_Grammar;
 
 /* Preferred access to parser is through AST. */
@@ -1408,6 +1185,76 @@ extern "C" mod_ty PyParser_ASTFromFile(FILE* fp, const char* filename, int start
             *errcode = err.error;
         return NULL;
     }
+}
+
+extern "C" PyObject* Py_CompileStringFlags(const char* str, const char* filename, int start,
+                                           PyCompilerFlags* flags) noexcept {
+    PyCodeObject* co;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromString(str, filename, start, flags, arena);
+    if (mod == NULL) {
+        PyArena_Free(arena);
+        return NULL;
+    }
+    if (flags && (flags->cf_flags & PyCF_ONLY_AST)) {
+        PyObject* result = PyAST_mod2obj(mod);
+        PyArena_Free(arena);
+        return result;
+    }
+    co = PyAST_Compile(mod, filename, flags, arena);
+    PyArena_Free(arena);
+    return (PyObject*)co;
+}
+
+static PyObject* run_mod(mod_ty mod, const char* filename, PyObject* globals, PyObject* locals, PyCompilerFlags* flags,
+                         PyArena* arena) noexcept {
+    PyCodeObject* co;
+    PyObject* v;
+    co = PyAST_Compile(mod, filename, flags, arena);
+    if (co == NULL)
+        return NULL;
+    v = PyEval_EvalCode(co, globals, locals);
+    Py_DECREF(co);
+    return v;
+}
+
+extern "C" PyObject* PyRun_FileExFlags(FILE* fp, const char* filename, int start, PyObject* globals, PyObject* locals,
+                                       int closeit, PyCompilerFlags* flags) noexcept {
+    PyObject* ret;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromFile(fp, filename, start, 0, 0, flags, NULL, arena);
+    if (closeit)
+        fclose(fp);
+    if (mod == NULL) {
+        PyArena_Free(arena);
+        return NULL;
+    }
+    ret = run_mod(mod, filename, globals, locals, flags, arena);
+    PyArena_Free(arena);
+    return ret;
+}
+
+extern "C" PyObject* PyRun_StringFlags(const char* str, int start, PyObject* globals, PyObject* locals,
+                                       PyCompilerFlags* flags) noexcept {
+    PyObject* ret = NULL;
+    mod_ty mod;
+    PyArena* arena = PyArena_New();
+    if (arena == NULL)
+        return NULL;
+
+    mod = PyParser_ASTFromString(str, "<string>", start, flags, arena);
+    if (mod != NULL)
+        ret = run_mod(mod, "<string>", globals, locals, flags, arena);
+    PyArena_Free(arena);
+    return ret;
 }
 
 extern "C" int PyRun_InteractiveLoopFlags(FILE* fp, const char* filename, PyCompilerFlags* flags) noexcept {
@@ -1669,17 +1516,6 @@ extern "C" void makePendingCalls() {
         throwCAPIException();
 }
 
-extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexcept {
-    // Don't have to do anything here, since we will error in _PyImport_FindExtension
-    // TODO is this ok?
-    return NULL;
-}
-
-extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
-}
-
 static PyObject* listmethodchain(PyMethodChain* chain) noexcept {
     PyMethodChain* c;
     PyMethodDef* ml;
@@ -1820,7 +1656,10 @@ extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
 }
 
 extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
-    Py_FatalError("Unimplemented");
+    if (_PyThreadState_Current == NULL)
+        Py_FatalError("PyThreadState_Get: no current thread");
+
+    return _PyThreadState_Current;
 }
 
 extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {

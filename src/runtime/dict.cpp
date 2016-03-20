@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 #include "runtime/dict.h"
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -163,6 +164,9 @@ Box* dictLen(BoxedDict* self) {
 }
 
 extern "C" Py_ssize_t PyDict_Size(PyObject* op) noexcept {
+    if (op->cls == attrwrapper_cls)
+        return PyObject_Size(op);
+
     RELEASE_ASSERT(PyDict_Check(op), "");
     return static_cast<BoxedDict*>(op)->d.size();
 }
@@ -173,8 +177,11 @@ extern "C" void PyDict_Clear(PyObject* op) noexcept {
 }
 
 extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
-    RELEASE_ASSERT(PyDict_Check(o), "");
+    RELEASE_ASSERT(PyDict_Check(o) || o->cls == attrwrapper_cls, "");
     try {
+        if (o->cls == attrwrapper_cls)
+            return attrwrapperToDict(o);
+
         return dictCopy(static_cast<BoxedDict*>(o));
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -648,15 +655,23 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
 }
 
 extern "C" int PyDict_Merge(PyObject* a, PyObject* b, int override_) noexcept {
-    if (a == NULL || !PyDict_Check(a) || b == NULL) {
-        PyErr_BadInternalCall();
-        return -1;
-    }
-
-    if (override_ != 1)
-        Py_FatalError("unimplemented");
-
     try {
+        if (a == NULL || !PyDict_Check(a) || b == NULL) {
+            if (a && b && a->cls == attrwrapper_cls) {
+                RELEASE_ASSERT(PyDict_Check(b) && override_ == 1, "");
+                for (auto&& item : *(BoxedDict*)b) {
+                    setitem(a, item.first, item.second);
+                }
+                return 0;
+            }
+
+            PyErr_BadInternalCall();
+            return -1;
+        }
+
+        if (override_ != 1)
+            Py_FatalError("unimplemented");
+
         dictMerge(static_cast<BoxedDict*>(a), b);
         return 0;
     } catch (ExcInfo e) {
@@ -841,6 +856,7 @@ void setupDict() {
         = dictiteritem_cls->instances_are_nonzero = true;
 
     dict_cls->tp_dealloc = &BoxedDict::dealloc;
+    dict_cls->tp_hash = PyObject_HashNotImplemented;
     dict_cls->has_safe_tp_dealloc = true;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
@@ -850,7 +866,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
-
+    dict_cls->giveAttr("__hash__", None);
     dict_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterKeys,
                                                                               typeFromClass(dictiterkey_cls), 1)));
 
@@ -899,6 +915,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)dictNonzero, BOXED_BOOL, 1)));
 
+    add_operators(dict_cls);
     dict_cls->freeze();
 
     // create the dictonary iterator types

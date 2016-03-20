@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,15 +35,18 @@ struct LineInfo;
 extern const void* interpreter_instr_addr;
 
 struct ASTInterpreterJitInterface {
+    // Special value which when returned from the bjit will trigger a OSR.
+    static constexpr uint64_t osr_dummy_value = -1;
+
     static int getBoxedLocalsOffset();
     static int getCurrentBlockOffset();
     static int getCurrentInstOffset();
+    static int getEdgeCountOffset();
     static int getGeneratorOffset();
     static int getGlobalsOffset();
 
     static void delNameHelper(void* _interpreter, InternedString name);
     static Box* derefHelper(void* interp, InternedString s);
-    static Box* doOSRHelper(void* interp, AST_Jump* node);
     static Box* landingpadHelper(void* interp);
     static void pendingCallsCheckHelper();
     static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
@@ -74,8 +77,9 @@ struct Value {
 Box* astInterpretFunction(FunctionMetadata* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args);
 Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLocals);
-Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                       FrameStackState frame_state);
+// this function is implemented in the src/codegen/ast_interpreter_exec.S assembler file
+extern "C" Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                                  FrameStackState frame_state);
 
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);

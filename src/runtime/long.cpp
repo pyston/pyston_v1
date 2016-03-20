@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <mpfr.h>
 #include <sstream>
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "capi/typeobject.h"
@@ -114,14 +115,18 @@ extern "C" int _PyLong_AsInt(PyObject* obj) noexcept {
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* vv) noexcept {
     if (PyLong_Check(vv)) {
         BoxedLong* l = static_cast<BoxedLong*>(vv);
-        return mpz_get_ui(l->n);
+        auto v = mpz_get_ui(l->n);
+        if (mpz_sgn(l->n) == -1)
+            return -v;
+        return v;
     }
 
     Py_FatalError("unimplemented");
 }
 
 extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) noexcept {
-    Py_FatalError("unimplemented");
+    static_assert(sizeof(PY_LONG_LONG) == sizeof(unsigned long), "");
+    return PyLong_AsUnsignedLongMask(vv);
 }
 
 extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
@@ -212,18 +217,19 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
             || (base == 2 && (str[1] == 'b' || str[1] == 'B'))))
         str += 2;
 
+    llvm::StringRef str_ref = str;
+    llvm::StringRef str_ref_trimmed = str_ref.rtrim(base < 22 ? "Ll \t\n\v\f\r" : " \t\n\v\f\r");
+
     BoxedLong* rtn = new BoxedLong();
     int r = 0;
-    if ((str[strlen(str) - 1] == 'L' || str[strlen(str) - 1] == 'l') && base < 22) {
-        std::string without_l(str, strlen(str) - 1);
-        r = mpz_init_set_str(rtn->n, without_l.c_str(), base);
-    } else {
-        // if base great than 22, 'l' or 'L' should count as a digit.
+    if (str_ref_trimmed != str_ref)
+        r = mpz_init_set_str(rtn->n, str_ref_trimmed.str().c_str(), base);
+    else
         r = mpz_init_set_str(rtn->n, str, base);
-    }
 
-    if (pend)
-        *pend = const_cast<char*>(str) + strlen(str);
+    if (pend) {
+        *pend = const_cast<char*>(str) + str_ref.size();
+    }
     if (r != 0) {
         PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base, str);
         return NULL;
@@ -535,6 +541,12 @@ extern "C" void* PyLong_AsVoidPtr(PyObject* vv) noexcept {
     if (x == -1 && PyErr_Occurred())
         return NULL;
     return (void*)x;
+}
+
+
+extern "C" size_t _PyLong_NumBits(PyObject* vv) noexcept {
+    RELEASE_ASSERT(PyLong_Check(vv), "");
+    return mpz_sizeinbase(((BoxedLong*)vv)->n, 2);
 }
 
 extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian,
@@ -1375,7 +1387,7 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     } else {
         return NotImplemented;
     }
-    if (mpz_sgn(v2->n) == 0) {
+    if (mpz_sgn(v1->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
     }
 
@@ -1523,8 +1535,12 @@ Box* longHash(BoxedLong* self) {
                        getTypeName(self));
 
     // If the long fits into an int we have to return the same hash in order that we can find the value in a dict.
-    if (mpz_fits_slong_p(self->n))
-        return boxInt(mpz_get_si(self->n));
+    if (mpz_fits_slong_p(self->n)) {
+        auto v = mpz_get_si(self->n);
+        if (v == -1)
+            v = -2;
+        return boxInt(v);
+    }
 
     // CPython use the absolute value of self mod ULONG_MAX.
     unsigned long remainder = mpz_tdiv_ui(self->n, ULONG_MAX);
@@ -1537,6 +1553,14 @@ Box* longHash(BoxedLong* self) {
         remainder = -2;
 
     return boxInt(remainder);
+}
+
+long long_hash(PyObject* self) noexcept {
+    try {
+        return unboxInt(longHash((BoxedLong*)self));
+    } catch (ExcInfo e) {
+        RELEASE_ASSERT(0, "");
+    }
 }
 
 extern "C" Box* longTrunc(BoxedLong* self) {
@@ -1726,5 +1750,6 @@ void setupLong() {
     long_cls->freeze();
 
     long_cls->tp_as_number->nb_power = long_pow;
+    long_cls->tp_hash = long_hash;
 }
 }

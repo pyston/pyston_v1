@@ -219,3 +219,19 @@ try:
     RaisingCmp() in [1, 2, 3]
 except ZeroDivisionError as e:
     print e
+
+class D(object):
+    def __rmul__(self, other):
+        return other * 2
+
+d = D()
+
+try:
+    print([1, 2] * 3.5)
+except TypeError as e:
+    print(type(e))
+
+try:
+    print([1, 2] * d)
+except TypeError as e:
+    print(type(e))

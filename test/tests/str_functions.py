@@ -10,6 +10,8 @@ print repr('"')
 # print repr("'") // don't feel like handling this right now; this should print out (verbatim) "'", ie realize it can use double quotes
 print repr("'\"")
 
+print str(object="test")
+
 print "hello world\tmore\nwords\va\fb\ao".split()
 print "  test  ".split()
 print "  test  ".split(' ')

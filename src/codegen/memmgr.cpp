@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include "llvm/Support/Memory.h"
 
 #include "codegen/irgen/util.h"
+#include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/util.h"
@@ -208,6 +209,11 @@ void PystonMemoryManager::invalidateInstructionCache() {
 
 uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
     uint64_t base = (uint64_t)getValueOfRelocatableSym(name);
+    if (base)
+        return base;
+
+    // make sure our own c++ exc implementations symbols get used instead of gcc ones.
+    base = getCXXUnwindSymbolAddress(name);
     if (base)
         return base;
 

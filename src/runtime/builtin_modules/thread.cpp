@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -90,7 +90,7 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
 // TODO this should take kwargs, which defaults to empty
 Box* startNewThread(Box* target, Box* args, Box* kw) {
     intptr_t thread_id = start_thread(&thread_start, target, args, kw);
-    return boxInt(thread_id ^ 0x12345678901L);
+    return boxInt(thread_id);
 }
 
 #define CHECK_STATUS(name)                                                                                             \
@@ -244,11 +244,7 @@ void setupThread() {
     thread_lock_cls->giveAttr("locked_lock", thread_lock_cls->getattr(internStringMortal("locked")));
     thread_lock_cls->freeze();
 
-    ThreadError = BoxedClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,
-                                     Exception->tp_basicsize, false, "error");
-    ThreadError->giveAttr("__module__", boxString("thread"));
-    ThreadError->freeze();
-
+    ThreadError = (BoxedClass*)PyErr_NewException("thread.error", NULL, NULL);
     thread_module->giveAttr("error", ThreadError);
 }
 }

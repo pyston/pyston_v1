@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,8 +30,10 @@ public:
     Box* module;
 
 public:
-    BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module = NULL)
-        : method_def(method_def), passthrough(passthrough), module(module) {}
+    BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module_name)
+        : method_def(method_def), passthrough(passthrough), module(module_name) {
+        assert(!module || PyString_Check(module_name));
+    }
 
     DEFAULT_CLASS(capifunc_cls);
 
@@ -39,7 +41,10 @@ public:
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
-        return boxString(self->method_def->ml_name);
+        if (self->passthrough == NULL)
+            return (BoxedString*)PyString_FromFormat("<built-in function %s>", self->method_def->ml_name);
+        return (BoxedString*)PyString_FromFormat("<built-in method %s of %s object at %p>", self->method_def->ml_name,
+                                                 self->passthrough->cls->tp_name, self->passthrough);
     }
 
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs);

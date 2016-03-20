@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ namespace pyston {
 
 extern "C" PyObject* PyImport_GetImporter(PyObject* path) noexcept;
 extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name);
-extern Box* importModuleLevel(llvm::StringRef module_name, Box* globals, Box* from_imports, int level);
 BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path);
 }
 

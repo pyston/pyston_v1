@@ -1,4 +1,3 @@
-# expected: fail
 import pickle
 from cStringIO import StringIO
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1804,7 +1804,7 @@ extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
     return 0;
 }
 
-extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
+extern "C" PyObject* PyMapping_GetItemString(PyObject* o, const char* key) noexcept {
     PyObject* okey, *r;
 
     if (key == NULL)
@@ -1818,7 +1818,7 @@ extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
     return r;
 }
 
-extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* value) noexcept {
+extern "C" int PyMapping_SetItemString(PyObject* o, const char* key, PyObject* value) noexcept {
     PyObject* okey;
     int r;
 
@@ -1947,15 +1947,15 @@ extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
-    if (o == Py_None)
-        return type_error("bad operand type for abs(): '%.200s'", o);
+    PyNumberMethods* m;
 
-    try {
-        return abs_(o);
-    } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-    }
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_absolute)
+        return m->nb_absolute(o);
+
+    return type_error("bad operand type for abs(): '%.200s'", o);
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {

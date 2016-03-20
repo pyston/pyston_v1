@@ -87,13 +87,16 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     complexobject.c
     dictobject.c
     dictproxy.c
+    errors.c
     exceptions.c
     floatobject.c
     fileobject.c
+    import.c
     iterobject.c
     memoryobject.c
     stringobject.c
     structseq.c
+    traceback.c
     unicodectype.c
     unicodeobject.c
     weakrefobject.c
@@ -135,17 +138,21 @@ add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_
 add_dependencies(FROM_CPYTHON copy_stdlib)
 
 set(STDMODULES
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/future_builtins.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/pyexpat.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_elementtree.pyston.so
     ${CMAKE_BINARY_DIR}/from_cpython/Lib/bz2.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/cmath.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/cPickle.pyston.so
     ${CMAKE_BINARY_DIR}/from_cpython/Lib/_ctypes.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_curses.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_elementtree.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/future_builtins.pyston.so
     ${CMAKE_BINARY_DIR}/from_cpython/Lib/grp.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_locale.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/mmap.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/parser.pyston.so
+    ${CMAKE_BINARY_DIR}/from_cpython/Lib/pyexpat.pyston.so
     ${CMAKE_BINARY_DIR}/from_cpython/Lib/readline.pyston.so
     ${CMAKE_BINARY_DIR}/from_cpython/Lib/termios.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_curses.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/mmap.pyston.so
 )
 
 add_custom_command(OUTPUT ${STDMODULES}
@@ -176,6 +183,9 @@ add_custom_command(OUTPUT ${STDMODULES}
 		       Modules/termios.c
 		       Modules/_cursesmodule.c
 		       Modules/mmapmodule.c
+		       Modules/_localemodule.c
+		       Modules/cPickle.c
+                       Modules/parsermodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so)
 

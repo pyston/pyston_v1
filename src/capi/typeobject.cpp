@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1013,6 +1013,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     return res;
                 } else if (return_convention == ReturnConvention::NO_RETURN) {
                     assert(!res);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    rewrite_args = NULL;
                 } else if (return_convention == ReturnConvention::CAPI_RETURN
                            || return_convention == ReturnConvention::NOEXC_POSSIBLE) {
                     // If we get a CAPI return, we probably did a function call, and these guards
@@ -2078,7 +2080,7 @@ static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr(new_str))
         return;
 
-    type->giveAttr(new_str, new BoxedCApiFunction(tp_new_methoddef, type));
+    type->giveAttr(new_str, new BoxedCApiFunction(tp_new_methoddef, type, NULL /* module name */));
 }
 
 void add_operators(BoxedClass* cls) noexcept {
@@ -2104,6 +2106,16 @@ void add_operators(BoxedClass* cls) noexcept {
 
     if (cls->tp_new)
         add_tp_new_wrapper(cls);
+
+    // Pyston change:
+    // Call PyType_Modified just to be extra safe.  Our class initialization happens slightly differently from
+    // CPython's, so we end up calling add_operators at more different times than they do.  The issue is that we
+    // sometimes call add_operators after calling typeLookup, so we might have already started using the method cache.
+    // Since add_operators directly adds class attributes, in theory it needs to call PyType_Modified, but CPython
+    // is able to avoid it since they know that no lookups had been cached yet.
+    // We could probably get to the point that we have the same guarantees, but it seems safer to just call
+    // PyType_Modified anyway.
+    PyType_Modified(cls);
 }
 
 static void type_mro_modified(PyTypeObject* type, PyObject* bases) {

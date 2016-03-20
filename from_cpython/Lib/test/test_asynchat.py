@@ -1,4 +1,3 @@
-# expected: fail
 # test asynchat
 
 import asyncore, asynchat, socket, time

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,7 +74,6 @@
 #include "classobject.h"
 #include "cobject.h"
 #include "fileobject.h"
-#include "frameobject.h"
 #include "pycapsule.h"
 #include "traceback.h"
 #include "sliceobject.h"
@@ -132,6 +131,7 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 #include "abstract.h"
 
 #include "compile.h"
+#include "eval.h"
 
 #include "pyctype.h"
 #include "pystrtod.h"

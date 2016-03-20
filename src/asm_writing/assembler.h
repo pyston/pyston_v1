@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -168,8 +168,10 @@ public:
 
     void cmp(Register reg1, Register reg2);
     void cmp(Register reg, Immediate imm);
-    void cmp(Indirect mem, Immediate imm);
+    void cmp(Indirect mem, Immediate imm, MovType type = MovType::Q);
+    void cmpl(Indirect mem, Immediate imm) { return cmp(mem, imm, MovType::L); }
     void cmp(Indirect mem, Register reg);
+
 
     void lea(Indirect mem, Register reg);
 

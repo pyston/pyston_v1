@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -926,6 +926,20 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
     return new (cls) BoxedFloat(f->d);
 }
 
+// Roughly analogous to CPython's float_new.
+// The arguments need to be unpacked from args and kwds.
+static Box* floatNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
+    PyObject* x = False; // False is like initalizing it to 0.0 but faster because we don't need to box it in case the
+                         // optional arg exists
+    static char* kwlist[2] = { NULL, NULL };
+    kwlist[0] = const_cast<char*>("x");
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:float", kwlist, &x))
+        return NULL;
+
+    return floatNew<CAPI>(type, x);
+}
+
 PyObject* float_str_or_repr(double v, int precision, char format_code) {
     PyObject* result;
     char* buf = PyOS_double_to_string(v, format_code, precision, Py_DTSF_ADD_DOT_0, NULL);
@@ -1647,7 +1661,8 @@ void setupFloat() {
     float_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)floatDivmod, UNKNOWN, 2)));
     float_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)floatRDivmod, UNKNOWN, 2)));
 
-    auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false, ParamNames::empty(), CXX);
+    auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false,
+                                              ParamNames({ "", "x" }, "", ""), CXX);
     float_new->addVersion((void*)floatNew<CAPI>, UNKNOWN, CAPI);
     float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
 
@@ -1699,6 +1714,7 @@ void setupFloat() {
 
     float_cls->tp_str = float_str;
     float_cls->tp_as_number->nb_power = float_pow;
+    float_cls->tp_new = (newfunc)floatNewPacked;
 }
 
 void teardownFloat() {

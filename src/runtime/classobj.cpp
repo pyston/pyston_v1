@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -293,6 +293,11 @@ static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     assert(_value);
 
     _classobjSetattr(_cls, _attr, _value);
+    return None;
+}
+
+static Box* classobjDelattr(Box* _cls, Box* _attr) {
+    _classobjSetattr(_cls, _attr, NULL);
     return None;
 }
 
@@ -1615,6 +1620,12 @@ extern "C" PyObject* PyClass_New(PyObject* bases, PyObject* dict, PyObject* name
     }
 }
 
+extern "C" PyObject* PyClass_Name(PyObject* _classobj) noexcept {
+    RELEASE_ASSERT(PyClass_Check(_classobj), "");
+    BoxedClassobj* classobj = (BoxedClassobj*)_classobj;
+    return classobj->name;
+}
+
 extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klass) noexcept {
     try {
         return new BoxedInstanceMethod(self, func, klass);
@@ -1666,6 +1677,8 @@ void setupClassobj() {
                            new BoxedFunction(FunctionMetadata::create((void*)classobjGetattribute, UNKNOWN, 2)));
     classobj_cls->giveAttr("__setattr__",
                            new BoxedFunction(FunctionMetadata::create((void*)classobjSetattr, UNKNOWN, 3)));
+    classobj_cls->giveAttr("__delattr__",
+                           new BoxedFunction(FunctionMetadata::create((void*)classobjDelattr, UNKNOWN, 2)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)classobjStr, STR, 1)));
     classobj_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)classobjRepr, STR, 1)));
     classobj_cls->giveAttr("__dict__", dict_descr);

@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2957,8 +2957,7 @@ public:
             phi_node = emitter.getBuilder()->CreatePHI(g.llvm_aststmt_type_ptr, 0);
 
             emitter.emitSetCurrentStmt(current_stmt);
-            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException,
-                                             { phi_node, embedRelocatablePtr(irstate->getSourceInfo(), g.i8_ptr) });
+            emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException);
 
             if (!final_dest) {
                 // Propagate the exception out of the function:
@@ -3059,6 +3058,7 @@ public:
             // just not created an Invoke and let the exception machinery propagate it for us.
             assert(irstate->getExceptionStyle() == CAPI);
             builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         }
 

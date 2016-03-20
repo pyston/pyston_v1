@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include "Python.h"
 
 #include "analysis/scoping_analysis.h"
+#include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/types.h"
@@ -197,8 +198,8 @@ public:
     ~CFGVisitor() {
         // if we're being destroyed due to an exception, our internal invariants may be violated, but that's okay; the
         // CFG isn't going to get used anyway. (Maybe we should check that it won't be used somehow?)
-        assert(continuations.size() == 0 || std::uncaught_exception());
-        assert(exc_handlers.size() == 0 || std::uncaught_exception());
+        assert(continuations.size() == 0 || isUnwinding());
+        assert(exc_handlers.size() == 0 || isUnwinding());
     }
 
     // ---------- private methods ----------

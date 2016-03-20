@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,17 +39,18 @@ static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 // long foo(char* c);
 // void bjit() {
 //   asm volatile ("" ::: "r14");
-//   asm volatile ("" ::: "r12");
+//   asm volatile ("" ::: "r13");
 //   char scratch[256+16];
 //   foo(scratch);
 // }
 //
-// It omits the frame pointer but saves R12 and R14
+// It omits the frame pointer but saves r13 and r14
+// use 'objdump -s -j .eh_frame <obj.file>' to dump it
 const unsigned char eh_info[]
     = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10,
         0x01, 0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x42,
-        0x0e, 0x18, 0x47, 0x0e, 0xb0, 0x02, 0x8c, 0x03, 0x8e, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        0x0e, 0x18, 0x47, 0x0e, 0xb0, 0x02, 0x8d, 0x03, 0x8e, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
 static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
@@ -70,10 +71,10 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
 
     // emit prolog
     a.push(assembler::R14);
-    a.push(assembler::R12);
+    a.push(assembler::R13);
     static_assert(sp_adjustment % 16 == 8, "stack isn't aligned");
     a.sub(assembler::Immediate(sp_adjustment), assembler::RSP);
-    a.mov(assembler::RDI, assembler::R12);                                // interpreter pointer
+    a.mov(assembler::RDI, assembler::R13);                                // interpreter pointer
     a.mov(assembler::RDX, assembler::R14);                                // vreg array
     a.jmp(assembler::Indirect(assembler::RSI, offsetof(CFGBlock, code))); // jump to block
 
@@ -145,7 +146,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       interp(0),
       ic_info(std::move(ic_info)) {
     interp = createNewVar();
-    addLocationToVar(interp, assembler::R12);
+    addLocationToVar(interp, assembler::R13);
     interp->setAttr(ASTInterpreterJitInterface::getCurrentBlockOffset(), imm(block));
 
     vregs_array = createNewVar();
@@ -469,9 +470,7 @@ void JitFragmentWriter::emitJump(CFGBlock* b) {
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
-    RewriterVar* node_var = imm(node);
-    RewriterVar* result = createNewVar();
-    addAction([=]() { _emitOSRPoint(result, node_var); }, { result, node_var, getInterp() }, ActionType::NORMAL);
+    addAction([=]() { _emitOSRPoint(); }, { getInterp() }, ActionType::NORMAL);
 }
 
 void JitFragmentWriter::emitPendingCallsCheck() {
@@ -808,7 +807,7 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
         int num_bytes = assembler->bytesWritten();
         block_next->getInReg(assembler::RAX, true);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
-        assembler->pop(assembler::R12);
+        assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
         assembler->retq();
 
@@ -822,24 +821,30 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, int& siz
     block_next->bumpUse();
 }
 
-void JitFragmentWriter::_emitOSRPoint(RewriterVar* result, RewriterVar* node_var) {
-    RewriterVar::SmallVector args;
-    args.push_back(getInterp());
-    args.push_back(node_var);
-    _call(result, false, (void*)ASTInterpreterJitInterface::doOSRHelper, args, RewriterVar::SmallVector());
-    auto result_reg = result->getInReg(assembler::RDX);
-    result->bumpUse();
-
-    assembler->test(result_reg, result_reg);
+void JitFragmentWriter::_emitOSRPoint() {
+    // We can't directly do OSR from the bjit frame because it will cause issues with exception handling.
+    // Reason is that the bjit and the OSRed code share the same python frame and the way invokes are implemented in the
+    // bjit. During unwinding we will see the OSR frame and will remove it and continue to unwind but the try catch
+    // block inside ASTInterpreter::execJITedBlock will rethrow the exception which causes another frame deinit,
+    // which is wrong because it already got removed.
+    // Instead we return back to the interpreter loop with special value (osr_dummy_value) which will trigger the OSR.
+    // this generates code for:
+    // if (++interpreter.edgecount < OSR_THRESHOLD_BASELINE)
+    //     return std::make_pair((CFGBlock*)0, ASTInterpreterJitInterface::osr_dummy_value);
+    assembler::Register interp_reg = getInterp()->getInReg(); // will always be r13
+    assembler::Indirect edgecount = assembler::Indirect(interp_reg, ASTInterpreterJitInterface::getEdgeCountOffset());
+    assembler->incl(edgecount);                                               // 32bit inc
+    assembler->cmpl(edgecount, assembler::Immediate(OSR_THRESHOLD_BASELINE)); // 32bit cmp
     {
-        assembler::ForwardJump je(*assembler, assembler::COND_EQUAL);
-        assembler->clear_reg(assembler::RAX);
+        assembler::ForwardJump jl(*assembler, assembler::COND_BELOW);
+        assembler->clear_reg(assembler::RAX); // = next block to execute
+        assembler->mov(assembler::Immediate(ASTInterpreterJitInterface::osr_dummy_value), assembler::RDX);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
-        assembler->pop(assembler::R12);
+        assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
         assembler->retq();
     }
-
+    interp->bumpUse();
     assertConsistent();
 }
 
@@ -929,7 +934,7 @@ void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
     assembler->clear_reg(assembler::RAX);
     assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
-    assembler->pop(assembler::R12);
+    assembler->pop(assembler::R13);
     assembler->pop(assembler::R14);
     assembler->retq();
     return_val->bumpUse();

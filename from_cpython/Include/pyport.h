@@ -16,13 +16,6 @@
 #define PYSTON_NOEXCEPT
 #endif
 
-// HACK: we should set this manually rather than cluing off of the C++ version
-#ifdef __cplusplus
-#if __cplusplus > 199711L
-#define _PYSTON_API
-#endif
-#endif
-
 #define Py_PROTO(x) x
 
 // Pyston change: these are just hard-coded for now:

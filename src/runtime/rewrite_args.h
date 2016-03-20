@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 #define PYSTON_RUNTIME_REWRITEARGS_H
 
 #include "asm_writing/rewriter.h"
+#include "codegen/unwinding.h"
 
 namespace pyston {
 
@@ -48,6 +49,7 @@ enum class ReturnConvention {
     NO_RETURN,
     CAPI_RETURN,
     NOEXC_POSSIBLE,
+    MAYBE_EXC,
 };
 
 class _ReturnConventionBase {
@@ -73,7 +75,7 @@ public:
 
 #ifndef NDEBUG
     ~_ReturnConventionBase() {
-        if (out_success && !std::uncaught_exception())
+        if (out_success && !isUnwinding())
             assert(return_convention_checked && "Didn't check the return convention of this rewrite...");
     }
 #endif
@@ -98,6 +100,8 @@ public:
                     assert(!PyErr_Occurred());
                 } else if (r == ReturnConvention::CAPI_RETURN) {
                     assert((bool)b ^ (bool)PyErr_Occurred());
+                } else if (r == ReturnConvention::MAYBE_EXC) {
+                    assert(b);
                 } else {
                     assert(r == ReturnConvention::NOEXC_POSSIBLE);
                 }

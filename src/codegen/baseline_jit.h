@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ class JitFragmentWriter;
 // register or stack slot but we aren't if it outlives the block - we have to store it in the interpreter instance.
 //
 // We use the following callee-save regs to speed up the generated code:
-//      r12: pointer to ASTInterpreter instance
+//      r13: pointer to ASTInterpreter instance
 //      r14: pointer to the vregs array
 //
 // To execute a specific CFGBlock one has to call:
@@ -91,10 +91,10 @@ class JitFragmentWriter;
 // Basic layout of generated code block is:
 // entry_code:
 //      push   %r14                 ; save r14
-//      push   %r12                 ; save r12
+//      push   %r13                 ; save r13
 //      sub    $0x118,%rsp          ; setup scratch, 0x118 = scratch_size + 16 = space for two func args passed on the
 //                                                                               stack + 8 byte for stack alignment
-//      mov    %rdi,%r12            ; copy the pointer to ASTInterpreter instance into r12
+//      mov    %rdi,%r13            ; copy the pointer to ASTInterpreter instance into r13
 //      mov    %rdx,%r14            ; copy the pointer to the vregs array into r14
 //      jmpq   *0x8(%rsi)           ; jump to block->code
 //                                      possible values: first_JitFragment, second_JitFragment,...
@@ -107,7 +107,7 @@ class JitFragmentWriter;
 //      jne    end_side_exit
 //      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
 //      add    $0x118,%rsp          ; restore stack pointer
-//      pop    %r12                 ; restore r12
+//      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
 //      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
@@ -120,7 +120,7 @@ class JitFragmentWriter;
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
 //      add    $0x118,%rsp          ; restore stack pointer
-//      pop    %r12                 ; restore r12
+//      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
 //      ret
 //
@@ -294,7 +294,7 @@ private:
 
     void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
-    void _emitOSRPoint(RewriterVar* result, RewriterVar* node_var);
+    void _emitOSRPoint();
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                      int slot_size, AST* ast_node);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);

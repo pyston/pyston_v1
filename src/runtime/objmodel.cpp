@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Dropbox, Inc.
+// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1470,7 +1470,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             if (!crewrite_args.out_success) {
                 rewrite_args = NULL;
             } else {
-                rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::HAS_RETURN);
+                rewrite_args->setReturn(crewrite_args.out_rtn, ReturnConvention::MAYBE_EXC);
             }
             return rtn;
         }
@@ -1498,6 +1498,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             rewrite_args = NULL;
         }
 
+        Box* rtn = getset_descr->get(obj, getset_descr->closure);
+
         if (rewrite_args) {
             // hmm, maybe we should write assembly which can look up the function address and call any function
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
@@ -1507,10 +1509,9 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 /* has_side_effects */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
 
             rewrite_args->setReturn(r_rtn, descr->cls == capi_getset_cls ? ReturnConvention::CAPI_RETURN
-                                                                         : ReturnConvention::HAS_RETURN);
+                                                                         : ReturnConvention::MAYBE_EXC);
         }
-
-        return getset_descr->get(obj, getset_descr->closure);
+        return rtn;
     }
 
     return NULL;
@@ -1693,7 +1694,12 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
         gotten = getclsattrInternal<REWRITABLE>(obj, attr, &rewrite_args);
 
         if (rewrite_args.isSuccessful() && gotten) {
-            RewriterVar* r_rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+            RewriterVar* r_rtn;
+            ReturnConvention return_convention;
+            std::tie(r_rtn, return_convention) = rewrite_args.getReturn();
+
+            assert(return_convention == ReturnConvention::HAS_RETURN
+                   || return_convention == ReturnConvention::MAYBE_EXC);
             rewriter->commitReturning(r_rtn);
         }
 #endif
@@ -2639,7 +2645,7 @@ extern "C" bool nonzero(Box* obj) {
             }
             ASSERT(obj->cls->is_user_defined || obj->cls->instances_are_nonzero || obj->cls == classobj_cls
                        || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == &PyFile_Type
-                       || obj->cls == traceback_cls || obj->cls == instancemethod_cls || obj->cls == module_cls
+                       || obj->cls == &PyTraceBack_Type || obj->cls == instancemethod_cls || obj->cls == module_cls
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
                        || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
                        || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls
@@ -4468,121 +4474,112 @@ extern "C" Box* runtimeCallCapi(Box* obj, ArgPassSpec argspec, Box* arg1, Box* a
 }
 
 template <Rewritable rewritable>
-Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {
+static Box* binopInternalHelper(BinopRewriteArgs*& rewrite_args, BoxedString* op_name, Box* lhs, Box* rhs,
+                                RewriterVar* r_lhs, RewriterVar* r_rhs) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
-    }
-
-    // TODO handle the case of the rhs being a subclass of the lhs
-    // this could get really annoying because you can dynamically make one type a subclass
-    // of the other!
-
-    assert(gc::isValidGCObject(lhs));
-    assert(gc::isValidGCObject(rhs));
-
-    if (rewrite_args) {
-        // TODO probably don't need to guard on the lhs_cls since it
-        // will get checked no matter what, but the check that should be
-        // removed is probably the later one.
-        // ie we should have some way of specifying what we know about the values
-        // of objects and their attributes, and the attributes' attributes.
-        rewrite_args->lhs->addAttrGuard(offsetof(Box, cls), (intptr_t)lhs->cls);
-        rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
     }
 
     struct NotImplementedHelper {
         static void call(Box* r, bool was_notimplemented) { assert((r == NotImplemented) == was_notimplemented); }
     };
 
-    Box* irtn = NULL;
-    if (inplace) {
-        BoxedString* iop_name = getInplaceOpName(op_type);
-        if (rewrite_args) {
-            CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
-            srewrite_args.arg1 = rewrite_args->rhs;
-            srewrite_args.args_guarded = true;
-            irtn = callattrInternal1<CXX, REWRITABLE>(lhs, iop_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
-
-            if (!srewrite_args.isSuccessful()) {
-                rewrite_args = NULL;
-            } else if (irtn) {
-                rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
-// If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
-// or not based only on the types of the inputs.
-#ifndef NDEBUG
-                rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
-                                             rewrite_args->rewriter->loadConst(irtn == NotImplemented));
-#endif
-            } else {
-                srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
-            }
-        } else {
-            irtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, iop_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
-        }
-
-        if (irtn) {
-            if (irtn != NotImplemented) {
-                if (rewrite_args) {
-                    assert(rewrite_args->out_rtn);
-                    rewrite_args->out_success = true;
-                }
-                return irtn;
-            } else {
-                assert(!rewrite_args);
-            }
-        }
-    }
-
-    BoxedString* op_name = getOpName(op_type);
-    Box* lrtn;
+    Box* rtn = NULL;
     if (rewrite_args) {
-        CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
-        srewrite_args.arg1 = rewrite_args->rhs;
-        lrtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
+        CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, r_lhs, rewrite_args->destination);
+        srewrite_args.arg1 = r_rhs;
+        srewrite_args.args_guarded = true;
+        rtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
         if (!srewrite_args.isSuccessful()) {
             rewrite_args = NULL;
-        } else if (lrtn) {
+        } else if (rtn) {
             rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
 // If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
 // or not based only on the types of the inputs.
 #ifndef NDEBUG
             rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
-                                         rewrite_args->rewriter->loadConst(irtn == NotImplemented));
+                                         rewrite_args->rewriter->loadConst(rtn == NotImplemented));
 #endif
         } else {
             srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
-    } else {
-        lrtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
-    }
 
-
-    if (lrtn) {
-        if (lrtn != NotImplemented) {
-            if (rewrite_args) {
-                assert(rewrite_args->out_rtn);
+        if (rewrite_args && rtn) {
+            if (rtn != NotImplemented)
                 rewrite_args->out_success = true;
+            else {
+                // I think our guarding up to here is correct; the issue is we won't be able to complete
+                // the rewrite since we have more guards to do, but we already did some mutations.
+                rewrite_args->out_success = false;
+                rewrite_args = NULL;
+                REWRITE_ABORTED("");
             }
-            return lrtn;
         }
+        // we don't need to abort the rewrite when the attribute does not exist (rtn==null) because we only rewrite
+        // binops when both sides are not user defined types for which we assume that they will never change.
+    } else {
+        rtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
     }
 
-    // TODO patch these cases
-    // actually, I think our guarding up to here is correct; the issue is we won't be able to complete
-    // the rewrite since we have more guards to do, but we already did some mutations.
-    if (rewrite_args) {
-        assert(rewrite_args->out_success == false);
+    return rtn;
+}
+
+template <Rewritable rewritable>
+Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
         rewrite_args = NULL;
-        REWRITE_ABORTED("");
     }
 
-    BoxedString* rop_name = getReverseOpName(op_type);
-    Box* rrtn = callattrInternal1<CXX, REWRITABLE>(rhs, rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
-    if (rrtn != NULL && rrtn != NotImplemented)
-        return rrtn;
+    assert(gc::isValidGCObject(lhs));
+    assert(gc::isValidGCObject(rhs));
 
+    RewriterVar* r_lhs = NULL;
+    RewriterVar* r_rhs = NULL;
+    if (rewrite_args) {
+        r_lhs = rewrite_args->lhs;
+        r_rhs = rewrite_args->rhs;
+
+        RewriterVar* r_lhs_cls = r_lhs->getAttr(offsetof(Box, cls));
+        r_lhs_cls->addGuard((intptr_t)lhs->cls);
+        RewriterVar* r_rhs_cls = r_rhs->getAttr(offsetof(Box, cls));
+        r_rhs_cls->addGuard((intptr_t)rhs->cls);
+
+        r_lhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)lhs->cls->tp_mro);
+        r_rhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)rhs->cls->tp_mro);
+    }
+
+    Box* irtn = NULL;
+    if (inplace) {
+        BoxedString* iop_name = getInplaceOpName(op_type);
+        irtn = binopInternalHelper<rewritable>(rewrite_args, iop_name, lhs, rhs, r_lhs, r_rhs);
+        if (irtn && irtn != NotImplemented)
+            return irtn;
+    }
+
+    bool should_try_reverse = true;
+    Box* rrtn = NULL;
+    if (lhs->cls != rhs->cls && isSubclass(rhs->cls, lhs->cls)) {
+        should_try_reverse = false;
+        BoxedString* rop_name = getReverseOpName(op_type);
+        rrtn = binopInternalHelper<rewritable>(rewrite_args, rop_name, rhs, lhs, r_rhs, r_lhs);
+        if (rrtn && rrtn != NotImplemented)
+            return rrtn;
+    }
+
+    BoxedString* op_name = getOpName(op_type);
+    Box* lrtn = binopInternalHelper<rewritable>(rewrite_args, op_name, lhs, rhs, r_lhs, r_rhs);
+    if (lrtn && lrtn != NotImplemented)
+        return lrtn;
+
+    if (should_try_reverse) {
+        BoxedString* rop_name = getReverseOpName(op_type);
+        rrtn = binopInternalHelper<rewritable>(rewrite_args, rop_name, rhs, lhs, r_rhs, r_lhs);
+        if (rrtn && rrtn != NotImplemented)
+            return rrtn;
+    }
 
     llvm::StringRef op_sym = getOpSymbol(op_type);
     const char* op_sym_suffix = "";
@@ -4591,6 +4588,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     }
 
     if (VERBOSITY()) {
+        BoxedString* rop_name = getReverseOpName(op_type);
         if (inplace) {
             BoxedString* iop_name = getInplaceOpName(op_type);
             if (irtn)

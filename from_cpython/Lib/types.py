@@ -60,6 +60,7 @@ BuiltinFunctionType = type(len)
 # Pyston change:
 # BuiltinMethodType = type([].append)     # Same as BuiltinFunctionType
 BuiltinMethodType = type((1.0).hex)     # Same as BuiltinFunctionType
+BuiltinCAPIFunctionType = type(reload)  # Pyston change: added this type
 
 ModuleType = type(sys)
 FileType = file
