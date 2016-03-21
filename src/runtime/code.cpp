@@ -99,8 +99,6 @@ Box* BoxedCode::flags(Box* b, void*) {
 }
 
 int BoxedCode::traverse(Box* self, visitproc visit, void *arg) noexcept {
-    Py_FatalError("untested");
-
     BoxedCode* o = static_cast<BoxedCode*>(self);
     Py_VISIT(o->_filename);
     Py_VISIT(o->_name);
@@ -108,12 +106,14 @@ int BoxedCode::traverse(Box* self, visitproc visit, void *arg) noexcept {
 }
 
 void BoxedCode::dealloc(Box* b) noexcept {
-    Py_FatalError("untested");
-
     BoxedCode* o = static_cast<BoxedCode*>(b);
+
+    PyObject_GC_UnTrack(o);
+
     Py_XDECREF(o->_filename);
     Py_XDECREF(o->_name);
-    PyObject_DEL(o);
+
+    o->cls->tp_free(o);
 }
 
 FunctionMetadata* metadataFromCode(Box* code) {
