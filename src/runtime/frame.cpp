@@ -234,6 +234,26 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
     }
 }
 
+int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexcept {
+    Py_VISIT(frame_info->frame_obj);
+
+    if (frame_info->vregs) {
+        int num_user_visible_vregs = frame_info->md->calculateNumUserVisibleVRegs();
+        for (int i = 0; i < num_user_visible_vregs; i++) {
+            Py_VISIT(frame_info->vregs[i]);
+        }
+    }
+    Py_VISIT(frame_info->boxedLocals);
+
+    if (frame_info->exc.type) {
+        Py_VISIT(frame_info->exc.type);
+        Py_VISIT(frame_info->exc.value);
+        Py_VISIT(frame_info->exc.traceback);
+    }
+
+    return 0;
+}
+
 extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) {
     Box* old_type = frame_info->exc.type;
     Box* old_value = frame_info->exc.value;

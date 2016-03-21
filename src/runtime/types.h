@@ -1202,7 +1202,11 @@ public:
 
     struct Context* context, *returnContext;
     void* stack_begin;
-    FrameInfo* top_caller_frame_info;
+    FrameInfo* top_caller_frame_info; // The FrameInfo that called into this generator.
+
+    // For abandoned-generator collection -- WIP
+    FrameInfo* paused_frame_info; // The FrameInfo the generator was on when it called yield (or NULL if the generator
+                                  // hasn't started or has exited).
 
 #if STAT_TIMERS
     StatTimer* prev_stack;
@@ -1316,6 +1320,7 @@ Box* getFrame(FrameInfo* frame_info);
 Box* getFrame(int depth);
 void frameInvalidateBack(BoxedFrame* frame);
 extern "C" void deinitFrame(FrameInfo* frame_info);
+int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexcept;
 extern "C" void initFrame(FrameInfo* frame_info);
 extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb);
 

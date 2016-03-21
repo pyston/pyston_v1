@@ -347,8 +347,10 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 
     // reset current frame to the caller tops frame --> removes the frame the generator added
     cur_thread_state.frame_info = self->top_caller_frame_info;
+    obj->paused_frame_info = generator_frame_info;
     swapContext(&self->context, self->returnContext, 0);
     FrameInfo* top_new_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
+    obj->paused_frame_info = NULL;
 
     // the caller of the generator can change between yield statements that means we can't just restore the top of the
     // frame to the point before the yield instead we have to update it.
@@ -397,7 +399,8 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       exception(nullptr, nullptr, nullptr),
       context(nullptr),
       returnContext(nullptr),
-      top_caller_frame_info(nullptr)
+      top_caller_frame_info(nullptr),
+      paused_frame_info(nullptr)
 #if STAT_TIMERS
       ,
       prev_stack(NULL),
@@ -481,7 +484,13 @@ Box* generatorName(Box* _self, void* context) {
 }
 
 extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
-    Py_FatalError("unimplemented");
+    auto self = (BoxedGenerator*)gen;
+
+    // CPython has some optimizations for not needing to finalize generators that haven't exited, but
+    // which are guaranteed to not need any special cleanups.
+    // For now just say anything still in-progress needs finalizing.
+    return (bool)self->paused_frame_info;
+
 #if 0
     int i;
     PyFrameObject* f = gen->gi_frame;
@@ -503,6 +512,13 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 
 static void generator_dealloc(BoxedGenerator* self) noexcept {
     assert(isSubclass(self->cls, generator_cls));
+
+    // Hopefully this never happens:
+    assert(!self->running);
+
+    // I don't think this should get hit currently because we don't properly collect the cycle that this would
+    // represent:
+    ASSERT(!self->paused_frame_info, "Can't clean up a generator that is currently paused");
 
     PyObject_GC_UnTrack(self);
 
@@ -534,7 +550,35 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
 }
 
 static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) noexcept {
-    Py_FatalError("unimplemented");
+    assert(isSubclass(self->cls, generator_cls));
+
+    if (self->paused_frame_info) {
+        int r = frameinfo_traverse(self->paused_frame_info, visit, arg);
+        if (r)
+            return r;
+    }
+
+    int numArgs = self->function->md->numReceivedArgs();
+    if (numArgs > 3) {
+        numArgs -= 3;
+        for (int i= 0; i < numArgs; i++) {
+            Py_VISIT(self->args->elts[i]);
+        }
+    }
+
+    Py_VISIT(self->arg1);
+    Py_VISIT(self->arg2);
+    Py_VISIT(self->arg3);
+
+    Py_VISIT(self->function);
+
+    Py_VISIT(self->returnValue);
+
+    Py_VISIT(self->exception.type);
+    Py_VISIT(self->exception.value);
+    Py_VISIT(self->exception.traceback);
+
+    return 0;
 }
 
 void setupGenerator() {
