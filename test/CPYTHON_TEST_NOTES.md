@@ -17,7 +17,6 @@ The CPython tests I've included fail for various reasons. Recurring issues inclu
 ```
 FILE                    REASONS
 ------------------------------------------------------
-test_abc                [unknown]
 test_aepack             No module named aetypes
 test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
@@ -56,7 +55,6 @@ test_codeop             [unknown]
 test_code               [unknown]
 test_coding             works when run from inside the from_cpython dir
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
-test_collections        assertion failed when doing vars(collections.namedtuple('Point', 'x y')(11, 12))
 test_compileall         [unknown]
 test_compiler           [unknown]
 test_compile            [unknown]
@@ -201,7 +199,7 @@ test_uuid               segfault in ctypes (but only on CI)
 test_wait3              [unknown]
 test_wait4              [unknown]
 test_warnings           [unknown]
-test_weakref            weird function-picking bug (something around float.__add__)
+test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
 test_weakset            unknown issues
 test_winreg             [unknown]
 test_winsound           [unknown]

@@ -2693,6 +2693,59 @@ static int object_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
     return err;
 }
 
+static int type_set_abstractmethods(PyTypeObject* type, PyObject* value, void* context) noexcept {
+    /* __abstractmethods__ should only be set once on a type, in
+       abc.ABCMeta.__new__, so this function doesn't do anything
+       special to update subclasses.
+    */
+    int abstract, res;
+    if (value != NULL) {
+        abstract = PyObject_IsTrue(value);
+        if (abstract < 0)
+            return -1;
+        res = PyDict_SetItemString(type->tp_dict, "__abstractmethods__", value);
+    } else {
+        abstract = 0;
+        res = PyDict_DelItemString(type->tp_dict, "__abstractmethods__");
+        if (res && PyErr_ExceptionMatches(PyExc_KeyError)) {
+            PyErr_SetString(PyExc_AttributeError, "__abstractmethods__");
+            return -1;
+        }
+    }
+    if (res == 0) {
+        PyType_Modified(type);
+        if (abstract)
+            type->tp_flags |= Py_TPFLAGS_IS_ABSTRACT;
+        else
+            type->tp_flags &= ~Py_TPFLAGS_IS_ABSTRACT;
+    }
+    return res;
+}
+
+static void typeSetAbstractMethods(Box* _type, PyObject* value, void* context) {
+    RELEASE_ASSERT(PyType_Check(_type), "");
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    if (type_set_abstractmethods(type, value, context) == -1)
+        throwCAPIException();
+}
+
+static Box* typeAbstractMethods(Box* _type, void*) {
+    RELEASE_ASSERT(PyType_Check(_type), "");
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    PyObject* mod = NULL;
+    /* type itself has an __abstractmethods__ descriptor (this). Don't return
+       that. */
+    if (type != &PyType_Type)
+        mod = PyDict_GetItemString(type->tp_dict, "__abstractmethods__");
+    // mod = type->getattr(internStringMortal("__abstractmethods__"));
+    if (!mod) {
+        raiseExcHelper(AttributeError, "__abstractmethods__");
+    }
+    return mod;
+}
+
 static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
     int err = 0;
     if (excess_args(args, kwds)) {
@@ -2707,9 +2760,45 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
         return NULL;
 
     if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
-        // I don't know what this is or when it happens, but
-        // CPython does something special with it
-        Py_FatalError("unimplemented");
+        static PyObject* comma = NULL;
+        PyObject* abstract_methods = NULL;
+        PyObject* builtins;
+        PyObject* sorted;
+        PyObject* sorted_methods = NULL;
+        PyObject* joined = NULL;
+        const char* joined_str;
+
+        /* Compute ", ".join(sorted(type.__abstractmethods__))
+           into joined. */
+        abstract_methods = typeAbstractMethods(type, NULL);
+        if (abstract_methods == NULL)
+            goto error;
+        builtins = PyEval_GetBuiltins();
+        if (builtins == NULL)
+            goto error;
+        sorted = builtins->getattr(internStringMortal("sorted"));
+        if (sorted == NULL)
+            goto error;
+        sorted_methods = PyObject_CallFunctionObjArgs(sorted, abstract_methods, NULL);
+        if (sorted_methods == NULL)
+            goto error;
+        if (comma == NULL) {
+            comma = PyString_InternFromString(", ");
+            if (comma == NULL)
+                goto error;
+        }
+        joined = PyObject_CallMethod(comma, "join", "O", sorted_methods);
+        if (joined == NULL)
+            goto error;
+        joined_str = PyString_AsString(joined);
+        if (joined_str == NULL)
+            goto error;
+
+        PyErr_Format(PyExc_TypeError, "Can't instantiate abstract class %s "
+                                      "with abstract methods %s",
+                     type->tp_name, joined_str);
+    error:
+        return NULL;
     }
     return type->tp_alloc(type, 0);
 }
@@ -4142,6 +4231,8 @@ void setupRuntime() {
 
     type_cls->giveAttrDescriptor("__name__", typeName, typeSetName);
     type_cls->giveAttrDescriptor("__bases__", typeBases, typeSetBases);
+    type_cls->giveAttrDescriptor("__abstractmethods__", typeAbstractMethods, typeSetAbstractMethods);
+
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr(

@@ -1,10 +1,3 @@
-# expected: fail
-
-# The paste test suite uses pytest, so this test file incentally also tests pytest.
-# Pytest relies quite heavily on a number of code introspection features, which
-# we currently don't have. This includes:
-# 1) The ast module
-# 2) traceback.tb_frame, traceback.tb_next
 import os, sys, subprocess
 sys.path.append(os.path.dirname(__file__) + "/../lib")
 
@@ -13,14 +6,16 @@ from test_helper import create_virtenv, run_test
 ENV_NAME = "paste_test_env_" + os.path.basename(sys.executable)
 PYTHON_EXE = os.path.abspath(os.path.join(ENV_NAME, "bin", "python"))
 PYTEST_EXE = os.path.abspath(os.path.join(ENV_NAME, "bin", "py.test"))
-PASTE_DIR = os.path.abspath(os.path.join(ENV_NAME, "paste"))
-PASTE_TEST_DIR = os.path.abspath(os.path.join(PASTE_DIR, "tests"))
 
-packages = ["pytest", "paste", "nose==1.3.7"]
+packages = ["py==1.4.31", "pytest==2.8.7", "nose==1.3.7"]
 create_virtenv(ENV_NAME, packages, force_create = True)
 
 # Need the test files in the source
-subprocess.check_call(["hg", "clone", "https://bitbucket.org/ianb/paste"], cwd=ENV_NAME)
+url = "https://pypi.python.org/packages/source/P/Paste/Paste-1.7.5.tar.gz"
+subprocess.check_call(["wget", url], cwd=ENV_NAME)
+subprocess.check_call(["tar", "-zxf", "Paste-1.7.5.tar.gz"], cwd=ENV_NAME)
+PASTE_DIR = os.path.abspath(os.path.join(ENV_NAME, "Paste-1.7.5"))
+PASTE_TEST_DIR = os.path.abspath(os.path.join(PASTE_DIR, "tests"))
 
 print ">> "
 print ">> Setting up paste..."
@@ -28,6 +23,21 @@ print ">> "
 subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=PASTE_DIR)
 
 print ">> "
+print ">> Installing paste..."
+print ">> "
+subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=PASTE_DIR)
+
+print ">> "
 print ">> Running paste tests..."
 print ">> "
-subprocess.check_call([PYTEST_EXE], cwd=PASTE_TEST_DIR)
+# current cpython also does not pass all tests. (9 failed, 127 passed)
+# the additional test we fail are because:
+# - we have str.__iter__
+# - no sys.settrace 
+# - no shiftjis encoding
+# - slightly different error messages
+expected = [{"failed" : 22, "passed" : 113}]
+run_test([PYTEST_EXE], cwd=PASTE_TEST_DIR, expected=expected)
+
+
+
