@@ -2591,7 +2591,7 @@ void setupBuiltins() {
     };
     for (auto& md : builtin_methods) {
         builtins_module->giveAttr(md.ml_name,
-                                  new BoxedCApiFunction(&md, builtins_module, autoDecref(boxString("__builtin__"))));
+                                  new BoxedCApiFunction(&md, NULL, autoDecref(boxString("__builtin__"))));
     }
 }
 }

@@ -48,25 +48,24 @@ Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
-    return BoxedTuple::create({ exc->type, exc->value, exc->traceback });
+    Box* tb = exc->traceback ? exc->traceback : None;
+    return BoxedTuple::create({ exc->type, exc->value, tb });
 }
 
 Box* sysExcClear() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
 
     Box* old_type = exc->type;
     Box* old_value = exc->value;
     Box* old_traceback = exc->traceback;
     exc->type = incref(None);
     exc->value = incref(None);
-    exc->traceback = incref(None);
+    exc->traceback = NULL;
     Py_DECREF(old_type);
     Py_DECREF(old_value);
-    Py_DECREF(old_traceback);
+    Py_XDECREF(old_traceback);
 
     Py_RETURN_NONE;
 }
@@ -74,9 +73,6 @@ Box* sysExcClear() {
 static Box* sysExit(Box* arg) {
     assert(arg);
     Box* exc = runtimeCall(SystemExit, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
-    // TODO this should be handled by the SystemExit constructor
-    exc->giveAttrBorrowed("code", arg);
-
     raiseExc(exc);
 }
 
@@ -774,7 +770,7 @@ void setupSys() {
 
     auto sys_str = getStaticString("sys");
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, sys_module, sys_str));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, sys_str));
     }
 
     sys_module->giveAttrBorrowed("__displayhook__", sys_module->getattr(autoDecref(internStringMortal("displayhook"))));

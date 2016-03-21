@@ -10,7 +10,7 @@ def test(cls):
 
 def testall(module):
     for n in sorted(dir((module))):
-        if n in ("reversed", "AttrwrapperType", "BuiltinMethodType", "BufferType", "DictProxyType"):
+        if n in ("reversed", "AttrwrapperType", "BuiltinMethodType", "BufferType", "DictProxyType", "BuiltinCAPIFunctionType"):
             continue
 
         cls = getattr(module, n)

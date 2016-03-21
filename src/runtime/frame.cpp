@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include "Python.h"
+
+#include "frameobject.h"
 #include "pythread.h"
 
 #include "codegen/unwinding.h"
@@ -34,9 +36,7 @@ class BoxedFrame : public Box {
 private:
     // Call boxFrame to get a BoxedFrame object.
     BoxedFrame(FrameInfo* frame_info) __attribute__((visibility("default")))
-    : frame_info(frame_info), _back(NULL), _code(NULL), _globals(NULL), _locals(NULL), _stmt(NULL) {
-        assert(frame_info);
-    }
+    : frame_info(frame_info), _back(NULL), _code(NULL), _globals(NULL), _locals(NULL), _linenumber(-1) {}
 
 public:
     FrameInfo* frame_info;
@@ -46,7 +46,7 @@ public:
     Box* _globals;
     Box* _locals;
 
-    AST_stmt* _stmt;
+    int _linenumber;
 
 
     bool hasExited() const { return frame_info == NULL; }
@@ -129,7 +129,7 @@ public:
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (f->hasExited())
-            return boxInt(f->_stmt->lineno);
+            return boxInt(f->_linenumber);
 
         AST_stmt* stmt = f->frame_info->stmt;
         return boxInt(stmt->lineno);
@@ -145,7 +145,7 @@ public:
         autoDecref(globals(this, NULL));
         assert(!_locals);
         _locals = locals(this, NULL);
-        _stmt = frame_info->stmt;
+        _linenumber = frame_info->stmt->lineno;
 
         frame_info = NULL; // this means exited == true
         assert(hasExited());
@@ -183,6 +183,16 @@ public:
         Py_CLEAR(o->_globals);
         Py_CLEAR(o->_locals);
         return 0;
+    }
+
+    static Box* boxFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
+        BoxedFrame* frame = new BoxedFrame(NULL);
+        frame->_back = back;
+        frame->_code = (Box*)code;
+        frame->_globals = globals;
+        frame->_locals = locals;
+        frame->_linenumber = -1;
+        return frame;
     }
 };
 
@@ -273,6 +283,23 @@ extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN
 extern "C" int PyFrame_GetLineNumber(PyFrameObject* _f) noexcept {
     BoxedInt* lineno = (BoxedInt*)BoxedFrame::lineno((Box*)_f, NULL);
     return autoDecref(lineno)->n;
+}
+
+extern "C" void PyFrame_SetLineNumber(PyFrameObject* _f, int linenumber) noexcept {
+    BoxedFrame* f = (BoxedFrame*)_f;
+    RELEASE_ASSERT(f->hasExited(),
+                   "if this frame did not exit yet the line number may get overwriten, may be a problem?");
+    f->_linenumber = linenumber;
+}
+
+extern "C" PyFrameObject* PyFrame_New(PyThreadState* tstate, PyCodeObject* code, PyObject* globals,
+                                      PyObject* locals) noexcept {
+    RELEASE_ASSERT(tstate == &cur_thread_state, "");
+
+    RELEASE_ASSERT(PyCode_Check((Box*)code), "");
+    RELEASE_ASSERT(!globals || PyDict_Check(globals) || globals->cls == attrwrapper_cls, "%s", globals->cls->tp_name);
+    RELEASE_ASSERT(!locals || PyDict_Check(locals), "%s", locals->cls->tp_name);
+    return (PyFrameObject*)BoxedFrame::boxFrame(getFrame(0), (BoxedCode*)code, globals, locals);
 }
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {

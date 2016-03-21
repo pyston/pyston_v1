@@ -124,14 +124,9 @@ PyTraceBack_Here(PyFrameObject *frame)
 int
 PyTraceBack_Here_Tb(PyFrameObject *frame, PyTracebackObject** tb)
 {
-    PyObject* prev_tb = (PyObject*)*tb;
-    if (prev_tb == Py_None) {
-        Py_DECREF(prev_tb);
-        *tb = NULL;
-        prev_tb = NULL;
-    }
-    *tb = newtracebackobject(*tb, frame);
-    Py_XDECREF(prev_tb);
+    PyTracebackObject* oldtb = *tb;
+    *tb = newtracebackobject(oldtb, frame);
+    Py_XDECREF(oldtb);
     if (*tb == NULL)
         return -1;
     return 0;

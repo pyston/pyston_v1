@@ -1717,7 +1717,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     return bs;
 }
 
-static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
+static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) noexcept {
     BoxedString* a = static_cast<BoxedString*>(o);
     if (i < 0)
         i = 0;
@@ -1736,7 +1736,7 @@ static Box* str_slice(Box* o, Py_ssize_t i, Py_ssize_t j) {
 }
 
 // Analoguous to CPython's, used for sq_ slots.
-static Py_ssize_t str_length(Box* a) {
+static Py_ssize_t str_length(Box* a) noexcept {
     return Py_SIZE(a);
 }
 
@@ -2096,18 +2096,24 @@ Box* strSwapcase(BoxedString* self) {
     return rtn;
 }
 
-static inline int string_contains_shared(BoxedString* self, Box* elt) {
+template <ExceptionStyle S> static inline int stringContainsShared(BoxedString* self, Box* elt) noexcept(S == CAPI) {
     assert(PyString_Check(self));
 
     if (PyUnicode_Check(elt)) {
         int r = PyUnicode_Contains(self, elt);
-        if (r < 0)
+        if (r < 0 && S == CXX)
             throwCAPIException();
         return r;
     }
 
-    if (!PyString_Check(elt))
-        raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
+    if (!PyString_Check(elt)) {
+        if (S == CXX)
+            raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
+        else {
+            PyErr_Format(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
+            return -1;
+        }
+    }
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
@@ -2121,12 +2127,12 @@ static inline int string_contains_shared(BoxedString* self, Box* elt) {
 }
 
 // Analoguous to CPython's, used for sq_ slots.
-static int string_contains(PyObject* str_obj, PyObject* sub_obj) {
-    return string_contains_shared((BoxedString*)str_obj, sub_obj);
+static int string_contains(PyObject* str_obj, PyObject* sub_obj) noexcept {
+    return stringContainsShared<CAPI>((BoxedString*)str_obj, sub_obj);
 }
 
 Box* strContains(BoxedString* self, Box* elt) {
-    return boxBool(string_contains_shared(self, elt));
+    return boxBool(stringContainsShared<CXX>(self, elt));
 }
 
 // compares (a+a_pos, len) with (str)
@@ -2327,11 +2333,12 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     return result;
 }
 
-static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) {
+static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) noexcept {
     BoxedString* boxedString = (BoxedString*)self;
 
     if (i < 0 || i >= boxedString->size()) {
-        raiseExcHelper(IndexError, "string index out of range");
+        PyErr_SetString(PyExc_IndexError, "string index out of range");
+        return NULL;
     }
 
     char c = boxedString->s()[i];

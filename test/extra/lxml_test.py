@@ -16,7 +16,7 @@ def install_and_test_lxml():
     subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
 
     CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "Cython-0.22"))
-    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "integration", "Cython_0001-Pyston-change-we-don-t-support-custom-traceback-entr.patch"))
+    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "integration", "Cython-0.22.patch"))
     subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
     print "Applied Cython patch"
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)

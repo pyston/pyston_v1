@@ -717,9 +717,6 @@ void checkAndThrowCAPIException() {
         if (!value)
             value = incref(None);
 
-        if (!tb)
-            tb = incref(None);
-
         // This is similar to PyErr_NormalizeException:
         if (!isSubclass(value->cls, type)) {
             if (value->cls == tuple_cls) {
@@ -733,10 +730,10 @@ void checkAndThrowCAPIException() {
 
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
-        if (tb != None)
+        if (tb)
             throw ExcInfo(value->cls, value, tb);
         Py_DECREF(type);
-        Py_DECREF(tb);
+        Py_XDECREF(tb);
         raiseExc(value);
     }
 }
@@ -761,7 +758,7 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
     ExcInfo* exc = getFrameExcInfo();
     exc->type = type ? type : None;
     exc->value = value ? value : None;
-    exc->traceback = traceback ? traceback : None;
+    exc->traceback = traceback;
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
@@ -1647,7 +1644,10 @@ extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
 }
 
 extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
-    Py_FatalError("Unimplemented");
+    if (_PyThreadState_Current == NULL)
+        Py_FatalError("PyThreadState_Get: no current thread");
+
+    return _PyThreadState_Current;
 }
 
 extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {

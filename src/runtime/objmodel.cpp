@@ -965,7 +965,7 @@ BoxedDict** Box::getDictPtr() {
     return d_ptr;
 }
 
-void Box::setDict(BoxedDict* d) {
+void Box::setDict(STOLEN(BoxedDict*) d) {
     assert(0 && "check refcounting");
     assert(cls->instancesHaveDictAttrs());
 
@@ -6547,7 +6547,6 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
             Py_DECREF(s);
         }
     } else {
-        assert(0 && "check refcounting");
         Box* copy = PyDict_Copy(attr_dict);
         RELEASE_ASSERT(copy, "");
         made->setDictBacked(copy);

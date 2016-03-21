@@ -1344,23 +1344,8 @@ static Box* typeSubDict(Box* obj, void* context) {
     abort();
 }
 
-void Box::setDictBacked(STOLEN(Box*) val) {
-    assert(0 && "check refcounting");
-    assert(this->cls->instancesHaveHCAttrs());
-
-    RELEASE_ASSERT(val->cls == dict_cls || val->cls == attrwrapper_cls, "");
-
-    auto new_attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
-    new_attr_list->attrs[0] = val;
-
-    HCAttrs* hcattrs = this->getHCAttrsPtr();
-
-    hcattrs->hcls = HiddenClass::dict_backed;
-    hcattrs->attr_list = new_attr_list;
-}
-
-static void typeSubSetDict(Box* obj, Box* val, void* context) {
-    assert(0 && "check refcounting");
+static void typeSubSetDict(BORROWED(Box*) obj, BORROWED(Box*) val, void* context) {
+    Py_INCREF(val);
     if (obj->cls->instancesHaveDictAttrs()) {
         RELEASE_ASSERT(val->cls == dict_cls, "");
         obj->setDict(static_cast<BoxedDict*>(val));
@@ -1368,16 +1353,7 @@ static void typeSubSetDict(Box* obj, Box* val, void* context) {
     }
 
     if (obj->cls->instancesHaveHCAttrs()) {
-        RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "%s", val->cls->tp_name);
-
-        auto new_attr_list
-            = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
-        new_attr_list->attrs[0] = val;
-
-        HCAttrs* hcattrs = obj->getHCAttrsPtr();
-
-        hcattrs->hcls = HiddenClass::dict_backed;
-        hcattrs->attr_list = new_attr_list;
+        obj->setDictBacked(val);
         return;
     }
 
@@ -2144,35 +2120,45 @@ public:
 // or PyModule_GetDict to return real dicts.
 class AttrWrapper : public Box {
 private:
-    // TODO: need to merge this with marius's change.  this will need to become
-    // an owned reference.
-    BORROWED(Box*) b; // The parent object ('b') will keep the attrwrapper alive (forever)
+    // TODO: not sure if b should become owned (it would create a cycle)
+    // The fields are not not allowed to be set at the same time
+    BORROWED(Box* b);        // set when this attribute wrapper wraps a Box (default mode)
+    BoxedDict* private_dict; // set when the attribute wrapper does not wrap a Box anymore because the Box.__dict__
+                             // changed to another dict.
 
+    // This is useful when we assign non str_cls keys, because the attribute array only supports strs.
     void convertToDictBacked() {
-        assert(0 && "check refcounting");
-        HCAttrs* attrs = this->b->getHCAttrsPtr();
-        if (attrs->hcls->type == HiddenClass::DICT_BACKED)
+        if (isDictBacked())
             return;
 
-        BoxedDict* d = new BoxedDict();
+        HCAttrs* attrs = this->b->getHCAttrsPtr();
+        assert(attrs->hcls->type != HiddenClass::DICT_BACKED);
+        BoxedDict* d = (BoxedDict*)AttrWrapper::copy(this);
+        b->clearAttrs();
+        HCAttrs* hcattrs = b->getHCAttrsPtr();
+        auto new_attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
+        new_attr_list->attrs[0] = d;
 
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
-        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            d->d[p.first] = attrs->attr_list->attrs[p.second];
-        }
-
-        b->setDictBacked(d);
+        hcattrs->hcls = HiddenClass::dict_backed;
+        hcattrs->attr_list = new_attr_list;
     }
 
-    bool isDictBacked() { return b->getHCAttrsPtr()->hcls->type == HiddenClass::DICT_BACKED; }
+    bool isDictBacked() {
+        if (private_dict)
+            return private_dict;
+        return b->getHCAttrsPtr()->hcls->type == HiddenClass::DICT_BACKED;
+    }
 
     Box* getDictBacking() {
         assert(isDictBacked());
+        if (private_dict)
+            return private_dict;
         return b->getHCAttrsPtr()->attr_list->attrs[0];
     }
 
+
 public:
-    AttrWrapper(Box* b) : b(b) {
+    AttrWrapper(Box* b) : b(b), private_dict(NULL) {
         assert(b->cls->instancesHaveHCAttrs());
 
         // We currently don't support creating an attrwrapper around a dict-backed object,
@@ -2184,9 +2170,43 @@ public:
                || b->getHCAttrsPtr()->hcls->type == HiddenClass::SINGLETON);
     }
 
+    void convertToPrivateDict() {
+        RELEASE_ASSERT(!private_dict, "");
+        RELEASE_ASSERT(b, "");
+        private_dict = (BoxedDict*)AttrWrapper::copy(this);
+        assert(PyDict_CheckExact(private_dict));
+        b->clearAttrs();
+        b = NULL;
+    }
+
     DEFAULT_CLASS(attrwrapper_cls);
 
-    BORROWED(Box*) getUnderlying() { return b; }
+
+    BORROWED(Box*) getUnderlying() {
+        if (private_dict)
+            return private_dict;
+        return b;
+    }
+
+    static void dealloc(Box* b) noexcept {
+        if (_PyObject_GC_IS_TRACKED(b))
+            _PyObject_GC_UNTRACK(b);
+
+        AttrWrapper::tp_clear(b);
+        b->cls->tp_free(b);
+    }
+
+    static int traverse(PyObject* op, visitproc visit, void* arg) noexcept {
+        AttrWrapper* attr_wrapper = (AttrWrapper*)op;
+        Py_VISIT(attr_wrapper->private_dict);
+        return 0;
+    }
+
+    static int tp_clear(PyObject* op) noexcept {
+        AttrWrapper* attr_wrapper = (AttrWrapper*)op;
+        Py_CLEAR(attr_wrapper->private_dict);
+        return 0;
+    }
 
     static Box* setitem(Box* _self, Box* _key, Box* value) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
@@ -2259,7 +2279,14 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr<CXX>(_key);
+        if (_key->cls != str_cls)
+            self->convertToDictBacked();
+
+        if (self->isDictBacked()) {
+            static BoxedString* get_str = getStaticString("get");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), get_str, LookupScope::CLASS_ONLY, NULL,
+                                                         ArgPassSpec(2), _key, def, NULL, NULL, NULL);
+        }
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2276,9 +2303,14 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr<S>(_key);
-        if (S == CAPI && !_key)
-            return NULL;
+        if (_key->cls != str_cls)
+            self->convertToDictBacked();
+
+        if (self->isDictBacked()) {
+            static BoxedString* getitem_str = getStaticString("__getitem__");
+            return callattrInternal<S, NOT_REWRITABLE>(self->getDictBacking(), getitem_str, LookupScope::CLASS_ONLY,
+                                                       NULL, ArgPassSpec(1), _key, NULL, NULL, NULL, NULL);
+        }
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2301,7 +2333,14 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr<CXX>(_key);
+        if (_key->cls != str_cls)
+            self->convertToDictBacked();
+
+        if (self->isDictBacked()) {
+            static BoxedString* pop_str = getStaticString("pop");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), pop_str, LookupScope::CLASS_ONLY, NULL,
+                                                         ArgPassSpec(2), _key, default_, NULL, NULL, NULL);
+        }
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2323,7 +2362,14 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr<CXX>(_key);
+        if (_key->cls != str_cls)
+            self->convertToDictBacked();
+
+        if (self->isDictBacked()) {
+            static BoxedString* delitem_str = getStaticString("__delitem__");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), delitem_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(1), _key, NULL, NULL, NULL, NULL);
+        }
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2344,21 +2390,33 @@ public:
         std::string O("");
         llvm::raw_string_ostream os(O);
 
-        os << "attrwrapper({";
+        os << "attrwrapper(";
+        if (self->isDictBacked()) {
+            static BoxedString* repr_str = getStaticString("__repr__");
+            Box* dict_repr
+                = callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), repr_str, LookupScope::CLASS_ONLY, NULL,
+                                                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            RELEASE_ASSERT(PyString_CheckExact(dict_repr), "");
+            os << ((BoxedString*)dict_repr)->s();
+            Py_DECREF(dict_repr);
+        } else {
+            HCAttrs* attrs = self->b->getHCAttrsPtr();
+            os << "{";
+            RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
+            bool first = true;
+            for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
+                if (!first)
+                    os << ", ";
+                first = false;
 
-        HCAttrs* attrs = self->b->getHCAttrsPtr();
-        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
-        bool first = true;
-        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
-            if (!first)
-                os << ", ";
-            first = false;
-
-            BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first->s() << ": " << v->s();
-            Py_DECREF(v);
+                BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
+                os << p.first->s() << ": " << v->s();
+                Py_DECREF(v);
+            }
+            os << "}";
         }
-        os << "})";
+        os << ")";
+
         return boxString(os.str());
     }
 
@@ -2366,9 +2424,14 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        _key = coerceUnicodeToStr<S>(_key);
-        if (S == CAPI && !_key)
-            return NULL;
+        if (_key->cls != str_cls)
+            self->convertToDictBacked();
+
+        if (self->isDictBacked()) {
+            static BoxedString* contains_str = getStaticString("__contains__");
+            return callattrInternal<S, NOT_REWRITABLE>(self->getDictBacking(), contains_str, LookupScope::CLASS_ONLY,
+                                                       NULL, ArgPassSpec(1), _key, NULL, NULL, NULL, NULL);
+        }
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -2397,6 +2460,13 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        if (self->isDictBacked()) {
+            static BoxedString* keys_str = getStaticString("keys");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), keys_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        }
+
+
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
@@ -2411,6 +2481,12 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        if (self->isDictBacked()) {
+            static BoxedString* values_str = getStaticString("values");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), values_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        }
+
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
@@ -2424,6 +2500,12 @@ public:
     static Box* items(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        if (self->isDictBacked()) {
+            static BoxedString* items_str = getStaticString("items");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), items_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        }
 
         BoxedList* rtn = new BoxedList();
 
@@ -2455,6 +2537,12 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        if (self->isDictBacked()) {
+            static BoxedString* copy_str = getStaticString("copy");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), copy_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        }
+
         BoxedDict* rtn = new BoxedDict();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
@@ -2470,6 +2558,15 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        if (self->isDictBacked()) {
+            static BoxedString* clear_str = getStaticString("clear");
+            auto rtn = callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), clear_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            assert(rtn == None);
+            Py_DECREF(rtn);
+            return;
+        }
+
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
         attrs->clear();
@@ -2480,15 +2577,21 @@ public:
     }
 
     static Box* clear(Box* _self) {
-        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         _clear(_self);
-
         Py_RETURN_NONE;
     }
+
+
 
     static Box* len(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        if (self->isDictBacked()) {
+            static BoxedString* len_str = getStaticString("__len__");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), len_str, LookupScope::CLASS_ONLY, NULL,
+                                                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        }
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
@@ -2504,9 +2607,17 @@ public:
 
         RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
 
+        if (self->isDictBacked()) {
+            static BoxedString* update_str = getStaticString("update");
+            return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), update_str, LookupScope::CLASS_ONLY,
+                                                         NULL, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL,
+                                                         NULL);
+        }
+
         auto handle = [&](Box* _container) {
             if (_container->cls == attrwrapper_cls) {
                 AttrWrapper* container = static_cast<AttrWrapper*>(_container);
+                RELEASE_ASSERT(!container->isDictBacked(), "not implemented");
                 HCAttrs* attrs = container->b->getHCAttrsPtr();
 
                 RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON,
@@ -2564,6 +2675,7 @@ public:
 
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
         BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
+        AUTO_DECREF(dict);
         assert(dict->cls == dict_cls);
         static BoxedString* eq_str = getStaticString("__eq__");
         return callattrInternal<CXX, NOT_REWRITABLE>(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1),
@@ -2623,6 +2735,9 @@ Box* Box::getAttrWrapper() {
     HCAttrs* attrs = getHCAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
 
+    if (!hcls)
+        hcls = attrs->hcls = root_hcls;
+
     if (hcls->type == HiddenClass::DICT_BACKED) {
         return incref(attrs->attr_list->attrs[0]);
     }
@@ -2652,6 +2767,38 @@ extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {
 BORROWED(Box*) unwrapAttrWrapper(Box* b) {
     assert(b->cls == attrwrapper_cls);
     return static_cast<AttrWrapper*>(b)->getUnderlying();
+}
+
+
+void Box::setDictBacked(STOLEN(Box*) val) {
+    // this checks for: v.__dict__ = v.__dict__
+    if (val->cls == attrwrapper_cls && unwrapAttrWrapper(val) == this) {
+        Py_DECREF(val);
+        return;
+    }
+
+    assert(this->cls->instancesHaveHCAttrs());
+    HCAttrs* hcattrs = this->getHCAttrsPtr();
+    RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "");
+
+    // If there is an old attrwrapper it is not allowed to wrap the instance anymore instead it has to switch to a
+    // private dictonary.
+    // e.g.:
+    //     a = v.__dict__
+    //     v.__dict__ = {} # 'a' must switch now from wrapping 'v' to a the private dict.
+    int offset = hcattrs->hcls->type != HiddenClass::DICT_BACKED ? hcattrs->hcls->getAttrwrapperOffset() : -1;
+    if (offset != -1) {
+        AttrWrapper* wrapper = (AttrWrapper*)hcattrs->attr_list->attrs[offset];
+        RELEASE_ASSERT(wrapper->cls == attrwrapper_cls, "");
+        wrapper->convertToPrivateDict();
+    }
+
+    // assign the dict to the attribute list and switch to the dict backed strategy
+    auto new_attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
+    new_attr_list->attrs[0] = val;
+
+    hcattrs->hcls = HiddenClass::dict_backed;
+    hcattrs->attr_list = new_attr_list;
 }
 
 Box* attrwrapperKeys(Box* b) {
@@ -2693,6 +2840,59 @@ static int object_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
     return err;
 }
 
+static int type_set_abstractmethods(PyTypeObject* type, PyObject* value, void* context) noexcept {
+    /* __abstractmethods__ should only be set once on a type, in
+       abc.ABCMeta.__new__, so this function doesn't do anything
+       special to update subclasses.
+    */
+    int abstract, res;
+    if (value != NULL) {
+        abstract = PyObject_IsTrue(value);
+        if (abstract < 0)
+            return -1;
+        res = PyDict_SetItemString(type->tp_dict, "__abstractmethods__", value);
+    } else {
+        abstract = 0;
+        res = PyDict_DelItemString(type->tp_dict, "__abstractmethods__");
+        if (res && PyErr_ExceptionMatches(PyExc_KeyError)) {
+            PyErr_SetString(PyExc_AttributeError, "__abstractmethods__");
+            return -1;
+        }
+    }
+    if (res == 0) {
+        PyType_Modified(type);
+        if (abstract)
+            type->tp_flags |= Py_TPFLAGS_IS_ABSTRACT;
+        else
+            type->tp_flags &= ~Py_TPFLAGS_IS_ABSTRACT;
+    }
+    return res;
+}
+
+static void typeSetAbstractMethods(Box* _type, PyObject* value, void* context) {
+    RELEASE_ASSERT(PyType_Check(_type), "");
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    if (type_set_abstractmethods(type, value, context) == -1)
+        throwCAPIException();
+}
+
+static Box* typeAbstractMethods(Box* _type, void*) {
+    RELEASE_ASSERT(PyType_Check(_type), "");
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    PyObject* mod = NULL;
+    /* type itself has an __abstractmethods__ descriptor (this). Don't return
+       that. */
+    if (type != &PyType_Type)
+        mod = PyDict_GetItemString(type->tp_dict, "__abstractmethods__");
+    // mod = type->getattr(internStringMortal("__abstractmethods__"));
+    if (!mod) {
+        raiseExcHelper(AttributeError, "__abstractmethods__");
+    }
+    return mod;
+}
+
 static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
     int err = 0;
     if (excess_args(args, kwds)) {
@@ -2707,9 +2907,45 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
         return NULL;
 
     if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
-        // I don't know what this is or when it happens, but
-        // CPython does something special with it
-        Py_FatalError("unimplemented");
+        static PyObject* comma = NULL;
+        PyObject* abstract_methods = NULL;
+        PyObject* builtins;
+        PyObject* sorted;
+        PyObject* sorted_methods = NULL;
+        PyObject* joined = NULL;
+        const char* joined_str;
+
+        /* Compute ", ".join(sorted(type.__abstractmethods__))
+           into joined. */
+        abstract_methods = typeAbstractMethods(type, NULL);
+        if (abstract_methods == NULL)
+            goto error;
+        builtins = PyEval_GetBuiltins();
+        if (builtins == NULL)
+            goto error;
+        sorted = builtins->getattr(internStringMortal("sorted"));
+        if (sorted == NULL)
+            goto error;
+        sorted_methods = PyObject_CallFunctionObjArgs(sorted, abstract_methods, NULL);
+        if (sorted_methods == NULL)
+            goto error;
+        if (comma == NULL) {
+            comma = PyString_InternFromString(", ");
+            if (comma == NULL)
+                goto error;
+        }
+        joined = PyObject_CallMethod(comma, "join", "O", sorted_methods);
+        if (joined == NULL)
+            goto error;
+        joined_str = PyString_AsString(joined);
+        if (joined_str == NULL)
+            goto error;
+
+        PyErr_Format(PyExc_TypeError, "Can't instantiate abstract class %s "
+                                      "with abstract methods %s",
+                     type->tp_name, joined_str);
+    error:
+        return NULL;
     }
     return type->tp_alloc(type, 0);
 }
@@ -3943,7 +4179,8 @@ void setupRuntime() {
     pyston_getset_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor",
                                            false, BoxedGetsetDescriptor::dealloc, NULL, false);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", false, NULL, NULL, false);
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", false, AttrWrapper::dealloc, NULL,
+                   true, AttrWrapper::traverse, AttrWrapper::tp_clear);
     dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", true, BoxedDict::dealloc, NULL,
                                   true, BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
@@ -4142,6 +4379,8 @@ void setupRuntime() {
 
     type_cls->giveAttrDescriptor("__name__", typeName, typeSetName);
     type_cls->giveAttrDescriptor("__bases__", typeBases, typeSetBases);
+    type_cls->giveAttrDescriptor("__abstractmethods__", typeAbstractMethods, typeSetAbstractMethods);
+
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr(

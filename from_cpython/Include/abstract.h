@@ -1359,7 +1359,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 #define PyMapping_Items(O) PyObject_CallMethod(O,"items",NULL)
 
-     PyAPI_FUNC(PyObject *) PyMapping_GetItemString(PyObject *o, char *key) PYSTON_NOEXCEPT;
+     PyAPI_FUNC(PyObject *) PyMapping_GetItemString(PyObject *o, const char *key) PYSTON_NOEXCEPT;
 
        /*
      Return element of o corresponding to the object, key, or NULL
@@ -1367,7 +1367,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      o[key].
        */
 
-     PyAPI_FUNC(int) PyMapping_SetItemString(PyObject *o, char *key,
+     PyAPI_FUNC(int) PyMapping_SetItemString(PyObject *o, const char *key,
                                             PyObject *value) PYSTON_NOEXCEPT;
 
        /*

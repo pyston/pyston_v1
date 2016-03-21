@@ -703,7 +703,7 @@ ExcInfo* getFrameExcInfo() {
 
     if (!copy_from_exc->type) {
         // No exceptions found:
-        *copy_from_exc = ExcInfo(None, None, None);
+        *copy_from_exc = ExcInfo(None, None, NULL);
     }
 
     for (auto* ex : to_update) {
