@@ -2290,6 +2290,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
@@ -2314,6 +2315,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
@@ -2344,6 +2346,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
@@ -2373,6 +2376,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
@@ -2435,6 +2439,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
+        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
