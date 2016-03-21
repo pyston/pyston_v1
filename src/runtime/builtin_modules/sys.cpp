@@ -48,25 +48,24 @@ Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
-    return BoxedTuple::create({ exc->type, exc->value, exc->traceback });
+    Box* tb = exc->traceback ? exc->traceback : None;
+    return BoxedTuple::create({ exc->type, exc->value, tb });
 }
 
 Box* sysExcClear() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    assert(exc->traceback);
 
     Box* old_type = exc->type;
     Box* old_value = exc->value;
     Box* old_traceback = exc->traceback;
     exc->type = incref(None);
     exc->value = incref(None);
-    exc->traceback = incref(None);
+    exc->traceback = NULL;
     Py_DECREF(old_type);
     Py_DECREF(old_value);
-    Py_DECREF(old_traceback);
+    Py_XDECREF(old_traceback);
 
     Py_RETURN_NONE;
 }

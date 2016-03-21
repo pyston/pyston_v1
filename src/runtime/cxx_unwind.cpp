@@ -73,7 +73,7 @@ namespace pyston {
 
 void checkExcInfo(const ExcInfo* exc) {
     assert(exc);
-    assert(exc->type && exc->value && exc->traceback);
+    assert(exc->type && exc->value);
 }
 
 static StatCounter us_unwind_loop("us_unwind_loop");
