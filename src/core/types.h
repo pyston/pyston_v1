@@ -690,7 +690,7 @@ public:
     void setDictBacked(STOLEN(Box*) d);
     // For instances with dict attrs:
     BoxedDict* getDict();
-    void setDict(BoxedDict* d);
+    void setDict(STOLEN(BoxedDict*) d);
 
 
     // Note, setattr does *not* steal a reference, but it probably should
