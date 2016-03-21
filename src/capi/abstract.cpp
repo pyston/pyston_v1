@@ -730,15 +730,12 @@ extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, const char* name, c
             argspec = ArgPassSpec(1);
     } else
         argspec = ArgPassSpec(0);
+    AUTO_XDECREF(args);
 
-    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
-                                                                 argspec, args, NULL, NULL, NULL, NULL);
+    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, autoDecref(internStringMortal(name)), CLASS_OR_INST,
+                                                                 NULL, argspec, args, NULL, NULL, NULL, NULL);
     if (!tmp && !PyErr_Occurred())
         PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, name);
-
-
-    Py_DECREF(args);
-    Py_DECREF(o);
 
     return tmp;
 }
