@@ -962,7 +962,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
-
+    dict_cls->giveAttr("__hash__", incref(None));
     dict_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterKeys,
                                                                               typeFromClass(dictiterkey_cls), 1)));
 
