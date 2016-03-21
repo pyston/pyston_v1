@@ -1,4 +1,3 @@
-# expected: fail
 # PyOS_ascii_formatd is deprecated and not called from anywhere in
 #  Python itself. So this module is the only place it gets tested.
 # Test that it works, and test that it's deprecated.

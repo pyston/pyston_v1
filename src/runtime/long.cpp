@@ -107,14 +107,18 @@ extern "C" int _PyLong_AsInt(PyObject* obj) noexcept {
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* vv) noexcept {
     if (PyLong_Check(vv)) {
         BoxedLong* l = static_cast<BoxedLong*>(vv);
-        return mpz_get_ui(l->n);
+        auto v = mpz_get_ui(l->n);
+        if (mpz_sgn(l->n) == -1)
+            return -v;
+        return v;
     }
 
     Py_FatalError("unimplemented");
 }
 
 extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) noexcept {
-    Py_FatalError("unimplemented");
+    static_assert(sizeof(PY_LONG_LONG) == sizeof(unsigned long), "");
+    return PyLong_AsUnsignedLongMask(vv);
 }
 
 extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {

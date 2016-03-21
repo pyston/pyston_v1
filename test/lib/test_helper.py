@@ -37,15 +37,24 @@ def pip_install(name, package_list):
 def parse_output(output):
     result = []
     for l in output.split('\n'):
+        # nosetest
         m = re.match("Ran (\d+) tests in", l)
         if m:
             result.append({"ran": int(m.group(1))})
             continue
         for res_type in ("errors", "failures", "skipped"):
-	    m = re.match("FAILED \(.*%s=(\d+).*\)" % res_type, l)
-	    if m:
-	        result[-1][res_type] = int(m.group(1))
-	
+            m = re.match("FAILED \(.*%s=(\d+).*\)" % res_type, l)
+            if m:
+                result[-1][res_type] = int(m.group(1))
+
+        # py.test
+        m = re.match(".* in \d+[.]\d+ seconds [=]*", l)
+        if m:
+            result.append({})
+            for res_type in ("failed", "passed", "skipped", "xfailed", "error"):
+                m = re.match(".* (\d+) %s.*" % res_type, l)
+                if m:
+                    result[-1][res_type] = int(m.group(1))
     return result
 
 def run_test(cmd, cwd, expected, env = None):
