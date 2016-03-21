@@ -249,7 +249,7 @@ PyAPI_FUNC(void) _PyErr_BadInternalCall(const char *filename, int lineno) PYSTON
 
 /* Function to create a new exception */
 PyAPI_FUNC(PyObject *) PyErr_NewException(
-    char *name, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
+    const char *name, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_NewExceptionWithDoc(
     char *name, char *doc, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *) PYSTON_NOEXCEPT;

@@ -248,11 +248,7 @@ void setupThread() {
     thread_lock_cls->giveAttrBorrowed("locked_lock", thread_lock_cls->getattr(getStaticString("locked")));
     thread_lock_cls->freeze();
 
-    ThreadError = BoxedClass::create(type_cls, Exception, Exception->attrs_offset, Exception->tp_weaklistoffset,
-                                     Exception->tp_basicsize, false, "error", true, NULL, NULL, false);
-    ThreadError->giveAttr("__module__", boxString("thread"));
-    ThreadError->freeze();
-
+    ThreadError = (BoxedClass*)PyErr_NewException("thread.error", NULL, NULL);
     thread_module->giveAttrBorrowed("error", ThreadError);
 }
 }
