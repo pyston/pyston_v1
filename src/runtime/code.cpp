@@ -28,12 +28,18 @@ BoxedClass* code_cls;
 
 Box* BoxedCode::name(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-    return incref(static_cast<BoxedCode*>(b)->f->source->getName());
+    BoxedCode* code = static_cast<BoxedCode*>(b);
+    if (code->_name)
+        return incref(code->_name);
+    return incref(code->f->source->getName());
 }
 
 Box* BoxedCode::filename(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-    return incref(static_cast<BoxedCode*>(b)->f->source->getFn());
+    BoxedCode* code = static_cast<BoxedCode*>(b);
+    if (code->_filename)
+        return incref(code->_filename);
+    return incref(code->f->source->getFn());
 }
 
 Box* BoxedCode::firstlineno(Box* b, void*) {
@@ -41,11 +47,8 @@ Box* BoxedCode::firstlineno(Box* b, void*) {
     BoxedCode* code = static_cast<BoxedCode*>(b);
     FunctionMetadata* md = code->f;
 
-    if (!md->source) {
-        // I don't think it really matters what we return here;
-        // in CPython, builtin functions don't have code objects.
-        return boxInt(-1);
-    }
+    if (!md || !md->source)
+        return boxInt(code->_firstline);
 
     if (md->source->ast->lineno == (uint32_t)-1)
         return boxInt(-1);
@@ -55,7 +58,6 @@ Box* BoxedCode::firstlineno(Box* b, void*) {
 
 Box* BoxedCode::argcount(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-
     return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
 }
 
@@ -96,14 +98,91 @@ Box* BoxedCode::flags(Box* b, void*) {
     return boxInt(flags);
 }
 
+int BoxedCode::traverse(Box* self, visitproc visit, void *arg) noexcept {
+    Py_FatalError("untested");
+
+    BoxedCode* o = static_cast<BoxedCode*>(self);
+    Py_VISIT(o->_filename);
+    Py_VISIT(o->_name);
+    return 0;
+}
+
+void BoxedCode::dealloc(Box* b) noexcept {
+    Py_FatalError("untested");
+
+    BoxedCode* o = static_cast<BoxedCode*>(b);
+    Py_XDECREF(o->_filename);
+    Py_XDECREF(o->_name);
+    PyObject_DEL(o);
+}
+
 FunctionMetadata* metadataFromCode(Box* code) {
     assert(code->cls == code_cls);
     return static_cast<BoxedCode*>(code)->f;
 }
 
-extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, PyObject*, PyObject*, PyObject*,
-                                    PyObject*, PyObject*, PyObject*, int, PyObject*) noexcept {
-    RELEASE_ASSERT(0, "not implemented");
+extern "C" PyCodeObject* PyCode_New(int argcount, int nlocals, int stacksize, int flags, PyObject* code,
+                                    PyObject* consts, PyObject* names, PyObject* varnames, PyObject* freevars,
+                                    PyObject* cellvars, PyObject* filename, PyObject* name, int firstlineno,
+                                    PyObject* lnotab) noexcept {
+    // Check if this is a dummy code object like PyCode_NewEmpty generates.
+    // Because we currently support dummy ones only.
+    bool is_dummy = argcount == 0 && nlocals == 0 && stacksize == 0 && flags == 0;
+    is_dummy = is_dummy && code == EmptyString && lnotab == EmptyString;
+    for (auto&& var : { consts, names, varnames, freevars, cellvars })
+        is_dummy = is_dummy && var == EmptyTuple;
+    RELEASE_ASSERT(is_dummy, "not implemented");
+    // ok this is an empty/dummy code object
+
+    RELEASE_ASSERT(PyString_Check(filename), "");
+    RELEASE_ASSERT(PyString_Check(name), "");
+
+    return (PyCodeObject*)new BoxedCode(filename, name, firstlineno);
+}
+
+extern "C" PyCodeObject* PyCode_NewEmpty(const char* filename, const char* funcname, int firstlineno) noexcept {
+    static PyObject* emptystring = NULL;
+    static PyObject* nulltuple = NULL;
+    PyObject* filename_ob = NULL;
+    PyObject* funcname_ob = NULL;
+    PyCodeObject* result = NULL;
+    if (emptystring == NULL) {
+        emptystring = PyGC_RegisterStaticConstant(PyString_FromString(""));
+        if (emptystring == NULL)
+            goto failed;
+    }
+    if (nulltuple == NULL) {
+        nulltuple = PyGC_RegisterStaticConstant(PyTuple_New(0));
+        if (nulltuple == NULL)
+            goto failed;
+    }
+    funcname_ob = PyString_FromString(funcname);
+    if (funcname_ob == NULL)
+        goto failed;
+    filename_ob = PyString_FromString(filename);
+    if (filename_ob == NULL)
+        goto failed;
+
+    result = PyCode_New(0,           /* argcount */
+                        0,           /* nlocals */
+                        0,           /* stacksize */
+                        0,           /* flags */
+                        emptystring, /* code */
+                        nulltuple,   /* consts */
+                        nulltuple,   /* names */
+                        nulltuple,   /* varnames */
+                        nulltuple,   /* freevars */
+                        nulltuple,   /* cellvars */
+                        filename_ob, /* filename */
+                        funcname_ob, /* name */
+                        firstlineno, /* firstlineno */
+                        emptystring  /* lnotab */
+                        );
+
+failed:
+    Py_XDECREF(funcname_ob);
+    Py_XDECREF(filename_ob);
+    return result;
 }
 
 extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
@@ -122,7 +201,7 @@ extern "C" PyObject* PyCode_GetName(PyCodeObject* op) noexcept {
 
 void setupCode() {
     code_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", true, NULL, NULL, false);
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false, (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
 
     code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 
