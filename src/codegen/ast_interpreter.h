@@ -77,8 +77,9 @@ struct Value {
 Box* astInterpretFunction(FunctionMetadata* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
                           Box* arg3, Box** args);
 Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLocals);
-Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                       FrameStackState frame_state);
+// this function is implemented in the src/codegen/ast_interpreter_exec.S assembler file
+extern "C" Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                                  FrameStackState frame_state);
 
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);

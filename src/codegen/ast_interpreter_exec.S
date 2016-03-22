@@ -32,11 +32,36 @@ executeInnerAndSetupFrame:
     sub $16, %rsp
     mov %rdi, -8(%rbp)
     call executeInnerFromASM
-    leave
+    add $16, %rsp
+    pop %rbp
     .cfi_def_cfa            rsp,8
     ret
     .cfi_endproc
 .size executeInnerAndSetupFrame,.-executeInnerAndSetupFrame
+
+// This function is just a small wrapper around astInterpretDeoptFromASM.
+// Our unwinder must be able to detect deopt frames and by writting this wrapper in assembler we can be sure to correctly
+// detect the frame independent of compiler optimizations because this function will always appear in the call stack.
+//
+// Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+//                        FrameStackState frame_state);
+.text
+.globl astInterpretDeopt
+.type astInterpretDeopt,@function
+.align 16
+astInterpretDeopt:
+    .cfi_startproc
+    push %rbp
+    .cfi_def_cfa_offset     16
+    .cfi_offset             rbp,-16
+    mov %rsp, %rbp
+    .cfi_def_cfa_register   rbp
+    call astInterpretDeoptFromASM
+    pop %rbp
+    .cfi_def_cfa            rsp,8
+    ret
+    .cfi_endproc
+.size astInterpretDeopt,.-astInterpretDeopt
 
 .section .note.GNU-stack,"",%progbits // we don't need executable stack
 
