@@ -1,3 +1,4 @@
+# expected: reffail
 import copy
 class C(object):
     pass

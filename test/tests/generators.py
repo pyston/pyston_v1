@@ -1,3 +1,4 @@
+# expected: reffail
 def G1(i=0):
     while True:
         yield i

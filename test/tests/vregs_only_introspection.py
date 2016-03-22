@@ -1,3 +1,4 @@
+# expected: reffail
 import sys
 def f():
     # By the time of the f_locals call, x will only be alive because

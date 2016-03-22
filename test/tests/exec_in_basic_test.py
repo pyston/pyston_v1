@@ -1,3 +1,4 @@
+# expected: reffail
 d = {}
 exec "a = 5" in d
 print d['a']

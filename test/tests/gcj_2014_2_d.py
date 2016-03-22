@@ -1,3 +1,4 @@
+# expected: reffail
 import sys
 
 P = 1000000007

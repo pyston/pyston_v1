@@ -1,3 +1,4 @@
+# expected: reffail
 import pickle
 
 l = [[], (123,)]

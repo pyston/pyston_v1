@@ -1,3 +1,4 @@
+# expected: reffail
 print `42`
 print `int`
 print `2+3`

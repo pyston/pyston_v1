@@ -1,3 +1,4 @@
+# expected: reffail
 def wrapper(f):
     return f
 

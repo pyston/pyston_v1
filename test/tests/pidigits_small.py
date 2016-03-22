@@ -1,3 +1,4 @@
+# expected: reffail
 import time
 
 def pidigits(length):

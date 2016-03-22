@@ -1,3 +1,4 @@
+# expected: reffail
 # We could just have a file for each, but if we Do these in execs,
 # we don't need separate files for each, and that makes it easier
 # to just spam all the permutations.

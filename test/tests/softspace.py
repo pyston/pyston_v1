@@ -1,5 +1,3 @@
-# expected: fail
-
 import sys
 
 old_stdout = sys.stdout

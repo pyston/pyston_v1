@@ -1,3 +1,4 @@
+# expected: reffail
 import os.path
 
 print type(os)

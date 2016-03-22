@@ -1,3 +1,4 @@
+# expected: reffail
 def f4():
     a = 1
     b = 2

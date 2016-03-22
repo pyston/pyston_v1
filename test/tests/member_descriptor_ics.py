@@ -1,3 +1,4 @@
+# expected: reffail
 # run_args: -n
 # statcheck: noninit_count('slowpath_member_descriptor_get') <= 1500
 

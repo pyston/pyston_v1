@@ -1,3 +1,4 @@
+# expected: reffail
 import multiprocessing
 
 # from https://docs.python.org/2/library/multiprocessing.html

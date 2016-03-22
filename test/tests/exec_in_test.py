@@ -1,3 +1,4 @@
+# expected: reffail
 print 'Test getting'
 
 g = {'a': 1}

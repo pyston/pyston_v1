@@ -1,3 +1,4 @@
+# expected: reffail
 try:
     print intern(123)
 except TypeError:

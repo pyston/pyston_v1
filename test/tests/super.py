@@ -1,3 +1,4 @@
+# expected: reffail
 class B(object):
     def __new__(cls, arg1):
         print "B.__new__", arg1

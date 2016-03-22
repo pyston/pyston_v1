@@ -1,3 +1,4 @@
+# expected: reffail
 import sys
 
 def p():

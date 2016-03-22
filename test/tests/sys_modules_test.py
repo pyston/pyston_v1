@@ -1,3 +1,4 @@
+# expected: reffail
 # Not sure how important or necessary this behavior is, but
 # CPython's behavior around sys.modules seems to be that it saves
 # an internal reference to the object, so if you set sys.modules

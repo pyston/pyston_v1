@@ -1,3 +1,4 @@
+# expected: reffail
 from ctypes import *
 libc = CDLL("libc.so.6")
 qsort = libc.qsort

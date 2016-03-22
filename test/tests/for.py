@@ -1,3 +1,4 @@
+# expected: reffail
 for i in range(10):
     print i
 for i in xrange(1, 15, 2):

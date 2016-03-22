@@ -1,3 +1,4 @@
+# expected: reffail
 # run_args: -n
 # statcheck: noninit_count('slowpath_classmethod_get') <= 10
 # statcheck: noninit_count('slowpath_staticmethod_get') <= 10

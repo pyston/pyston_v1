@@ -1,3 +1,4 @@
+# expected: reffail
 # Tests to make sure that setting __class__ changes the class, and that it's ok to disallow
 # having anything other than a type as the class
 class C(object):

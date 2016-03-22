@@ -1,3 +1,4 @@
+# expected: reffail
 import os, sys
 
 def delete_file(name):

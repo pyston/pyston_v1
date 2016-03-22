@@ -1,3 +1,4 @@
+# expected: reffail
 
 print list(reversed("hello"))
 print list(reversed(""))

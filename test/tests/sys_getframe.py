@@ -1,3 +1,4 @@
+# expected: reffail
 """
 Frame Hack Recipe #1: Ruby-style string interpolation (version 1)
 """

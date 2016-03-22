@@ -1,3 +1,4 @@
+# expected: reffail
 try:
     execfile("doesnt_exist.py")
 except IOError, e:

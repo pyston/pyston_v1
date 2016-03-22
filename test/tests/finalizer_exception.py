@@ -1,3 +1,4 @@
+# expected: reffail
 # Exceptions from finalizers should get caught:
 import sys
 from testing_helpers import test_gc

@@ -1,3 +1,4 @@
+# expected: reffail
 # Pass a started generator to two different threads, and make them both
 # try to run it at the same time.
 

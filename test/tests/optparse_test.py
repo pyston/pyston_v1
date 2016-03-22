@@ -1,3 +1,4 @@
+# expected: reffail
 # Simple optparse test, taken from the optparse.py docstring:
 
 from optparse import OptionParser

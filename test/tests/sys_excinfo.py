@@ -1,3 +1,4 @@
+# expected: reffail
 # should_error
 # Different ways of nesting exceptions
 

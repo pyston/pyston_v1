@@ -1,3 +1,4 @@
+# expected: reffail
 # these may seem pointless, but they exercise a family of corner cases in our
 # CFG generation pass (cfg.cpp).
 def returner():

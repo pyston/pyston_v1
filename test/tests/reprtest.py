@@ -1,3 +1,4 @@
+# expected: reffail
 a=1
 try:
     a.b

@@ -1,3 +1,4 @@
+# expected: reffail
 class MM(type):
     def __new__(*args):
         print "MM.__new__", args[:3]

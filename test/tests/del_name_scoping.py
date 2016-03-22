@@ -1,3 +1,4 @@
+# expected: reffail
 x = 1
 def f():
     if 0:

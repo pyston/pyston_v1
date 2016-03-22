@@ -1,3 +1,4 @@
+# expected: reffail
 # Test a generator cycle involving an unfinished generator.
 
 def f():

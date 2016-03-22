@@ -1,3 +1,4 @@
+# expected: reffail
 # requires:
 # - code.co_firstlineno
 # - sys.dysplayhook

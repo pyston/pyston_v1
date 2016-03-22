@@ -1,3 +1,4 @@
+# expected: reffail
 from abc import ABCMeta
 
 class SubClassHook:

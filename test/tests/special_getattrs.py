@@ -1,3 +1,4 @@
+# expected: reffail
 def show(obj):
     print obj.__class__
     for b in obj.__class__.__mro__:

@@ -1,3 +1,4 @@
+# expected: reffail
 # I would have expected this to be valid, but cPython and pypy err out saying "name 'x' is local and global"
 
 try:

@@ -1,3 +1,4 @@
+# expected: reffail
 import functools
 
 f = functools.partial(lambda *args: args, 1, 23)

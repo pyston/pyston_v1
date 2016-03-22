@@ -1,3 +1,4 @@
+# expected: reffail
 from future_builtins import hex, oct, map, zip, filter
 from itertools import imap, izip, ifilter
 

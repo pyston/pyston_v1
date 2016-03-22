@@ -1,3 +1,4 @@
+# expected: reffail
 # skip-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
 
 # Make sure that we can fork from a threaded environment

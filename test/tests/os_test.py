@@ -1,3 +1,4 @@
+# expected: reffail
 #
 
 # currently broken:

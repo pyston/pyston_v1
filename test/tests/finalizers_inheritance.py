@@ -1,3 +1,4 @@
+# expected: reffail
 from testing_helpers import test_gc
 
 class C(object):

@@ -1,3 +1,4 @@
+# expected: reffail
 # Random regression test from implementing refcounting:
 
 def f():

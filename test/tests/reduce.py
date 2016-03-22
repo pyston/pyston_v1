@@ -1,3 +1,4 @@
+# expected: reffail
 import operator
 
 print reduce(operator.add, range(50))

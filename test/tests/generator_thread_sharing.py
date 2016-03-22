@@ -1,3 +1,4 @@
+# expected: reffail
 # Start a generator on one thread, pass it to another, and have that execute it for a while
 
 def gen():

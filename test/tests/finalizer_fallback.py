@@ -1,3 +1,4 @@
+# expected: reffail
 from testing_helpers import test_gc
 
 # __del__ does not get called because it doesn't fallback to getattr

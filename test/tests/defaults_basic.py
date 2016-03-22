@@ -1,3 +1,4 @@
+# expected: reffail
 d = {}
 print d.get(1)
 print d.setdefault(2)

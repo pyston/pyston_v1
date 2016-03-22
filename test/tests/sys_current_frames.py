@@ -1,3 +1,4 @@
+# expected: reffail
 # this is copied out of cpythons test_sys.py and adopted to use assert stmts
 import sys
 import thread

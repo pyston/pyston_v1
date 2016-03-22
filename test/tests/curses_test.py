@@ -1,3 +1,4 @@
+# expected: reffail
 import curses, sys
 
 try:

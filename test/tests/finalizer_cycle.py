@@ -1,3 +1,4 @@
+# expected: reffail
 import gc
 
 finalized_at_least_once = False

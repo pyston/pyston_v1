@@ -1,3 +1,4 @@
+# expected: reffail
 class C(object):
     def __len__(self):
         print "__len__"

@@ -1,3 +1,4 @@
+# expected: reffail
 def test(v):
     print len(v), v.readonly, v.itemsize, v.tobytes(), v.tolist()
 

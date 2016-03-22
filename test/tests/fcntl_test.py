@@ -1,3 +1,4 @@
+# expected: reffail
 import fcntl
 
 for k in sorted(dir(fcntl)):

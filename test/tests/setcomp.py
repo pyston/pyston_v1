@@ -1,3 +1,4 @@
+# expected: reffail
 # this file is adapted from dictcomp.py
 def set2str(s):
     # set isn't guaranteed to keep things in sorted order (although in CPython it does AFAICT)

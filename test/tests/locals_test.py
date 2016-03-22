@@ -1,3 +1,4 @@
+# expected: reffail
 def f1():
     l = []
     for i in xrange(5):

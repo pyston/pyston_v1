@@ -1,3 +1,4 @@
+# expected: reffail
 def dict2str(d):
     result = ''
     for k, v in sorted(d.items()):

@@ -1,3 +1,4 @@
+# expected: reffail
 def f():
     print (1,2,3)[-1]
 f()

@@ -1,3 +1,4 @@
+# expected: reffail
 # Similar to finally_continue.py, but this is allowable
 
 for i in xrange(10):

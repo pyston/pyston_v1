@@ -1,3 +1,4 @@
+# expected: reffail
 # test to ensure that weakref callbacks and finalizers get called in the
 # right order
 

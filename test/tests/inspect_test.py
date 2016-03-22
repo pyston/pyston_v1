@@ -1,3 +1,4 @@
+# expected: reffail
 import inspect
 
 def f1(a, b=2, *args, **kw):

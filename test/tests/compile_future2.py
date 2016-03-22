@@ -1,3 +1,4 @@
+# expected: reffail
 # co is compiled without the __future__ division import.
 # So even though the import is present in the exec statements,
 # the code will be evaluated without it. Each should print 0.

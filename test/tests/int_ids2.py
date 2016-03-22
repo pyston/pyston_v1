@@ -1,3 +1,4 @@
+# expected: reffail
 # while I think nothing requires that this works I actually found this in a library...
 import subprocess
 def f():

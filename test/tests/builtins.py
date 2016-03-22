@@ -1,3 +1,4 @@
+# expected: reffail
 import sys
 
 __builtins__.aoeu = 1

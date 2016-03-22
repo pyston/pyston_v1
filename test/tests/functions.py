@@ -1,3 +1,4 @@
+# expected: reffail
 
 def f():
     """very nice function"""

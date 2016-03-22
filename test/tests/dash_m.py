@@ -1,3 +1,4 @@
+# expected: reffail
 import os
 import sys
 import subprocess

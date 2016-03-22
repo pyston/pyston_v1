@@ -1,3 +1,4 @@
+# expected: reffail
 import slots_test
 
 for i in xrange(3):

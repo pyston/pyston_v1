@@ -1,3 +1,4 @@
+# expected: reffail
 import _ast
 
 def ast_parse(source, filename='<unknown>', mode='exec'):

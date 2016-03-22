@@ -1,3 +1,4 @@
+# expected: reffail
 # TODO repr is wrong, so for now, only printing complex numbers whose real
 # and imaginary parts are non-integers
 

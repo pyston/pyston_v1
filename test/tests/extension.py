@@ -1,3 +1,4 @@
+# expected: reffail
 import basic_test
 
 print type(basic_test)

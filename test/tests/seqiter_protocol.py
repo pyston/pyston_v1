@@ -1,3 +1,4 @@
+# expected: reffail
 # Objects are iterable if they just implement __getitem__:
 
 class C(object):

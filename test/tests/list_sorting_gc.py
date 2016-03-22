@@ -1,3 +1,4 @@
+# expected: reffail
 # regression test: list sorting had a gc bug
 
 import gc

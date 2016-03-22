@@ -1,3 +1,4 @@
+# expected: reffail
 def g():
     l1 = [1]
     l2 = [2]

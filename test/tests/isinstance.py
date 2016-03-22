@@ -1,3 +1,4 @@
+# expected: reffail
 class M(type):
     pass
 

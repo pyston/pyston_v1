@@ -1,3 +1,4 @@
+# expected: reffail
 import re
 import inspect
 def gen():

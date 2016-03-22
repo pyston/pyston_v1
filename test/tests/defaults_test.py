@@ -1,3 +1,4 @@
+# expected: reffail
 # Test for various defaults arguments in builtin functions:
 
 class ExpectationFailedException(Exception):

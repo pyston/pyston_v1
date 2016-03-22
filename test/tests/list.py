@@ -1,3 +1,4 @@
+# expected: reffail
 l = range(5)
 print l
 print l * 5

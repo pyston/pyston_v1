@@ -1,3 +1,4 @@
+# expected: reffail
 
 orig_ae = AssertionError
 class MyAssertionError(Exception):

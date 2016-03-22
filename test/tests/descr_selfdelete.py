@@ -1,3 +1,4 @@
+# expected: reffail
 # Test some internals: when we execute some special functions, we often need to
 # make sure to keep a reference to that function, in case that function ends up
 # unsetting itself.

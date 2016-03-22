@@ -1,3 +1,4 @@
+# expected: reffail
 # Simple test:
 class MyClass(object):
     __a = 1

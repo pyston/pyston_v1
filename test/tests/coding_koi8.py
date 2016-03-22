@@ -1,3 +1,4 @@
+# expected: reffail
 # -*- coding: koi8-r -*-
 def test(s):
     print s, "len:", len(s)

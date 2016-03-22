@@ -1,4 +1,4 @@
-# expected: fail
+# expected: reffail
 
 # See what happens when we make __get__ and __set__ things other than functions...
 # TODO add some with __del__

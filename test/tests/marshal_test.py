@@ -1,3 +1,4 @@
+# expected: reffail
 import marshal
 o = [-1, 1.23456789, complex(1.2, 3.4)]
 o += [True, False, None]

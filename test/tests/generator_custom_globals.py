@@ -1,3 +1,4 @@
+# expected: reffail
 s = """
 def g():
     yield x

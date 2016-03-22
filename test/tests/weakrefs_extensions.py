@@ -1,3 +1,4 @@
+# expected: reffail
 # Make sure we can support weakrefs on extension objects.
 # The _sre.SRE_Pattern type is one of the few builtin types that supports weakrefs natively.
 

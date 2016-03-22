@@ -1,3 +1,4 @@
+# expected: reffail
 # statcheck: '-O' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
 
 # Try to trick the JIT into OSR'ing into an optimized version with a speculation

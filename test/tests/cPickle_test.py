@@ -1,3 +1,4 @@
+# expected: reffail
 import cPickle
 
 l = [[], (123,)]

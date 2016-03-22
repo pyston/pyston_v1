@@ -1,3 +1,4 @@
+# expected: reffail
 # Make sure we can subclass from weakref.ref, since the weakref module itself does this
 
 from weakref import ref

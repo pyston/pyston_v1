@@ -1,3 +1,4 @@
+# expected: reffail
 import array
 a = array.array("c", "hello world")
 print type(a)

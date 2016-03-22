@@ -1,3 +1,4 @@
+# expected: reffail
 # Test that we can pass known-bool values through OSRs and what not:
 
 def f(b):

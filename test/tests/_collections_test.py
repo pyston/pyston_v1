@@ -1,3 +1,4 @@
+# expected: reffail
 import _collections
 
 d = _collections.deque()

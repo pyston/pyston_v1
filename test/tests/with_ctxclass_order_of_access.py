@@ -1,3 +1,4 @@
+# expected: reffail
 class Mgr(object):
     def __init__(self): print 'Mgr.__init__()'
 

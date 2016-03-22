@@ -1,3 +1,4 @@
+# expected: reffail
 # Make sure we can spawn a bunch of threads
 
 import threading

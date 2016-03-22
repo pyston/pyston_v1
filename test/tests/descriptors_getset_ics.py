@@ -1,3 +1,4 @@
+# expected: reffail
 # run_args: -n
 # statcheck: noninit_count('slowpath_getattr') <= 10
 # statcheck: noninit_count('slowpath_setattr') <= 10

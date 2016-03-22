@@ -1,3 +1,4 @@
+# expected: reffail
 # skip-if: '-x' in EXTRA_JIT_ARGS
 # - too slow
 

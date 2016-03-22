@@ -1,3 +1,4 @@
+# expected: reffail
 # This test checks if generators which get started but haven't yet stopped (=not raisen a StopIteration exc, etc)
 # get freed when there aren't any references to the generators left.
 

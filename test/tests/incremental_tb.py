@@ -1,3 +1,4 @@
+# expected: reffail
 import traceback
 import sys
 def f():

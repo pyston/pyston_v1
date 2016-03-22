@@ -1,3 +1,4 @@
+# expected: reffail
 import collections
 
 o = collections.OrderedDict()

@@ -1,3 +1,4 @@
+# expected: reffail
 o = object()
 r = o.__reduce__()
 print type(r), len(r)

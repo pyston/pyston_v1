@@ -1,3 +1,4 @@
+# expected: reffail
 # This segfaults under python-dbg
 # (In a release build it "works" since the use-after-free happens without penalty.)
 

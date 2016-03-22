@@ -1,3 +1,4 @@
+# expected: reffail
 from weakref import WeakKeyDictionary, WeakValueDictionary
 
 class S(object):

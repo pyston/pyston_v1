@@ -1,3 +1,4 @@
+# expected: reffail
 # Augassigns are somewhat odd because they encode both a use and a def of a variable.
 # So for the sake of determining if a scope sets a variable, they count as a def, but
 # for the sake of whether or not a variable is live, they count as a use.

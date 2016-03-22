@@ -1,3 +1,4 @@
+# expected: reffail
 s1 = {1}
 
 def sorted(s):

@@ -1,3 +1,4 @@
+# expected: reffail
 d = {}
 for i in xrange(1000):
     d[i] = i ** 2

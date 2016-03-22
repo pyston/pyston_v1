@@ -1,3 +1,4 @@
+# expected: reffail
 class C(object):
   i = 0
   def next(self):

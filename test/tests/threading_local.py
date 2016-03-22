@@ -1,3 +1,4 @@
+# expected: reffail
 import gc
 import threading
 

@@ -1,3 +1,4 @@
+# expected: reffail
 import gc
 from testing_helpers import test_gc
 

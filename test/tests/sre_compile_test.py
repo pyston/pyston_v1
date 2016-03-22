@@ -1,3 +1,4 @@
+# expected: reffail
 import sre_compile
 import sre_constants
 
