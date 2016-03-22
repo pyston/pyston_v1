@@ -3074,6 +3074,7 @@ public:
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
+            builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
             //auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
