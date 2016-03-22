@@ -230,7 +230,7 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
         Py_CLEAR(frame_info->frame_obj);
     }
     if (frame_info->vregs) {
-        int num_user_visible_vregs = frame_info->md->calculateNumUserVisibleVRegs();
+        int num_user_visible_vregs = frame_info->num_vregs;
         for (int i = 0; i < num_user_visible_vregs; i++) {
             Py_XDECREF(frame_info->vregs[i]);
         }
@@ -248,7 +248,7 @@ int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexce
     Py_VISIT(frame_info->frame_obj);
 
     if (frame_info->vregs) {
-        int num_user_visible_vregs = frame_info->md->calculateNumUserVisibleVRegs();
+        int num_user_visible_vregs = frame_info->num_vregs;
         for (int i = 0; i < num_user_visible_vregs; i++) {
             Py_VISIT(frame_info->vregs[i]);
         }

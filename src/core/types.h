@@ -962,6 +962,8 @@ struct FrameInfo {
     // uninitialized.  When one wants to access any of the values, you need to check if exc.type
     // is NULL, and if so crawl up the stack looking for the first frame with a non-null exc.type
     // and copy that.
+    //
+    // Note: Adding / moving any fields here requires updating the "getXxxGEP()" functions in irgenerator.cpp
     ExcInfo exc;
 
     // This field is always initialized:
@@ -971,6 +973,8 @@ struct FrameInfo {
     BORROWED(BoxedClosure*) passed_closure;
 
     Box** vregs;
+    int num_vregs;
+
     AST_stmt* stmt; // current statement
     // This is either a module or a dict
     BORROWED(Box*) globals;
@@ -980,7 +984,17 @@ struct FrameInfo {
 
     Box* updateBoxedLocals();
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0), stmt(0), globals(0), back(0), md(0) {}
+    FrameInfo(ExcInfo exc)
+        : exc(exc),
+          boxedLocals(NULL),
+          frame_obj(0),
+          passed_closure(0),
+          vregs(0),
+          num_vregs(INT_MAX),
+          stmt(0),
+          globals(0),
+          back(0),
+          md(0) {}
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:

@@ -165,19 +165,24 @@ template <typename Builder> static llvm::Value* getVRegsGep(Builder& builder, ll
     return builder.CreateConstInBoundsGEP2_32(v, 0, 4);
 }
 
-template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, stmt) == 56, "");
+template <typename Builder> static llvm::Value* getNumVRegsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, num_vregs) == 56, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 5);
 }
 
-template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, globals) == 64, "");
+template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, stmt) == 64, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
 }
 
+template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, globals) == 72, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 7);
+}
+
 template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, md) == 64 + 16, "");
-    return builder.CreateConstInBoundsGEP2_32(v, 0, 8);
+    static_assert(offsetof(FrameInfo, md) == 72 + 16, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 9);
 }
 
 void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
@@ -283,6 +288,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
+        builder.CreateStore(getConstantInt(num_user_visible_vregs, g.i32), getNumVRegsGep(builder, al));
         builder.CreateStore(embedRelocatablePtr(getMD(), g.llvm_functionmetadata_type_ptr), getMDGep(builder, al));
 
         this->frame_info = al;
