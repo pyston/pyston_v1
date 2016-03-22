@@ -87,18 +87,28 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
         PyObject_InitHcAttrs(&self->hcattrs);
         if (arg) {
             self->args = PyTuple_Pack(1, arg);
-            if (!self->args)
+            if (!self->args) {
+                Py_DECREF(self);
                 return NULL;
+            }
             self->message = arg;
         } else {
             self->args = PyTuple_New(0);
-            self->message = PyString_FromString("");
-            if (!self->message)
+            if (!self->args) {
+                Py_DECREF(self);
                 return NULL;
+            }
+            self->message = PyString_FromString("");
+            if (!self->message) {
+                Py_DECREF(self->args);
+                Py_DECREF(self);
+                return NULL;
+            }
         }
         return (PyObject*)self;
     } else {
         // Fallback
+        PyObject* rtn;
         PyObject* args;
         if (arg == NULL)
             args = PyTuple_New(0);
@@ -108,7 +118,9 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
         if (args == NULL)
             return NULL;
 
-        return PyObject_Call(_type, args, NULL);
+        rtn = PyObject_Call(_type, args, NULL);
+        Py_DECREF(args);
+        return rtn;
     }
 }
 

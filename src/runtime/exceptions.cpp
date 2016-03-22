@@ -45,6 +45,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
         AUTO_DECREF(loc);
 
         auto args = BoxedTuple::create({ autoDecref(boxString(file)), autoDecref(boxInt(lineno)), None, loc });
+        AUTO_DECREF(args);
         Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), autoDecref(boxString(msg)), args, NULL, NULL, NULL);
         assert(!PyErr_Occurred());
         throw ExcInfo(incref(exc->cls), exc, NULL);
