@@ -4958,148 +4958,125 @@ extern "C" Box* runtimeCallCapi(Box* obj, ArgPassSpec argspec, Box* arg1, Box* a
 }
 
 template <Rewritable rewritable>
-Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {
+static Box* binopInternalHelper(BinopRewriteArgs*& rewrite_args, BoxedString* op_name, Box* lhs, Box* rhs,
+                                RewriterVar* r_lhs, RewriterVar* r_rhs) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
-    }
-
-    // TODO handle the case of the rhs being a subclass of the lhs
-    // this could get really annoying because you can dynamically make one type a subclass
-    // of the other!
-
-    if (rewrite_args) {
-        // TODO probably don't need to guard on the lhs_cls since it
-        // will get checked no matter what, but the check that should be
-        // removed is probably the later one.
-        // ie we should have some way of specifying what we know about the values
-        // of objects and their attributes, and the attributes' attributes.
-        rewrite_args->lhs->addAttrGuard(offsetof(Box, cls), (intptr_t)lhs->cls);
-        rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
     }
 
     struct NotImplementedHelper {
         static void call(Box* r, bool was_notimplemented) { assert((r == NotImplemented) == was_notimplemented); }
     };
 
-    Box* irtn = NULL;
-    if (inplace) {
-        // XXX I think we need to make sure that we keep these strings alive?
-        DecrefHandle<BoxedString> iop_name(getInplaceOpName(op_type));
-        if (rewrite_args) {
-            CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
-            srewrite_args.arg1 = rewrite_args->rhs;
-            srewrite_args.args_guarded = true;
-            irtn = callattrInternal1<CXX, REWRITABLE>(lhs, iop_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
-
-            if (!srewrite_args.isSuccessful()) {
-                rewrite_args = NULL;
-            } else if (irtn) {
-                rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
-// If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
-// or not based only on the types of the inputs.
-#ifndef NDEBUG
-                rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
-                                             rewrite_args->rewriter->loadConst(irtn == NotImplemented));
-#endif
-            } else {
-                srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
-            }
-        } else {
-            irtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, iop_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
-        }
-
-        if (irtn) {
-            if (irtn != NotImplemented) {
-                if (rewrite_args) {
-                    assert(rewrite_args->out_rtn);
-                    rewrite_args->out_success = true;
-                }
-                return irtn;
-            } else {
-                Py_DECREF(irtn);
-                assert(!rewrite_args);
-            }
-        }
-    }
-
-    BORROWED(BoxedString*) op_name = getOpName(op_type);
-    Box* lrtn;
+    Box* rtn = NULL;
     if (rewrite_args) {
-        CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
-        srewrite_args.arg1 = rewrite_args->rhs;
-        lrtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
+        CallattrRewriteArgs srewrite_args(rewrite_args->rewriter, r_lhs, rewrite_args->destination);
+        srewrite_args.arg1 = r_rhs;
+        srewrite_args.args_guarded = true;
+        rtn = callattrInternal1<CXX, REWRITABLE>(lhs, op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
         if (!srewrite_args.isSuccessful()) {
             rewrite_args = NULL;
-        } else if (lrtn) {
+        } else if (rtn) {
             rewrite_args->out_rtn = srewrite_args.getReturn(ReturnConvention::HAS_RETURN);
 // If we allowed a rewrite to get here, it means that we assumed that the class will return NotImplemented
 // or not based only on the types of the inputs.
 #ifndef NDEBUG
             rewrite_args->rewriter->call(false, (void*)NotImplementedHelper::call, rewrite_args->out_rtn,
-                                         rewrite_args->rewriter->loadConst(irtn == NotImplemented));
+                                         rewrite_args->rewriter->loadConst(rtn == NotImplemented));
 #endif
         } else {
             srewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
         }
+
+        if (rewrite_args && rtn) {
+            if (rtn != NotImplemented)
+                rewrite_args->out_success = true;
+            else {
+                // I think our guarding up to here is correct; the issue is we won't be able to complete
+                // the rewrite since we have more guards to do, but we already did some mutations.
+                rewrite_args->out_success = false;
+                rewrite_args = NULL;
+                REWRITE_ABORTED("");
+            }
+        }
+        // we don't need to abort the rewrite when the attribute does not exist (rtn==null) because we only rewrite
+        // binops when both sides are not user defined types for which we assume that they will never change.
     } else {
-        lrtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
+        rtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, op_name, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
     }
 
+    return rtn;
+}
 
-    if (lrtn) {
-        if (lrtn != NotImplemented) {
-            if (rewrite_args) {
-                assert(rewrite_args->out_rtn);
-                rewrite_args->out_success = true;
-            }
-            return lrtn;
+template <Rewritable rewritable>
+Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {
+    if (rewritable == NOT_REWRITABLE) {
+        assert(!rewrite_args);
+        rewrite_args = NULL;
+    }
+
+    RewriterVar* r_lhs = NULL;
+    RewriterVar* r_rhs = NULL;
+    if (rewrite_args) {
+        r_lhs = rewrite_args->lhs;
+        r_rhs = rewrite_args->rhs;
+
+        RewriterVar* r_lhs_cls = r_lhs->getAttr(offsetof(Box, cls))->setType(RefType::BORROWED);
+        r_lhs_cls->addGuard((intptr_t)lhs->cls);
+        RewriterVar* r_rhs_cls = r_rhs->getAttr(offsetof(Box, cls))->setType(RefType::BORROWED);
+        r_rhs_cls->addGuard((intptr_t)rhs->cls);
+
+        r_lhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)lhs->cls->tp_mro);
+        r_rhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)rhs->cls->tp_mro);
+    }
+
+    if (inplace) {
+        // XXX I think we need to make sure that we keep these strings alive?
+        DecrefHandle<BoxedString> iop_name = getInplaceOpName(op_type);
+        Box* irtn = binopInternalHelper<rewritable>(rewrite_args, iop_name, lhs, rhs, r_lhs, r_rhs);
+        if (irtn) {
+            if (irtn != NotImplemented)
+                return irtn;
+            Py_DECREF(irtn);
         }
+    }
+
+    bool should_try_reverse = true;
+    if (lhs->cls != rhs->cls && isSubclass(rhs->cls, lhs->cls)) {
+        should_try_reverse = false;
+        DecrefHandle<BoxedString> rop_name = getReverseOpName(op_type);
+        Box* rrtn = binopInternalHelper<rewritable>(rewrite_args, rop_name, rhs, lhs, r_rhs, r_lhs);
+        if (rrtn) {
+            if (rrtn != NotImplemented)
+                return rrtn;
+            Py_DECREF(rrtn);
+        }
+    }
+
+    BORROWED(BoxedString*) op_name = getOpName(op_type);
+    Box* lrtn = binopInternalHelper<rewritable>(rewrite_args, op_name, lhs, rhs, r_lhs, r_rhs);
+    if (lrtn) {
+        if (lrtn != NotImplemented)
+            return lrtn;
         Py_DECREF(lrtn);
     }
 
-    // TODO patch these cases
-    // I think our guarding up to here is correct; the issue is we won't be able to complete
-    // the rewrite since we have more guards to do, but we already did some mutations.
-    if (rewrite_args) {
-        assert(rewrite_args->out_success == false);
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
+    if (should_try_reverse) {
+        DecrefHandle<BoxedString> rop_name = getReverseOpName(op_type);
+        Box* rrtn = binopInternalHelper<rewritable>(rewrite_args, rop_name, rhs, lhs, r_rhs, r_lhs);
+        if (rrtn) {
+            if (rrtn != NotImplemented)
+                return rrtn;
+            Py_DECREF(rrtn);
+        }
     }
-
-    BoxedString* rop_name = getReverseOpName(op_type);
-    AUTO_DECREF(rop_name);
-
-    Box* rrtn = callattrInternal1<CXX, REWRITABLE>(rhs, rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
-    if (rrtn != NULL && rrtn != NotImplemented)
-        return rrtn;
-    Py_XDECREF(rrtn);
-
 
     llvm::StringRef op_sym = getOpSymbol(op_type);
     const char* op_sym_suffix = "";
     if (inplace) {
         op_sym_suffix = "=";
-    }
-
-    if (VERBOSITY()) {
-        if (inplace) {
-            BoxedString* iop_name = getInplaceOpName(op_type);
-            if (irtn)
-                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs), iop_name->c_str());
-            else
-                fprintf(stderr, "%s does not have %s\n", getTypeName(lhs), iop_name->c_str());
-        }
-
-        if (lrtn)
-            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs), op_name->c_str());
-        else
-            fprintf(stderr, "%s does not have %s\n", getTypeName(lhs), op_name->c_str());
-        if (rrtn)
-            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs), rop_name->c_str());
-        else
-            fprintf(stderr, "%s does not have %s\n", getTypeName(rhs), rop_name->c_str());
     }
 
     raiseExcHelper(TypeError, "unsupported operand type(s) for %s%s: '%s' and '%s'", op_sym.data(), op_sym_suffix,
