@@ -781,6 +781,15 @@ static int _PyCodecRegistry_Init(void) {
     Py_DECREF(mod);
     return 0;
 }
+
+// Pyston addition:
+int _PyCodecRegistry_Deinit(void) {
+    Py_CLEAR(interp->codec_search_path);
+    Py_CLEAR(interp->codec_search_cache);
+    Py_CLEAR(interp->codec_error_registry);
+    return 0;
+}
+
 }
 
 } // namespace pyston

@@ -647,7 +647,6 @@ static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwd
 }
 
 static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, Box** _args) {
-    assert(0 && "check refcounting");
     Box* errors_obj = _args[0];
 
     assert(isSubclass(type, unicode_cls));
@@ -699,8 +698,10 @@ static Box* unicodeNewHelper(BoxedClass* type, Box* string, Box* encoding_obj, B
     AUTO_DECREF(args);
 
     int init_code = r->cls->tp_init(r, args, NULL);
-    if (init_code == -1)
+    if (init_code == -1) {
+        Py_DECREF(r);
         throwCAPIException();
+    }
 
     return r;
 }
@@ -4696,7 +4697,6 @@ BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn, const cha
     Box* existing = d->getOrNull(name);
     if (existing && PyModule_Check(existing)) {
         module = static_cast<BoxedModule*>(existing);
-        Py_INCREF(module);
     } else {
         module = new BoxedModule();
         autoDecref(moduleInit(module, name, autoDecref(boxString(doc ? doc : ""))));
@@ -4732,6 +4732,9 @@ static void call_sys_exitfunc(void) {
         PyErr_Clear();
 }
 
+// this is a pyston addition defined in codecs.cpp
+extern "C" int _PyCodecRegistry_Deinit(void) noexcept;
+
 extern "C" void Py_Finalize() noexcept {
     // In the future this will have to wait for non-daemon
     // threads to finish
@@ -4748,7 +4751,7 @@ extern "C" void Py_Finalize() noexcept {
     PyGC_Collect(); // To make sure it creates any static objects
     IN_SHUTDOWN = true;
     PyOS_FiniInterrupts();
-
+    _PyCodecRegistry_Deinit();
     // TODO: we might have to do this in a loop:
     PyType_ClearCache();
     _PyUnicode_Fini();
