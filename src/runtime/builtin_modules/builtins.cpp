@@ -324,7 +324,6 @@ Box* open(Box* arg1, Box* arg2, Box* arg3) {
 }
 
 extern "C" Box* chr(Box* arg) {
-    assert(0 && "check refcounting");
     i64 n = PyInt_AsLong(arg);
     if (n == -1 && PyErr_Occurred())
         throwCAPIException();
@@ -338,7 +337,6 @@ extern "C" Box* chr(Box* arg) {
 }
 
 extern "C" Box* unichr(Box* arg) {
-    assert(0 && "check refcounting");
     int n = -1;
     if (!PyArg_ParseSingle(arg, 0, "unichr", "i", &n))
         throwCAPIException();
@@ -363,7 +361,6 @@ Box* coerceFunc(Box* vv, Box* ww) {
 }
 
 extern "C" Box* ord(Box* obj) {
-    assert(0 && "check refcounting");
     long ord;
     Py_ssize_t size;
 
@@ -770,22 +767,23 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 }
 
 Box* map2(Box* f, Box* container) {
-    assert(0 && "check refcounting");
     Box* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     bool use_identity_func = f == None;
     for (Box* e : container->pyElements()) {
         Box* val;
         if (use_identity_func)
             val = e;
-        else
+        else {
+            AUTO_DECREF(e);
             val = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
-        listAppendInternal(rtn, val);
+        }
+        listAppendInternalStolen(rtn, val);
     }
-    return rtn;
+    return incref(rtn);
 }
 
 Box* map(Box* f, BoxedTuple* args) {
-    assert(0 && "check refcounting");
     assert(args->cls == tuple_cls);
     auto num_iterable = args->size();
     if (num_iterable < 1)
@@ -795,6 +793,7 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
+    std::vector<BoxIteratorRange> ranges;
     std::vector<BoxIterator> args_it;
     std::vector<BoxIterator> args_end;
 
@@ -802,23 +801,27 @@ Box* map(Box* f, BoxedTuple* args) {
         auto range = e->pyElements();
         args_it.emplace_back(range.begin());
         args_end.emplace_back(range.end());
+        ranges.push_back(std::move(range));
     }
     assert(args_it.size() == num_iterable);
     assert(args_end.size() == num_iterable);
 
     bool use_identity_func = f == None;
     Box* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     std::vector<Box*> current_val(num_iterable);
     while (true) {
         int num_done = 0;
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] == args_end[i]) {
                 ++num_done;
-                current_val[i] = None;
+                current_val[i] = incref(None);
             } else {
                 current_val[i] = *args_it[i];
             }
         }
+
+        AUTO_DECREF_ARRAY(&current_val[0], num_iterable);
 
         if (num_done == num_iterable)
             break;
@@ -830,14 +833,14 @@ Box* map(Box* f, BoxedTuple* args) {
                                 std::get<3>(v), NULL);
         } else
             entry = BoxedTuple::create(num_iterable, &current_val[0]);
-        listAppendInternal(rtn, entry);
+        listAppendInternalStolen(rtn, entry);
 
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] != args_end[i])
                 ++args_it[i];
         }
     }
-    return rtn;
+    return incref(rtn);
 }
 
 Box* reduce(Box* f, Box* container, Box* initial) {
