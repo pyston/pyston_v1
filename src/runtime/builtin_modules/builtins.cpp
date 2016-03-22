@@ -159,7 +159,6 @@ extern "C" Box* any(Box* container) {
 }
 
 Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
-    assert(0 && "check refcounting");
     assert(args->cls == tuple_cls);
     if (kwargs)
         assert(kwargs->cls == dict_cls);
@@ -182,16 +181,18 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
         }
     }
 
+    XKEEP_ALIVE(key_func); // probably not necessary
+
     if (args->size() == 0) {
         extremElement = nullptr;
         extremVal = nullptr;
         container = arg0;
     } else {
-        extremElement = arg0;
+        extremElement = incref(arg0);
         if (key_func != NULL) {
             extremVal = runtimeCall(key_func, ArgPassSpec(1), extremElement, NULL, NULL, NULL, NULL);
         } else {
-            extremVal = extremElement;
+            extremVal = incref(extremElement);
         }
         container = args;
     }
@@ -207,25 +208,35 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
             curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
         } else {
             if (!extremElement) {
-                extremVal = e;
+                extremVal = incref(e);
                 extremElement = e;
                 continue;
             }
-            curVal = e;
+            curVal = incref(e);
         }
         int r = PyObject_RichCompareBool(curVal, extremVal, opid);
-        if (r == -1)
+        if (r == -1) {
+            Py_DECREF(e);
+            Py_DECREF(extremVal);
+            Py_DECREF(extremElement);
+            Py_DECREF(curVal);
             throwCAPIException();
+        }
         if (r) {
+            Py_DECREF(extremElement);
+            Py_DECREF(extremVal);
             extremElement = e;
             extremVal = curVal;
+        } else {
+            Py_DECREF(curVal);
+            Py_DECREF(e);
         }
     }
+    Py_DECREF(extremVal);
     return extremElement;
 }
 
 extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
-    assert(0 && "check refcounting");
     if (arg0 == None && args->size() == 0) {
         raiseExcHelper(TypeError, "min expected 1 arguments, got 0");
     }
@@ -239,7 +250,6 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
-    assert(0 && "check refcounting");
     if (arg0 == None && args->size() == 0) {
         raiseExcHelper(TypeError, "max expected 1 arguments, got 0");
     }
