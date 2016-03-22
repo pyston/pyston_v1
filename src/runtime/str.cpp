@@ -2590,6 +2590,7 @@ extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) no
 
 extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
     PyString_Concat(pv, w);
+    Py_XDECREF(w);
 }
 
 static PyObject* string_expandtabs(PyStringObject* self, PyObject* args) noexcept {
