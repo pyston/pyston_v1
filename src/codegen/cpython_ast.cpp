@@ -421,6 +421,7 @@ public:
                 if (o->cls == unicode_cls) {
                     o = PyUnicode_AsUTF8String(o);
                     RELEASE_ASSERT(o, "");
+                    AUTO_DECREF(o);
 
                     auto r = new AST_Str();
                     r->str_data = static_cast<BoxedString*>(o)->s();

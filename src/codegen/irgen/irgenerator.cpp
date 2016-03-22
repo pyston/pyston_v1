@@ -552,9 +552,10 @@ public:
     // to a function which could throw an exception, inspect the python call frame,...
     // Only patchpoint don't need to set the current statement because the stmt will be inluded in the stackmap args.
     void emitSetCurrentStmt(AST_stmt* stmt) {
-        getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_aststmt_type_ptr)
-                                       : getNullPtr(g.llvm_aststmt_type_ptr),
-                                  irstate->getStmtVar());
+        if (stmt)
+            getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_aststmt_type_ptr)
+                                           : getNullPtr(g.llvm_aststmt_type_ptr),
+                                      irstate->getStmtVar());
     }
 
     llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,

@@ -3973,6 +3973,9 @@ type_clear(PyTypeObject *type)
 }
 
 int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
+    if (!hcls)
+        return 0;
+
     int nattrs = hcls->attributeArraySize();
     for (int i = 0; i < nattrs; i++) {
         Py_VISIT(attr_list->attrs[i]);
@@ -4845,7 +4848,7 @@ extern "C" void Py_Finalize() noexcept {
         PRINT_TOTAL_REFS();
 #ifdef Py_REF_DEBUG
 #ifdef Py_TRACE_REFS
-    if (_Py_RefTotal > 0)
+    if (_Py_RefTotal != 0)
         _Py_PrintReferenceAddressesCapped(stderr, 10);
 #endif
 
