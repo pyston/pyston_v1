@@ -14,6 +14,8 @@
 
 #include "codegen/cpython_ast.h"
 
+#include <set>
+
 #include "llvm/ADT/STLExtras.h"
 
 #include "core/types.h"
@@ -93,14 +95,49 @@ public:
         return pool->get(static_cast<BoxedString*>(ident)->s());
     }
 
-    AST_arguments* convert(arguments_ty ident) {
+    AST_arguments* convert(arguments_ty ident, AST* parent) {
         auto r = new AST_arguments();
 
         convertAll<expr_ty>(ident->args, r->args);
         convertAll<expr_ty>(ident->defaults, r->defaults);
         r->vararg = convert(ident->vararg);
         r->kwarg = convert(ident->kwarg);
+
+        if ((!r->vararg.s().empty()) && (!r->kwarg.s().empty()) && (r->vararg == r->kwarg)) {
+            char buf[1024];
+            snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", r->vararg.c_str());
+            raiseSyntaxError(buf, parent->lineno, parent->col_offset, fn, "", true);
+        }
+
+        std::set<InternedString> seen;
+        if (!r->vararg.s().empty()) {
+            seen.insert(r->vararg);
+        }
+        if (!r->kwarg.s().empty()) {
+            seen.insert(r->kwarg);
+        }
+        checkDuplicateArgs(parent, r->args, &seen);
+
         return r;
+    }
+
+    void checkDuplicateArgs(AST* parent, std::vector<AST_expr*> args, std::set<InternedString>* seen) {
+        for (auto arg : args) {
+            if (arg->type == AST_TYPE::Name) {
+                auto name_node = static_cast<AST_Name*>(arg);
+                if (seen->find(name_node->id) != seen->end()) {
+                    char buf[1024];
+                    snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", name_node->id.c_str());
+                    raiseSyntaxError(buf, parent->lineno, parent->col_offset, fn, "", true);
+                }
+                seen->insert(name_node->id);
+            } else if (arg->type == AST_TYPE::Tuple) {
+                auto slice_node = static_cast<AST_Tuple*>(arg);
+                checkDuplicateArgs(parent, slice_node->elts, seen);
+            } else {
+                RELEASE_ASSERT(0, "");
+            }
+        }
     }
 
 #define CASE(N)                                                                                                        \
@@ -244,8 +281,10 @@ public:
             }
             case Lambda_kind: {
                 auto r = new AST_Lambda();
+                r->lineno = expr->lineno;
+                r->col_offset = expr->col_offset;
                 auto v = expr->v.Lambda;
-                r->args = convert(v.args);
+                r->args = convert(v.args, r);
                 r->body = convert(v.body);
                 return r;
             }
@@ -467,9 +506,11 @@ public:
         switch (stmt->kind) {
             case FunctionDef_kind: {
                 auto r = new AST_FunctionDef();
+                r->lineno = stmt->lineno;
+                r->col_offset = stmt->col_offset;
                 auto v = stmt->v.FunctionDef;
                 r->name = convert(v.name);
-                r->args = convert(v.args);
+                r->args = convert(v.args, r);
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
                 r->decorator_list = convert<expr_ty, AST_expr*>(v.decorator_list);
                 return r;
