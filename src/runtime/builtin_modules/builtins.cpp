@@ -441,10 +441,10 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
-    assert(0 && "check refcounting");
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
+    KEEP_ALIVE(rtn);
     for (Box* e : obj->pyElements()) {
         listAppendInternalStolen(rtn, e);
     }

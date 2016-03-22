@@ -2883,20 +2883,28 @@ static void typeSetAbstractMethods(Box* _type, PyObject* value, void* context) {
         throwCAPIException();
 }
 
-static Box* typeAbstractMethods(Box* _type, void*) {
-    RELEASE_ASSERT(PyType_Check(_type), "");
-    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
-
-    PyObject* mod = NULL;
+static PyObject* type_abstractmethods(PyTypeObject *type, void *context) noexcept
+{
+    PyObject *mod = NULL;
     /* type itself has an __abstractmethods__ descriptor (this). Don't return
        that. */
     if (type != &PyType_Type)
         mod = PyDict_GetItemString(type->tp_dict, "__abstractmethods__");
-    // mod = type->getattr(internStringMortal("__abstractmethods__"));
     if (!mod) {
-        raiseExcHelper(AttributeError, "__abstractmethods__");
+        PyErr_SetString(PyExc_AttributeError, "__abstractmethods__");
+        return NULL;
     }
-    return incref(mod);
+    Py_XINCREF(mod);
+    return mod;
+}
+
+static Box* typeAbstractMethods(Box* _type, void* c) {
+    RELEASE_ASSERT(PyType_Check(_type), "");
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+    Box* rtn = type_abstractmethods(type, c);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
@@ -2923,20 +2931,24 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
 
         /* Compute ", ".join(sorted(type.__abstractmethods__))
            into joined. */
-        abstract_methods = typeAbstractMethods(type, NULL);
+        abstract_methods = type_abstractmethods(type, NULL);
         if (abstract_methods == NULL)
             goto error;
         builtins = PyEval_GetBuiltins();
         if (builtins == NULL)
             goto error;
-        sorted = builtins->getattr(internStringMortal("sorted"));
+        // Pyston change: builtins is a module not a dict
+        // sorted = PyDict_GetItemString(builtins, "sorted");
+        sorted = builtins->getattr(autoDecref(internStringMortal("sorted")));
         if (sorted == NULL)
             goto error;
         sorted_methods = PyObject_CallFunctionObjArgs(sorted, abstract_methods, NULL);
         if (sorted_methods == NULL)
             goto error;
         if (comma == NULL) {
-            comma = PyString_InternFromString(", ");
+            // Pyston change:
+            // comma = PyGC_ PyString_InternFromString(", ");
+            comma = getStaticString(", ");
             if (comma == NULL)
                 goto error;
         }
@@ -2951,6 +2963,9 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
                                       "with abstract methods %s",
                      type->tp_name, joined_str);
     error:
+        Py_XDECREF(joined);
+        Py_XDECREF(sorted_methods);
+        Py_XDECREF(abstract_methods);
         return NULL;
     }
     return type->tp_alloc(type, 0);

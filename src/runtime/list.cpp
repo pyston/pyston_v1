@@ -901,6 +901,7 @@ public:
 };
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
+    assert(0 && "check refcounting");
     assert(PyList_Check(self));
 
     if (cmp == None)
