@@ -6950,4 +6950,8 @@ extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr) {
 extern "C" void checkRefs(Box* b) {
     RELEASE_ASSERT(b->ob_refcnt >= 0, "%ld", b->ob_refcnt);
 }
+extern "C" Box* assertAlive(Box* b) {
+    RELEASE_ASSERT(b->ob_refcnt > 0, "%ld", b->ob_refcnt);
+    return b;
+}
 }

@@ -646,7 +646,8 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     return incref(None);
 }
 
-static Box* hasattrFuncHelper(Box* return_val) noexcept {
+// Not sure if this should be stealing or not:
+static Box* hasattrFuncHelper(STOLEN(Box*) return_val) noexcept {
     AUTO_XDECREF(return_val);
 
     if (return_val)
@@ -744,6 +745,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     if (rewrite_args) {
         RewriterVar* final_rtn
             = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn)->setType(RefType::OWNED);
+        r_rtn->refConsumed();
 
         if (S == CXX)
             rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);

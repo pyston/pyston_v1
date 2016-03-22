@@ -226,6 +226,7 @@ extern "C" void boxedLocalsSet(Box* boxedLocals, BoxedString* attr, Box* val);
 extern "C" Box* boxedLocalsGet(Box* boxedLocals, BoxedString* attr, Box* globals);
 extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr);
 
-extern "C" void checkRefs(Box* b);
+extern "C" void checkRefs(Box* b);   // asserts that b has >= 0 refs
+extern "C" Box* assertAlive(Box* b); // asserts that b has > 0 refs, and returns b
 }
 #endif

@@ -20,6 +20,7 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "runtime/types.h"
+#include "runtime/objmodel.h"
 
 namespace pyston {
 
@@ -567,6 +568,12 @@ void Rewriter::_decref(RewriterVar* var) {
 
     _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (int)0), assembler::RAX);
 
+
+#ifdef Py_REF_DEBUG
+    assembler->mov(assembler::Immediate((void*)assertAlive), assembler::R11);
+    assembler->callq(assembler::R11);
+    assembler->mov(assembler::RAX, assembler::RDI);
+#endif
     // _setupCall doesn't remember that it added the arg regs to the location set
     auto reg = assembler::RDI;
     //auto reg = var->getInReg();
