@@ -566,7 +566,8 @@ void Rewriter::_decref(RewriterVar* var) {
     assembler->decq(assembler::Immediate(&_Py_RefTotal));
 #endif
 
-    _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (int)0), assembler::RAX);
+    _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0),
+               assembler::RAX);
 
 
 #ifdef Py_REF_DEBUG
@@ -601,7 +602,7 @@ void Rewriter::_xdecref(RewriterVar* var) {
     //assembler->trap();
 
     this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+                llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0));
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)

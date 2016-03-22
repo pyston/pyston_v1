@@ -173,7 +173,7 @@ void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     assert(num_refs > 0);
 
     llvm::BasicBlock* cur_block;
-    llvm::BasicBlock* continue_block;
+    llvm::BasicBlock* continue_block = NULL;
     llvm::BasicBlock* incref_block;
 
     llvm::IRBuilder<true> builder(incref_pt);
