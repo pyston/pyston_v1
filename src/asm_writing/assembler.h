@@ -174,8 +174,10 @@ public:
 
     void cmp(Register reg1, Register reg2);
     void cmp(Register reg, Immediate imm);
-    void cmp(Indirect mem, Immediate imm);
+    void cmp(Indirect mem, Immediate imm, MovType type = MovType::Q);
+    void cmpl(Indirect mem, Immediate imm) { return cmp(mem, imm, MovType::L); }
     void cmp(Indirect mem, Register reg);
+
 
     void lea(Indirect mem, Register reg);
 

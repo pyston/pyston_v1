@@ -35,15 +35,18 @@ struct LineInfo;
 extern const void* interpreter_instr_addr;
 
 struct ASTInterpreterJitInterface {
+    // Special value which when returned from the bjit will trigger a OSR.
+    static constexpr uint64_t osr_dummy_value = -1;
+
     static int getBoxedLocalsOffset();
     static int getCurrentBlockOffset();
     static int getCurrentInstOffset();
+    static int getEdgeCountOffset();
     static int getGeneratorOffset();
     static int getGlobalsOffset();
 
     static void delNameHelper(void* _interpreter, InternedString name);
     static Box* derefHelper(void* interp, InternedString s);
-    static Box* doOSRHelper(void* interp, AST_Jump* node);
     static Box* landingpadHelper(void* interp);
     static void pendingCallsCheckHelper();
     static void setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);

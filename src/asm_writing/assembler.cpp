@@ -684,6 +684,8 @@ void Assembler::incl(Indirect mem) {
 
     assert(src_idx >= 0 && src_idx < 8);
 
+    bool needssib = (src_idx == 0b100);
+
     if (rex)
         emitRex(rex);
     emitByte(0xff);
@@ -691,8 +693,12 @@ void Assembler::incl(Indirect mem) {
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, 0, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
     } else {
         emitModRM(0b01, 0, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
         emitByte(mem.offset);
     }
 }
@@ -868,13 +874,13 @@ void Assembler::cmp(Register reg, Immediate imm) {
     emitArith(imm, reg, OPCODE_CMP);
 }
 
-void Assembler::cmp(Indirect mem, Immediate imm) {
+void Assembler::cmp(Indirect mem, Immediate imm, MovType type) {
     int64_t val = imm.val;
     assert(fitsInto<int32_t>(val));
 
     int src_idx = mem.base.regnum;
-
-    int rex = REX_W;
+    assert(type == MovType::Q || type == MovType::L);
+    int rex = type == MovType::Q ? REX_W : 0;
     if (src_idx >= 8) {
         rex |= REX_B;
         src_idx -= 8;
@@ -882,17 +888,26 @@ void Assembler::cmp(Indirect mem, Immediate imm) {
 
     assert(src_idx >= 0 && src_idx < 8);
 
-    emitRex(rex);
+    bool needssib = (src_idx == 0b100);
+
+    if (rex)
+        emitRex(rex);
     emitByte(0x81);
 
     if (mem.offset == 0) {
         emitModRM(0b00, 7, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
     } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, 7, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
         emitByte(mem.offset);
     } else {
         assert(fitsInto<int32_t>(mem.offset));
         emitModRM(0b10, 7, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
         emitInt(mem.offset, 4);
     }
 
