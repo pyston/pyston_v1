@@ -189,7 +189,9 @@ def get_test_options(fn, check_stats, run_memcheck):
             l = l[len("# run_args:"):].split()
             opts.jit_args += l
         elif l.startswith("# expected:"):
+            assert opts.expected == "success", "Multiple 'expected:' lines found!"
             opts.expected = l[len("# expected:"):].strip()
+            assert opts.expected != "success", "'expected: success' is the default and is ignored"
         elif l.startswith("# should_error"):
             opts.should_error = True
         elif l.startswith("# fail-if:"):
@@ -258,7 +260,9 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             if not have_stats:
                 color = 31
                 msg = "no stats available"
-                if KEEP_GOING:
+                if opts.expected == "fail":
+                    return "Expected failure (no stats found)"
+                elif KEEP_GOING:
                     failed.append(fn)
                     if VERBOSE >= 1:
                         return "\033[%dmFAILED\033[0m (%s)\n%s" % (color, msg, stderr)
