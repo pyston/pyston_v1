@@ -2895,7 +2895,7 @@ static Box* typeAbstractMethods(Box* _type, void*) {
     if (!mod) {
         raiseExcHelper(AttributeError, "__abstractmethods__");
     }
-    return mod;
+    return incref(mod);
 }
 
 static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
