@@ -19,6 +19,7 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
@@ -290,6 +291,69 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     builder.SetInsertPoint(continue_block);
 }
 
+// TODO: this should be cleaned up and moved to src/core/
+template <typename K, typename V> class OrderedMap {
+private:
+    llvm::DenseMap<K, V> map;
+    std::vector<K> order;
+
+public:
+    V& operator[](const K& k) {
+        if (map.count(k) == 0)
+            order.push_back(k);
+
+        return map[k];
+    }
+
+    const V& get(const K& k) const { return map.find(k)->second; }
+
+    size_t size() const {
+        assert(order.size() == map.size());
+        return order.size();
+    }
+
+    void clear() {
+        map.clear();
+        order.clear();
+    }
+
+    // TODO: this is slow
+    void erase(const K& k) {
+        assert(map.count(k));
+        map.erase(k);
+        order.erase(std::remove(order.begin(), order.end(), k), order.end());
+    }
+
+    class const_iterator {
+    private:
+        const OrderedMap* themap;
+        int idx;
+
+        const_iterator(const OrderedMap* themap, int idx) : themap(themap), idx(idx) {}
+
+    public:
+        std::pair<K, V> operator*() { return *themap->map.find(themap->order[idx]); }
+        std::pair<K, V> operator->() { return *this; }
+
+        bool operator==(const const_iterator& rhs) const {
+            assert(themap == rhs.themap);
+            return idx == rhs.idx;
+        }
+        bool operator!=(const const_iterator& rhs) const { return !(*this == rhs); }
+
+        const_iterator& operator++() {
+            idx++;
+            return *this;
+        }
+
+        friend class OrderedMap;
+    };
+
+    size_t count(K& k) const { return map.count(k); }
+    const_iterator begin() const { return const_iterator(this, 0); }
+    const_iterator end() const { return const_iterator(this, size()); }
+};
+
 static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
     std::vector<llvm::BasicBlock*> ordering;
     llvm::DenseSet<llvm::BasicBlock*> added;
@@ -329,10 +393,13 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
             // The heuristic here is just to make sure to pick one in 0-successor component of the SCC
 
             std::vector<std::pair<llvm::BasicBlock*, int>> num_successors;
-            for (auto&& p : num_successors_added) {
-                if (added.count(p.first))
+            // TODO this could be sped up:
+            for (auto&& BB : *f) {
+                if (!num_successors_added.count(&BB))
                     continue;
-                num_successors.push_back(p);
+                if (added.count(&BB))
+                    continue;
+                num_successors.push_back(std::make_pair(&BB, num_successors_added[&BB]));
             }
 
             std::sort(num_successors.begin(), num_successors.end(),
@@ -397,6 +464,7 @@ private:
 
     struct BlockComparer {
         bool operator()(std::pair<llvm::BasicBlock*, int> lhs, std::pair<llvm::BasicBlock*, int> rhs) {
+            assert(lhs.second != rhs.second);
             return lhs.second > rhs.second;
         }
     };
@@ -408,11 +476,13 @@ private:
 public:
     BlockOrderer(std::vector<llvm::BasicBlock*> order) {
         for (int i = 0; i < order.size(); i++) {
+            // errs() << "DETERMINISM: " << order[i]->getName() << " has priority " << i << '\n';
             priority[order[i]] = i;
         }
     }
 
     void add(llvm::BasicBlock* b) {
+        // errs() << "DETERMINISM: adding " << b->getName() << '\n';
         assert(in_queue.size() == queue.size());
         if (in_queue.count(b))
             return;
@@ -428,6 +498,7 @@ public:
         }
 
         llvm::BasicBlock* b = queue.top().first;
+        // errs() << "DETERMINISM: popping " << b->getName() << " (priority " << priority[b] << " \n";
         queue.pop();
         assert(in_queue.count(b));
         in_queue.erase(b);
@@ -435,15 +506,14 @@ public:
     }
 };
 
-typedef llvm::DenseMap<llvm::Value*, int> BlockMap;
+typedef OrderedMap<llvm::Value*, int> BlockMap;
 bool endingRefsDifferent(const BlockMap& lhs, const BlockMap& rhs) {
     if (lhs.size() != rhs.size())
         return true;
     for (auto&& p : lhs) {
-        auto it = rhs.find(p.first);
-        if (it == rhs.end())
+        if (rhs.count(p.first) == 0)
             return true;
-        if (p.second != it->second)
+        if (p.second != rhs.get(p.first))
             return true;
     }
     return false;
@@ -556,8 +626,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         // We do a backwards scan and starting/ending here refers to the scan, not the instruction sequence.
         // So "starting_refs" are the refs that are inherited, ie the refstate at the end of the basic block.
         // "ending_refs" are the refs we calculated, which corresponds to the refstate at the beginning of the block.
-        llvm::DenseMap<llvm::Value*, int> starting_refs;
-        llvm::DenseMap<llvm::Value*, int> ending_refs;
+        BlockMap starting_refs;
+        BlockMap ending_refs;
 
         llvm::SmallVector<RefOp, 4> increfs;
         llvm::SmallVector<RefOp, 4> decrefs;
@@ -570,6 +640,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     }
 
     while (llvm::BasicBlock* bb = orderer.pop()) {
+        // errs() << "DETERMINISM: Processing " << bb->getName() << '\n';
         llvm::BasicBlock& BB = *bb;
 
 #if 0
@@ -589,7 +660,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         bool firsttime = (states.count(&BB) == 0);
         RefState& state = states[&BB];
 
-        llvm::DenseMap<llvm::Value*, int> orig_ending_refs = std::move(state.ending_refs);
+        BlockMap orig_ending_refs = std::move(state.ending_refs);
 
         state.starting_refs.clear();
         state.ending_refs.clear();
@@ -603,26 +674,34 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 successors.push_back(SBB);
         }
         if (successors.size()) {
-            llvm::DenseSet<llvm::Value*> tracked_values;
+            std::vector<llvm::Value*> tracked_values;
+            std::unordered_set<llvm::Value*> in_tracked_values;
             for (auto SBB : successors) {
+                // errs() << "DETERMINISM: successor " << SBB->getName() << '\n';
                 assert(states.count(SBB));
                 for (auto&& p : states[SBB].ending_refs) {
+                    // errs() << "DETERMINISM: looking at ref " << p.first->getName() << '\n';
                     assert(p.second > 0);
-                    tracked_values.insert(p.first);
+                    if (!in_tracked_values.count(p.first)) {
+                        in_tracked_values.insert(p.first);
+                        tracked_values.push_back(p.first);
+                    }
                 }
             }
 
+            // size_t hash = 0;
             for (auto v : tracked_values) {
+                // hash = hash * 31 + std::hash<llvm::StringRef>()(v->getName());
                 assert(rt->vars.count(v));
                 auto refstate = rt->vars[v];
 
                 int min_refs = 1000000000;
                 for (auto SBB : successors) {
-                    auto it = states[SBB].ending_refs.find(v);
-                    if (it != states[SBB].ending_refs.end()) {
+                    auto&& ending_refs = states[SBB].ending_refs;
+                    if (ending_refs.count(v)) {
                         //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", have "
                                      //<< it->second << " refs on " << *v << '\n';
-                        min_refs = std::min(it->second, min_refs);
+                        min_refs = std::min(ending_refs[v], min_refs);
                     } else {
                         //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName()
                                      //<< ", have 0 (missing) refs on " << *v << '\n';
@@ -634,11 +713,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     min_refs = std::max(1, min_refs);
 
                 for (auto SBB : successors) {
-                    auto it = states[SBB].ending_refs.find(v);
                     int this_refs = 0;
-                    if (it != states[SBB].ending_refs.end()) {
-                        this_refs = it->second;
-                    }
+                    auto&& ending_refs = states[SBB].ending_refs;
+                    if (ending_refs.count(v))
+                        this_refs = ending_refs[v];
 
                     if (this_refs > min_refs) {
                         //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
@@ -655,6 +733,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 else
                     assert(state.starting_refs.count(v) == 0);
             }
+            // errs() << "DETERMINISM: tracked value name hash: " << hash << '\n';
         }
 
         state.ending_refs = state.starting_refs;
@@ -669,7 +748,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 continue;
 
             llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
-            llvm::DenseMap<llvm::Value*, int> num_times_as_op;
+            OrderedMap<llvm::Value*, int> num_times_as_op;
 
             for (auto v : rt->refs_consumed[&I]) {
                 num_consumed_by_inst[v]++;
@@ -733,16 +812,25 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             }
         }
 
+
+        // size_t hash = 0;
         // Handle variables that were defined in this BB:
-        for (auto&& p : rt->vars) {
-            llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
-            if (!inst)
+        // TODO shouldn't have to iterate over all instructions in the function
+        for (auto&& II : llvm::inst_range(f)) {
+            //llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
+            //if (!inst)
+                //continue;
+            llvm::Instruction* inst = &II;
+            if (!rt->vars.count(inst))
                 continue;
+            auto&& rstate = rt->vars[inst];
+
+            // hash = hash * 31 + std::hash<llvm::StringRef>()(inst->getName());
 
             // Invokes are special.  Handle them here by treating them as if they happened in their normal-dest block.
             llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(inst);
             if ((!ii && inst->getParent() == &BB) || (ii && ii->getNormalDest() == &BB)) {
-                int starting_refs = (p.second.reftype == RefType::OWNED ? 1 : 0);
+                int starting_refs = (rstate.reftype == RefType::OWNED ? 1 : 0);
                 if (state.ending_refs[inst] != starting_refs) {
                     llvm::Instruction* insertion_pt = NULL;
                     llvm::BasicBlock* insertion_block = NULL, *insertion_from_block = NULL;
@@ -757,19 +845,20 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     }
 
                     if (state.ending_refs[inst] < starting_refs) {
-                        assert(p.second.reftype == RefType::OWNED);
+                        assert(rstate.reftype == RefType::OWNED);
                         state.decrefs.push_back(
-                            RefOp({ inst, p.second.nullable, starting_refs - state.ending_refs[inst], insertion_pt,
+                            RefOp({ inst, rstate.nullable, starting_refs - state.ending_refs[inst], insertion_pt,
                                     insertion_block, insertion_from_block }));
                     } else {
                         state.increfs.push_back(
-                            RefOp({ inst, p.second.nullable, state.ending_refs[inst] - starting_refs, insertion_pt,
+                            RefOp({ inst, rstate.nullable, state.ending_refs[inst] - starting_refs, insertion_pt,
                                     insertion_block, insertion_from_block }));
                     }
                 }
                 state.ending_refs.erase(inst);
             }
         }
+        // errs() << "DETERMINISM: rt.vars name hash: " << hash << '\n';
 
         // If this is the entry block, finish dealing with the ref state rather than handing off to a predecessor
         if (&BB == &BB.getParent()->front()) {
@@ -806,6 +895,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 orderer.add(SBB);
             }
         }
+
+        // for (auto&& p : state.ending_refs) {
+        // errs() << "DETERMINISM: ending ref: " << p.first->getName() << '\n';
+        //}
     }
 
     ASSERT(states.size() == f->size(), "We didn't process all nodes...");

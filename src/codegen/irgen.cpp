@@ -496,7 +496,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
     std::unordered_map<CFGBlock*, SymbolTable*> ending_symbol_tables;
     std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
-    typedef std::unordered_map<InternedString, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
+    typedef std::map<InternedString, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
     std::unordered_map<CFGBlock*, PHITable*> created_phis;
     std::unordered_map<CFGBlock*, llvm::SmallVector<IRGenerator::ExceptionState, 2>> incoming_exception_state;
 
