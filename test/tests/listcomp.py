@@ -1,4 +1,3 @@
-# expected: reffail
 print [(i, j) for i in range(4) for j in range(4)]
 
 def f():
