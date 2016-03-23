@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs);
+    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -154,14 +154,6 @@ private:
 public:
     ~ASTInterpreter() {
         Py_XDECREF(frame_info.boxedLocals);
-
-        int nvregs = getMD()->calculateNumVRegs();
-        int nvregs_user_visible = getMD()->calculateNumUserVisibleVRegs();
-        // skip the user visible ones because they will get decrefed in deinitFrame
-        for (int i = nvregs_user_visible; i < nvregs; i++) {
-            Py_XDECREF(vregs[i]);
-        }
-
         Py_DECREF(frame_info.globals);
         Py_XDECREF(this->created_closure);
     }
@@ -241,7 +233,7 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
@@ -258,6 +250,7 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
     scope_info = source_info->getScopeInfo();
     frame_info.vregs = vregs;
     frame_info.md = md;
+    frame_info.num_vregs = num_vregs;
 
     assert(scope_info);
 }
@@ -1912,7 +1905,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     }
 
     ++md->times_interpreted;
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
 
     ScopeInfo* scope_info = md->source->getScopeInfo();
 
@@ -1953,7 +1946,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
     interpreter.initArguments(NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter.setBoxedLocals(boxedLocals);
 
@@ -1988,7 +1981,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
     if (source_info->scoping->areGlobalsFromModule())
         interpreter.setGlobals(source_info->parent_module);
 

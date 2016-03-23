@@ -585,7 +585,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              v);
         v->refConsumed();
     } else {
-        RewriterVar* prev = vregs_array->getAttr(8 * vreg);
+        RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setNullable(true);
         vregs_array->setAttr(8 * vreg, v);
         v->refConsumed();
 
