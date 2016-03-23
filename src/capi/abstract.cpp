@@ -415,7 +415,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
             // We don't need to worry about __getattr__, since the default __class__ will always resolve.
             bool has_custom_class = inst->cls->has___class__ || inst->cls->has_getattribute;
             if (!has_custom_class) {
-                assert(PyObject_GetAttr(inst, __class__) == inst->cls);
+                assert(autoDecref(PyObject_GetAttr(inst, __class__)) == inst->cls);
             } else {
                 c = PyObject_GetAttr(inst, __class__);
                 if (!c)

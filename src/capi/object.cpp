@@ -191,6 +191,7 @@ static PyObject* _generic_dir(PyObject* obj) noexcept {
     } else if (dict->cls == attrwrapper_cls) {
         auto new_dict = PyDict_New();
         PyDict_Update(new_dict, dict);
+        Py_DECREF(dict);
         dict = new_dict;
     } else if (!PyDict_Check(dict)) {
         Py_DECREF(dict);

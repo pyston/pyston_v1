@@ -3320,10 +3320,12 @@ done:
 
 static Box* objectClass(Box* obj, void* context) {
     assert(obj->cls != instance_cls); // should override __class__ in classobj
-    return obj->cls;
+    return incref(obj->cls);
 }
 
 static void objectSetClass(Box* obj, Box* val, void* context) {
+    RELEASE_ASSERT(0, "check refcounting");
+
     if (!PyType_Check(val))
         raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
 

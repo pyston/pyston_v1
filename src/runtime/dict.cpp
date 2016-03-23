@@ -35,6 +35,23 @@ BoxedClass* dictitervalue_cls = NULL;
 BoxedClass* dictiteritem_cls = NULL;
 }
 
+static void _dictSetStolen(BoxedDict* self, BoxAndHash k, STOLEN(Box*) v) {
+    Box*& slot = self->d[k];
+    Box* old_val = slot;
+
+    slot = v;
+
+    if (old_val) {
+        Py_DECREF(old_val);
+    } else {
+        Py_INCREF(k.value);
+    }
+}
+
+static void _dictSet(BoxedDict* self, BoxAndHash k, Box* v) {
+    _dictSetStolen(self, k, incref(v));
+}
+
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
@@ -238,7 +255,7 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
             // Special-case defaultdict, assuming that it's the main time we will actually hit this.
             // We could just use a single runtime IC here, or have a small cache that maps type->runtimeic.
             // Or use a polymorphic runtime ic.
-            assert(0 && "check refcountinG");
+            assert(0 && "check refcounting");
             static BoxedClass* defaultdict_cls = NULL;
             static CallattrIC defaultdict_ic;
             if (defaultdict_cls == NULL && strcmp(self->cls->tp_name, "collections.defaultdict") == 0) {
@@ -283,6 +300,16 @@ extern "C" PyObject* PyDict_New() noexcept {
 // The performance should hopefully be comparable to the CPython fast case, since we can use
 // runtimeICs.
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noexcept {
+    if (PyDict_Check(mp)) {
+        try {
+            _dictSet(static_cast<BoxedDict*>(mp), _key, _item);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return -1;
+        }
+        return 0;
+    }
+
     ASSERT(PyDict_Check(mp) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
 
     assert(mp);
@@ -404,17 +431,7 @@ extern "C" BORROWED(PyObject*) PyDict_GetItemString(PyObject* dict, const char* 
 }
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
-    Box*& pos = self->d[k];
-    Py_INCREF(v);
-
-    Box* old = pos;
-    pos = v;
-
-    if (old) {
-        Py_DECREF(old);
-    } else {
-        Py_INCREF(k);
-    }
+    _dictSet(self, k, v);
 
     Py_RETURN_NONE;
 }
@@ -424,7 +441,6 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
         raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
-    assert(0 && "check refcounting");
     auto it = self->d.find(k);
     if (it == self->d.end()) {
         raiseExcHelper(KeyError, k);
@@ -433,6 +449,7 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
     Box* v = it->second;
     self->d.erase(it);
     Py_DECREF(v);
+    Py_DECREF(k);
 
     Py_RETURN_NONE;
 }
@@ -513,7 +530,9 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     }
 
     Box* rtn = it->second;
+    Box* old_k = it->first.value;
     self->d.erase(it);
+    Py_DECREF(old_k);
     return rtn;
 }
 
@@ -579,7 +598,9 @@ extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
         if (op->cls == attrwrapper_cls) {
             if (key->cls == str_cls) {
                 BoxedString* key_str = (BoxedString*)key;
+                Py_INCREF(key_str);
                 internStringMortalInplace(key_str);
+                AUTO_DECREF(key_str);
                 return unwrapAttrWrapper(op)->hasattr(key_str);
             }
 
@@ -613,7 +634,8 @@ Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
         }
     } else {
         for (Box* e : iterable->pyElements()) {
-            dictSetitem(rtn, e, default_value);
+            AUTO_DECREF(e);
+            _dictSet(rtn, e, default_value);
         }
     }
 
@@ -655,6 +677,7 @@ Box* dictNe(BoxedDict* self, Box* _rhs) {
     Box* eq = dictEq(self, _rhs);
     if (eq == NotImplemented)
         return eq;
+    AUTO_DECREF(eq);
     if (eq == True)
         Py_RETURN_FALSE;
     Py_RETURN_TRUE;
@@ -676,7 +699,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 void dictMerge(BoxedDict* self, Box* other) {
     if (PyDict_Check(other)) {
         for (const auto& p : static_cast<BoxedDict*>(other)->d)
-            self->d[p.first] = p.second;
+            _dictSet(self, p.first, p.second);
         return;
     }
 
@@ -692,7 +715,8 @@ void dictMerge(BoxedDict* self, Box* other) {
     AUTO_DECREF(keys);
 
     for (Box* k : keys->pyElements()) {
-        self->d[k] = getitemInternal<CXX>(other, k);
+        AUTO_DECREF(k);
+        _dictSetStolen(self, k, getitemInternal<CXX>(other, k));
     }
 }
 
@@ -709,16 +733,14 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
                 raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %ld; 2 is required", idx,
                                list->size);
 
-            assert(0 && "bad refcounting if key already exists");
-            self->d[incref(list->elts->elts[0])] = incref(list->elts->elts[1]);
+            _dictSet(self, list->elts->elts[0], list->elts->elts[1]);
         } else if (element->cls == tuple_cls) {
             BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
             if (tuple->size() != 2)
                 raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %ld; 2 is required", idx,
                                tuple->size());
 
-            assert(0 && "bad refcounting if key already exists");
-            self->d[incref(tuple->elts[0])] = incref(tuple->elts[1]);
+            _dictSet(self, tuple->elts[0], tuple->elts[1]);
         } else
             raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
 
@@ -760,7 +782,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = getStaticString("keys");
-        if (getattrInternal<ExceptionStyle::CXX>(arg, keys_str)) {
+        if (autoDecref(getattrInternal<ExceptionStyle::CXX>(arg, keys_str))) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);
@@ -781,17 +803,14 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args_sz > 1)
         raiseExcHelper(TypeError, "dict expected at most 1 arguments, got %d", args_sz);
 
-    dictUpdate(self, args, kwargs);
+    autoDecref(dictUpdate(self, args, kwargs));
 
     if (kwargs) {
         // handle keyword arguments by merging (possibly over positional entries per CPy)
         assert(kwargs->cls == dict_cls);
 
         for (const auto& p : kwargs->d) {
-            assert(0 && "bad refcounting if key already exists");
-            Py_INCREF(p.first.value);
-            Py_INCREF(p.second);
-            self->d[p.first] = p.second;
+            _dictSet(self, p.first, p.second);
         }
     }
 

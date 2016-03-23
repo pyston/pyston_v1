@@ -901,7 +901,6 @@ public:
 };
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
-    assert(0 && "check refcounting");
     assert(PyList_Check(self));
 
     if (cmp == None)
@@ -918,6 +917,7 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     // I also don't know if std::stable_sort is exception-safe.
 
     if (cmp) {
+        assert(!key);
         std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size, PyCmpComparer(cmp));
     } else {
         int num_keys_added = 0;
@@ -925,7 +925,9 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
             for (int i = 0; i < num_keys_added; i++) {
                 Box** obj_loc = &self->elts->elts[i];
                 assert((*obj_loc)->cls == tuple_cls);
-                *obj_loc = static_cast<BoxedTuple*>(*obj_loc)->elts[2];
+                BoxedTuple* t = static_cast<BoxedTuple*>(*obj_loc);
+                *obj_loc = t->elts[2];
+                Py_DECREF(t);
             }
         };
 
@@ -935,11 +937,13 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
                     Box** obj_loc = &self->elts->elts[i];
 
                     Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
+                    AUTO_DECREF(key_val);
+
                     // Add the index as part of the new tuple so that the comparison never hits the
                     // original object.
                     // TODO we could potentially make this faster by copying the CPython approach of
                     // creating special sortwrapper objects that compare only based on the key.
-                    Box* new_obj = BoxedTuple::create({ key_val, boxInt(i), *obj_loc });
+                    Box* new_obj = BoxedTuple::create({ key_val, autoDecref(boxInt(i)), *obj_loc });
 
                     *obj_loc = new_obj;
                     num_keys_added++;
@@ -960,7 +964,8 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     }
 
     if (nonzero(reverse)) {
-        listReverse(self);
+        Box* r = listReverse(self);
+        Py_DECREF(r);
     }
 }
 
