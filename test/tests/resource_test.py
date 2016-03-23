@@ -1,4 +1,3 @@
-# expected: reffail
 import resource
 
 for k in sorted(dir(resource)):

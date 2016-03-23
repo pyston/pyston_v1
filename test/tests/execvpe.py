@@ -1,4 +1,3 @@
-# expected: reffail
 # no-collect-stats
 
 import os
