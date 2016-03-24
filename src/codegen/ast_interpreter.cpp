@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs);
+    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -154,14 +154,6 @@ private:
 public:
     ~ASTInterpreter() {
         Py_XDECREF(frame_info.boxedLocals);
-
-        int nvregs = getMD()->calculateNumVRegs();
-        int nvregs_user_visible = getMD()->calculateNumUserVisibleVRegs();
-        // skip the user visible ones because they will get decrefed in deinitFrame
-        for (int i = nvregs_user_visible; i < nvregs; i++) {
-            Py_XDECREF(vregs[i]);
-        }
-
         Py_DECREF(frame_info.globals);
         Py_XDECREF(this->created_closure);
     }
@@ -241,7 +233,7 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
@@ -258,6 +250,7 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs)
     scope_info = source_info->getScopeInfo();
     frame_info.vregs = vregs;
     frame_info.md = md;
+    frame_info.num_vregs = num_vregs;
 
     assert(scope_info);
 }
@@ -571,6 +564,7 @@ Value ASTInterpreter::getNone() {
 
 Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
     Value operand = visit_expr(node->operand);
+    AUTO_DECREF(operand.o);
     if (node->op_type == AST_TYPE::Not)
         return Value(boxBool(!nonzero(operand.o)), jit ? jit->emitNotNonzero(operand) : NULL);
     else
@@ -733,7 +727,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
     for (auto&& dead : dead_symbols) {
         assert(getSymVRegMap().count(dead));
-        vregs[getSymVRegMap()[dead]] = NULL;
+        int vreg_num = getSymVRegMap()[dead];
+        Py_CLEAR(vregs[vreg_num]);
     }
 
     const OSREntryDescriptor* found_entry = nullptr;
@@ -757,12 +752,13 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
         if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
             bool is_defined = val != NULL;
+            assert(is_defined && "check refcounting");
             // TODO only mangle once
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            sorted_symbol_table[name] = is_defined ? val : VAL_UNDEFINED;
+            sorted_symbol_table[name] = is_defined ? incref(val) : VAL_UNDEFINED;
         } else {
             ASSERT(val != NULL, "%s", name.c_str());
-            Box* v = sorted_symbol_table[name] = val;
+            sorted_symbol_table[name] = incref(val);
         }
     }
 
@@ -1912,7 +1908,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     }
 
     ++md->times_interpreted;
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
 
     ScopeInfo* scope_info = md->source->getScopeInfo();
 
@@ -1953,7 +1949,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
     interpreter.initArguments(NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter.setBoxedLocals(boxedLocals);
 
@@ -1988,7 +1984,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(md, vregs, num_vregs);
     if (source_info->scoping->areGlobalsFromModule())
         interpreter.setGlobals(source_info->parent_module);
 

@@ -459,7 +459,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (p.second == phi_type) {
                 // good to go
                 v = from_arg;
+                irstate->getRefcounts()->setType(v, RefType::BORROWED);
             } else if (p.second->canConvertTo(phi_type)) {
+                assert(0 && "check refcounting");
                 // not sure if/when this happens, but if there's a type mismatch but one we know
                 // can be handled (such as casting from a subclass to a superclass), handle it:
                 ConcreteCompilerVariable* converted = var->makeConverted(*unbox_emitter, phi_type);
@@ -601,7 +603,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             // TODO might be more efficient to do post-call safepoints?
             generator->doSafePoint(block->body[0]);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
-            assert(0 && "check refcounting");
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
             assert(phis);
@@ -619,11 +620,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
                 //        analyzed_type->debugName().c_str());
 
-                assert(0 && "check refcounting");
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
                                                                       block->predecessors.size() + 1, p.first.s());
                 if (analyzed_type->getBoxType() == analyzed_type) {
-                    assert(0 && "check refcounting");
                     irstate->getRefcounts()->setType(phi, RefType::OWNED);
                 }
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
@@ -877,7 +876,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
             if (this_is_osr_entry) {
-                assert(0 && "check refcounting");
                 ConcreteCompilerVariable* v = (*osr_syms)[it->first];
                 assert(v);
 

@@ -225,13 +225,12 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         assert(!passed_globals);
 
         // The OSR case
-
-        assert(0 && "check refcounting");
         this->frame_info = frame_info_arg;
 
         // use vrags array from the interpreter
         vregs = builder.CreateLoad(getVRegsGep(builder, frame_info_arg));
         this->globals = builder.CreateLoad(getGlobalsGep(builder, frame_info_arg));
+        getRefcounts()->setType(this->globals, RefType::BORROWED);
 
         if (getScopeInfo()->usesNameLookup()) {
             // load frame_info.boxedLocals
