@@ -183,7 +183,7 @@ Box* tupleMulInt(BoxedTuple* self, int n) {
         n = 0;
 
     if ((s == 0 || n == 1) && PyTuple_CheckExact(self)) {
-        return self;
+        return incref(self);
     } else {
         BoxedTuple* rtn = BoxedTuple::create(n * s);
         int rtn_i = 0;

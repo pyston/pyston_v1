@@ -1577,7 +1577,7 @@ extern "C" Box* longTrunc(BoxedLong* self) {
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
-    return self;
+    return incref(self);
 }
 
 extern "C" Box* longIndex(BoxedLong* v) noexcept {

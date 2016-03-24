@@ -1351,7 +1351,7 @@ public:
     static Box* iter(Box* _self) noexcept {
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        return self;
+        return incref(self);
     }
 
     static Box* next(Box* _self) {

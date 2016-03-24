@@ -185,8 +185,7 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
 
 Box* xrangeIterIter(Box* self) {
     assert(self->cls == xrange_iterator_cls);
-    Py_INCREF(self);
-    return self;
+    return incref(self);
 }
 
 Box* xrangeIter(Box* self) noexcept {

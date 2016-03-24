@@ -1036,7 +1036,7 @@ extern "C" Box* floatFloat(BoxedFloat* self) {
                        getTypeName(self));
 
     if (self->cls == float_cls)
-        return self;
+        return incref(self);
     return boxFloat(self->d);
 }
 

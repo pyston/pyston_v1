@@ -1083,7 +1083,7 @@ extern "C" Box* intHash(BoxedInt* self) {
         return boxInt(-2);
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 
@@ -1155,7 +1155,7 @@ extern "C" Box* intTrunc(BoxedInt* self) {
                        getTypeName(self));
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 
@@ -1165,7 +1165,7 @@ extern "C" Box* intInt(BoxedInt* self) {
                        getTypeName(self));
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 

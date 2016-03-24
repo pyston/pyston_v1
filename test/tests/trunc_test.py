@@ -1,4 +1,3 @@
-# expected: reffail
 import math
 
 def type_trunc(type, arg):
