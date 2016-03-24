@@ -246,6 +246,7 @@ private:
 
         // TODO this isn't the exact behavior
         BoxedString* name = getInplaceOpName(node->op_type);
+        AUTO_DECREF(name);
         CompilerType* attr_type = left->getattrType(name, true);
 
         if (attr_type == UNDEF)
