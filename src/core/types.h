@@ -630,7 +630,7 @@ public:
     HiddenClass* hcls;
     AttrList* attr_list;
 
-    HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
+    HCAttrs(HiddenClass* hcls = NULL) : hcls(hcls), attr_list(nullptr) {}
 
     int traverse(visitproc visit, void* arg) noexcept;
     void clear() noexcept;

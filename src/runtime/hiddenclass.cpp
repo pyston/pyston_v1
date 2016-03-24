@@ -136,6 +136,8 @@ HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
             cur = cur->getOrMakeChild(attr);
         curidx++;
     }
+    if (cur == root_hcls)
+        return NULL;
     return cur;
 }
 

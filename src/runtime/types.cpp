@@ -2063,7 +2063,7 @@ Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
 
     HCAttrs* attrs = self->getHCAttrsPtr();
 
-    if (attrs->hcls->attributeArraySize() == 0) {
+    if (!attrs->hcls || attrs->hcls->attributeArraySize() == 0) {
         attrs->hcls = HiddenClass::makeSingleton();
 
         self->giveAttrBorrowed("__name__", name);
@@ -2167,7 +2167,7 @@ public:
         // This check doesn't cover all cases, since an attrwrapper could be created around
         // a normal object which then becomes dict-backed, so we RELEASE_ASSERT later
         // that that doesn't happen.
-        assert(b->getHCAttrsPtr()->hcls->type == HiddenClass::NORMAL
+        assert(!b->getHCAttrsPtr()->hcls || b->getHCAttrsPtr()->hcls->type == HiddenClass::NORMAL
                || b->getHCAttrsPtr()->hcls->type == HiddenClass::SINGLETON);
     }
 
@@ -2579,6 +2579,8 @@ public:
 
         // Add the existing attrwrapper object (ie self) back as the attrwrapper:
         self->b->appendNewHCAttr(self, NULL);
+        if (!attrs->hcls)
+            attrs->hcls = root_hcls;
         attrs->hcls = attrs->hcls->getAttrwrapperChild();
     }
 
@@ -2742,7 +2744,7 @@ Box* Box::getAttrWrapper() {
     HiddenClass* hcls = attrs->hcls;
 
     if (!hcls)
-        hcls = attrs->hcls = root_hcls;
+        hcls = root_hcls;
 
     if (hcls->type == HiddenClass::DICT_BACKED) {
         return incref(attrs->attr_list->attrs[0]);
@@ -3727,7 +3729,7 @@ void HCAttrs::clear() noexcept {
     auto old_attr_list = this->attr_list;
     auto old_attr_list_size = hcls->attributeArraySize();
 
-    new ((void*)this) HCAttrs(root_hcls);
+    new ((void*)this) HCAttrs(NULL);
 
     if (old_attr_list) {
         for (int i = 0; i < old_attr_list_size; i++) {

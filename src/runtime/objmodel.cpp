@@ -1118,6 +1118,8 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
     HCAttrs* attrs = getHCAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
 
+    if (hcls == NULL)
+        hcls = root_hcls;
     assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
     int numattrs = hcls->attributeArraySize();
@@ -1188,7 +1190,7 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
             // We could update PyObject_Init and PyObject_INIT to do this, but that has a small compatibility
             // issue (what if people don't call either of those) and I'm not sure that this check will be that
             // harmful.  But if it is we might want to try pushing this assignment to allocation time.
-            hcls = attrs->hcls = root_hcls;
+            hcls = root_hcls;
         }
 
         if (hcls->type == HiddenClass::DICT_BACKED) {
@@ -1212,7 +1214,7 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
                 REWRITE_ABORTED("");
                 rewrite_args = NULL;
             } else {
-                rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
+                rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)attrs->hcls);
                 if (hcls->type == HiddenClass::SINGLETON)
                     hcls->addDependence(rewrite_args->rewriter);
             }
