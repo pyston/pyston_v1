@@ -564,6 +564,7 @@ Value ASTInterpreter::getNone() {
 
 Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
     Value operand = visit_expr(node->operand);
+    AUTO_DECREF(operand.o);
     if (node->op_type == AST_TYPE::Not)
         return Value(boxBool(!nonzero(operand.o)), jit ? jit->emitNotNonzero(operand) : NULL);
     else
@@ -726,7 +727,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
     for (auto&& dead : dead_symbols) {
         assert(getSymVRegMap().count(dead));
-        vregs[getSymVRegMap()[dead]] = NULL;
+        int vreg_num = getSymVRegMap()[dead];
+        Py_CLEAR(vregs[vreg_num]);
     }
 
     const OSREntryDescriptor* found_entry = nullptr;
@@ -750,12 +752,13 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
         if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
             bool is_defined = val != NULL;
+            assert(is_defined && "check refcounting");
             // TODO only mangle once
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            sorted_symbol_table[name] = is_defined ? val : VAL_UNDEFINED;
+            sorted_symbol_table[name] = is_defined ? incref(val) : VAL_UNDEFINED;
         } else {
             ASSERT(val != NULL, "%s", name.c_str());
-            Box* v = sorted_symbol_table[name] = val;
+            sorted_symbol_table[name] = incref(val);
         }
     }
 
