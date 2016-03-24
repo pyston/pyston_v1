@@ -475,20 +475,46 @@ public:
     }
 
     static void tp_dealloc(Box* b) noexcept;
-    static void tp_free(void* b) noexcept;
 
     friend int PyInt_ClearFreeList() noexcept;
 };
 static_assert(sizeof(BoxedInt) == sizeof(PyIntObject), "");
 static_assert(offsetof(BoxedInt, n) == offsetof(PyIntObject, ob_ival), "");
 
+extern "C" int PyFloat_ClearFreeList() noexcept;
 class BoxedFloat : public Box {
+private:
+    static PyFloatObject* free_list;
+    static PyFloatObject* fill_free_list() noexcept;
+
 public:
     double d;
 
     BoxedFloat(double d) __attribute__((visibility("default"))) : d(d) {}
 
-    DEFAULT_CLASS_SIMPLE(float_cls, false);
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default"))) {
+        return Box::operator new(size, cls);
+    }
+    // float uses a customized allocator, so we can't use DEFAULT_CLASS_SIMPLE (which inlines the default allocator)
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+#ifdef DISABLE_INT_FREELIST
+        return Box::operator new(size, float_cls);
+#else
+        if (unlikely(free_list == NULL)) {
+            free_list = fill_free_list();
+            assert(free_list);
+        }
+
+        PyFloatObject* v = free_list;
+        free_list = (PyFloatObject*)v->ob_type;
+        PyObject_INIT((BoxedFloat*)v, &PyFloat_Type);
+        return v;
+#endif
+    }
+
+    static void tp_dealloc(Box* b) noexcept;
+
+    friend int PyFloat_ClearFreeList() noexcept;
 };
 static_assert(sizeof(BoxedFloat) == sizeof(PyFloatObject), "");
 static_assert(offsetof(BoxedFloat, d) == offsetof(PyFloatObject, ob_fval), "");

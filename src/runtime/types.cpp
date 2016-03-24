@@ -4217,7 +4217,8 @@ void setupRuntime() {
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", true, NULL, NULL, false);
     long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", true, NULL, NULL, false);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
-    float_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, NULL, NULL, false);
+    float_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, BoxedFloat::tp_dealloc, NULL, false);
     function_cls = new (0) BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
                                       sizeof(BoxedFunction), false, "function", false, functionDtor, NULL, true,
                                       (traverseproc)func_traverse, NOCLEAR);

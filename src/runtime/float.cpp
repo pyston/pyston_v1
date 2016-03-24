@@ -41,6 +41,86 @@ extern "C" int float_pow_unboxed(double iv, double iw, double* res) noexcept;
 
 namespace pyston {
 
+/* Special free list -- see comments for same code in intobject.c. */
+#define BLOCK_SIZE 1000 /* 1K less typical malloc overhead */
+#define BHEAD_SIZE 8    /* Enough for a 64-bit pointer */
+#define N_FLOATOBJECTS ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyFloatObject))
+
+struct _floatblock {
+    struct _floatblock* next;
+    PyFloatObject objects[N_FLOATOBJECTS];
+};
+
+typedef struct _floatblock PyFloatBlock;
+
+static PyFloatBlock* block_list = NULL;
+PyFloatObject* BoxedFloat::free_list = NULL;
+
+PyFloatObject* BoxedFloat::fill_free_list(void) noexcept {
+    PyFloatObject* p, *q;
+    /* XXX Float blocks escape the object heap. Use PyObject_MALLOC ??? */
+    p = (PyFloatObject*)PyMem_MALLOC(sizeof(PyFloatBlock));
+    if (p == NULL)
+        return (PyFloatObject*)PyErr_NoMemory();
+    ((PyFloatBlock*)p)->next = block_list;
+    block_list = (PyFloatBlock*)p;
+    p = &((PyFloatBlock*)p)->objects[0];
+    q = p + N_FLOATOBJECTS;
+    while (--q > p)
+        q->ob_type = (struct _typeobject*)(q - 1);
+    q->ob_type = NULL;
+    return p + N_FLOATOBJECTS - 1;
+}
+
+void BoxedFloat::tp_dealloc(Box* b) noexcept {
+#ifdef DISABLE_INT_FREELIST
+    b->cls->tp_free(b);
+#else
+    if (PyFloat_CheckExact(b)) {
+        PyFloatObject* v = (PyFloatObject*)(b);
+        v->ob_type = (struct _typeobject *)free_list;
+        free_list = v;
+    } else {
+        b->cls->tp_free(b);
+    }
+#endif
+}
+
+extern "C" int PyFloat_ClearFreeList() noexcept {
+    PyFloatObject* p;
+    PyFloatBlock* list, *next;
+    int i;
+    int u; /* remaining unfreed ints per block */
+    int freelist_size = 0;
+
+    list = block_list;
+    block_list = NULL;
+    BoxedFloat::free_list = NULL;
+    while (list != NULL) {
+        u = 0;
+        for (i = 0, p = &list->objects[0]; i < N_FLOATOBJECTS; i++, p++) {
+            if (PyFloat_CheckExact((BoxedFloat*)p) && Py_REFCNT(p) != 0)
+                u++;
+        }
+        next = list->next;
+        if (u) {
+            list->next = block_list;
+            block_list = list;
+            for (i = 0, p = &list->objects[0]; i < N_FLOATOBJECTS; i++, p++) {
+                if (!PyFloat_CheckExact((BoxedFloat*)p) || Py_REFCNT(p) == 0) {
+                    p->ob_type = (struct _typeobject*)BoxedFloat::free_list;
+                    BoxedFloat::free_list = p;
+                }
+            }
+        } else {
+            PyMem_FREE(list);
+        }
+        freelist_size += u;
+        list = next;
+    }
+    return freelist_size;
+}
+
 extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
     return boxFloat(d);
 }
@@ -1630,10 +1710,6 @@ static PyMethodDef float_methods[]
         { "__setformat__", (PyCFunction)float_setformat, METH_VARARGS | METH_CLASS, float_setformat_doc },
         { "is_integer", (PyCFunction)float_is_integer, METH_NOARGS, NULL },
         { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL } };
-
-extern "C" int PyFloat_ClearFreeList() noexcept {
-    return 0; // number of entries cleared
-}
 
 void setupFloat() {
     static PyNumberMethods float_as_number;

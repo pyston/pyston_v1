@@ -87,25 +87,18 @@ PyIntObject* BoxedInt::fill_free_list(void) noexcept {
     return p + N_INTOBJECTS - 1;
 }
 
-void BoxedInt::tp_dealloc(Box* v) noexcept {
+void BoxedInt::tp_dealloc(Box* b) noexcept {
 #ifdef DISABLE_INT_FREELIST
-    v->cls->tp_free(v);
+    b->cls->tp_free(b);
 #else
-    if (PyInt_CheckExact(v)) {
-        BoxedInt::tp_free(v);
+    if (PyInt_CheckExact(b)) {
+        PyIntObject* v = (PyIntObject*)(b);
+        v->ob_type = (struct _typeobject *)free_list;
+        free_list = v;
     } else {
-        v->cls->tp_free(v);
+        b->cls->tp_free(b);
     }
 #endif
-}
-
-void BoxedInt::tp_free(void* b) noexcept {
-#ifdef DISABLE_INT_FREELIST
-    assert(0);
-#endif
-    PyIntObject* v = static_cast<PyIntObject*>(b);
-    v->ob_type = (struct _typeobject *)free_list;
-    free_list = v;
 }
 
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
