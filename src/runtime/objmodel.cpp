@@ -1119,13 +1119,126 @@ template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 // overhead, so the resulting size might not end up fitting that efficiently.
 #define INITIAL_ARRAY_SIZE 4
 
+// Freelist for attribute arrays.  Parameters have not been tuned.
+#define ARRAYLIST_FREELIST_SIZE 100
+#define ARRAYLIST_NUM_FREELISTS 4
+#define MAX_FREELIST_SIZE (INITIAL_ARRAY_SIZE * (1 << (ARRAYLIST_NUM_FREELISTS - 1)))
+HCAttrs::AttrList* attrlist_freelist[ARRAYLIST_NUM_FREELISTS][ARRAYLIST_FREELIST_SIZE];
+int attrlist_freelist_size[ARRAYLIST_NUM_FREELISTS];
+int freelist_index[]
+    = { 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 };
+static_assert(sizeof(freelist_index) / sizeof(freelist_index[0]) == MAX_FREELIST_SIZE + 1, "");
+
+static bool isPowerOfTwo(int n) {
+    return __builtin_popcountll(n) == 1;
+}
 static bool arrayIsAtCapacity(int n) {
-    return n >= INITIAL_ARRAY_SIZE && __builtin_popcountll(n) == 1;
+    return n >= INITIAL_ARRAY_SIZE && isPowerOfTwo(n);
 }
 
 static int nextAttributeArraySize(int n) {
     assert(arrayIsAtCapacity(n));
     return n * 2;
+}
+
+static int freelistIndex(int n) {
+    assert(n <= sizeof(freelist_index) / sizeof(freelist_index[0]));
+    return freelist_index[n];
+}
+
+static HCAttrs::AttrList* allocFromFreelist(int freelist_idx) {
+    int size = attrlist_freelist_size[freelist_idx];
+    if (size) {
+        auto rtn = attrlist_freelist[freelist_idx][size - 1];
+        attrlist_freelist_size[freelist_idx] = size - 1;
+
+#ifndef NDEBUG
+        int nattrs = (1 << freelist_idx) * INITIAL_ARRAY_SIZE;
+        memset(rtn, 0xcb, sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
+        attrlist_freelist[freelist_idx][size - 1] = NULL;
+#endif
+        return rtn;
+    }
+
+    int nattrs = (1 << freelist_idx) * INITIAL_ARRAY_SIZE;
+    return (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
+}
+
+static HCAttrs::AttrList* allocAttrs(int nattrs) {
+    assert(arrayIsAtCapacity(nattrs));
+
+    if (nattrs <= MAX_FREELIST_SIZE)
+        return allocFromFreelist(freelistIndex(nattrs));
+
+    return (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
+}
+
+static void freeAttrs(HCAttrs::AttrList* attrs, int nattrs) {
+    if (nattrs <= MAX_FREELIST_SIZE) {
+        int idx = freelistIndex(nattrs);
+        int size = attrlist_freelist_size[idx];
+
+        // TODO: should drop an old item from the freelist, not a new one
+        if (size == ARRAYLIST_FREELIST_SIZE) {
+            PyObject_FREE(attrs);
+        } else {
+#ifndef NDEBUG
+            memset(attrs, 0xdb, sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
+#endif
+            attrlist_freelist[idx][size] = attrs;
+            attrlist_freelist_size[idx]++;
+            return;
+        }
+    }
+
+    PyObject_FREE(attrs);
+}
+
+static HCAttrs::AttrList* reallocAttrs(HCAttrs::AttrList* attrs, int old_nattrs, int new_nattrs) {
+    assert(arrayIsAtCapacity(old_nattrs));
+    assert(new_nattrs > old_nattrs);
+
+    HCAttrs::AttrList* rtn = allocAttrs(new_nattrs);
+    memcpy(rtn, attrs, sizeof(HCAttrs::AttrList) + sizeof(Box*) * old_nattrs);
+#ifndef NDEBUG
+    memset(&rtn->attrs[old_nattrs], 0xcb, sizeof(Box*) * (new_nattrs - old_nattrs));
+#endif
+    freeAttrs(attrs, old_nattrs);
+
+    return rtn;
+}
+
+void HCAttrs::clear() noexcept {
+    HiddenClass* hcls = this->hcls;
+
+    if (!hcls)
+        return;
+
+    if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
+        Box* d = this->attr_list->attrs[0];
+        Py_DECREF(d);
+
+        // Skips the attrlist freelist
+        PyObject_FREE(this->attr_list);
+        this->attr_list = NULL;
+
+        return;
+    }
+
+    assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+
+    auto old_attr_list = this->attr_list;
+    auto old_attr_list_size = hcls->attributeArraySize();
+
+    new ((void*)this) HCAttrs(NULL);
+
+    if (old_attr_list) {
+        for (int i = 0; i < old_attr_list_size; i++) {
+            Py_DECREF(old_attr_list->attrs[i]);
+        }
+
+        freeAttrs(old_attr_list, old_attr_list_size);
+    }
 }
 
 void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_args) {
@@ -1142,15 +1255,14 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
     RewriterVar* r_array = NULL;
     if (numattrs == 0 || arrayIsAtCapacity(numattrs)) {
         if (numattrs == 0) {
-            int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * INITIAL_ARRAY_SIZE;
-            attrs->attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(new_size);
+            attrs->attr_list = allocFromFreelist(0);
             if (rewrite_args) {
-                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-                r_array = rewrite_args->rewriter->call(true, (void*)PyMem_Malloc, r_newsize);
+                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(0, Location::forArg(0));
+                r_array = rewrite_args->rewriter->call(true, (void*)allocFromFreelist, r_newsize);
             }
         } else {
-            int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * nextAttributeArraySize(numattrs);
-            attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
+            int new_size = nextAttributeArraySize(numattrs);
+            attrs->attr_list = (HCAttrs::AttrList*)reallocAttrs(attrs->attr_list, numattrs, new_size);
             if (rewrite_args) {
                 if (cls->attrs_offset < 0) {
                     REWRITE_ABORTED("");
@@ -1158,8 +1270,9 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
                 } else {
                     RewriterVar* r_oldarray
                         = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
-                    RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-                    r_array = rewrite_args->rewriter->call(true, (void*)PyMem_Realloc, r_oldarray, r_newsize);
+                    RewriterVar* r_oldsize = rewrite_args->rewriter->loadConst(numattrs, Location::forArg(1));
+                    RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(2));
+                    r_array = rewrite_args->rewriter->call(true, (void*)reallocAttrs, r_oldarray, r_oldsize, r_newsize);
                 }
             }
         }
@@ -6103,7 +6216,7 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
         // guarantee the size of the attr_list equals the number of attrs
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
         // TODO: we might want to free some of this memory eventually
-        // attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
+        // attrs->attr_list = (HCAttrs::AttrList*)reallocAttrs(attrs->attr_list, num_attrs, new_size);
 
         Py_DECREF(removed_object);
         return;

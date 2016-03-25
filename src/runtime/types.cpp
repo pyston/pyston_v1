@@ -2137,7 +2137,8 @@ private:
         BoxedDict* d = (BoxedDict*)AttrWrapper::copy(this);
         b->clearAttrs();
         HCAttrs* hcattrs = b->getHCAttrsPtr();
-        auto new_attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
+        // Skips the attrlist freelist:
+        auto new_attr_list = (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
         new_attr_list->attrs[0] = d;
 
         hcattrs->hcls = HiddenClass::dict_backed;
@@ -2802,7 +2803,8 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     }
 
     // assign the dict to the attribute list and switch to the dict backed strategy
-    auto new_attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
+    // Skips the attrlist freelist
+    auto new_attr_list = (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
     new_attr_list->attrs[0] = val;
 
     hcattrs->hcls = HiddenClass::dict_backed;
@@ -3709,34 +3711,6 @@ void HiddenClass::dump() noexcept {
             //printf("%d: %s\n", p.second, p.first->c_str());
             printf("%d: %p\n", p.second, p.first);
         }
-    }
-}
-
-void HCAttrs::clear() noexcept {
-    HiddenClass* hcls = this->hcls;
-
-    if (!hcls)
-        return;
-
-    if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
-        Box* d = this->attr_list->attrs[0];
-        Py_DECREF(d);
-        return;
-    }
-
-    assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
-
-    auto old_attr_list = this->attr_list;
-    auto old_attr_list_size = hcls->attributeArraySize();
-
-    new ((void*)this) HCAttrs(NULL);
-
-    if (old_attr_list) {
-        for (int i = 0; i < old_attr_list_size; i++) {
-            Py_DECREF(old_attr_list->attrs[i]);
-        }
-
-        PyMem_FREE(old_attr_list);
     }
 }
 
