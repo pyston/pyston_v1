@@ -229,12 +229,13 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
         frame->handleFrameExit();
         Py_CLEAR(frame_info->frame_obj);
     }
-    if (frame_info->vregs) {
-        int num_user_visible_vregs = frame_info->num_vregs;
-        for (int i = 0; i < num_user_visible_vregs; i++) {
-            Py_XDECREF(frame_info->vregs[i]);
-        }
+
+    assert(frame_info->vregs || frame_info->num_vregs == 0);
+    int num_user_visible_vregs = frame_info->num_vregs;
+    for (int i = 0; i < num_user_visible_vregs; i++) {
+        Py_XDECREF(frame_info->vregs[i]);
     }
+
     Py_CLEAR(frame_info->boxedLocals);
 
     if (frame_info->exc.type) {
