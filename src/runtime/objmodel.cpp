@@ -1113,6 +1113,21 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
 template Box* Box::getattr<REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 
+// Parameters that control the growth of the attributes array.
+// Currently, starts at 4 elements and then doubles every time.
+// TODO: find a growth strategy that fits better with the allocator.  We add the AttrList header, plus whatever malloc
+// overhead, so the resulting size might not end up fitting that efficiently.
+#define INITIAL_ARRAY_SIZE 4
+
+static bool arrayIsAtCapacity(int n) {
+    return n >= INITIAL_ARRAY_SIZE && __builtin_popcountll(n) == 1;
+}
+
+static int nextAttributeArraySize(int n) {
+    assert(arrayIsAtCapacity(n));
+    return n * 2;
+}
+
 void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_args) {
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
@@ -1124,33 +1139,43 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
 
     int numattrs = hcls->attributeArraySize();
 
-    RewriterVar* r_new_array2 = NULL;
-    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
-    if (numattrs == 0) {
-        attrs->attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(new_size);
-        if (rewrite_args) {
-            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-            r_new_array2 = rewrite_args->rewriter->call(true, (void*)PyMem_Malloc, r_newsize);
-        }
-    } else {
-        attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
-        if (rewrite_args) {
-            if (cls->attrs_offset < 0) {
-                REWRITE_ABORTED("");
-                rewrite_args = NULL;
-            } else {
-                RewriterVar* r_oldarray
-                    = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
-                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(true, (void*)PyMem_Realloc, r_oldarray, r_newsize);
+    RewriterVar* r_array = NULL;
+    if (numattrs == 0 || arrayIsAtCapacity(numattrs)) {
+        if (numattrs == 0) {
+            int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * INITIAL_ARRAY_SIZE;
+            attrs->attr_list = (HCAttrs::AttrList*)PyMem_MALLOC(new_size);
+            if (rewrite_args) {
+                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
+                r_array = rewrite_args->rewriter->call(true, (void*)PyMem_Malloc, r_newsize);
+            }
+        } else {
+            int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * nextAttributeArraySize(numattrs);
+            attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
+            if (rewrite_args) {
+                if (cls->attrs_offset < 0) {
+                    REWRITE_ABORTED("");
+                    rewrite_args = NULL;
+                } else {
+                    RewriterVar* r_oldarray
+                        = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
+                    RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
+                    r_array = rewrite_args->rewriter->call(true, (void*)PyMem_Realloc, r_oldarray, r_newsize);
+                }
             }
         }
     }
 
     if (rewrite_args) {
-        r_new_array2->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval);
+        bool new_array = (bool)r_array;
+
+        if (!new_array)
+            r_array = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list));
+
+        r_array->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval);
         rewrite_args->attrval->refConsumed();
-        rewrite_args->obj->setAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), r_new_array2);
+
+        if (new_array)
+            rewrite_args->obj->setAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), r_array);
 
         rewrite_args->out_success = true;
     }
@@ -6077,7 +6102,8 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
 
         // guarantee the size of the attr_list equals the number of attrs
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
-        attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
+        // TODO: we might want to free some of this memory eventually
+        // attrs->attr_list = (HCAttrs::AttrList*)PyMem_REALLOC(attrs->attr_list, new_size);
 
         Py_DECREF(removed_object);
         return;
