@@ -1,4 +1,3 @@
-# expected: reffail
 from types import ModuleType
 
 class MyModule(ModuleType):

@@ -1,4 +1,3 @@
-# expected: reffail
 # PEP-302  import hook test
 
 import sys
