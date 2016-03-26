@@ -232,9 +232,8 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
 
     assert(frame_info->vregs || frame_info->num_vregs == 0);
     int num_user_visible_vregs = frame_info->num_vregs;
-    for (int i = 0; i < num_user_visible_vregs; i++) {
-        Py_XDECREF(frame_info->vregs[i]);
-    }
+
+    decrefArray<true>(frame_info->vregs, num_user_visible_vregs);
 
     Py_CLEAR(frame_info->boxedLocals);
 

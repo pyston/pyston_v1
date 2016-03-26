@@ -1233,9 +1233,7 @@ void HCAttrs::clear() noexcept {
     new ((void*)this) HCAttrs(NULL);
 
     if (old_attr_list) {
-        for (int i = 0; i < old_attr_list_size; i++) {
-            Py_DECREF(old_attr_list->attrs[i]);
-        }
+        decrefArray(old_attr_list->attrs, old_attr_list_size);
 
         freeAttrs(old_attr_list, old_attr_list_size);
     }

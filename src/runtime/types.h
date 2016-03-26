@@ -379,6 +379,27 @@ template <typename B> DecrefHandle<B, true> autoXDecref(B* b) {
 #define KEEP_ALIVE(x) AUTO_DECREF(incref(x))
 #define XKEEP_ALIVE(x) AUTO_XDECREF(xincref(x))
 
+// A micro-optimized function to decref an entire array.
+// Seems to be about 10% faster than the straightforward version.
+template <bool Nullable = false> inline void decrefArray(Box** array, int size) {
+    if (size) {
+        Box* next = array[0];
+        for (int i = 0; i < size - 1; i++) {
+            Box* cur = next;
+            next = array[i + 1];
+            _mm_prefetch(next, _MM_HINT_T0);
+            if (Nullable)
+                Py_XDECREF(cur);
+            else
+                Py_DECREF(cur);
+        }
+        if (Nullable)
+            Py_XDECREF(next);
+        else
+            Py_DECREF(next);
+    }
+}
+
 template <bool Nullable = false> class AutoDecrefArray {
 private:
     Box** array;
