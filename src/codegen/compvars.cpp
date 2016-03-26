@@ -2773,6 +2773,10 @@ public:
         return rtn;
     }
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) override {
+        if (other_type == other_type->getBoxType()) {
+            assert(other_type == UNKNOWN);
+            return emitter.getNone()->makeConverted(emitter, other_type);
+        }
         llvm::Value* v = llvm::UndefValue::get(other_type->llvmType());
         return new ConcreteCompilerVariable(other_type, v);
     }

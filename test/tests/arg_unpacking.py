@@ -1,4 +1,3 @@
-# expected: reffail
 def f((a,b)):
     print a,b
     print sorted(list(locals().iteritems()))

@@ -20,6 +20,7 @@
 namespace pyston {
 
 BoxedDictIterator::BoxedDictIterator(BoxedDict* d) : d(d), it(d->d.begin()), itEnd(d->d.end()) {
+    Py_INCREF(d);
 }
 
 Box* dict_iter(Box* s) noexcept {
