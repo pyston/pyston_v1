@@ -920,7 +920,7 @@ Box* floatNonzero(BoxedFloat* self) {
 
 template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == CAPI) {
     if (a->cls == float_cls) {
-        return static_cast<BoxedFloat*>(a);
+        return static_cast<BoxedFloat*>(incref(a));
     } else if (PyInt_Check(a)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
 
