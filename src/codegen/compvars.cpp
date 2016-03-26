@@ -1993,8 +1993,16 @@ public:
                                const std::vector<BoxedString*>* keyword_names) override {
         ExceptionStyle exception_style = info.preferredExceptionStyle();
 
+        bool no_attribute = false;
+        bool* no_attribute_ptr = NULL;
+        if (flags.null_on_nonexistent)
+            no_attribute_ptr = &no_attribute;
+
         CompilerVariable* called_constant = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, flags.argspec,
-                                                                args, keyword_names, NULL, exception_style);
+                                                                args, keyword_names, no_attribute_ptr, exception_style);
+
+        if (no_attribute)
+            return new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), 1);
 
         if (called_constant)
             return called_constant;
