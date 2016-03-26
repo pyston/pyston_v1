@@ -453,7 +453,7 @@ extern "C" BORROWED(PyObject*) PyModule_GetDict(PyObject* _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(PyModule_Check(m));
 
-    return autoDecref(m->getAttrWrapper());
+    return m->getAttrWrapper();
 }
 
 extern "C" int PyModule_AddObject(PyObject* _m, const char* name, STOLEN(PyObject*) value) noexcept {

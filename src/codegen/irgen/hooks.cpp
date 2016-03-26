@@ -469,6 +469,7 @@ extern "C" int PyEval_MergeCompilerFlags(PyCompilerFlags* cf) noexcept {
 }
 
 static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
+    assert(0 && "check refcounting");
     if (globals == None)
         globals = NULL;
 

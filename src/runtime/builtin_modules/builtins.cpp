@@ -83,7 +83,7 @@ extern "C" Box* dir(Box* obj) {
 
 extern "C" Box* vars(Box* obj) {
     if (!obj)
-        return fastLocalsToBoxedLocals();
+        return incref(PyEval_GetLocals());
 
     static BoxedString* dict_str = getStaticString("__dict__");
     Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str);
@@ -1251,7 +1251,7 @@ public:
     static Box* __reduce__(Box* self) {
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
-        return BoxedTuple::create({ self->cls, EmptyTuple, autoDecref(self->getAttrWrapper()) });
+        return BoxedTuple::create({ self->cls, EmptyTuple, self->getAttrWrapper() });
     }
 };
 
@@ -1388,19 +1388,17 @@ public:
     }
 };
 
-Box* globals() {
-    // TODO is it ok that we don't return a real dict here?
-    return getGlobalsDict();
+static Box* globals() {
+    return incref(getGlobalsDict());
 }
 
-Box* locals() {
-    return fastLocalsToBoxedLocals();
+static Box* locals() {
+    return incref(fastLocalsToBoxedLocals());
 }
 
 extern "C" BORROWED(PyObject*) PyEval_GetLocals(void) noexcept {
     try {
-        assert(0 && "check refcounting");
-        return locals();
+        return fastLocalsToBoxedLocals();
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -1409,7 +1407,7 @@ extern "C" BORROWED(PyObject*) PyEval_GetLocals(void) noexcept {
 
 extern "C" BORROWED(PyObject*) PyEval_GetGlobals(void) noexcept {
     try {
-        return autoXDecref(globals());
+        return getGlobalsDict();
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -1681,7 +1679,7 @@ Box* input(Box* prompt) {
         str++;
 
     Box* gbls = globals();
-    Box* lcls = locals();
+    Box* lcls = PyEval_GetLocals();
 
     // CPython has these safety checks that the builtin functions exist
     // in the current global scope.

@@ -94,7 +94,7 @@ public:
         if (f->hasExited())
             return incref(f->_locals);
 
-        return f->frame_info->updateBoxedLocals();
+        return incref(f->frame_info->updateBoxedLocals());
     }
 
     static Box* globals(Box* obj, void*) {
@@ -103,7 +103,7 @@ public:
         if (!f->_globals) {
             Box* globals = f->frame_info->globals;
             if (globals && PyModule_Check(globals))
-                f->_globals = globals->getAttrWrapper();
+                f->_globals = incref(globals->getAttrWrapper());
             else {
                 f->_globals = incref(globals);
             }

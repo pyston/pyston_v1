@@ -1333,13 +1333,13 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
 
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
-        return PyDictProxy_New(autoDecref(obj->getAttrWrapper()));
+        return PyDictProxy_New(obj->getAttrWrapper());
     abort();
 }
 
 static Box* typeSubDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
-        return obj->getAttrWrapper();
+        return incref(obj->getAttrWrapper());
     if (obj->cls->instancesHaveDictAttrs())
         return obj->getDict();
     abort();
@@ -2739,7 +2739,7 @@ void Box::giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), void (*
     giveAttr(bstr, new (pyston_getset_cls) BoxedGetsetDescriptor(bstr, get, set, NULL));
 }
 
-Box* Box::getAttrWrapper() {
+BORROWED(Box*) Box::getAttrWrapper() {
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
@@ -2748,7 +2748,7 @@ Box* Box::getAttrWrapper() {
         hcls = root_hcls;
 
     if (hcls->type == HiddenClass::DICT_BACKED) {
-        return incref(attrs->attr_list->attrs[0]);
+        return attrs->attr_list->attrs[0];
     }
 
     int offset = hcls->getAttrwrapperOffset();
@@ -2758,15 +2758,17 @@ Box* Box::getAttrWrapper() {
             auto new_hcls = hcls->getAttrwrapperChild();
             appendNewHCAttr(aw, NULL);
             attrs->hcls = new_hcls;
+            Py_DECREF(aw);
             return aw;
         } else {
             assert(hcls->type == HiddenClass::SINGLETON);
             appendNewHCAttr(aw, NULL);
             hcls->appendAttrwrapper();
+            Py_DECREF(aw);
             return aw;
         }
     }
-    return incref(attrs->attr_list->attrs[offset]);
+    return attrs->attr_list->attrs[offset];
 }
 
 extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {

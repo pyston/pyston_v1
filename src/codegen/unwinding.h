@@ -36,8 +36,8 @@ bool isUnwinding(); // use this instead of std::uncaught_exception
 
 void setupUnwinding();
 BoxedModule* getCurrentModule();
-Box* getGlobals();     // returns either the module or a globals dict
-Box* getGlobalsDict(); // always returns a dict-like object
+BORROWED(Box*) getGlobals();     // returns either the module or a globals dict
+BORROWED(Box*) getGlobalsDict(); // always returns a dict-like object
 CompiledFunction* getCFForAddress(uint64_t addr);
 
 class PythonUnwindSession;
@@ -66,7 +66,7 @@ std::string getCurrentPythonLine();
 void logByCurrentPythonLine(const std::string& stat_name);
 
 // Adds stack locals and closure locals into the locals dict, and returns it.
-Box* fastLocalsToBoxedLocals();
+BORROWED(Box*) fastLocalsToBoxedLocals();
 
 class PythonFrameIteratorImpl;
 class PythonFrameIterator {
@@ -79,7 +79,7 @@ public:
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
     AST_stmt* getCurrentStatement();
-    Box* getGlobalsDict();
+    BORROWED(Box*) getGlobalsDict();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
     void operator=(PythonFrameIterator&& rhs);

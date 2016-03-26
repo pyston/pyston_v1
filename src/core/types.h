@@ -722,8 +722,7 @@ public:
     void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 
     // Only valid for hc-backed instances:
-    // Maybe this should return a borrowed reference?
-    Box* getAttrWrapper();
+    BORROWED(Box*) getAttrWrapper();
 
     Box* reprIC();
     BoxedString* reprICAsString();
@@ -982,7 +981,7 @@ struct FrameInfo {
     FrameInfo* back;
     FunctionMetadata* md;
 
-    Box* updateBoxedLocals();
+    BORROWED(Box*) updateBoxedLocals();
 
     FrameInfo(ExcInfo exc)
         : exc(exc),

@@ -223,7 +223,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     // These are special cases in CPython as well:
     if (attr->data()[0] == '_' && attr->data()[1] == '_') {
         if (attr->s() == "__dict__")
-            return cls->getAttrWrapper();
+            return incref(cls->getAttrWrapper());
 
         if (attr->s() == "__bases__")
             return incref(cls->bases);
@@ -461,7 +461,7 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
     // These are special cases in CPython as well:
     if (attr_str->data()[0] == '_' && attr_str->data()[1] == '_') {
         if (attr_str->s() == "__dict__")
-            return inst->getAttrWrapper();
+            return incref(inst->getAttrWrapper());
 
         if (attr_str->s() == "__class__")
             return incref(inst->inst_cls);

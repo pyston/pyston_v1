@@ -353,19 +353,12 @@ public:
         return getFrameInfo()->stmt;
     }
 
-    Box* getGlobals() {
-        assert(0 && "check refcounting (of callers)");
-        Box* r = getFrameInfo()->globals;
-        return incref(r);
-    }
-
-    Box* getGlobalsDict() {
-        Box* globals = getGlobals();
+    BORROWED(Box*) getGlobalsDict() {
+        Box* globals = getFrameInfo()->globals;
         if (!globals)
             return NULL;
 
         if (PyModule_Check(globals)) {
-            AUTO_DECREF(globals);
             return globals->getAttrWrapper();
         }
         return globals;
@@ -729,14 +722,14 @@ FunctionMetadata* getTopPythonFunction() {
     return frame_info->md;
 }
 
-Box* getGlobals() {
+BORROWED(Box*) getGlobals() {
     FrameInfo* frame_info = getTopFrameInfo();
     if (!frame_info)
         return NULL;
     return frame_info->globals;
 }
 
-Box* getGlobalsDict() {
+BORROWED(Box*) getGlobalsDict() {
     Box* globals = getGlobals();
     if (globals && PyModule_Check(globals))
         globals = globals->getAttrWrapper();
@@ -874,7 +867,7 @@ DeoptState getDeoptState() {
     return rtn;
 }
 
-Box* fastLocalsToBoxedLocals() {
+BORROWED(Box*) fastLocalsToBoxedLocals() {
     return getPythonFrameInfo(0)->updateBoxedLocals();
 }
 
@@ -891,7 +884,7 @@ static BoxedDict* localsForFrame(Box** vregs, CFG* cfg) {
     return rtn;
 }
 
-Box* FrameInfo::updateBoxedLocals() {
+BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     STAT_TIMER(t0, "us_timer_updateBoxedLocals", 0);
 
     FrameInfo* frame_info = this;
@@ -922,15 +915,17 @@ Box* FrameInfo::updateBoxedLocals() {
         Box* val = closure->elts[derefInfo.offset];
         Box* boxedName = name.getBox();
         if (val != NULL) {
+            assert(0 &&" add refcounting");
             d->d[boxedName] = val;
         } else {
+            assert(0 &&" add refcounting");
             d->d.erase(boxedName);
         }
     }
 
     if (!frame_info->boxedLocals) {
-        frame_info->boxedLocals = incref(d);
-        return d;
+        frame_info->boxedLocals = d;
+        return frame_info->boxedLocals;
     }
 
     AUTO_DECREF(d);
@@ -949,7 +944,7 @@ Box* FrameInfo::updateBoxedLocals() {
         }
     }
 
-    return incref(frame_info->boxedLocals);
+    return frame_info->boxedLocals;
 }
 
 AST_stmt* PythonFrameIterator::getCurrentStatement() {
@@ -964,7 +959,7 @@ FunctionMetadata* PythonFrameIterator::getMD() {
     return impl->getMD();
 }
 
-Box* PythonFrameIterator::getGlobalsDict() {
+BORROWED(Box*) PythonFrameIterator::getGlobalsDict() {
     return impl->getGlobalsDict();
 }
 

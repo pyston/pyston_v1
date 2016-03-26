@@ -768,7 +768,7 @@ BoxedClass* BoxedClass::create(BoxedClass* metaclass, BoxedClass* base, int attr
 
 void BoxedClass::finishInitialization() {
     assert(!this->tp_dict);
-    this->tp_dict = this->getAttrWrapper();
+    this->tp_dict = incref(this->getAttrWrapper());
 
     commonClassSetup(this);
     tp_flags |= Py_TPFLAGS_READY;
