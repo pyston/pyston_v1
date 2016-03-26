@@ -1,4 +1,3 @@
-# expected: reffail
 # getitem
 
 def f(l):

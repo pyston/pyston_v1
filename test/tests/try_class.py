@@ -1,4 +1,3 @@
-# expected: reffail
 # we have one test at global scope, another at local.
 # they behave differently in codegen; there have been points at which either was bugged when the other was not.
 try:

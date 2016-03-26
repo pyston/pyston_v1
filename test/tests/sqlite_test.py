@@ -1,4 +1,3 @@
-# expected: reffail
 import os
 try:
     os.unlink('example.db')

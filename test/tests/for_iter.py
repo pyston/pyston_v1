@@ -1,4 +1,3 @@
-# expected: reffail
 class C(object):
     def __iter__(self):
         print "orig iter"

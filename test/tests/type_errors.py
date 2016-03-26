@@ -1,4 +1,3 @@
-# expected: reffail
 # Regression test: make sure that we can handle various kinds of written type errors.
 # ex if we can prove that an expression would throw an error due to type issues, we should
 # still compile and run the function just fine.
