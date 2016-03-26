@@ -439,7 +439,7 @@ static void subtype_dealloc(Box* self) noexcept {
         PyObject_ClearWeakRefs(self);
 
     /* Maybe call finalizer; exit early if resurrected */
-    if (type->tp_del) {
+    if (unlikely(type->tp_del)) {
         _PyObject_GC_TRACK(self);
         type->tp_del(self);
         if (self->ob_refcnt > 0)
@@ -461,7 +461,7 @@ static void subtype_dealloc(Box* self) noexcept {
     /*  Clear slots up to the nearest base with a different tp_dealloc */
     base = type;
     while (base->tp_dealloc == subtype_dealloc) {
-        if (Py_SIZE(base))
+        if (unlikely(Py_SIZE(base)))
             clear_slots(base, self);
         base = base->tp_base;
         assert(base);

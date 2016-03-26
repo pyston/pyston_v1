@@ -76,7 +76,7 @@ void BoxedFloat::tp_dealloc(Box* b) noexcept {
 #ifdef DISABLE_INT_FREELIST
     b->cls->tp_free(b);
 #else
-    if (PyFloat_CheckExact(b)) {
+    if (likely(PyFloat_CheckExact(b))) {
         PyFloatObject* v = (PyFloatObject*)(b);
         v->ob_type = (struct _typeobject *)free_list;
         free_list = v;
