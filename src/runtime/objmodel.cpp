@@ -1123,8 +1123,12 @@ template Box* Box::getattr<NOT_REWRITABLE>(BoxedString*, GetattrRewriteArgs*);
 #define ARRAYLIST_FREELIST_SIZE 100
 #define ARRAYLIST_NUM_FREELISTS 4
 #define MAX_FREELIST_SIZE (INITIAL_ARRAY_SIZE * (1 << (ARRAYLIST_NUM_FREELISTS - 1)))
-HCAttrs::AttrList* attrlist_freelist[ARRAYLIST_NUM_FREELISTS][ARRAYLIST_FREELIST_SIZE];
-int attrlist_freelist_size[ARRAYLIST_NUM_FREELISTS];
+struct Freelist {
+    int size;
+    HCAttrs::AttrList* next_free;
+};
+
+Freelist attrlist_freelist[ARRAYLIST_NUM_FREELISTS];
 int freelist_index[]
     = { 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 };
 static_assert(sizeof(freelist_index) / sizeof(freelist_index[0]) == MAX_FREELIST_SIZE + 1, "");
@@ -1147,15 +1151,16 @@ static int freelistIndex(int n) {
 }
 
 static HCAttrs::AttrList* allocFromFreelist(int freelist_idx) {
-    int size = attrlist_freelist_size[freelist_idx];
+    auto&& freelist = attrlist_freelist[freelist_idx];
+    int size = freelist.size;
     if (size) {
-        auto rtn = attrlist_freelist[freelist_idx][size - 1];
-        attrlist_freelist_size[freelist_idx] = size - 1;
+        auto rtn = freelist.next_free;
+        freelist.size = size - 1;
+        freelist.next_free = *reinterpret_cast<HCAttrs::AttrList**>(rtn);
 
 #ifndef NDEBUG
         int nattrs = (1 << freelist_idx) * INITIAL_ARRAY_SIZE;
         memset(rtn, 0xcb, sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
-        attrlist_freelist[freelist_idx][size - 1] = NULL;
 #endif
         return rtn;
     }
@@ -1176,7 +1181,8 @@ static HCAttrs::AttrList* allocAttrs(int nattrs) {
 static void freeAttrs(HCAttrs::AttrList* attrs, int nattrs) {
     if (nattrs <= MAX_FREELIST_SIZE) {
         int idx = freelistIndex(nattrs);
-        int size = attrlist_freelist_size[idx];
+        auto&& freelist = attrlist_freelist[idx];
+        int size = freelist.size;
 
         // TODO: should drop an old item from the freelist, not a new one
         if (size == ARRAYLIST_FREELIST_SIZE) {
@@ -1185,8 +1191,9 @@ static void freeAttrs(HCAttrs::AttrList* attrs, int nattrs) {
 #ifndef NDEBUG
             memset(attrs, 0xdb, sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
 #endif
-            attrlist_freelist[idx][size] = attrs;
-            attrlist_freelist_size[idx]++;
+            *reinterpret_cast<HCAttrs::AttrList**>(attrs) = freelist.next_free;
+            freelist.next_free = attrs;
+            freelist.size++;
             return;
         }
     }
