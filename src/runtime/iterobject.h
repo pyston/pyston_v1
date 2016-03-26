@@ -41,7 +41,7 @@ public:
 
     static void dealloc(BoxedSeqIter* o) noexcept {
         PyObject_GC_UnTrack(o);
-        Py_DECREF(o->b);
+        Py_XDECREF(o->b);
         Py_XDECREF(o->next);
         o->cls->tp_free(o);
     }
