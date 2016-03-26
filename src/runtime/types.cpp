@@ -4113,6 +4113,9 @@ void setupRuntime() {
     // object-creation routines look at the class to see the allocation size.
     object_cls = static_cast<BoxedClass*>(_PyObject_GC_Malloc(sizeof(BoxedClass)));
     type_cls = static_cast<BoxedClass*>(_PyObject_GC_Malloc(sizeof(BoxedClass)));
+    // Usually done by PyType_GenericAlloc:
+    memset(object_cls, 0, sizeof(BoxedClass));
+    memset(type_cls, 0, sizeof(BoxedClass));
     PyObject_INIT(object_cls, type_cls);
     PyObject_INIT(type_cls, type_cls);
     ::new (object_cls)
