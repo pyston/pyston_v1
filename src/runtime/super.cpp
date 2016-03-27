@@ -226,6 +226,9 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     if (obj != NULL)
         obj_type = superCheck<CXX>(type, obj);
 
+    assert(!self->type);
+    assert(!self->obj);
+    assert(!self->obj_type);
     self->type = incref(type);
     self->obj = incref(obj);
     self->obj_type = incref(obj_type);

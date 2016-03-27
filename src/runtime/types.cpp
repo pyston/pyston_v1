@@ -1188,6 +1188,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         Box* initrtn;
         // If there's a Python-level __init__ function, try calling it.
         if (init_attr && init_attr->cls == function_cls) {
+            AUTO_DECREF(made); // In case init throws:
+
             if (rewrite_args) {
                 // We are going to rewrite as a call to cls.init:
                 assert(which_init == MAKES_CLS);
@@ -1220,6 +1222,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 initrtn = runtimeCallInternal<S, NOT_REWRITABLE>(init_attr, NULL, argspec, made, arg2, arg3, args,
                                                                  keyword_names);
             }
+
+            incref(made); // to cancel out the AUTO_DECREF
 
             if (!initrtn) {
                 assert(S == CAPI);
@@ -1254,6 +1258,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
                                    argspec, made, arg2, arg3, args, NULL, keyword_names);
             } catch (ExcInfo e) {
+                Py_DECREF(made);
                 if (S == CAPI) {
                     setCAPIException(e);
                     return NULL;
@@ -1272,6 +1277,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             Py_DECREF(arg2);
             Py_XDECREF(arg3);
             if (err == -1) {
+                Py_DECREF(made);
                 if (S == CAPI)
                     return NULL;
                 else

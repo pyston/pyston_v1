@@ -915,11 +915,9 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
         Box* val = closure->elts[derefInfo.offset];
         Box* boxedName = name.getBox();
         if (val != NULL) {
-            assert(0 &&" add refcounting");
-            d->d[boxedName] = val;
+            PyDict_SetItem(d, boxedName, val);
         } else {
-            assert(0 &&" add refcounting");
-            d->d.erase(boxedName);
+            PyDict_DelItem(d, boxedName);
         }
     }
 
