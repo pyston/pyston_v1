@@ -1,3 +1,4 @@
+# expected: reffail
 x3 = 0
 def bad_addr3(_x):
     if 0:

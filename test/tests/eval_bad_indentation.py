@@ -1,4 +1,3 @@
-# expected: reffail
 try:
     eval("\n 2")
     print "bad, should have thrown an exception"
