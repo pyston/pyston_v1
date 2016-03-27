@@ -356,6 +356,8 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     if (doc_string != None) {
         static BoxedString* doc_box = getStaticString("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
+    } else {
+        Py_DECREF(doc_string);
     }
 
     return astInterpretFunctionEval(md, globals, boxedLocals);
@@ -413,13 +415,13 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 if (parsed->type != AST_TYPE::Module) {
                     raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileExec(static_cast<AST_Module*>(parsed), boxString(filename), flags);
+                md = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Expression_kind:
                 if (parsed->type != AST_TYPE::Expression) {
                     raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileEval(static_cast<AST_Expression*>(parsed), boxString(filename), flags);
+                md = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Suite_kind:
                 PyErr_SetString(PyExc_SystemError, "suite should not be possible");
@@ -469,7 +471,6 @@ extern "C" int PyEval_MergeCompilerFlags(PyCompilerFlags* cf) noexcept {
 }
 
 static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
-    assert(0 && "check refcounting");
     if (globals == None)
         globals = NULL;
 
@@ -502,9 +503,7 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
         if (globals->cls == module_cls)
             globals_dict = globals->getAttrWrapper();
         else
-            globals_dict = incref(globals);
-
-        AUTO_DECREF(globals_dict);
+            globals_dict = globals;
 
         auto requested_builtins = PyDict_GetItemString(globals_dict, "__builtins__");
         if (requested_builtins == NULL)
@@ -517,7 +516,6 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
 }
 
 extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObject* locals) noexcept {
-    assert(0 && "check refcounting");
     try {
         pickGlobalsAndLocals(globals, locals);
         return evalOrExec(metadataFromCode((Box*)co), globals, locals);

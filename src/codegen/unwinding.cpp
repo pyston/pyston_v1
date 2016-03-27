@@ -736,7 +736,7 @@ BORROWED(Box*) getGlobalsDict() {
     return globals;
 }
 
-BoxedModule* getCurrentModule() {
+BORROWED(BoxedModule*) getCurrentModule() {
     FunctionMetadata* md = getTopPythonFunction();
     if (!md)
         return NULL;

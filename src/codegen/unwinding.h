@@ -35,7 +35,7 @@ uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym);
 bool isUnwinding(); // use this instead of std::uncaught_exception
 
 void setupUnwinding();
-BoxedModule* getCurrentModule();
+BORROWED(BoxedModule*) getCurrentModule();
 BORROWED(Box*) getGlobals();     // returns either the module or a globals dict
 BORROWED(Box*) getGlobalsDict(); // always returns a dict-like object
 CompiledFunction* getCFForAddress(uint64_t addr);

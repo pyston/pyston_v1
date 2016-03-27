@@ -153,8 +153,6 @@ private:
 
 public:
     ~ASTInterpreter() {
-        Py_XDECREF(frame_info.boxedLocals);
-        Py_DECREF(frame_info.globals);
         Py_XDECREF(this->created_closure);
     }
 
@@ -186,7 +184,7 @@ public:
     void setGenerator(Box* gen);
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
-    void setBoxedLocals(Box*);
+    void setBoxedLocals(STOLEN(Box*));
     void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
@@ -219,6 +217,7 @@ void ASTInterpreter::setCreatedClosure(Box* closure) {
 }
 
 void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
+    assert(!this->frame_info.boxedLocals);
     this->frame_info.boxedLocals = boxedLocals;
 }
 
@@ -230,7 +229,7 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 
 void ASTInterpreter::setGlobals(Box* globals) {
     assert(!this->frame_info.globals);
-    this->frame_info.globals = incref(globals);
+    this->frame_info.globals = globals;
 }
 
 ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
@@ -1951,7 +1950,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
 
     ASTInterpreter interpreter(md, vregs, num_vregs);
     interpreter.initArguments(NULL, NULL, NULL, NULL, NULL, NULL);
-    interpreter.setBoxedLocals(boxedLocals);
+    interpreter.setBoxedLocals(incref(boxedLocals));
 
     assert(!md->source->scoping->areGlobalsFromModule());
     assert(globals);
