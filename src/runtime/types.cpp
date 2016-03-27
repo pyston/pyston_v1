@@ -1399,7 +1399,6 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         metaclass = bases->elts[0]->cls;
     } else {
         Box* gl = getGlobalsDict();
-        AUTO_DECREF(gl);
         metaclass = PyDict_GetItemString(gl, "__metaclass__");
 
         if (!metaclass) {

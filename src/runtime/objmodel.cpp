@@ -1187,6 +1187,7 @@ static void freeAttrs(HCAttrs::AttrList* attrs, int nattrs) {
         // TODO: should drop an old item from the freelist, not a new one
         if (size == ARRAYLIST_FREELIST_SIZE) {
             PyObject_FREE(attrs);
+            return;
         } else {
 #ifndef NDEBUG
             memset(attrs, 0xdb, sizeof(HCAttrs::AttrList) + nattrs * sizeof(Box*));
@@ -6678,7 +6679,6 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     static BoxedString* module_str = getStaticString("__module__");
     if (!made->hasattr(module_str)) {
         Box* gl = getGlobalsDict();
-        AUTO_DECREF(gl);
         static BoxedString* name_str = getStaticString("__name__");
         Box* attr = PyDict_GetItem(gl, name_str);
         if (attr)
