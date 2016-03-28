@@ -428,7 +428,7 @@ static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept 
     Py_VISIT(f->closure);
 
     //Py_VISIT(f->func_dict);
-    Py_VISIT_HCATTRS(f->attrs);
+    Py_TRAVERSE(f->attrs);
     return 0;
 }
 
@@ -3773,7 +3773,7 @@ void BoxedModule::dealloc(Box* b) noexcept {
 
 int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
-    Py_VISIT_HCATTRS(m->attrs);
+    Py_TRAVERSE(m->attrs);
     assert(!m->keep_alive.size());
     return 0;
 }
@@ -3913,7 +3913,7 @@ type_traverse(PyTypeObject *type, visitproc visit, void *arg)
     // Pyston change: HEAPTYPE is not about whether it is in GC or not
     // assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 
-    Py_VISIT_HCATTRS(type->attrs);
+    Py_TRAVERSE(type->attrs);
 
     Py_VISIT(type->tp_dict);
     Py_VISIT(type->tp_cache);

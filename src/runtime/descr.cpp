@@ -774,7 +774,6 @@ template <ExceptionStyle S>
 Box* BoxedWrapperObject::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                  Box* arg3, Box** args,
                                  const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    assert(0 && "check refcounting");
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == wrapperobject_cls);

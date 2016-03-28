@@ -69,6 +69,13 @@ public:
         return iterator == rhs->iterator && value == rhs->value;
     }
 
+    int traverse(visitproc visit, void* arg) override {
+        Py_VISIT(iterator);
+        Py_VISIT(value);
+
+        return 0;
+    }
+
     static BoxIteratorGeneric* end() {
         static BoxIteratorGeneric _end(nullptr);
         return &_end;
@@ -136,6 +143,12 @@ public:
     bool isSame(const BoxIteratorImpl* _rhs) override {
         const auto rhs = (const BoxIteratorIndex*)_rhs;
         return obj == rhs->obj && index == rhs->index;
+    }
+
+    int traverse(visitproc visit, void* arg) override {
+        Py_VISIT(obj);
+
+        return 0;
     }
 
     static BoxIteratorIndex* end() {

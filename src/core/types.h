@@ -549,12 +549,21 @@ class BinopIC;
 
 class Box;
 
+#define Py_TRAVERSE(obj)                                                                                               \
+    do {                                                                                                               \
+        int vret = (obj).traverse(visit, arg);                                                                         \
+        if (vret)                                                                                                      \
+            return vret;                                                                                               \
+    } while (0)
+
+
 class BoxIteratorImpl {
 public:
     virtual ~BoxIteratorImpl() = default;
     virtual void next() = 0;
     virtual Box* getValue() = 0;
     virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+    virtual int traverse(visitproc visit, void* arg) = 0;
 };
 
 class BoxIterator {
@@ -590,6 +599,12 @@ public:
         : begin_impl(std::move(begin)), end_impl(end) {}
     BoxIterator begin() { return BoxIterator(begin_impl.get()); }
     BoxIterator end() { return BoxIterator(end_impl); }
+
+    int traverse(visitproc visit, void* arg) {
+        Py_TRAVERSE(*begin_impl);
+        Py_TRAVERSE(*end_impl);
+        return 0;
+    }
 };
 
 class HiddenClass;
@@ -636,14 +651,6 @@ public:
     void clear() noexcept;
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
-
-#define Py_VISIT_HCATTRS(hcattrs)                                                                                      \
-    do {                                                                                                               \
-        int vret = hcattrs.traverse(visit, arg);                                                                      \
-        if (vret)                                                                                                      \
-            return vret;                                                                                               \
-    } while (0)
-
 
 extern std::vector<BoxedClass*> classes;
 

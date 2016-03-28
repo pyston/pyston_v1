@@ -1754,7 +1754,7 @@ void BoxedInstance::dealloc(Box* b) noexcept {
 int BoxedInstance::traverse(Box* o, visitproc visit, void* arg) noexcept {
     BoxedInstance* self = static_cast<BoxedInstance*>(o);
 
-    Py_VISIT_HCATTRS(self->attrs);
+    Py_TRAVERSE(self->attrs);
     Py_VISIT(self->inst_cls);
 
     return 0;
@@ -1785,7 +1785,7 @@ int BoxedClassobj::traverse(Box* o, visitproc visit, void* arg) noexcept {
 
     Py_VISIT(cl->bases);
     Py_VISIT(cl->name);
-    Py_VISIT_HCATTRS(cl->attrs);
+    Py_TRAVERSE(cl->attrs);
     return 0;
 }
 

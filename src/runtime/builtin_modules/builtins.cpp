@@ -1330,7 +1330,13 @@ private:
 
 public:
     BoxedEnumerate(BoxIteratorRange range, int64_t idx, BoxedLong* idx_long)
-        : range(std::move(range)), iterator(range.begin()), iterator_end(range.end()), idx(idx), idx_long(idx_long) {}
+        : range(std::move(range)),
+          iterator(this->range.begin()),
+          iterator_end(this->range.end()),
+          idx(idx),
+          idx_long(idx_long) {
+        Py_XINCREF(idx_long);
+    }
 
     DEFAULT_CLASS(enumerate_cls);
 
@@ -1358,8 +1364,13 @@ public:
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
+        AUTO_DECREF(val);
         ++self->iterator;
-        Box* rtn = BoxedTuple::create({ self->idx_long ? self->idx_long : boxInt(self->idx), val });
+        Box* rtn;
+        if (self->idx_long)
+            rtn = BoxedTuple::create({ self->idx_long, val });
+        else
+            rtn = BoxedTuple::create({ autoDecref(boxInt(self->idx)), val });
 
         // check if incrementing the counter would overflow it, if so switch to long counter
         if (self->idx == PY_SSIZE_T_MAX) {
@@ -1368,7 +1379,7 @@ public:
             self->idx = -1;
         }
         if (self->idx_long)
-            self->idx_long = (BoxedLong*)longAdd(self->idx_long, boxInt(1));
+            self->idx_long = (BoxedLong*)longAdd(autoDecref(self->idx_long), autoDecref(boxInt(1)));
         else
             ++self->idx;
         return rtn;
@@ -1381,10 +1392,27 @@ public:
     }
 
     static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
+        assert(b->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(b);
+
+        PyObject_GC_UnTrack(self);
+
+        Py_XDECREF(self->idx_long);
+        self->iterator.~BoxIterator();
+        self->iterator_end.~BoxIterator();
+        self->range.~BoxIteratorRange();
+
+        self->cls->tp_free(self);
     }
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
-        Py_FatalError("unimplemented");
+
+    static int traverse(Box* b, visitproc visit, void *arg) noexcept {
+        assert(b->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(b);
+
+        Py_VISIT(self->idx_long);
+        Py_TRAVERSE(self->range);
+
+        return 0;
     }
 };
 
