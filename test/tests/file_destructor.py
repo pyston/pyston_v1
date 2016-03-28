@@ -1,4 +1,3 @@
-# expected: reffail
 import gc
 
 def open_lots_of_files():

@@ -1,4 +1,3 @@
-# expected: reffail
 # This file isn't really meant to be run as a test, though it won't really
 # make a difference.
 

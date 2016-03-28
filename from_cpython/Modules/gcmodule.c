@@ -1431,6 +1431,8 @@ initgc(void)
         tmod = PyImport_ImportModuleNoBlock("time");
         if (tmod == NULL)
             PyErr_Clear();
+        else
+            PyGC_RegisterStaticConstant(tmod);
     }
 
 #define ADD_INT(NAME) if (PyModule_AddIntConstant(m, #NAME, NAME) < 0) return

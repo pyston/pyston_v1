@@ -1,4 +1,3 @@
-# expected: reffail
 # Regression test: this triggers a bug in the way we guard for boxedfunctions and their closures.
 # In particular, we guard on the specific value of a BoxedFunction to say that it is the same, but
 # it's possible for the function to get destructed and then a new (and different) boxedfunction to
