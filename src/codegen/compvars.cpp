@@ -289,6 +289,7 @@ public:
             = emitter.getBuilder()->CreateConstInBoundsGEP2_32(var->getValue(), 0, offsetof(Box, cls) / sizeof(void*));
 
         llvm::Value* cls_value = emitter.getBuilder()->CreateLoad(cls_ptr);
+        emitter.setType(cls_value, RefType::BORROWED);
         assert(cls_value->getType() == g.llvm_class_type_ptr);
         llvm::Value* rtn = emitter.getBuilder()->CreateICmpEQ(
             cls_value, emitter.setType(embedRelocatablePtr(cls, g.llvm_class_type_ptr), RefType::BORROWED));

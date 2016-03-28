@@ -191,11 +191,15 @@ public:
     friend struct pyston::ASTInterpreterJitInterface;
 };
 
-void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
+void ASTInterpreter::addSymbol(InternedString name, Box* new_value, bool allow_duplicates) {
     assert(getSymVRegMap().count(name));
-    if (!allow_duplicates)
-        assert(vregs[getSymVRegMap()[name]] == NULL);
-    vregs[getSymVRegMap()[name]] = value;
+    Box*& value = vregs[getSymVRegMap()[name]];
+    Box* old_value = value;
+    value = incref(new_value);
+    if (allow_duplicates)
+        Py_XDECREF(old_value);
+    else
+        assert(old_value == NULL);
 }
 
 void ASTInterpreter::setGenerator(Box* gen) {
@@ -223,8 +227,10 @@ void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
 
 void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
     Box** vregs = this->frame_info.vregs;
+    int num_vregs = this->frame_info.num_vregs;
     this->frame_info = *frame_info;
     this->frame_info.vregs = vregs;
+    this->frame_info.num_vregs = num_vregs;
 }
 
 void ASTInterpreter::setGlobals(Box* globals) {
@@ -402,6 +408,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
                     //          it will confuse our unwinder!
                     rtn = interpreter.doOSR(cur_stmt);
                 }
+                Py_XDECREF(v.o);
                 return rtn;
             }
         }
@@ -857,6 +864,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
 Value ASTInterpreter::visit_clsAttribute(AST_ClsAttribute* node) {
     Value obj = visit_expr(node->value);
     BoxedString* attr = node->attr.getBox();
+    AUTO_DECREF(obj.o);
     return Value(getclsattr(obj.o, attr), jit ? jit->emitGetClsAttr(obj, attr) : NULL);
 }
 
@@ -891,8 +899,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
-        BoxedString* name_boxed = source_info->parent_module->getStringConstant(name, true);
-        AUTO_DECREF(name_boxed);
+        BORROWED(BoxedString*) name_boxed = source_info->parent_module->getStringConstant(name, true);
 
         if (jit)
             v.var = jit->emitImportFrom(module, name_boxed);
@@ -2020,6 +2027,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
             RELEASE_ASSERT(expr->value == after_expr, "%p %p", expr->value, after_expr);
             assert(expr->value == after_expr);
+            assert(0 && "check refcounting");
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
             auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
@@ -2059,7 +2067,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     cur_thread_state.frame_info = frame_state.frame_info->back;
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
-    return v ? v : None;
+    return v ? v : incref(None);
 }
 
 extern "C" void printExprHelper(Box* obj) {

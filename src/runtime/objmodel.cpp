@@ -136,9 +136,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
         deopt_state.frame_state.frame_info->exc.value = NULL;
     }
 
-    assert(0 && "check refcounting");
     AUTO_DECREF(deopt_state.frame_state.locals);
-
     return astInterpretDeopt(deopt_state.cf->md, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
