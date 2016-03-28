@@ -1,4 +1,3 @@
-# expected: reffail
 def f():
     try:
         def foo(): return 0

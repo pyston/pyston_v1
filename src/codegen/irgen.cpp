@@ -830,6 +830,10 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (blocks.count(bpred) == 0)
                 continue;
 
+            auto terminator = llvm_exit_blocks[b->predecessors[j]]->getTerminator();
+            if (llvm::isa<llvm::UnreachableInst>(terminator))
+                continue;
+
             // printf("(%d %ld) -> (%d %ld)\n", bpred->idx, phi_ending_symbol_tables[bpred]->size(), b->idx,
             // phis->size());
             ASSERT(sameKeyset(phi_ending_symbol_tables[bpred], phis), "%d->%d", bpred->idx, b->idx);
