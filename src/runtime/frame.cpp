@@ -119,7 +119,7 @@ public:
             if (!f->frame_info->back)
                 f->_back = incref(None);
             else
-                f->_back = BoxedFrame::boxFrame(f->frame_info->back);
+                f->_back = incref(BoxedFrame::boxFrame(f->frame_info->back));
         }
 
         return incref(f->_back);
@@ -153,11 +153,11 @@ public:
 
     DEFAULT_CLASS(frame_cls);
 
-    static Box* boxFrame(FrameInfo* fi) {
+    static BORROWED(Box*) boxFrame(FrameInfo* fi) {
         if (fi->frame_obj == NULL)
             fi->frame_obj = new BoxedFrame(fi);
         assert(fi->frame_obj->cls == frame_cls);
-        return incref(fi->frame_obj);
+        return fi->frame_obj;
     }
 
     static void dealloc(Box* b) noexcept {
@@ -185,12 +185,13 @@ public:
         return 0;
     }
 
-    static Box* boxFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
+    static Box* createFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
+        assert(0 && "ch eck refcounting");
         BoxedFrame* frame = new BoxedFrame(NULL);
-        frame->_back = back;
-        frame->_code = (Box*)code;
-        frame->_globals = globals;
-        frame->_locals = locals;
+        frame->_back = incref(back);
+        frame->_code = (Box*)incref(code);
+        frame->_globals = incref(globals);
+        frame->_locals = incref(locals);
         frame->_linenumber = -1;
         return frame;
     }
@@ -200,11 +201,11 @@ extern "C" int PyFrame_ClearFreeList(void) noexcept {
     return 0; // number of entries cleared
 }
 
-Box* getFrame(FrameInfo* frame_info) {
+BORROWED(Box*) getFrame(FrameInfo* frame_info) {
     return BoxedFrame::boxFrame(frame_info);
 }
 
-Box* getFrame(int depth) {
+BORROWED(Box*) getFrame(int depth) {
     FrameInfo* frame_info = getPythonFrameInfo(depth);
     if (!frame_info)
         return NULL;
@@ -299,7 +300,7 @@ extern "C" PyFrameObject* PyFrame_New(PyThreadState* tstate, PyCodeObject* code,
     RELEASE_ASSERT(PyCode_Check((Box*)code), "");
     RELEASE_ASSERT(!globals || PyDict_Check(globals) || globals->cls == attrwrapper_cls, "%s", globals->cls->tp_name);
     RELEASE_ASSERT(!locals || PyDict_Check(locals), "%s", locals->cls->tp_name);
-    return (PyFrameObject*)BoxedFrame::boxFrame(getFrame(0), (BoxedCode*)code, globals, locals);
+    return (PyFrameObject*)BoxedFrame::createFrame(getFrame(0), (BoxedCode*)code, globals, locals);
 }
 
 extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
@@ -310,6 +311,7 @@ extern "C" PyObject* PyFrame_GetCode(PyFrameObject* f) noexcept {
 }
 
 extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {
+    assert(0 && "check refcounting -- are callers expecting a borrowed ref?");
     return (PyFrameObject*)getFrame(stack_level);
 }
 

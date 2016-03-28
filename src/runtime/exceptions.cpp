@@ -312,7 +312,7 @@ bool exceptionAtLineCheck() {
 
 void exceptionAtLine(Box** traceback) {
     if (exceptionAtLineCheck()) {
-        PyTraceBack_Here_Tb((struct _frame*)autoDecref(getFrame((FrameInfo*)cur_thread_state.frame_info)),
+        PyTraceBack_Here_Tb((struct _frame*)getFrame((FrameInfo*)cur_thread_state.frame_info),
                             (PyTracebackObject**)traceback);
     }
 }

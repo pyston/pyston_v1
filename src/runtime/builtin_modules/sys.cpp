@@ -115,7 +115,7 @@ Box* sysGetFrame(Box* val) {
     if (!frame) {
         raiseExcHelper(ValueError, "call stack is not deep enough");
     }
-    return frame;
+    return incref(frame);
 }
 
 Box* sysCurrentFrames() {

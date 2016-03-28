@@ -1363,8 +1363,8 @@ extern Box* dict_descr;
 
 FunctionMetadata* metadataFromCode(Box* code);
 
-Box* getFrame(FrameInfo* frame_info);
-Box* getFrame(int depth);
+BORROWED(Box*) getFrame(FrameInfo* frame_info);
+BORROWED(Box*) getFrame(int depth);
 void frameInvalidateBack(BoxedFrame* frame);
 extern "C" void deinitFrame(FrameInfo* frame_info);
 int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexcept;

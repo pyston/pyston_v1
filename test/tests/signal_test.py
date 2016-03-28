@@ -1,4 +1,3 @@
-# expected: reffail
 import signal
 
 for k in sorted(dir(signal)):

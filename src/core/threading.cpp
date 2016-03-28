@@ -600,6 +600,7 @@ extern "C" void PyThread_delete_key_value(int key) noexcept {
 
 
 extern "C" PyObject *_PyThread_CurrentFrames(void) noexcept {
+    assert(0 && "check refcounting");
     try {
         LOCK_REGION(&threading_lock);
         BoxedDict* result = new BoxedDict;
