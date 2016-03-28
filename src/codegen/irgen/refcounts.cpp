@@ -641,6 +641,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         orderer.add(&BB);
     }
 
+    std::vector<llvm::Instruction*> tracked_instructions;
+    for (auto&& II : llvm::inst_range(f)) {
+        llvm::Instruction* inst = &II;
+        if (!rt->vars.count(inst))
+            continue;
+        tracked_instructions.push_back(inst);
+    }
+
     while (llvm::BasicBlock* bb = orderer.pop()) {
         // errs() << "DETERMINISM: Processing " << bb->getName() << '\n';
         llvm::BasicBlock& BB = *bb;
@@ -821,14 +829,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         // size_t hash = 0;
         // Handle variables that were defined in this BB:
-        // TODO shouldn't have to iterate over all instructions in the function
-        for (auto&& II : llvm::inst_range(f)) {
-            //llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(p.first);
-            //if (!inst)
-                //continue;
-            llvm::Instruction* inst = &II;
-            if (!rt->vars.count(inst))
-                continue;
+        for (auto&& inst : tracked_instructions) {
             const auto&& rstate = rt->vars.lookup(inst);
 
             // hash = hash * 31 + std::hash<llvm::StringRef>()(inst->getName());
