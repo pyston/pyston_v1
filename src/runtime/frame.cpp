@@ -231,9 +231,9 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
     }
 
     assert(frame_info->vregs || frame_info->num_vregs == 0);
-    int num_user_visible_vregs = frame_info->num_vregs;
+    int num_vregs = frame_info->num_vregs;
 
-    decrefArray<true>(frame_info->vregs, num_user_visible_vregs);
+    decrefArray<true>(frame_info->vregs, num_vregs);
 
     Py_CLEAR(frame_info->boxedLocals);
 
@@ -248,8 +248,8 @@ int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexce
     Py_VISIT(frame_info->frame_obj);
 
     if (frame_info->vregs) {
-        int num_user_visible_vregs = frame_info->num_vregs;
-        for (int i = 0; i < num_user_visible_vregs; i++) {
+        int num_vregs = frame_info->num_vregs;
+        for (int i = 0; i < num_vregs; i++) {
             Py_VISIT(frame_info->vregs[i]);
         }
     }
