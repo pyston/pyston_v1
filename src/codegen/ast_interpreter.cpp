@@ -579,11 +579,10 @@ Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
 
 Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     Value left = visit_expr(node->left);
-    Value right = visit_expr(node->right);
     AUTO_DECREF(left.o);
+    Value right = visit_expr(node->right);
     AUTO_DECREF(right.o);
-    Value r = doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
-    return r;
+    return doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
 }
 
 Value ASTInterpreter::visit_slice(AST_slice* node) {
@@ -604,15 +603,15 @@ Value ASTInterpreter::visit_slice(AST_slice* node) {
 }
 
 Value ASTInterpreter::visit_ellipsis(AST_Ellipsis* node) {
-    return Value(Ellipsis, jit ? jit->imm(Ellipsis) : NULL);
+    return Value(incref(Ellipsis), jit ? jit->imm(Ellipsis) : NULL);
 }
 
 Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();
-    Value upper = node->upper ? visit_expr(node->upper) : getNone();
-    Value step = node->step ? visit_expr(node->step) : getNone();
     AUTO_DECREF(lower.o);
+    Value upper = node->upper ? visit_expr(node->upper) : getNone();
     AUTO_DECREF(upper.o);
+    Value step = node->step ? visit_expr(node->step) : getNone();
     AUTO_DECREF(step.o);
 
     Value v;
@@ -640,6 +639,9 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     Value v = visit_expr(node->test);
     ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
 
+    // TODO could potentially avoid doing this if we skip the incref in NONZERO
+    AUTO_DECREF(v.o);
+
     if (jit) {
         jit->emitEndBlock();
 
@@ -653,8 +655,6 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
         next_block = node->iftrue;
     else
         next_block = node->iffalse;
-    // TODO could potentially avoid doing this if we skip the incref in NONZERO
-    Py_DECREF(v.o);
 
     if (jit) {
         jit->emitJump(next_block);
@@ -872,12 +872,10 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
     assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
     Value left = visit_expr(node->left);
+    AUTO_DECREF(left.o);
     Value right = visit_expr(node->right);
-    Value r = doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
-    Py_DECREF(left.o);
-    Py_DECREF(right.o);
-
-    return r;
+    AUTO_DECREF(right.o);
+    return doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
 }
 
 Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
@@ -885,8 +883,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     if (node->opcode == AST_LangPrimitive::GET_ITER) {
         assert(node->args.size() == 1);
         Value val = visit_expr(node->args[0]);
+        AUTO_DECREF(val.o);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
-        Py_DECREF(val.o);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);
@@ -927,6 +925,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
+        AUTO_DECREF(module.o);
         v = Value(importStar(module.o, frame_info.globals), jit ? jit->emitImportStar(module) : NULL);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = getNone();
@@ -952,12 +951,10 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     } else if (node->opcode == AST_LangPrimitive::NONZERO) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
+        AUTO_DECREF(obj.o);
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
-        Py_DECREF(obj.o);
     } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
-
-        assert(0 && "check refcounting -- call setFrameExcInfo instead of setting it directly");
 
         Value type = visit_expr(node->args[0]);
         assert(type.o);
@@ -968,25 +965,23 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
         if (jit)
             jit->emitSetExcInfo(type, value, traceback);
-        getFrameInfo()->exc = ExcInfo(type.o, value.o, traceback.o);
-        Py_DECREF(type.o);
-        Py_DECREF(value.o);
-        Py_DECREF(traceback.o);
+        setFrameExcInfo(getFrameInfo(), type.o, value.o, traceback.o);
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO) {
         assert(node->args.empty());
         if (jit)
             jit->emitUncacheExcInfo();
-        getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
+        setFrameExcInfo(getFrameInfo(), NULL, NULL, NULL);
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::HASNEXT) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
+        AUTO_DECREF(obj.o);
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
-        Py_DECREF(obj.o);
     } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
         abortJITing();
         Value obj = visit_expr(node->args[0]);
+        AUTO_DECREF(obj.o);
         printExprHelper(obj.o);
         v = getNone();
     } else
@@ -996,6 +991,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
 Value ASTInterpreter::visit_yield(AST_Yield* node) {
     Value value = node->value ? visit_expr(node->value) : getNone();
+    AUTO_DECREF(value.o);
     assert(generator && generator->cls == generator_cls);
 
     return Value(yield(generator, value.o), jit ? jit->emitYield(value) : NULL);
@@ -1291,8 +1287,8 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             case AST_TYPE::Subscript: {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
-                Value slice = visit_slice(sub->slice);
                 AUTO_DECREF(value.o);
+                Value slice = visit_slice(sub->slice);
                 AUTO_DECREF(slice.o);
                 if (jit)
                     jit->emitDelItem(value, slice);
@@ -1302,6 +1298,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             case AST_TYPE::Attribute: {
                 AST_Attribute* attr = (AST_Attribute*)target_;
                 Value target = visit_expr(attr->value);
+                AUTO_DECREF(target.o);
                 BoxedString* str = attr->attr.getBox();
                 if (jit)
                     jit->emitDelAttr(target, str);
@@ -1333,6 +1330,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                         return Value();
                     }
 
+                    Py_DECREF(vregs[target->vreg]);
                     vregs[target->vreg] = NULL;
                 }
                 break;
@@ -1372,8 +1370,11 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
 Value ASTInterpreter::visit_exec(AST_Exec* node) {
     // TODO implement the locals and globals arguments
     Value code = visit_expr(node->body);
+    AUTO_DECREF(code.o);
     Value globals = node->globals == NULL ? Value() : visit_expr(node->globals);
+    AUTO_XDECREF(globals.o);
     Value locals = node->locals == NULL ? Value() : visit_expr(node->locals);
+    AUTO_XDECREF(locals.o);
 
     if (jit)
         jit->emitExec(code, globals, locals, this->source_info->future_flags);
@@ -1385,11 +1386,10 @@ Value ASTInterpreter::visit_exec(AST_Exec* node) {
 Value ASTInterpreter::visit_compare(AST_Compare* node) {
     RELEASE_ASSERT(node->comparators.size() == 1, "not implemented");
     Value left = visit_expr(node->left);
+    AUTO_DECREF(left.o);
     Value right = visit_expr(node->comparators[0]);
-    Value r = doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
-    Py_DECREF(left.o);
-    Py_DECREF(right.o);
-    return r;
+    AUTO_DECREF(right.o);
+    return doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
 }
 
 Value ASTInterpreter::visit_expr(AST_expr* node) {
@@ -1556,6 +1556,7 @@ Value ASTInterpreter::visit_index(AST_Index* node) {
 
 Value ASTInterpreter::visit_repr(AST_Repr* node) {
     Value v = visit_expr(node->value);
+    AUTO_DECREF(v.o);
     return Value(repr(v.o), jit ? jit->emitRepr(v) : NULL);
 }
 
@@ -1671,9 +1672,8 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
 Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
-    Value slice = visit_slice(node->slice);
-
     AUTO_DECREF(value.o);
+    Value slice = visit_slice(node->slice);
     AUTO_DECREF(slice.o);
 
     return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(node, value, slice) : NULL);
@@ -1755,6 +1755,8 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
         if (it == d.end()) {
             assertNameDefined(0, name.c_str(), NameError, false /* local_var_msg */);
         }
+        Py_DECREF(it->first.value);
+        Py_DECREF(it->second);
         d.erase(it);
     } else if (boxed_locals->cls == attrwrapper_cls) {
         attrwrapperDel(boxed_locals, name);
@@ -1786,7 +1788,9 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     Box* value = last_exception.value ? last_exception.value : None;
     Box* traceback = last_exception.traceback ? last_exception.traceback : None;
     Box* rtn = BoxedTuple::create({ type, value, traceback });
-    last_exception = ExcInfo(NULL, NULL, NULL);
+    Py_CLEAR(last_exception.type);
+    Py_CLEAR(last_exception.value);
+    Py_CLEAR(last_exception.traceback);
     return rtn;
 }
 
@@ -1797,7 +1801,7 @@ void ASTInterpreterJitInterface::pendingCallsCheckHelper() {
 
 void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    interpreter->getFrameInfo()->exc = ExcInfo(type, value, traceback);
+    setFrameExcInfo(interpreter->getFrameInfo(), type, value, traceback);
 }
 
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
@@ -1813,7 +1817,7 @@ void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long 
 
 void ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
-    interpreter->getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
+    setFrameExcInfo(interpreter->getFrameInfo(), NULL, NULL, NULL);
 }
 
 void ASTInterpreterJitInterface::raise0Helper(void* _interpreter) {
@@ -1964,7 +1968,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     interpreter.setGlobals(globals);
 
     Box* v = ASTInterpreter::execute(interpreter);
-    return v ? v : None;
+    return v ? v : incref(None);
 }
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
