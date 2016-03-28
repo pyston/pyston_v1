@@ -1,4 +1,3 @@
-# expected: reffail
 def f(a):
     print a
 
