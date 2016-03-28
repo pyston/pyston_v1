@@ -276,9 +276,6 @@ tb_printinternal(PyTracebackObject *tb, PyObject *f, long limit)
                 PyString_AsString(filename),
                 tb->tb_lineno,
                 PyString_AsString(name));
-            Py_DECREF(name);
-            Py_DECREF(filename);
-            Py_DECREF(code);
         }
         depth--;
         tb = tb->tb_next;

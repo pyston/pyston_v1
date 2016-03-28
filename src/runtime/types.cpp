@@ -3455,16 +3455,17 @@ extern "C" void PyObject_InitHcAttrs(HCAttrs* attrs) noexcept {
 }
 
 extern "C" PyObject* PyObject_GetHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
-    return obj->getattr(internStringMortal(attr));
+    return obj->getattr(autoDecref(internStringMortal(attr)));
 }
 
 extern "C" int PyObject_SetHcAttrString(PyObject* obj, const char* attr, PyObject* val) PYSTON_NOEXCEPT {
-    obj->setattr(internStringMortal(attr), val, NULL);
+    obj->setattr(autoDecref(internStringMortal(attr)), val, NULL);
     return 0;
 }
 
 extern "C" int PyObject_DelHcAttrString(PyObject* obj, const char* attr) PYSTON_NOEXCEPT {
     BoxedString* attr_str = internStringMortal(attr);
+    AUTO_DECREF(attr_str);
     bool has = obj->hasattr(attr_str);
     if (!has)
         return -1;

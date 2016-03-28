@@ -232,7 +232,7 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
             Py_DECREF(e);
         }
     }
-    Py_DECREF(extremVal);
+    Py_XDECREF(extremVal);
     return extremElement;
 }
 

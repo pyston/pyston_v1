@@ -1,4 +1,3 @@
-# expected: reffail
 
 
 assert chr(0) == '\x00'

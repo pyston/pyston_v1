@@ -79,25 +79,33 @@ public:
     // * = unsupported in Pyston
     // ** = getter supported, but setter unsupported
 
-    static Box* code(Box* obj, void*) {
+    static BORROWED(Box*) code(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_code)
             f->_code = incref((Box*)f->frame_info->md->getCode());
 
-        return incref(f->_code);
+        return f->_code;
     }
 
-    static Box* locals(Box* obj, void*) {
+    static Box* f_code(Box* obj, void* arg) {
+        return incref(code(obj, arg));
+    }
+
+    static BORROWED(Box*) locals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (f->hasExited())
-            return incref(f->_locals);
+            return f->_locals;
 
-        return incref(f->frame_info->updateBoxedLocals());
+        return f->frame_info->updateBoxedLocals();
     }
 
-    static Box* globals(Box* obj, void*) {
+    static Box* f_locals(Box* obj, void* arg) {
+        return incref(locals(obj, arg));
+    }
+
+    static BORROWED(Box*) globals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_globals) {
@@ -109,10 +117,14 @@ public:
             }
         }
 
-        return incref(f->_globals);
+        return f->_globals;
     }
 
-    static Box* back(Box* obj, void*) {
+    static Box* f_globals(Box* obj, void* arg) {
+        return incref(globals(obj, arg));
+    }
+
+    static BORROWED(Box*) back(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_back) {
@@ -122,7 +134,11 @@ public:
                 f->_back = incref(BoxedFrame::boxFrame(f->frame_info->back));
         }
 
-        return incref(f->_back);
+        return f->_back;
+    }
+
+    static Box* f_back(Box* obj, void* arg) {
+        return incref(back(obj, arg));
     }
 
     static Box* lineno(Box* obj, void*) {
@@ -140,11 +156,11 @@ public:
             return;
 
         // Call the getters for their side-effects of caching the result:
-        autoDecref(back(this, NULL));
-        autoDecref(code(this, NULL));
-        autoDecref(globals(this, NULL));
+        back(this, NULL);
+        code(this, NULL);
+        globals(this, NULL);
         assert(!_locals);
-        _locals = locals(this, NULL);
+        _locals = incref(locals(this, NULL));
         _linenumber = frame_info->stmt->lineno;
 
         frame_info = NULL; // this means exited == true
@@ -186,7 +202,7 @@ public:
     }
 
     static Box* createFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
-        assert(0 && "ch eck refcounting");
+        assert(0 && "check refcounting");
         BoxedFrame* frame = new BoxedFrame(NULL);
         frame->_back = incref(back);
         frame->_code = (Box*)incref(code);
@@ -303,15 +319,14 @@ extern "C" PyFrameObject* PyFrame_New(PyThreadState* tstate, PyCodeObject* code,
     return (PyFrameObject*)BoxedFrame::createFrame(getFrame(0), (BoxedCode*)code, globals, locals);
 }
 
-extern "C" PyObject* PyFrame_GetGlobals(PyFrameObject* f) noexcept {
+extern "C" BORROWED(PyObject*) PyFrame_GetGlobals(PyFrameObject* f) noexcept {
     return BoxedFrame::globals((Box*)f, NULL);
 }
-extern "C" PyObject* PyFrame_GetCode(PyFrameObject* f) noexcept {
+extern "C" BORROWED(PyObject*) PyFrame_GetCode(PyFrameObject* f) noexcept {
     return BoxedFrame::code((Box*)f, NULL);
 }
 
 extern "C" PyFrameObject* PyFrame_ForStackLevel(int stack_level) noexcept {
-    assert(0 && "check refcounting -- are callers expecting a borrowed ref?");
     return (PyFrameObject*)getFrame(stack_level);
 }
 
@@ -320,12 +335,12 @@ void setupFrame() {
                                    (destructor)BoxedFrame::dealloc, NULL, true, (traverseproc)BoxedFrame::traverse,
                                    (inquiry)BoxedFrame::clear);
 
-    frame_cls->giveAttrDescriptor("f_code", BoxedFrame::code, NULL);
-    frame_cls->giveAttrDescriptor("f_locals", BoxedFrame::locals, NULL);
+    frame_cls->giveAttrDescriptor("f_code", BoxedFrame::f_code, NULL);
+    frame_cls->giveAttrDescriptor("f_locals", BoxedFrame::f_locals, NULL);
     frame_cls->giveAttrDescriptor("f_lineno", BoxedFrame::lineno, NULL);
 
-    frame_cls->giveAttrDescriptor("f_globals", BoxedFrame::globals, NULL);
-    frame_cls->giveAttrDescriptor("f_back", BoxedFrame::back, NULL);
+    frame_cls->giveAttrDescriptor("f_globals", BoxedFrame::f_globals, NULL);
+    frame_cls->giveAttrDescriptor("f_back", BoxedFrame::f_back, NULL);
 
     frame_cls->freeze();
 }

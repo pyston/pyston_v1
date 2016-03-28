@@ -39,8 +39,10 @@ public:
 
     // These need to be static functions rather than methods because function
     // pointers could point to them.
-    static Box* name(Box* b, void*);
-    static Box* filename(Box* b, void*);
+    static BORROWED(Box*) name(Box* b, void*);
+    static BORROWED(Box*) filename(Box* b, void*);
+    static Box* f_name(Box* b, void*);
+    static Box* f_filename(Box* b, void*);
     static Box* firstlineno(Box* b, void*);
     static Box* argcount(Box* b, void*);
     static Box* varnames(Box* b, void*);

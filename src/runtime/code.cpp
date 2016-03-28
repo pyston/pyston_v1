@@ -26,20 +26,28 @@ extern "C" {
 BoxedClass* code_cls;
 }
 
-Box* BoxedCode::name(Box* b, void*) {
+BORROWED(Box*) BoxedCode::name(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_name)
-        return incref(code->_name);
-    return incref(code->f->source->getName());
+        return code->_name;
+    return code->f->source->getName();
 }
 
-Box* BoxedCode::filename(Box* b, void*) {
+Box* BoxedCode::f_name(Box* b, void* arg) {
+    return incref(name(b, arg));
+}
+
+BORROWED(Box*) BoxedCode::filename(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_filename)
-        return incref(code->_filename);
-    return incref(code->f->source->getFn());
+        return code->_filename;
+    return code->f->source->getFn();
+}
+
+Box* BoxedCode::f_filename(Box* b, void* arg) {
+    return incref(filename(b, arg));
 }
 
 Box* BoxedCode::firstlineno(Box* b, void*) {
@@ -190,11 +198,11 @@ extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
     return unboxInt(autoDecref(BoxedCode::argcount((Box*)op, NULL)));
 }
 
-extern "C" PyObject* PyCode_GetFilename(PyCodeObject* op) noexcept {
+extern "C" BORROWED(PyObject*) PyCode_GetFilename(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::filename((Box*)op, NULL);
 }
-extern "C" PyObject* PyCode_GetName(PyCodeObject* op) noexcept {
+extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::name((Box*)op, NULL);
 }
@@ -205,8 +213,8 @@ void setupCode() {
 
     code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 
-    code_cls->giveAttrDescriptor("co_name", BoxedCode::name, NULL);
-    code_cls->giveAttrDescriptor("co_filename", BoxedCode::filename, NULL);
+    code_cls->giveAttrDescriptor("co_name", BoxedCode::f_name, NULL);
+    code_cls->giveAttrDescriptor("co_filename", BoxedCode::f_filename, NULL);
     code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::firstlineno, NULL);
     code_cls->giveAttrDescriptor("co_argcount", BoxedCode::argcount, NULL);
     code_cls->giveAttrDescriptor("co_varnames", BoxedCode::varnames, NULL);

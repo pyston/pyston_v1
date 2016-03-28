@@ -1,4 +1,3 @@
-# expected: reffail
 import gc
 
 l = []

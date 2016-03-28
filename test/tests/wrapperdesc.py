@@ -1,4 +1,3 @@
-# expected: reffail
 class C(object):
     pass
 print C.__str__ is object.__str__
