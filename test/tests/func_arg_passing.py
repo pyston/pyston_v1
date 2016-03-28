@@ -1,4 +1,3 @@
-# expected: reffail
 def f():
     def f1(a, b, c):
         print a, b, c
@@ -51,3 +50,7 @@ g()
 del f2.func_defaults
 g()
 g()
+
+def f4(a, b, c, d, e):
+    print a, b, c, d, e
+f4(a=1, b=2, c=3, d=4, e=5)

@@ -1630,7 +1630,7 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
     BoxedTuple* t = static_cast<BoxedTuple*>(v);
 
     auto old_defaults = func->defaults;
-    func->defaults = incref(t);
+    func->defaults = xincref(t); // t can be NULL for 'del f.func_defaults'
     Py_XDECREF(old_defaults);
     func->dependent_ics.invalidateAll();
 }

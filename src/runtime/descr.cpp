@@ -834,7 +834,7 @@ void setupDescr() {
     property_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create(
                                                              (void*)propertyInit, UNKNOWN, 5, false, false,
                                                              ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
-                                                         { NULL, NULL, NULL, NULL }));
+                                                         { None, None, None, NULL }));
     property_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)propertyGet, UNKNOWN, 3)));
     property_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)propertySet, UNKNOWN, 3)));
     property_cls->giveAttr("__delete__", new BoxedFunction(FunctionMetadata::create((void*)propertyDel, UNKNOWN, 2)));

@@ -4229,7 +4229,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     }
 
     if (argspec.num_keywords) {
-        assert(!rewrite_args && "check refcounting");
         assert(argspec.num_keywords == keyword_names->size());
 
         RewriterVar::SmallVector r_vars;
@@ -4242,7 +4241,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 if (i == 2)
                     r_vars.push_back(rewrite_args->arg3);
                 if (i >= 3)
-                    r_vars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+                    r_vars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*))->setType(RefType::BORROWED));
             }
         }
 
