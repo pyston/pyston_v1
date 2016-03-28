@@ -1,4 +1,3 @@
-# expected: reffail
 import sys, os
 
 # this zip contains two pkgs: test1 and test2

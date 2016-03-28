@@ -113,7 +113,7 @@ class HCAttrs;
 typedef pyston::HCAttrs PyHcAttrs;
 #endif
 PyAPI_FUNC(void) PyObject_InitHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject*) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject*)) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyType_RequestHcAttrs(PyTypeObject*, int offset) PYSTON_NOEXCEPT;
 // Sets a descriptor on the type so that the attrs are available via __dict__
 PyAPI_FUNC(void) PyType_GiveHcAttrsDictDescr(PyTypeObject*) PYSTON_NOEXCEPT;

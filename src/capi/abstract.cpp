@@ -705,7 +705,6 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
 
 
     Py_DECREF(args);
-    Py_DECREF(callable);
 
     return tmp;
 }

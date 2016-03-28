@@ -970,7 +970,7 @@ void Box::setDict(STOLEN(BoxedDict*) d) {
     *getDictPtr() = d;
 }
 
-BoxedDict* Box::getDict() {
+BORROWED(BoxedDict*) Box::getDict() {
     assert(cls->instancesHaveDictAttrs());
 
     BoxedDict** d_ptr = getDictPtr();
@@ -980,7 +980,7 @@ BoxedDict* Box::getDict() {
     }
 
     assert(d->cls == dict_cls);
-    return incref(d);
+    return d;
 }
 
 static StatCounter box_getattr_slowpath("slowpath_box_getattr");
@@ -2226,14 +2226,19 @@ extern "C" Box* getclsattr(Box* obj, BoxedString* attr) {
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         gotten = getclsattrInternal<REWRITABLE>(obj, attr, &rewrite_args);
 
-        if (rewrite_args.isSuccessful() && gotten) {
-            RewriterVar* r_rtn;
-            ReturnConvention return_convention;
-            std::tie(r_rtn, return_convention) = rewrite_args.getReturn();
+        if (rewrite_args.isSuccessful()) {
+            if (gotten) {
+                RewriterVar* r_rtn;
+                ReturnConvention return_convention;
+                std::tie(r_rtn, return_convention) = rewrite_args.getReturn();
 
-            assert(return_convention == ReturnConvention::HAS_RETURN
-                   || return_convention == ReturnConvention::MAYBE_EXC);
-            rewriter->commitReturning(r_rtn);
+                assert(return_convention == ReturnConvention::HAS_RETURN
+                       || return_convention == ReturnConvention::MAYBE_EXC);
+                rewriter->commitReturning(r_rtn);
+            } else {
+                rewrite_args.getReturn(); // just to make the asserts happy
+                rewriter.reset(NULL);
+            }
         }
     } else
 #endif

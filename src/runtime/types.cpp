@@ -2776,7 +2776,8 @@ BORROWED(Box*) Box::getAttrWrapper() {
     return attrs->attr_list->attrs[offset];
 }
 
-extern "C" PyObject* PyObject_GetAttrWrapper(PyObject* obj) noexcept {
+extern "C" BORROWED(PyObject*) PyObject_GetAttrWrapper(PyObject* obj) noexcept {
+    assert(0 && "check refcounting");
     return obj->getAttrWrapper();
 }
 
@@ -4046,6 +4047,7 @@ void BoxedGetsetDescriptor::dealloc(Box* _o) noexcept {
 #endif
 
 std::vector<Box*> constants;
+std::vector<Box*> late_constants;
 extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
     constants.push_back(b);
     return b;
@@ -4185,7 +4187,7 @@ void setupRuntime() {
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
-    constants.push_back(EmptyTuple);
+    late_constants.push_back(EmptyTuple);
     list_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedList), false, "list", true, BoxedList::dealloc, NULL,
                                   true, BoxedList::traverse, BoxedList::clear);
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
@@ -4753,18 +4755,7 @@ extern "C" void Py_Finalize() noexcept {
     // initialized = 0;
 
 #ifdef Py_REF_DEBUG
-    PyGC_Collect(); // To make sure it creates any static objects
     IN_SHUTDOWN = true;
-    PyOS_FiniInterrupts();
-    _PyCodecRegistry_Deinit();
-    // TODO: we might have to do this in a loop:
-    PyType_ClearCache();
-    _PyUnicode_Fini();
-    PyThreadState_Clear(NULL);
-    for (auto b : constants) {
-        Py_DECREF(b);
-    }
-    constants.clear();
 
     // May need to run multiple collections to collect everything:
     while (true) {
@@ -4781,6 +4772,18 @@ extern "C" void Py_Finalize() noexcept {
         if (!freed)
             break;
     }
+
+    PyType_ClearCache();
+    PyOS_FiniInterrupts();
+    _PyCodecRegistry_Deinit();
+    // TODO: we might have to do this in a loop:
+    _PyUnicode_Fini();
+    PyThreadState_Clear(NULL);
+
+    for (auto b : late_constants) {
+        Py_DECREF(b);
+    }
+    late_constants.clear();
 
     _Py_ReleaseInternedStrings();
     for (auto b : classes) {

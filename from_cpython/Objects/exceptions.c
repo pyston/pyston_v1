@@ -243,6 +243,7 @@ BaseException_repr(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_reduce(PyBaseExceptionObject *self)
 {
+    assert(0 && "check refcounting");
     /* Pyston change:
     if (self->args && self->dict)
         return PyTuple_Pack(3, Py_TYPE(self), self->args, self->dict);
@@ -849,6 +850,7 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
     } else
         Py_INCREF(args);
 
+    assert(0 && "check refcounting");
     /* Pyston change:
     if (self->dict)
         res = PyTuple_Pack(3, Py_TYPE(self), args, self->dict);

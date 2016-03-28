@@ -1,4 +1,3 @@
-# expected: reffail
 import os
 import tempfile
 

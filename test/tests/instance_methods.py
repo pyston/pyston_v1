@@ -1,4 +1,3 @@
-# expected: reffail
 class C(object):
     def foo(self):
         pass

@@ -554,7 +554,7 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
 
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
-            runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            autoDecref(runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL));
             return;
         }
 
@@ -567,7 +567,7 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
         Box* setattr = classLookup(inst->inst_cls, setattr_str);
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
-            runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+            autoDecref(runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL));
             return;
         }
 
@@ -633,6 +633,7 @@ Box* instanceRepr(Box* _inst) {
     Box* repr_func = _instanceGetattribute(inst, repr_str, false);
 
     if (repr_func) {
+        AUTO_DECREF(repr_func);
         return runtimeCall(repr_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         Box* class_str = classobjStr(inst->inst_cls);
@@ -652,6 +653,7 @@ Box* instanceStr(Box* _inst) {
     Box* str_func = _instanceGetattribute(inst, str_str, false);
 
     if (str_func) {
+        AUTO_DECREF(str_func);
         return runtimeCall(str_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         return instanceRepr(inst);
@@ -684,6 +686,7 @@ Box* instanceNonzero(Box* _inst) {
     }
 
     if (nonzero_func) {
+        AUTO_DECREF(nonzero_func);
         return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         Py_RETURN_TRUE;
@@ -696,6 +699,7 @@ Box* instanceLen(Box* _inst) {
 
     static BoxedString* len_str = getStaticString("__len__");
     Box* len_func = _instanceGetattribute(inst, len_str, true);
+    AUTO_DECREF(len_func);
     return runtimeCall(len_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -705,6 +709,7 @@ Box* instanceGetitem(Box* _inst, Box* key) {
 
     static BoxedString* getitem_str = getStaticString("__getitem__");
     Box* getitem_func = _instanceGetattribute(inst, getitem_str, true);
+    AUTO_DECREF(getitem_func);
     return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
@@ -714,6 +719,7 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
 
     static BoxedString* setitem_str = getStaticString("__setitem__");
     Box* setitem_func = _instanceGetattribute(inst, setitem_str, true);
+    AUTO_DECREF(setitem_func);
     return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
 }
 
@@ -723,6 +729,7 @@ Box* instanceDelitem(Box* _inst, Box* key) {
 
     static BoxedString* delitem_str = getStaticString("__delitem__");
     Box* delitem_func = _instanceGetattribute(inst, delitem_str, true);
+    AUTO_DECREF(delitem_func);
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
@@ -741,7 +748,9 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (getslice_func == NULL) {
+        AUTO_DECREF(getslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        AUTO_DECREF(slice);
         return instanceGetitem(inst, slice);
     }
 
@@ -763,7 +772,9 @@ Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
     }
 
     if (setslice_func == NULL) {
+        AUTO_DECREF(setslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        AUTO_DECREF(slice);
         return instanceSetitem(inst, slice, *sequence);
     }
 
@@ -785,7 +796,9 @@ Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (delslice_func == NULL) {
+        AUTO_DECREF(delslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        AUTO_DECREF(slice);
         return instanceDelitem(inst, slice);
     }
     try {
@@ -839,6 +852,8 @@ static int half_cmp(PyObject* v, PyObject* w) noexcept {
         return -2;
     }
 #endif
+
+    AUTO_DECREF(cmp_func);
 
     args = PyTuple_Pack(1, w);
     if (args == NULL) {
@@ -946,7 +961,10 @@ Box* instanceContains(Box* _inst, Box* key) {
         return boxBool(result);
     }
 
+    AUTO_DECREF(contains_func);
+
     Box* r = runtimeCall(contains_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+    AUTO_DECREF(r);
     return boxBool(nonzero(r));
 }
 
@@ -970,12 +988,18 @@ static Box* instanceHash(BoxedInstance* inst) {
             func = _instanceGetattribute(inst, cmp_str, false);
             if (func == NULL) {
                 return boxInt(_Py_HashPointer(inst));
+            } else {
+                Py_DECREF(func);
             }
+        } else {
+            Py_DECREF(func);
         }
         raiseExcHelper(TypeError, "unhashable instance");
     }
+    AUTO_DECREF(func);
 
     res = runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    AUTO_DECREF(res);
     if (PyInt_Check(res) || PyLong_Check(res)) {
         CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
         return callattr(res, hash_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -992,6 +1016,7 @@ static Box* instanceIter(BoxedInstance* self) {
     static BoxedString* iter_str = getStaticString("__iter__");
     static BoxedString* getitem_str = getStaticString("__getitem__");
     if ((func = _instanceGetattribute(self, iter_str, false)) != NULL) {
+        AUTO_DECREF(func);
         PyObject* res = PyEval_CallObject(func, (PyObject*)NULL);
         if (!res)
             throwCAPIException();
@@ -1002,6 +1027,7 @@ static Box* instanceIter(BoxedInstance* self) {
     }
 
     if ((func = _instanceGetattribute(self, getitem_str, false)) == NULL) {
+        AUTO_DECREF(func);
         raiseExcHelper(TypeError, "iteration over non-sequence");
     }
 
@@ -1021,6 +1047,7 @@ static Box* instanceNext(BoxedInstance* inst) {
         // not 100% sure why this is a different error:
         raiseExcHelper(TypeError, "instance has no next() method");
     }
+    AUTO_DECREF(next_func);
 
     Box* r = runtimeCall(next_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     return r;

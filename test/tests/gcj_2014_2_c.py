@@ -1,4 +1,3 @@
-# expected: reffail
 import sys
 
 if __name__ == "__main__":

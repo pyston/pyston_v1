@@ -54,7 +54,7 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
     return rtn;
 }
 
-Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
+BORROWED(Box*) tupleGetitemUnboxedBorrowed(BoxedTuple* self, i64 n) {
     i64 size = self->size();
 
     if (n < 0)
@@ -63,19 +63,22 @@ Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
         raiseExcHelper(IndexError, "tuple index out of range");
 
     Box* rtn = self->elts[n];
-    Py_INCREF(rtn);
     return rtn;
+}
+
+Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
+    return incref(tupleGetitemUnboxedBorrowed(self, n));
 }
 
 Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
     return tupleGetitemUnboxed(self, slice->n);
 }
 
-extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
+extern "C" BORROWED(PyObject*) PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
     RELEASE_ASSERT(i >= 0, ""); // unlike tuple.__getitem__, PyTuple_GetItem doesn't do index wrapping
     try {
-        return tupleGetitemUnboxed(static_cast<BoxedTuple*>(op), i);
+        return tupleGetitemUnboxedBorrowed(static_cast<BoxedTuple*>(op), i);
     } catch (ExcInfo e) {
         abort();
     }

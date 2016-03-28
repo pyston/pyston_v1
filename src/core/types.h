@@ -307,6 +307,7 @@ class LocationMap;
 class JitCodeBlock;
 
 extern std::vector<Box*> constants;
+extern std::vector<Box*> late_constants; // constants that should be freed after normal constants
 
 // A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a FunctionMetadata
 // and some compilation settings, and produce a CompiledFunction
@@ -696,7 +697,7 @@ public:
     HCAttrs* getHCAttrsPtr();
     void setDictBacked(STOLEN(Box*) d);
     // For instances with dict attrs:
-    BoxedDict* getDict();
+    BORROWED(BoxedDict*) getDict();
     void setDict(STOLEN(BoxedDict*) d);
 
 
