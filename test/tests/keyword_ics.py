@@ -1,4 +1,3 @@
-# expected: reffail
 # statcheck: noninit_count('slowpath_runtimecall') <= 500
 # statcheck: noninit_count('slowpath_callfunc') <= 500
 # run_args: -n

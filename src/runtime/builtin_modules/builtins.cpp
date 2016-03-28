@@ -640,17 +640,18 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
-    assert(0 && "check refcounting");
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
+        Py_DECREF(_str);
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", _str->cls->tp_name);
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
-    setattr(obj, str, value);
+    setattr(obj, str, incref(value));
     return incref(None);
 }
 
