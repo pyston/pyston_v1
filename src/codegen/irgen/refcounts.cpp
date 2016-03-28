@@ -520,6 +520,8 @@ bool endingRefsDifferent(const BlockMap& lhs, const BlockMap& rhs) {
 }
 
 void RefcountTracker::addRefcounts(IRGenState* irstate) {
+    Timer _t("refcounting");
+
     llvm::Function* f = irstate->getLLVMFunction();
     RefcountTracker* rt = irstate->getRefcounts();
 
@@ -693,7 +695,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto v : tracked_values) {
                 // hash = hash * 31 + std::hash<llvm::StringRef>()(v->getName());
                 assert(rt->vars.count(v));
-                auto refstate = rt->vars[v];
+                const auto refstate = rt->vars.lookup(v);
 
                 int min_refs = 1000000000;
                 for (auto SBB : successors) {
@@ -752,12 +754,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
             for (auto v : rt->refs_consumed[&I]) {
                 num_consumed_by_inst[v]++;
-                assert(rt->vars[v].reftype != RefType::UNKNOWN);
+                assert(rt->vars.count(v) && rt->vars.lookup(v).reftype != RefType::UNKNOWN);
                 num_times_as_op[v]; // just make sure it appears in there
             }
 
             for (auto v : rt->refs_used[&I]) {
-                assert(rt->vars[v].reftype != RefType::UNKNOWN);
+                assert(rt->vars.lookup(v).reftype != RefType::UNKNOWN);
                 num_times_as_op[v]++;
             }
 
@@ -783,15 +785,19 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                              //llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, NULL, invoke->getNormalDest(), bb}));
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, NULL, invoke->getUnwindDest(), bb}));
+                                state.decrefs.push_back(
+                                    RefOp({ op, rt->vars.lookup(op).nullable, 1, NULL, invoke->getNormalDest(), bb }));
+                                state.decrefs.push_back(
+                                    RefOp({ op, rt->vars.lookup(op).nullable, 1, NULL, invoke->getUnwindDest(), bb }));
                             } else {
                                 assert(&I != I.getParent()->getTerminator());
                                 auto next = I.getNextNode();
-                                //while (llvm::isa<llvm::PHINode>(next))
-                                    //next = next->getNextNode();
-                                ASSERT(!llvm::isa<llvm::UnreachableInst>(next), "Can't add decrefs after this function...");
-                                state.decrefs.push_back(RefOp({op, rt->vars[op].nullable, 1, next, NULL, NULL}));
+                                // while (llvm::isa<llvm::PHINode>(next))
+                                // next = next->getNextNode();
+                                ASSERT(!llvm::isa<llvm::UnreachableInst>(next),
+                                       "Can't add decrefs after this function...");
+                                state.decrefs.push_back(
+                                    RefOp({ op, rt->vars.lookup(op).nullable, 1, next, NULL, NULL }));
                             }
                             state.ending_refs[op] = 1;
                         }
@@ -823,7 +829,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             llvm::Instruction* inst = &II;
             if (!rt->vars.count(inst))
                 continue;
-            auto&& rstate = rt->vars[inst];
+            const auto&& rstate = rt->vars.lookup(inst);
 
             // hash = hash * 31 + std::hash<llvm::StringRef>()(inst->getName());
 
@@ -880,9 +886,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     assert(found);
                 }
 #endif
-                assert(rt->vars[p.first].reftype == RefType::BORROWED);
+                assert(rt->vars.lookup(p.first).reftype == RefType::BORROWED);
 
-                state.increfs.push_back(RefOp({p.first, rt->vars[p.first].nullable, p.second, NULL, &BB, NULL}));
+                state.increfs.push_back(
+                    RefOp({ p.first, rt->vars.lookup(p.first).nullable, p.second, NULL, &BB, NULL }));
             }
             state.ending_refs.clear();
         }
@@ -949,6 +956,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         dumpPrettyIR(f);
         fprintf(stderr, "\033[0m");
     }
+
+    long us = _t.end();
+    static StatCounter us_refcounting("us_compiling_irgen_refcounting");
+    us_refcounting.log(us);
 }
 
 } // namespace pyston
