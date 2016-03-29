@@ -1,4 +1,3 @@
-# expected: reffail
 class C(object):
     def __delattr__(self, attr):
         print "delattr", attr

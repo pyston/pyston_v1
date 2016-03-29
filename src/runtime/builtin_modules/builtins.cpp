@@ -511,13 +511,15 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
-    assert(0 && "check refcounting");
     _str = coerceUnicodeToStr<CXX>(_str);
 
-    if (_str->cls != str_cls)
+    if (_str->cls != str_cls) {
+        Py_DECREF(_str);
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
+    }
     BoxedString* str = static_cast<BoxedString*>(_str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     delattr(obj, str);
     return incref(None);

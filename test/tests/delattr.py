@@ -1,4 +1,3 @@
-# expected: reffail
 #delete attribute of built-in types 
 def del_builtin_attr(o):
     try:

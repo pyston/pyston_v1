@@ -493,14 +493,16 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
     }
 
     BoxedString* str = static_cast<BoxedString*>(name);
+    incref(str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     assert(PyString_Check(name));
     try {
         if (value == NULL)
             delattrGeneric(obj, str, NULL);
         else
-            setattrGeneric<NOT_REWRITABLE>(obj, str, value, NULL);
+            setattrGeneric<NOT_REWRITABLE>(obj, str, incref(value), NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -1139,8 +1141,8 @@ extern "C" void _Py_NegativeRefcount(const char* fname, int lineno, PyObject* op
     char buf[300];
 
     PyOS_snprintf(buf, sizeof(buf), "%s:%i object at %p has negative ref count "
-                                    "%" PY_FORMAT_SIZE_T "d",
-                  fname, lineno, op, op->ob_refcnt);
+                                    "%" PY_FORMAT_SIZE_T "d.  \033[40mwatch -l *(long*)%p\033[0m",
+                  fname, lineno, op, op->ob_refcnt, &op->ob_refcnt);
     Py_FatalError(buf);
 }
 
