@@ -1027,9 +1027,9 @@ static Box* instanceIter(BoxedInstance* self) {
     }
 
     if ((func = _instanceGetattribute(self, getitem_str, false)) == NULL) {
-        AUTO_DECREF(func);
         raiseExcHelper(TypeError, "iteration over non-sequence");
     }
+    Py_DECREF(func);
 
     Box* r = PySeqIter_New((PyObject*)self);
     if (!r)
