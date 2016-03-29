@@ -3001,7 +3001,6 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
 
         return;
     } else if (tp_setattro != PyObject_GenericSetAttr) {
-        assert(0 && "check refcounting");
         static BoxedString* setattr_str = getStaticString("__setattr__");
         if (rewriter.get()) {
             GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
@@ -3047,7 +3046,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
         // TODO actually rewrite this?
         setattr = processDescriptor(setattr, obj, obj->cls);
         AUTO_DECREF(setattr);
-        runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL);
+        autoDecref(runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL));
     } else {
         STAT_TIMER(t0, "us_timer_slowpath_tpsetattro", 10);
         int r = tp_setattro(obj, attr, attr_val);
