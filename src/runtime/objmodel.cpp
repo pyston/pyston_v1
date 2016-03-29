@@ -3921,6 +3921,18 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewrite
     return ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
 }
 
+template <typename FT> class ExceptionCleanup {
+private:
+    FT functor;
+
+public:
+    ExceptionCleanup(FT ft) : functor(std::move(ft)) {}
+    ~ExceptionCleanup() {
+        if (isUnwinding())
+            functor();
+    }
+};
+
 template <Rewritable rewritable, typename FuncNameCB>
 void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
                                 Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
@@ -4034,6 +4046,18 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     Box* arg2 = oarg2;
     Box* arg3 = oarg3;
     oarg1 = oarg2 = oarg3 = NULL;
+
+    // Clear any increfs we did for when we throw an exception:
+    auto clear_refs = [&]() {
+        Py_XDECREF(oarg1);
+        Py_XDECREF(oarg2);
+        Py_XDECREF(oarg3);
+        for (int i = 0; i < num_output_args - 3; i++) {
+            Py_XDECREF(oargs[i]);
+        }
+    };
+    ExceptionCleanup<decltype(clear_refs)> cleanup(
+        clear_refs); // I feel like there should be some way to automatically infer the decltype
 
     static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
     slowpath_rearrangeargs_slowpath.log();
@@ -4344,7 +4368,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        RELEASE_ASSERT(0, "TODO: decref everything that we incref'd as part of this process");
         raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name_cb(), paramspec.num_args,
                        argspec.num_args + argspec.num_keywords + varargs_size);
     }
