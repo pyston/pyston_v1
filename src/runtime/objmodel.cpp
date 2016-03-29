@@ -5629,10 +5629,12 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
     static BoxedString* cmp_str = getStaticString("__cmp__");
     lrtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
+    AUTO_XDECREF(lrtn);
     if (lrtn && lrtn != NotImplemented) {
         return boxBool(convert3wayCompareResultToBool(lrtn, op_type));
     }
     rrtn = callattrInternal1<CXX, NOT_REWRITABLE>(rhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+    AUTO_XDECREF(rrtn);
     if (rrtn && rrtn != NotImplemented) {
         bool success = false;
         int reversed_op = getReverseCmpOp(op_type, success);

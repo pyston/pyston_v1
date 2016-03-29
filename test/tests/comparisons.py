@@ -1,4 +1,3 @@
-# expected: reffail
 def f(a, b):
     print repr(a), repr(b), "<", a < b
     print repr(a), repr(b), "<=", a <= b
