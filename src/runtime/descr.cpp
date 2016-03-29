@@ -319,9 +319,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     if (!rewrite_success)
         rewrite_args = NULL;
 
-    if (rewrite_args && oargs)
-        decrefOargs(rewrite_args->args, oargs_owned, 1);
-
     if (ml_flags & METH_CLASS) {
         rewrite_args = NULL;
         if (!PyType_Check(arg1))
@@ -401,6 +398,9 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     if (!rtn)
         throwCAPIException();
+
+    if (rewrite_args && oargs)
+        decrefOargs(rewrite_args->args, oargs_owned, 1);
 
     if (rewrite_args) {
         rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);

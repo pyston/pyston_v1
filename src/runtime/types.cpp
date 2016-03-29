@@ -772,13 +772,13 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (!rewrite_success)
             rewrite_args = NULL;
 
-        if (rewrite_args)
-            decrefOargs(rewrite_args->args, oargs_owned, 1);
-
         if (rewrite_args) {
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)unicodeNewHelper, rewrite_args->arg1, rewrite_args->arg2,
                                                rewrite_args->arg3, rewrite_args->args)->setType(RefType::OWNED);
+
+            decrefOargs(rewrite_args->args, oargs_owned, 1);
+
             rewrite_args->out_success = true;
         }
 
