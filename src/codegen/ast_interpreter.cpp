@@ -1099,6 +1099,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             defaults_var->setAttr(i++ * sizeof(void*), v);
     }
     defaults.push_back(0);
+    AUTO_XDECREF_ARRAY(defaults.data(), defaults.size());
 
     // FIXME: Using initializer_list is pretty annoying since you're not supposed to create them:
     union {
@@ -1200,7 +1201,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
         basesTuple->elts[base_idx++] = visit_expr(b).o;
     }
 
-    std::vector<DecrefHandle<Box>> decorators;
+    std::vector<Box*> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -1224,8 +1225,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     Box* classobj = createUserClass(node->name.getBox(), basesTuple, attrDict);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
-        AUTO_DECREF(classobj);
-        classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
+        classobj = runtimeCall(autoDecref(decorators[i]), ArgPassSpec(1), autoDecref(classobj), 0, 0, 0, 0);
     }
 
     return Value(classobj, NULL);
@@ -1263,11 +1263,15 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     // Currently we only generate "assert 0" statements
     Value v = visit_expr(node->test);
     assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
+    Py_DECREF(v.o);
 #endif
 
     static BoxedString* AssertionError_str = getStaticString("AssertionError");
     Box* assertion_type = getGlobal(frame_info.globals, AssertionError_str);
-    assertFail(assertion_type, node->msg ? visit_expr(node->msg).o : 0);
+    AUTO_DECREF(assertion_type);
+    Box* msg = node->msg ? visit_expr(node->msg).o : 0;
+    AUTO_XDECREF(msg);
+    assertFail(assertion_type, msg);
 
     return Value();
 }
