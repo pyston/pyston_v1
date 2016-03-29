@@ -990,7 +990,8 @@ extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) 
     assert(PyList_Check(a));
     BoxedList* self = static_cast<BoxedList*>(a);
     // Lots of extra copies here; we can do better if we need to:
-    return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
+    return listGetitemSlice<CAPI>(
+        self, autoDecref(new BoxedSlice(autoDecref(boxInt(ilow)), autoDecref(boxInt(ihigh)), autoDecref(boxInt(1)))));
 }
 
 static inline int listContainsShared(BoxedList* self, Box* elt) {
