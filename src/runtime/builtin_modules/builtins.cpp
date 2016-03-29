@@ -188,12 +188,12 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
         extremVal = nullptr;
         container = arg0;
     } else {
-        extremElement = incref(arg0);
         if (key_func != NULL) {
-            extremVal = runtimeCall(key_func, ArgPassSpec(1), extremElement, NULL, NULL, NULL, NULL);
+            extremVal = runtimeCall(key_func, ArgPassSpec(1), arg0, NULL, NULL, NULL, NULL);
         } else {
-            extremVal = incref(extremElement);
+            extremVal = incref(arg0);
         }
+        extremElement = incref(arg0);
         container = args;
     }
 
@@ -205,7 +205,14 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
                 extremElement = e;
                 continue;
             }
-            curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+            try {
+                curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+            } catch (ExcInfo ex) {
+                Py_DECREF(e);
+                Py_DECREF(extremVal);
+                Py_DECREF(extremElement);
+                throw ex;
+            }
         } else {
             if (!extremElement) {
                 extremVal = incref(e);
