@@ -632,10 +632,13 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
 }
 
 // For use on __init__ return values
-static void assertInitNone(Box* obj) {
-    if (obj != None) {
-        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj));
+static Box* assertInitNone(STOLEN(Box*) rtn, STOLEN(Box*) obj) {
+    AUTO_DECREF(rtn);
+    if (rtn != None) {
+        Py_DECREF(obj);
+        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(rtn));
     }
+    return obj;
 }
 
 static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwds) {
@@ -1218,7 +1221,12 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     rewrite_args = NULL;
                 } else {
                     assert(S == CXX && "this need to be converted");
-                    rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
+                    auto new_r_made
+                        = rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn, r_made);
+                    r_made->refConsumed();
+                    new_r_made->setType(RefType::OWNED);
+                    r_made = new_r_made;
+                    srewrite_args.out_rtn->refConsumed();
                 }
             } else {
                 initrtn = runtimeCallInternal<S, NOT_REWRITABLE>(init_attr, NULL, argspec, made, arg2, arg3, args,
@@ -1240,7 +1248,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     return NULL;
                 }
             } else
-                assertInitNone(autoDecref(initrtn));
+                made = assertInitNone(initrtn, made); // assertInitNone is optimized for the rewriter case; this call
+                                                      // here could be improved if it is an issue.
         } else {
             // Otherwise, just call tp_init.  This will work out well for extension classes, and no worse
             // than failing the rewrite for Python non-extension non-functions (when does that happen?).
