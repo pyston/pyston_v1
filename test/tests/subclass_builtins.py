@@ -1,4 +1,3 @@
-# expected: reffail
 class CustomInt(int):
     pass
 
