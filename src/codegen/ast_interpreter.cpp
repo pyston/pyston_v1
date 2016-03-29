@@ -2078,7 +2078,7 @@ extern "C" void printExprHelper(Box* obj) {
     Box* displayhook = PySys_GetObject("displayhook");
     if (!displayhook)
         raiseExcHelper(RuntimeError, "lost sys.displayhook");
-    runtimeCall(displayhook, ArgPassSpec(1), obj, 0, 0, 0, 0);
+    autoDecref(runtimeCall(displayhook, ArgPassSpec(1), obj, 0, 0, 0, 0));
 }
 
 static ASTInterpreter* getInterpreterFromFramePtr(void* frame_ptr) {
