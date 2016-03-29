@@ -1,4 +1,3 @@
-# expected: reffail
 # Testing capitalize/title methods.
 
 def test(s):
