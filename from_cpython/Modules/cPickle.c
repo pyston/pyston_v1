@@ -5932,7 +5932,7 @@ init_stuff(PyObject *module_dict)
 {
     PyObject *copyreg, *t, *r;
 
-#define INIT_STR(S) if (!( S ## _str=PyString_InternFromString(#S)))  return -1;
+#define INIT_STR(S) if (!( S ## _str=PyGC_RegisterStaticConstant(PyString_InternFromString(#S))))  return -1;
 
     if (PyType_Ready(&Unpicklertype) < 0)
         return -1;

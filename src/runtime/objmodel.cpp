@@ -1915,7 +1915,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args)
+                                             ->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
@@ -7075,6 +7076,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, BoxedString* attr, Box* globals
             if (!isSubclass(e.value->cls, KeyError)) {
                 throw e;
             }
+            e.clear();
         }
     }
 

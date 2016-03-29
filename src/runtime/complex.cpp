@@ -37,7 +37,7 @@ static Box* toComplex(Box* self) noexcept {
     }
 
     if (PyComplex_Check(self)) {
-        r = (BoxedComplex*)self;
+        r = (BoxedComplex*)incref(self);
     } else if (PyInt_Check(self)) {
         r = new BoxedComplex(static_cast<BoxedInt*>(self)->n, 0.0);
     } else if (PyFloat_Check(self)) {
@@ -285,7 +285,7 @@ Box* complexTruediv(BoxedComplex* lhs, Box* rhs) {
         double res = PyLong_AsDouble(rhs);
         if (res == -1 && PyErr_Occurred())
             throwCAPIException();
-        return complexDivFloat(lhs, (BoxedFloat*)boxFloat(res));
+        return complexDivFloat(lhs, (BoxedFloat*)autoDecref(boxFloat(res)));
     } else {
         return incref(NotImplemented);
     }
@@ -517,7 +517,7 @@ Box* complexDivmodComplex(BoxedComplex* lhs, Box* _rhs) {
     AUTO_DECREF(div);
     div->real = floor(div->real);                                    /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs_complex, div));
+    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs_complex, div)));
     AUTO_DECREF(mod);
     Box* res = BoxedTuple::create({ div, mod });
     return res;
@@ -574,7 +574,7 @@ Box* complexModComplex(BoxedComplex* lhs, Box* _rhs) {
     AUTO_DECREF(div);
     div->real = floor(div->real);                            /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs, div));
+    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs, div)));
     return mod;
 }
 
