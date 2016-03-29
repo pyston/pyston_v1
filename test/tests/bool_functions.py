@@ -1,4 +1,3 @@
-# expected: reffail
 # Regression test: we rely internally on CompilerType.nonzero() always returning a BOOL,
 # in at least these two cases.
 

@@ -4255,7 +4255,7 @@ void setupRuntime() {
     attrwrapper_cls->tp_mro = BoxedTuple::create({ attrwrapper_cls, object_cls });
     dict_cls->tp_mro = BoxedTuple::create({ dict_cls, object_cls });
     int_cls->tp_mro = BoxedTuple::create({ int_cls, object_cls });
-    bool_cls->tp_mro = BoxedTuple::create({ bool_cls, object_cls });
+    bool_cls->tp_mro = BoxedTuple::create({ bool_cls, int_cls, object_cls });
     complex_cls->tp_mro = BoxedTuple::create({ complex_cls, object_cls });
     long_cls->tp_mro = BoxedTuple::create({ long_cls, object_cls });
     float_cls->tp_mro = BoxedTuple::create({ float_cls, object_cls });

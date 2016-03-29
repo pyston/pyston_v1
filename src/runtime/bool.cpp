@@ -27,7 +27,7 @@ extern "C" PyObject* PyBool_FromLong(long n) noexcept {
 }
 
 extern "C" Box* boolNonzero(BoxedBool* v) {
-    return v;
+    return incref(v);
 }
 
 extern "C" Box* boolRepr(BoxedBool* v) {
