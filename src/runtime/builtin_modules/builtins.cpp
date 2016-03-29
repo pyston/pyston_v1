@@ -1712,8 +1712,8 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
-    assert(0 && "check refcounting");
     PyObject* line = rawInput(prompt);
+    AUTO_DECREF(line);
 
     char* str = NULL;
     if (!PyArg_Parse(line, "s;embedded '\\0' in input line", &str))
@@ -1722,7 +1722,7 @@ Box* input(Box* prompt) {
     while (*str == ' ' || *str == '\t')
         str++;
 
-    Box* gbls = globals();
+    Box* gbls = PyEval_GetGlobals();
     Box* lcls = PyEval_GetLocals();
 
     // CPython has these safety checks that the builtin functions exist
