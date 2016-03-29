@@ -300,12 +300,11 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
 
         assert(0 && "check the refcounting here");
         static BoxedString* name_str = getStaticString("__name__");
-        this->modname = incref(globals_for_name->getattr(name_str));
+        this->modname = xincref(globals_for_name->getattr(name_str));
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
-        Py_INCREF(None);
-        this->doc = None;
+        this->doc = incref(None);
     }
 }
 
@@ -347,9 +346,9 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
 
         static BoxedString* name_str = getStaticString("__name__");
         if (globals_for_name->cls == module_cls) {
-            this->modname = incref(globals_for_name->getattr(name_str));
+            this->modname = xincref(globals_for_name->getattr(name_str));
         } else {
-            this->modname = incref(PyDict_GetItem(globals_for_name, name_str));
+            this->modname = xincref(PyDict_GetItem(globals_for_name, name_str));
         }
         // It's ok for modname to be NULL
 
@@ -409,7 +408,7 @@ static void functionDtor(Box* b) {
     self->clearAttrs();
 
     Py_DECREF(self->doc);
-    Py_DECREF(self->modname);
+    Py_XDECREF(self->modname);
     Py_XDECREF(self->name);
     Py_XDECREF(self->closure);
     Py_XDECREF(self->globals);
@@ -1539,8 +1538,9 @@ static void funcSetName(Box* b, Box* v, void*) {
         raiseExcHelper(TypeError, "__name__ must be set to a string object");
     }
 
-    RELEASE_ASSERT(!func->name, "");
+    auto old_name = func->name;
     func->name = incref(static_cast<BoxedString*>(v));
+    Py_XDECREF(old_name);
 }
 
 static Box* builtinFunctionOrMethodName(Box* b, void*) {

@@ -2803,8 +2803,8 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
             rewrite_args->out_success = true;
         }
 
+        AUTO_DECREF(val);
         getset_descr->set(obj, val, getset_descr->closure);
-        Py_DECREF(val);
         checkAndThrowCAPIException();
 
         return true;
