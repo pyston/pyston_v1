@@ -1,4 +1,3 @@
-# expected: reffail
 print compile
 c = compile("a", "test.py", "eval")
 print type(c), c.co_filename, c.co_name

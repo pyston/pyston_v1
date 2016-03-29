@@ -34,7 +34,7 @@ BORROWED(Box*) BoxedCode::name(Box* b, void*) {
     return code->f->source->getName();
 }
 
-Box* BoxedCode::f_name(Box* b, void* arg) {
+Box* BoxedCode::co_name(Box* b, void* arg) {
     return incref(name(b, arg));
 }
 
@@ -46,7 +46,7 @@ BORROWED(Box*) BoxedCode::filename(Box* b, void*) {
     return code->f->source->getFn();
 }
 
-Box* BoxedCode::f_filename(Box* b, void* arg) {
+Box* BoxedCode::co_filename(Box* b, void* arg) {
     return incref(filename(b, arg));
 }
 
@@ -213,8 +213,8 @@ void setupCode() {
 
     code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 
-    code_cls->giveAttrDescriptor("co_name", BoxedCode::f_name, NULL);
-    code_cls->giveAttrDescriptor("co_filename", BoxedCode::f_filename, NULL);
+    code_cls->giveAttrDescriptor("co_name", BoxedCode::co_name, NULL);
+    code_cls->giveAttrDescriptor("co_filename", BoxedCode::co_filename, NULL);
     code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::firstlineno, NULL);
     code_cls->giveAttrDescriptor("co_argcount", BoxedCode::argcount, NULL);
     code_cls->giveAttrDescriptor("co_varnames", BoxedCode::varnames, NULL);

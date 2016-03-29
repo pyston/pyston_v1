@@ -107,6 +107,11 @@ InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
 
+BORROWED(BoxedString*) SourceInfo::getFn() {
+    assert(fn->ob_refcnt >= 1);
+    return fn;
+}
+
 BORROWED(BoxedString*) SourceInfo::getName() {
     assert(ast);
 
@@ -323,7 +328,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         FutureFlags future_flags = getFutureFlags(m->body, fn);
         ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
-        auto fn_str = getStaticString(fn); // XXX this is not a static string
+        auto fn_str = boxString(fn);
+        AUTO_DECREF(fn_str);
         std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn_str));
 
         static BoxedString* doc_str = getStaticString("__doc__");
@@ -525,7 +531,7 @@ extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObje
     }
 }
 
-Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
+void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
     if (!globals)
         globals = None;
     if (!locals)
@@ -608,7 +614,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
         }
 #endif
         if (PyString_AsStringAndSize(prog, &str, NULL))
-            return 0;
+            throwCAPIException();
         cf.cf_flags |= caller_future_flags & PyCF_MASK;
         if (cf.cf_flags)
             v = PyRun_StringFlags(str, Py_file_input, globals, locals, &cf);
@@ -619,7 +625,9 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
 
     if (!v)
         throwCAPIException();
-    return v;
+
+    assert(v == None); // not really necessary but I think this should be true
+    Py_DECREF(v);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

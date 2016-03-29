@@ -1,4 +1,3 @@
-# expected: reffail
 import test_package.import_target
 import import_target
 print

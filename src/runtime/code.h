@@ -41,8 +41,8 @@ public:
     // pointers could point to them.
     static BORROWED(Box*) name(Box* b, void*);
     static BORROWED(Box*) filename(Box* b, void*);
-    static Box* f_name(Box* b, void*);
-    static Box* f_filename(Box* b, void*);
+    static Box* co_name(Box* b, void*);
+    static Box* co_filename(Box* b, void*);
     static Box* firstlineno(Box* b, void*);
     static Box* argcount(Box* b, void*);
     static Box* varnames(Box* b, void*);

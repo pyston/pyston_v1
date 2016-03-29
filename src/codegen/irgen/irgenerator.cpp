@@ -1394,6 +1394,7 @@ private:
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
         llvm::Value* rtn = emitter.createCall(unw_info, g.funcs.repr, args);
+        emitter.setType(rtn, RefType::BORROWED); // Well, really it's owned, and we handoff the ref to the bitcast
         rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
         emitter.setType(rtn, RefType::OWNED);
 

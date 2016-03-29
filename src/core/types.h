@@ -409,7 +409,7 @@ public:
     const std::vector<AST_stmt*> body;
 
     BORROWED(BoxedString*) getName();
-    BORROWED(BoxedString*) getFn() { return fn; }
+    BORROWED(BoxedString*) getFn();
 
     InternedString mangleName(InternedString id);
 

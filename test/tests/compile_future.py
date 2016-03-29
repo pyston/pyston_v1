@@ -1,4 +1,3 @@
-# expected: reffail
 from __future__ import division
 
 # compile() inherits the future flags of the parent module

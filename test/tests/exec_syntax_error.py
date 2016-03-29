@@ -1,4 +1,3 @@
-# expected: reffail
 s = """
 def f():
     a = 1
