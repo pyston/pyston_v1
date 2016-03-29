@@ -1110,9 +1110,11 @@ Box* floatCoerce(BoxedFloat* _self, Box* other) {
 
     Box* self = static_cast<Box*>(_self);
     int result = float_coerce(&self, &other);
-    if (result == 0)
+    if (result == 0) {
+        AUTO_DECREF(self);
+        AUTO_DECREF(other);
         return BoxedTuple::create({ self, other });
-    else if (result == 1)
+    } else if (result == 1)
         return incref(NotImplemented);
     else
         throwCAPIException();

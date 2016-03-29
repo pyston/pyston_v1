@@ -1465,7 +1465,8 @@ Box* divmod(Box* lhs, Box* rhs) {
 
 Box* powFunc(Box* x, Box* y, Box* z) {
     Box* rtn = PyNumber_Power(x, y, z);
-    checkAndThrowCAPIException();
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 

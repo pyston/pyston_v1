@@ -1458,7 +1458,9 @@ Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
 
     if (mpz_sgn(rhs_long->n) == -1) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(longToFloat(rhs_long));
+        AUTO_DECREF(rhs_float);
         BoxedFloat* lhs_float = static_cast<BoxedFloat*>(longToFloat(lhs));
+        AUTO_DECREF(lhs_float);
         return boxFloat(pow_float_float(lhs_float->d, rhs_float->d));
     }
 
@@ -1633,6 +1635,8 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     try {
         PyLongObject* a, *b;
         CONVERT_BINOP(v, w, &a, &b);
+        AUTO_DECREF((Box*)a);
+        AUTO_DECREF((Box*)b);
         return longPow((BoxedLong*)a, (BoxedLong*)b, x);
     } catch (ExcInfo e) {
         setCAPIException(e);
