@@ -1002,6 +1002,7 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
         assert(S == CAPI);
         return NULL;
     }
+    AUTO_DECREF(f);
 
     return new (cls) BoxedFloat(f->d);
 }

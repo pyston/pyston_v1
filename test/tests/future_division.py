@@ -1,4 +1,3 @@
-# expected: reffail
 "docstring"
 
 from __future__ import division
