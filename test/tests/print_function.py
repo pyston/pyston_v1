@@ -1,4 +1,3 @@
-# expected: reffail
 # This is the same as print.py, but using print as a function
 # I guess print() as a function doesn't use the softspace technique.
 
