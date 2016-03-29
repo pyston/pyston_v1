@@ -1479,16 +1479,19 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
     if (dummy_args == NULL) {
         if (!(dummy_args = PyTuple_New(0)))
             return NULL;
+        constants.push_back(dummy_args);
     }
     if (str_newline == NULL) {
         str_newline = PyString_FromString("\n");
         if (str_newline == NULL)
             return NULL;
+        constants.push_back(str_newline);
         str_space = PyString_FromString(" ");
         if (str_space == NULL) {
             Py_CLEAR(str_newline);
             return NULL;
         }
+        constants.push_back(str_space);
 #ifdef Py_USING_UNICODE
         unicode_newline = PyUnicode_FromString("\n");
         if (unicode_newline == NULL) {
@@ -1496,6 +1499,7 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
             Py_CLEAR(str_space);
             return NULL;
         }
+        constants.push_back(unicode_newline);
         unicode_space = PyUnicode_FromString(" ");
         if (unicode_space == NULL) {
             Py_CLEAR(str_newline);
@@ -1503,6 +1507,7 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
             Py_CLEAR(unicode_space);
             return NULL;
         }
+        constants.push_back(unicode_space);
 #endif
     }
     if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OOO:print", const_cast<char**>(kwlist), &sep, &end, &file))
