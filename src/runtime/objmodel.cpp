@@ -4371,8 +4371,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     for (int i = 0; i < paramspec.num_args - paramspec.num_defaults; i++) {
         if (params_filled[i])
             continue;
-        raiseExcHelper(TypeError, "%s() takes exactly %d arguments (%ld given)", func_name_cb(), paramspec.num_args,
-                       argspec.num_args + argspec.num_keywords + varargs_size);
+
+        int min_args = paramspec.num_args - paramspec.num_defaults;
+        const char* exactly = (paramspec.num_defaults || paramspec.takes_varargs) ? "at least" : "exactly";
+        raiseExcHelper(TypeError, "%s() takes %s %d argument%s (%ld given)", func_name_cb(), exactly, min_args,
+                       min_args == 1 ? "" : "s", argspec.num_args + argspec.num_keywords + varargs_size);
     }
 
     // There can be more defaults than arguments.
