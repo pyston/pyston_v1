@@ -1906,6 +1906,10 @@ private:
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
                 llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
+                if (prev) {
+                    auto load = emitter.getBuilder()->CreateLoad(gep);
+                    emitter.setType(load, RefType::OWNED);
+                }
                 llvm::Value* v = val->makeConverted(emitter, UNKNOWN)->getValue();
                 auto store = emitter.getBuilder()->CreateStore(v, gep);
                 emitter.refConsumed(v, store);

@@ -1,4 +1,3 @@
-# expected: reffail
 # closure tests
 
 # simple closure:
