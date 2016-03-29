@@ -2535,17 +2535,17 @@ public:
 
     static Box* iterkeys(Box* _self) {
         Box* r = AttrWrapper::keys(_self);
-        return getiter(r);
+        return getiter(autoDecref(r));
     }
 
     static Box* itervalues(Box* _self) {
         Box* r = AttrWrapper::values(_self);
-        return getiter(r);
+        return getiter(autoDecref(r));
     }
 
     static Box* iteritems(Box* _self) {
         Box* r = AttrWrapper::items(_self);
-        return getiter(r);
+        return getiter(autoDecref(r));
     }
 
     static Box* copy(Box* _self) {
@@ -2648,7 +2648,7 @@ public:
                 // Hopefully this does not happen very often.
                 if (!PyDict_Check(_container)) {
                     BoxedDict* new_container = new BoxedDict();
-                    dictUpdate(new_container, autoDecref(BoxedTuple::create({ _container })), NULL);
+                    autoDecref(dictUpdate(new_container, autoDecref(BoxedTuple::create({ _container })), NULL));
                     _container = new_container;
                 } else {
                     Py_INCREF(_container);
@@ -2727,7 +2727,7 @@ Box* AttrWrapperIter::next(Box* _self) {
     assert(self->it != self->hcls->getStrAttrOffsets().end());
     Box* r = self->it->first;
     ++self->it;
-    return r;
+    return incref(r);
 }
 
 Box* AttrWrapperIter::next_capi(Box* _self) noexcept {
@@ -2739,7 +2739,7 @@ Box* AttrWrapperIter::next_capi(Box* _self) noexcept {
         return NULL;
     Box* r = self->it->first;
     ++self->it;
-    return r;
+    return incref(r);
 }
 
 void Box::giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*)) {
@@ -3992,17 +3992,7 @@ int HCAttrs::traverse(visitproc visit, void* arg) noexcept {
 void AttrWrapperIter::dealloc(Box* _o) noexcept {
     AttrWrapperIter* o = (AttrWrapperIter*)_o;
 
-    Py_FatalError("unimplemented?");
-
     o->cls->tp_free(o);
-}
-
-int AttrWrapperIter::traverse(Box* _o, visitproc visit, void* arg) noexcept {
-    AttrWrapperIter* o = (AttrWrapperIter*)_o;
-
-    Py_FatalError("unimplemented?");
-
-    return 0;
 }
 
 void BoxedClosure::dealloc(Box* _o) noexcept {
@@ -4361,9 +4351,8 @@ void setupRuntime() {
     classmethod_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedClassmethod), false, "classmethod",
                                          true, BoxedClassmethod::dealloc, NULL, true, BoxedClassmethod::traverse,
                                          BoxedClassmethod::clear);
-    attrwrapperiter_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(AttrWrapperIter), false, "attrwrapperiter", true,
-                             AttrWrapperIter::dealloc, NULL, true, AttrWrapperIter::traverse, NOCLEAR);
+    attrwrapperiter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(AttrWrapperIter), false,
+                                             "attrwrapperiter", true, AttrWrapperIter::dealloc, NULL, false);
 
     pyston_getset_cls->giveAttr("__get__",
                                 new BoxedFunction(FunctionMetadata::create((void*)getsetGet, UNKNOWN, 3), { None }));

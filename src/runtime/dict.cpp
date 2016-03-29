@@ -724,7 +724,8 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
     int idx = 0;
 
     // raises if not iterable
-    for (const auto& element : other->pyElements()) {
+    for (Box* element : other->pyElements()) {
+        AUTO_DECREF(element);
 
         // should this check subclasses? anyway to check if something is iterable...
         if (element->cls == list_cls) {
@@ -782,7 +783,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args->size()) {
         Box* arg = args->elts[0];
         static BoxedString* keys_str = getStaticString("keys");
-        if (autoDecref(getattrInternal<ExceptionStyle::CXX>(arg, keys_str))) {
+        if (autoXDecref(getattrInternal<ExceptionStyle::CXX>(arg, keys_str))) {
             dictMerge(self, arg);
         } else {
             dictMergeFromSeq2(self, arg);
