@@ -1,4 +1,3 @@
-# expected: reffail
 print eval("3 + 4")
 
 a = 5

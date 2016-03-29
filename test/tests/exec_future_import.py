@@ -1,4 +1,3 @@
-# expected: reffail
 print 1 / 2
 
 exec """
