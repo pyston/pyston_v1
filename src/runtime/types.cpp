@@ -761,16 +761,19 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         static ParamNames param_names({ "", "string", "encoding", "errors" }, "", "");
         static Box* defaults[3] = { NULL, NULL, NULL };
         Box* oargs[1];
-
+        bool oargs_owned[1];
 
         rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
-                           arg2, arg3, args, oargs, keyword_names);
+                           arg2, arg3, args, oargs, keyword_names, oargs_owned);
         assert(arg1 == cls);
 
         AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
         if (!rewrite_success)
             rewrite_args = NULL;
+
+        if (rewrite_args)
+            decrefOargs(rewrite_args->args, oargs_owned, 1);
 
         if (rewrite_args) {
             rewrite_args->out_rtn
@@ -794,7 +797,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         bool rewrite_success = false;
         Box** oargs = NULL;
         rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           oargs, keyword_names);
+                           oargs, keyword_names, NULL);
         assert(arg1 == cls);
 
         AUTO_DECREF(arg1);
@@ -1121,7 +1124,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         bool rewrite_success = false;
         try {
             rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
-                               argspec, made, arg2, arg3, args, NULL, keyword_names);
+                               argspec, made, arg2, arg3, args, NULL, keyword_names, NULL);
         } catch (ExcInfo e) {
             if (S == CAPI) {
                 setCAPIException(e);
@@ -1256,7 +1259,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             bool rewrite_success = false;
             try {
                 rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
-                                   argspec, made, arg2, arg3, args, NULL, keyword_names);
+                                   argspec, made, arg2, arg3, args, NULL, keyword_names, NULL);
             } catch (ExcInfo e) {
                 Py_DECREF(made);
                 if (S == CAPI) {

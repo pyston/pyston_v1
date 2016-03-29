@@ -236,3 +236,5 @@ try:
     print([1, 2] * d)
 except TypeError as e:
     print(type(e))
+
+print range(5).index(10, 100L, 200L)

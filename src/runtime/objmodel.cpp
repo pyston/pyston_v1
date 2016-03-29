@@ -3933,11 +3933,19 @@ public:
     }
 };
 
+void decrefOargs(RewriterVar* oargs, bool* oargs_owned, int num_oargs) {
+    for (int i = 0; i < num_oargs; i++) {
+        if (oargs_owned[i])
+            oargs->getAttr(i * sizeof(Box*))->setType(RefType::OWNED);
+    }
+}
+
 template <Rewritable rewritable, typename FuncNameCB>
 void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
                                 Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
                                 ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
-                                const std::vector<BoxedString*>* keyword_names) {
+                                const std::vector<BoxedString*>* keyword_names,
+                                bool* oargs_owned) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -3957,6 +3965,11 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     assert((oargs != NULL) == (num_output_args > 3));
     assert((defaults != NULL) == (paramspec.num_defaults != 0));
 
+    if (rewrite_args && oargs) {
+        assert(oargs_owned);
+        memset(oargs_owned, 0, (num_output_args - 3) * sizeof(bool));
+    }
+
     if (rewrite_args) {
         rewrite_success = false; // default case
     }
@@ -3972,16 +3985,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
             for (int i = 0; i < num_output_args - 3; i++) {
                 Py_XINCREF(oargs[i]);
-            }
-        }
-        if (rewrite_args) {
-            if (num_output_args >= 3) {
-                for (int i = 0; i < num_output_args - 3; i++) {
-                    rewrite_args->args->getAttr(i * sizeof(Box*))
-                        ->setType(RefType::BORROWED)
-                        ->setNullable(argspec.has_kwargs)
-                        ->refConsumed();
-                }
             }
         }
     };
@@ -4113,11 +4116,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     for (int i = 0; i < positional_to_positional; i++) {
         getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
     }
-    if (rewrite_args) {
-        for (int i = 3; i < positional_to_positional; i++) {
-            rewrite_args->args->getAttr((i - 3) * sizeof(Box*))->setType(RefType::BORROWED)->refConsumed();
-        }
-    }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
@@ -4163,6 +4161,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
             RewriterVar* varargs_val;
             int varargs_size = unused_positional_rvars.size();
+            bool is_owned = false;
 
             if (varargs_size == 0) {
                 varargs_val
@@ -4182,6 +4181,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 };
                 varargs_val = rewrite_args->rewriter->call(false, create_ptrs[varargs_size], unused_positional_rvars)
                                   ->setType(RefType::OWNED);
+                is_owned = true;
             }
 
             if (varargs_val) {
@@ -4193,7 +4193,10 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     rewrite_args->arg3 = varargs_val;
                 if (varargs_idx >= 3) {
                     rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
-                    varargs_val->refConsumed();
+                    if (is_owned) {
+                        oargs_owned[varargs_idx - 3] = true;
+                        varargs_val->refConsumed();
+                    }
                 }
             }
         }
@@ -4394,10 +4397,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->setType(RefType::BORROWED);
             else {
                 auto rvar = rewrite_args->rewriter->loadConst((intptr_t)default_obj);
-                rvar->setType(RefType::BORROWED);
                 rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*), rvar);
-                if (default_obj)
-                    rvar->refConsumed();
             }
         }
 
@@ -4409,17 +4409,18 @@ template <Rewritable rewritable>
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                         Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
                         Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
-                        const std::vector<BoxedString*>* keyword_names) {
+                        const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
     auto func = [func_name]() { return func_name; };
     return rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, rewrite_success,
-                                                  argspec, oarg1, oarg2, oarg3, args, oargs, keyword_names);
+                                                  argspec, oarg1, oarg2, oarg3, args, oargs, keyword_names,
+                                                  oargs_owned);
 }
 template void rearrangeArguments<REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
                                              _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
-                                             Box**, const std::vector<BoxedString*>*);
+                                             Box**, const std::vector<BoxedString*>*, bool*);
 template void rearrangeArguments<NOT_REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
                                                  _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
-                                                 Box**, const std::vector<BoxedString*>*);
+                                                 Box**, const std::vector<BoxedString*>*, bool*);
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 template <ExceptionStyle S, Rewritable rewritable>
@@ -4452,7 +4453,8 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
     }
 
-    Box** oargs;
+    Box** oargs = NULL;
+    bool* oargs_owned = NULL;
     bool rewrite_success = false;
 
     int num_output_args = paramspec.totalReceived();
@@ -4462,19 +4464,18 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         int size = (num_output_args - 3) * sizeof(Box*);
         oargs = (Box**)alloca(size);
 
+        oargs_owned = (bool*)alloca((num_output_args - 3) * sizeof(bool));
+
 #ifndef NDEBUG
         memset(&oargs[0], 0, size);
 #endif
-    } else {
-        // It won't get looked at, but the compiler wants this:
-        oargs = NULL;
     }
 
     try {
         auto func_name_cb = [md]() { return getFunctionName(md).data(); };
         rearrangeArgumentsInternal<rewritable>(paramspec, &md->param_names, func_name_cb,
                                                paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
-                                               rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names);
+                                               rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -4580,11 +4581,8 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                                         arg3, oargs);
     }
 
-    if (rewrite_args && num_output_args > 3) {
-        for (int i = 0; i < num_output_args - 3; i++) {
-            rewrite_args->args->getAttr(i * sizeof(Box*))->setType(RefType::OWNED)->setNullable(true);
-        }
-    }
+    if (rewrite_args && num_output_args > 3)
+        decrefOargs(rewrite_args->args, oargs_owned, num_output_args - 3);
 
     return res;
 }

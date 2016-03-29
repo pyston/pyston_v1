@@ -551,7 +551,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     static Box* defaults[] = { NULL };
     bool rewrite_success = false;
     rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
+                       argspec, arg1, arg2, arg3, args, NULL, keyword_names, NULL);
     if (!rewrite_success)
         rewrite_args = NULL;
 
@@ -685,7 +685,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     bool rewrite_success = false;
     rearrangeArguments(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
+                       argspec, arg1, arg2, arg3, args, NULL, keyword_names, NULL);
     if (!rewrite_success)
         rewrite_args = NULL;
 

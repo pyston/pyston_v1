@@ -3348,7 +3348,7 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
     Box** oargs = NULL;
     try {
         rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           oargs, keyword_names);
+                           oargs, keyword_names, NULL);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);

@@ -1802,7 +1802,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, oargs, keyword_names);
+                       arg1, arg2, arg3, args, oargs, keyword_names, NULL);
 
     AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 

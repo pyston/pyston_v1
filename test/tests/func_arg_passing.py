@@ -36,6 +36,18 @@ def f2(a, b=3, c=4, d=5, *args, **kw):
     print a, b, c, d, args, kw
 
 def g():
+    try:
+        print f2(1)
+    except Exception as e:
+        print e
+    try:
+        print f2(1, 2)
+    except Exception as e:
+        print e
+    try:
+        print f2(1, 2, 3)
+    except Exception as e:
+        print e
     print f2(1, 2, 3, 4)
     print f2(1, 2, 3, 4, k=1)
     print f2(1, 2, 3, 4, 5)

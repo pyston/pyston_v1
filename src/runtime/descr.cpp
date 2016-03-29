@@ -308,15 +308,19 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         assert((paramspec.totalReceived() - 3) <= sizeof(oargs_array) / sizeof(oargs_array[0]));
         oargs = oargs_array;
     }
+    bool oargs_owned[1];
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, oargs, keyword_names);
+                       arg2, arg3, args, oargs, keyword_names, oargs_owned);
 
     AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
     if (!rewrite_success)
         rewrite_args = NULL;
+
+    if (rewrite_args && oargs)
+        decrefOargs(rewrite_args->args, oargs_owned, 1);
 
     if (ml_flags & METH_CLASS) {
         rewrite_args = NULL;
@@ -629,7 +633,7 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
 
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, oargs, keyword_names);
+                       arg2, arg3, args, oargs, keyword_names, NULL);
 
     AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
 
