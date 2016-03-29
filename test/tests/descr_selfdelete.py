@@ -1,4 +1,3 @@
-# expected: reffail
 # Test some internals: when we execute some special functions, we often need to
 # make sure to keep a reference to that function, in case that function ends up
 # unsetting itself.
@@ -23,9 +22,9 @@ import sys
 
 def make_closure(f):
     def inner(*args, **kw):
-        print "starting", f.__name__
+        print "starting", getattr(f, '__name__', type(f).__name__)
         r = f(*args, **kw)
-        print "ending", f.__name__
+        print "ending", getattr(f, '__name__', type(f).__name__)
         return r
     return inner
 
@@ -122,7 +121,7 @@ def f():
 
         @make_closure
         def __set__(self, obj, value, other_arg=2.0**10):
-            print "D.__set__", obj, value
+            print "D.__set__", type(obj), value
             print other_arg
             del D.__set__
             print other_arg
@@ -159,7 +158,10 @@ def f():
     C.x = D()
     c = C()
     print c.x
-    print c.x
+    try:
+        print c.x
+    except Exception as e:
+        print e
 f()
 f()
 f()
@@ -177,7 +179,10 @@ def f():
     class C(object):
         __contains__ = make_closure(D())
 
-    print 1 in C()
+    try:
+        print 1 in C()
+    except Exception as e:
+        print e
 f()
 f()
 f()
@@ -190,7 +195,7 @@ def f():
             print "D.__getattribute__"
             del C.__getattribute__
             del D.__get__
-            print self
+            print type(self)
             return lambda *args: 1
 
     class C(object):
@@ -210,5 +215,7 @@ def f():
         del globals()['f']
     g()
 f()
-f()
-f()
+try:
+    f()
+except Exception as e:
+    print type(e)
