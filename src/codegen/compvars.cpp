@@ -343,9 +343,9 @@ public:
                 if (return_type != UNDEF) {
                     llvm::Value* cstart, *cstop;
                     cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
-                                             : getNullPtr(g.llvm_value_type_ptr);
+                                             : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
                     cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
-                                           : getNullPtr(g.llvm_value_type_ptr);
+                                           : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
 
                     llvm::Value* r
                         = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
@@ -405,8 +405,10 @@ public:
         }
 
         // We don't know the type so we have to check at runtime if __iter__ is implemented
+        llvm::Value* null_value = getNullPtr(g.llvm_value_type_ptr);
+        emitter.setType(null_value, RefType::BORROWED);
         llvm::Value* cmp
-            = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(), getNullPtr(g.llvm_value_type_ptr));
+            = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(), null_value);
 
         llvm::BasicBlock* bb_has_iter = emitter.createBasicBlock("has_iter");
         bb_has_iter->moveAfter(emitter.currentBasicBlock());
