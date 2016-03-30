@@ -385,8 +385,10 @@ public:
             emitter.setType(rtn, RefType::OWNED);
         }
 
-        if (target_exception_style == CAPI)
+        if (target_exception_style == CAPI) {
+            emitter.setNullable(rtn, true);
             emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
+        }
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
@@ -567,7 +569,10 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     } else {
         rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style);
     }
+
     emitter.setType(rtn_val, RefType::OWNED);
+    if (target_exception_style == CAPI)
+        emitter.setNullable(rtn_val, true);
 
     if (target_exception_style == CAPI)
         emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
@@ -680,7 +685,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
     if (rtn_type->getBoxType() == rtn_type) {
         emitter.setType(rtn, RefType::OWNED);
-        if (func_addr == runtimeCallCapi || func_addr == callattrCapi)
+        if (target_exception_style == CAPI)
             emitter.setNullable(rtn, true);
     }
     assert(rtn->getType() == rtn_type->llvmType());
