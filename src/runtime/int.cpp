@@ -1187,7 +1187,7 @@ Box* intLong(BoxedInt* self) {
 
 extern "C" Box* intIndex(BoxedInt* v) {
     if (PyInt_CheckExact(v))
-        return v;
+        return incref(v);
     return boxInt(v->n);
 }
 
@@ -1237,10 +1237,10 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
 
     if (PyString_Check(val)) {
         BoxedString* s = static_cast<BoxedString*>(val);
-        AUTO_DECREF(s);
 
         if (s->size() != strlen(s->data())) {
             Box* srepr = PyObject_Repr(val);
+            AUTO_DECREF(srepr);
             if (S == CAPI) {
                 PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base,
                              PyString_AS_STRING(srepr));
@@ -1300,8 +1300,6 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
         return NULL;
     }
 
-    AUTO_DECREF(n);
-
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
@@ -1312,6 +1310,8 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
         } else
             raiseExcHelper(OverflowError, "Python int too large to convert to C long");
     }
+
+    AUTO_DECREF(n);
     return new (cls) BoxedInt(n->n);
 }
 
@@ -1330,7 +1330,7 @@ static Box* intNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
     if (base == -909)
         return intNew<CAPI>(type, x, NULL);
     else
-        return intNew<CAPI>(type, x, boxInt(base));
+        return intNew<CAPI>(type, x, autoDecref(boxInt(base)));
 }
 
 static const unsigned char BitLengthTable[32]
