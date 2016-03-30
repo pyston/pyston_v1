@@ -37,6 +37,7 @@ BaseException_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!self)
         return NULL;
     self->message = NULL;
+    // Pyston change:
     PyObject_InitHcAttrs(&self->hcattrs);
 
     self->args = PyTuple_New(0);
@@ -72,6 +73,7 @@ BaseException_init(PyBaseExceptionObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+// Pyston addition:
 PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
     if (PyType_Check(_type) && ((PyTypeObject*)_type)->tp_new == (newfunc)BaseException_new &&
             ((PyTypeObject*)_type)->tp_init == (initproc)BaseException_init) {
@@ -91,6 +93,7 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
                 Py_DECREF(self);
                 return NULL;
             }
+            Py_INCREF(arg);
             self->message = arg;
         } else {
             self->args = PyTuple_New(0);

@@ -1247,6 +1247,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(autoDecref(initrtn)));
                     return NULL;
                 }
+                Py_DECREF(initrtn);
             } else
                 made = assertInitNone(initrtn, made); // assertInitNone is optimized for the rewriter case; this call
                                                       // here could be improved if it is an issue.
