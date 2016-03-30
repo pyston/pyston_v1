@@ -223,10 +223,29 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
         raise(SIGTRAP);
     }
 
-    assert(!nullable);
-
     assert(num_refs > 0);
     llvm::IRBuilder<true> builder(decref_pt);
+
+    if (nullable) {
+        llvm::BasicBlock* cur_block = decref_pt->getParent();
+        llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(decref_pt);
+        llvm::BasicBlock* decref_block
+            = llvm::BasicBlock::Create(g.context, "decref", decref_pt->getParent()->getParent(), continue_block);
+
+        assert(llvm::isa<llvm::BranchInst>(cur_block->getTerminator()));
+        cur_block->getTerminator()->eraseFromParent();
+
+        builder.SetInsertPoint(cur_block);
+        auto isnull = builder.CreateICmpEQ(v, getNullPtr(v->getType()));
+        builder.CreateCondBr(isnull, continue_block, decref_block);
+
+        builder.SetInsertPoint(decref_block);
+        auto jmp = builder.CreateBr(continue_block);
+        addDecrefs(v, false, num_refs, jmp);
+        return;
+    }
+
+    assert(!nullable);
 
     // Deal with subtypes of Box:
     while (v->getType() != g.llvm_value_type_ptr) {

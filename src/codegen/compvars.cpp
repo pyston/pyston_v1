@@ -678,8 +678,11 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         rtn = inst;
     }
 
-    if (rtn_type->getBoxType() == rtn_type)
+    if (rtn_type->getBoxType() == rtn_type) {
         emitter.setType(rtn, RefType::OWNED);
+        if (func_addr == runtimeCallCapi || func_addr == callattrCapi)
+            emitter.setNullable(rtn, true);
+    }
     assert(rtn->getType() == rtn_type->llvmType());
 
     if (target_exception_style == CAPI) {

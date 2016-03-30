@@ -668,7 +668,7 @@ public:
         return v;
     }
 
-    llvm::Value* setNullable(llvm::Value* v, bool nullable) {
+    llvm::Value* setNullable(llvm::Value* v, bool nullable) override {
         irstate->getRefcounts()->setNullable(v, nullable);
         return v;
     }

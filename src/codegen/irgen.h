@@ -110,6 +110,7 @@ public:
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;
 
     virtual llvm::Value* setType(llvm::Value* v, RefType reftype) = 0;
+    virtual llvm::Value* setNullable(llvm::Value* v, bool nullable) = 0;
     virtual void refConsumed(llvm::Value* v, llvm::Instruction* inst) = 0;
     virtual void refUsed(llvm::Value* v, llvm::Instruction* inst) = 0;
     virtual ConcreteCompilerVariable* getNone() = 0;
