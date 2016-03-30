@@ -740,6 +740,15 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
 
+    if (cls->tp_new == NULL) {
+        if (S == CAPI) {
+            PyErr_Format(PyExc_TypeError, "cannot create '%.100s' instances", cls->tp_name);
+            return NULL;
+        } else {
+            raiseExcHelper(TypeError, "cannot create '%.100s' instances", cls->tp_name);
+        }
+    }
+
     // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
     if (cls->tp_new == unicode_cls->tp_new) {
         // TODO: implement

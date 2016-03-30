@@ -2028,22 +2028,60 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
 }
 
 /* Pyston change: static */ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
-    RELEASE_ASSERT(PyType_Check(self), "");
+    PyTypeObject *type, *subtype, *staticbase;
+    PyObject *arg0, *res;
 
-    // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
+    if (self == NULL || !PyType_Check(self))
+        Py_FatalError("__new__() called with non-type 'self'");
+    type = (PyTypeObject *)self;
+    if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) < 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__new__(): not enough arguments",
+                     type->tp_name);
+        return NULL;
+    }
+    arg0 = PyTuple_GET_ITEM(args, 0);
+    if (!PyType_Check(arg0)) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__new__(X): X is not a type object (%s)",
+                     type->tp_name,
+                     Py_TYPE(arg0)->tp_name);
+        return NULL;
+    }
+    subtype = (PyTypeObject *)arg0;
+    if (!PyType_IsSubtype(subtype, type)) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__new__(%s): %s is not a subtype of %s",
+                     type->tp_name,
+                     subtype->tp_name,
+                     subtype->tp_name,
+                     type->tp_name);
+        return NULL;
+    }
 
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-    RELEASE_ASSERT(!kwds || kwds->cls == dict_cls, "");
-    RELEASE_ASSERT(args->size() >= 1, "");
+    /* Check that the use doesn't do something silly and unsafe like
+       object.__new__(dict).  To do this, we check that the
+       most derived base that's not a heap type is this type. */
+    staticbase = subtype;
+    while (staticbase && (staticbase->tp_flags & Py_TPFLAGS_HEAPTYPE))
+        staticbase = staticbase->tp_base;
+    /* If staticbase is NULL now, it is a really weird type.
+       In the spirit of backwards compatibility (?), just shut up. */
+    if (staticbase && staticbase->tp_new != type->tp_new) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__new__(%s) is not safe, use %s.__new__()",
+                     type->tp_name,
+                     subtype->tp_name,
+                     staticbase == NULL ? "?" : staticbase->tp_name);
+        return NULL;
+    }
 
-    BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
-    RELEASE_ASSERT(PyType_Check(subtype), "");
-    RELEASE_ASSERT(isSubclass(subtype, self), "");
-
-    BoxedTuple* new_args = BoxedTuple::create(args->size() - 1, &args->elts[1]);
-    AUTO_DECREF(new_args);
-
-    return self->tp_new(subtype, new_args, kwds);
+    args = (BoxedTuple*)PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
+    if (args == NULL)
+        return NULL;
+    res = type->tp_new(subtype, args, kwds);
+    Py_DECREF(args);
+    return res;
 }
 
 static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
