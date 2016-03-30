@@ -1311,8 +1311,10 @@ private:
             llvm::BasicBlock* fail_bb
                 = llvm::BasicBlock::Create(g.context, "deref_undefined", irstate->getLLVMFunction());
 
+            llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+            emitter.setType(null_value, RefType::BORROWED);
             llvm::Value* check_val
-                = emitter.getBuilder()->CreateICmpEQ(lookupResult, getNullPtr(g.llvm_value_type_ptr));
+                = emitter.getBuilder()->CreateICmpEQ(lookupResult, null_value);
             llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
 
             // Case that it is undefined: call the assert fail function.

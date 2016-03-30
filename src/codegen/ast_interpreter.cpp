@@ -783,7 +783,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
 
     if (frame_info.passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = frame_info.passed_closure;
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = incref(frame_info.passed_closure);
 
     if (created_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
@@ -1815,8 +1815,11 @@ void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long 
     assert(interpreter->getSymVRegMap()[id] == vreg);
     Box* prev = interpreter->vregs[vreg];
     interpreter->vregs[vreg] = v;
-    interpreter->created_closure->elts[interpreter->scope_info->getClosureOffset(id)] = incref(v);
+    auto closure_offset = interpreter->scope_info->getClosureOffset(id);
+    Box* prev_closure_elt = interpreter->created_closure->elts[closure_offset];
+    interpreter->created_closure->elts[closure_offset] = incref(v);
     Py_XDECREF(prev);
+    Py_XDECREF(prev_closure_elt);
 }
 
 void ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
