@@ -443,9 +443,6 @@ RewriterVar* JitFragmentWriter::emitUnaryop(RewriterVar* v, int op_type) {
 }
 
 std::vector<RewriterVar*> JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v, uint64_t num) {
-    assert(0 && "untested");
-    trap();
-
     RewriterVar* keep_alive = allocate(1);
 
     RewriterVar* array = call(false, (void*)unpackIntoArray, v, imm(num), keep_alive);
@@ -465,16 +462,16 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {
-    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512)->setType(RefType::OWNED);
+    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512);
 }
 
 void JitFragmentWriter::emitDelGlobal(BoxedString* name) {
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
-    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512)->setType(RefType::OWNED);
+    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512);
 }
 
 void JitFragmentWriter::emitDelItem(RewriterVar* target, RewriterVar* slice) {
-    emitPPCall((void*)delitem, { target, slice }, 1, 512)->setType(RefType::OWNED);
+    emitPPCall((void*)delitem, { target, slice }, 1, 512);
 }
 
 void JitFragmentWriter::emitDelName(InternedString name) {
