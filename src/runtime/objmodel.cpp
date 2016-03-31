@@ -5407,7 +5407,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         if (rewrite_args) {
             RewriterVar* cmpres = rewrite_args->lhs->cmp(neg ? AST_TYPE::NotEq : AST_TYPE::Eq, rewrite_args->rhs,
                                                          rewrite_args->destination);
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres);
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres)->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         }
 
@@ -5679,7 +5679,7 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
 
     if (rewriter.get()) {
         // rewriter->trap();
-        CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
+        CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED), rewriter->getArg(1)->setType(RefType::BORROWED),
                                         rewriter->getReturnDestination());
         Box* rtn = compareInternal<REWRITABLE>(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
