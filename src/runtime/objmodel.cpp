@@ -4977,6 +4977,14 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
         auto callable = f->md->internal_callable.get<S>();
+
+        if (S == CAPI)
+            assert((bool(f->md->internal_callable.get(CXX)) == bool(callable))
+                   && "too many opportunities for mistakes unless both CXX and CAPI versions are implemented");
+        else
+            assert((bool(f->md->internal_callable.get(CAPI)) == bool(callable))
+                   && "too many opportunities for mistake unless both CXX and CAPI versions are implementeds");
+
         if (callable == NULL) {
             callable = callFunc<S>;
         }

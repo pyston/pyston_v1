@@ -613,8 +613,10 @@ static Box* typeTppCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     return typeCallInner<S>(rewrite_args, new_argspec, arg1, arg2, arg3, new_args, keyword_names);
 }
 
+template <ExceptionStyle S>
 static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                             Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                             Box* arg2, Box* arg3, Box** args,
+                             const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     if (rewrite_args)
         assert(rewrite_args->func_guarded);
 
@@ -625,10 +627,10 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
         // Get callFunc to expand the arguments.
         // TODO: update this to use rearrangeArguments instead.
         KEEP_ALIVE(f);
-        return callFunc<CXX>(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+        return callFunc<S>(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 
-    return typeCallInner<CXX>(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+    return typeCallInner<S>(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
 // For use on __init__ return values
@@ -1246,6 +1248,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             if (!initrtn) {
                 assert(S == CAPI);
+                Py_DECREF(made);
                 return NULL;
             }
 
@@ -1253,7 +1256,9 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
             if (S == CAPI) {
                 if (initrtn != None) {
-                    PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(autoDecref(initrtn)));
+                    Py_DECREF(made);
+                    PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(initrtn));
+                    Py_DECREF(initrtn);
                     return NULL;
                 }
                 Py_DECREF(initrtn);
@@ -1334,7 +1339,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 }
 
 Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
-    assert(0 && "check refcounting");
+    RELEASE_ASSERT(0, "this shouldn't get called any more");
+
     assert(vararg->cls == tuple_cls);
 
     bool pass_kwargs = (kwargs && kwargs->d.size());
@@ -1355,7 +1361,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     if (pass_kwargs)
         getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
 
-    return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
+    return typeCallInternal<CXX>(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
 }
 
 static Box* typeDict(Box* obj, void* context) {
@@ -4402,7 +4408,8 @@ void setupRuntime() {
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
     auto typeCallObj = FunctionMetadata::create((void*)typeCall, UNKNOWN, 1, true, true);
-    typeCallObj->internal_callable.cxx_val = &typeCallInternal;
+    typeCallObj->internal_callable.capi_val = &typeCallInternal<CAPI>;
+    typeCallObj->internal_callable.cxx_val = &typeCallInternal<CXX>;
 
     type_cls->giveAttrDescriptor("__name__", typeName, typeSetName);
     type_cls->giveAttrDescriptor("__bases__", typeBases, typeSetBases);

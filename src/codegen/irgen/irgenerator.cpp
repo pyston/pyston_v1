@@ -450,8 +450,7 @@ private:
         } else {
 
             llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
-            if (target_exception_style == CXX)
-                emitPendingCallsCheck(NULL);
+            emitPendingCallsCheck(NULL);
             return cs;
         }
     }

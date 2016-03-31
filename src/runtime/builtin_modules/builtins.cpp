@@ -2380,6 +2380,17 @@ PyDoc_STRVAR(pow_doc, "pow(x, y[, z]) -> number\n\
 With two arguments, equivalent to x**y.  With three arguments,\n\
 equivalent to (x**y) % z, but may be more efficient (e.g. for longs).");
 
+static Box* lenCallInternalCapi(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                Box* arg2, Box* arg3, Box** args,
+                                const std::vector<BoxedString*>* keyword_names) noexcept {
+    try {
+        return lenCallInternal(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 void setupBuiltins() {
     builtins_module = createModule(autoDecref(boxString("__builtin__")), NULL,
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
@@ -2420,6 +2431,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("repr", repr_obj);
 
     auto len_func = FunctionMetadata::create((void*)len, UNKNOWN, 1);
+    len_func->internal_callable.capi_val = lenCallInternalCapi;
     len_func->internal_callable.cxx_val = lenCallInternal;
     len_obj = new BoxedBuiltinFunctionOrMethod(len_func, "len", len_doc);
     builtins_module->giveAttr("len", len_obj);

@@ -526,7 +526,8 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
 
     // Small optimization: skip any time we want to do xincref(NULL)
     if (var->isConstant() && var->constant_value == 0) {
-        assert(var->nullable);
+        // Maybe we should force people to explicitly annotate NULLs as nullable?
+        // assert(var->nullable);
         return;
     }
 
