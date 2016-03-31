@@ -931,13 +931,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = getNone();
     } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {
         assert(last_exception.type);
-        Box* type = last_exception.type;
-        Box* value = last_exception.value ? last_exception.value : None;
-        Box* traceback = last_exception.traceback ? last_exception.traceback : None;
-        v = Value(BoxedTuple::create({ type, value, traceback }), jit ? jit->emitLandingpad() : NULL);
-        Py_CLEAR(last_exception.type);
-        Py_CLEAR(last_exception.value);
-        Py_CLEAR(last_exception.traceback);
+        v = Value(ASTInterpreterJitInterface::landingpadHelper(this), jit ? jit->emitLandingpad() : NULL);
     } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
         assert(node->args.size() == 2);
         Value obj = visit_expr(node->args[0]);
