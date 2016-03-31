@@ -86,23 +86,32 @@ public:
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
+    // Special value for capi_exc_value that says that the target function always sets a capi exception.
+    static llvm::Value* ALWAYS_THROWS;
+
     virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
                                           const std::vector<llvm::Value*>& args,
-                                          ExceptionStyle target_exception_style = CXX) = 0;
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
     virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                          ExceptionStyle target_exception_style = CXX) = 0;
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
     virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                          ExceptionStyle target_exception_style = CXX) = 0;
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
     virtual llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                           llvm::Value* arg2, ExceptionStyle target_exception_style = CXX) = 0;
+                                           llvm::Value* arg2, ExceptionStyle target_exception_style = CXX,
+                                           llvm::Value* capi_exc_value = NULL) = 0;
     virtual llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
                                            llvm::Value* arg2, llvm::Value* arg3,
-                                           ExceptionStyle target_exception_style = CXX) = 0;
+                                           ExceptionStyle target_exception_style = CXX,
+                                           llvm::Value* capi_exc_value = NULL) = 0;
     virtual llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                        const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) = 0;
+                                        const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
+                                        llvm::Value* capi_exc_value = NULL) = 0;
 
-    virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
-                                                llvm::Value* exc_val, bool double_check = false) = 0;
+    // virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
+    // llvm::Value* exc_val, bool double_check = false) = 0;
 
     virtual llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) = 0;
 

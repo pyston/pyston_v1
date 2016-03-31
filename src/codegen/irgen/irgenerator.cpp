@@ -353,6 +353,8 @@ llvm::Value* IRGenState::getGlobalsIfCustom() {
 // XXX This is pretty hacky, but I think I can get rid of it once I merge in Marius's new frame introspection work
 #define NO_CXX_INTERCEPTION ((llvm::BasicBlock*)-1)
 
+llvm::Value* IREmitter::ALWAYS_THROWS = ((llvm::Value*)1);
+
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
@@ -404,9 +406,38 @@ private:
         setCurrentBasicBlock(join_block);
     }
 
+    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
+                                        bool double_check = false) {
+        assert(!double_check); // need to call PyErr_Occurred
+
+        assert(exc_val);
+
+        llvm::BasicBlock* normal_dest
+            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+        normal_dest->moveAfter(curblock);
+
+        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
+
+        if (exc_val == ALWAYS_THROWS) {
+            assert(returned_val->getType() == g.void_);
+
+            llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
+            getBuilder()->CreateBr(exc_dest);
+        } else {
+            assert(returned_val->getType() == exc_val->getType());
+            llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
+            llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
+        }
+
+        setCurrentBasicBlock(normal_dest);
+    }
+
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
-                            ExceptionStyle target_exception_style) {
+                            ExceptionStyle target_exception_style, llvm::Value* capi_exc_value) {
         emitSetCurrentStmt(unw_info.current_stmt);
+
+        if (target_exception_style == CAPI)
+            assert(capi_exc_value);
 
         bool needs_cxx_interception;
         if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
@@ -434,6 +465,8 @@ private:
 
             llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
 
+            ASSERT(target_exception_style == CXX, "otherwise need to call checkAndPropagateCapiException");
+
             // Note -- this code can often create critical edges between LLVM blocks.
             // The refcounting system has some support for handling this, but if we start generating
             // IR that it can't handle, we might have to break the critical edges here (or teach the
@@ -448,8 +481,11 @@ private:
                 emitPendingCallsCheck(NULL);
             return rtn;
         } else {
-
             llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
+
+            if (target_exception_style == CAPI)
+                checkAndPropagateCapiException(unw_info, cs, capi_exc_value);
+
             emitPendingCallsCheck(NULL);
             return cs;
         }
@@ -458,9 +494,12 @@ private:
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
                                   const std::vector<llvm::Value*>& ic_stackmap_args, const UnwindInfo& unw_info,
-                                  ExceptionStyle target_exception_style) {
+                                  ExceptionStyle target_exception_style, llvm::Value* capi_exc_value) {
         if (pp == NULL)
             assert(ic_stackmap_args.size() == 0);
+
+        if (target_exception_style == CAPI)
+            assert(capi_exc_value);
 
         // Retrieve address of called function, currently handles the IR
         // embedConstantPtr() and embedRelocatablePtr() create.
@@ -504,6 +543,9 @@ private:
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
             intrinsic_id = llvm::Intrinsic::experimental_patchpoint_i64;
+
+            if (capi_exc_value && capi_exc_value->getType()->isPointerTy())
+                capi_exc_value = getBuilder()->CreatePtrToInt(capi_exc_value, g.i64);
         } else if (return_type->isVoidTy()) {
             intrinsic_id = llvm::Intrinsic::experimental_patchpoint_void;
         } else if (return_type->isDoubleTy()) {
@@ -513,7 +555,7 @@ private:
             abort();
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style);
+        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style, capi_exc_value);
         return rtn;
     }
 
@@ -564,7 +606,7 @@ public:
 
     llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
                                   const std::vector<llvm::Value*>& args,
-                                  ExceptionStyle target_exception_style = CXX) override {
+                                  ExceptionStyle target_exception_style = CXX, llvm::Value* capi_exc_value = NULL) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
         // get checked.
@@ -582,36 +624,42 @@ public:
             }
         }
 #endif
-        return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
+        return emitCall(unw_info, callee, args, target_exception_style, capi_exc_value).getInstruction();
     }
 
     llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                            ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style);
+                                  ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style, capi_exc_value);
     }
 
     llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                            ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style);
+                                  ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style,
+                          capi_exc_value);
     }
 
-    llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                             ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style);
+    llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                   llvm::Value* arg2, ExceptionStyle target_exception_style = CXX,
+                                   llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style, capi_exc_value);
     }
 
-    llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                             llvm::Value* arg3, ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style);
+    llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                   llvm::Value* arg2, llvm::Value* arg3, ExceptionStyle target_exception_style = CXX,
+                                   llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style, capi_exc_value);
     }
 
     llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                          const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) override {
+                                const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
+                                llvm::Value* capi_exc_value = NULL) override {
         std::vector<llvm::Value*> stackmap_args;
 
         llvm::CallSite rtn = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
                                             embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args,
-                                            unw_info, target_exception_style);
+                                            unw_info, target_exception_style, capi_exc_value);
 
         rtn.setCallingConv(pp->getCallingConvention());
         return rtn.getInstruction();
@@ -625,23 +673,6 @@ public:
         llvm::Value* rtn = getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
         setType(rtn, RefType::OWNED);
         return rtn;
-    }
-
-    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
-                                        bool double_check = false) override {
-        assert(!double_check); // need to call PyErr_Occurred
-
-        llvm::BasicBlock* normal_dest
-            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
-        normal_dest->moveAfter(curblock);
-
-        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
-
-        assert(returned_val->getType() == exc_val->getType());
-        llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
-        llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
-
-        setCurrentBasicBlock(normal_dest);
     }
 
     Box* getIntConstant(int64_t n) override {
@@ -2424,9 +2455,7 @@ private:
 
             llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
-                emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI);
-                emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                       getNullPtr(g.llvm_value_type_ptr));
+                emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI, IREmitter::ALWAYS_THROWS);
                 emitter.getBuilder()->CreateUnreachable();
             } else {
                 emitter.createCall(unw_info, g.funcs.raise0, exc_info);
@@ -2450,9 +2479,7 @@ private:
 
         llvm::Instruction* inst;
         if (target_exception_style == CAPI) {
-            inst = emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI);
-            emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                   getNullPtr(g.llvm_value_type_ptr));
+            inst = emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI, IREmitter::ALWAYS_THROWS);
         } else {
             inst = emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
         }

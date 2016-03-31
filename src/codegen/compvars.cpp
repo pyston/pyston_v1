@@ -347,10 +347,9 @@ public:
                     cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
                                            : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
 
-                    llvm::Value* r
-                        = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart, cstop);
+                    llvm::Value* r = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart,
+                                                         cstop, CAPI, getNullPtr(g.llvm_value_type_ptr));
                     emitter.setType(r, RefType::OWNED);
-                    emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
 
                     return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
                 } else {
@@ -375,20 +374,18 @@ public:
 
             llvm::Value* uncasted
                 = emitter.createIC(pp, (void*)(target_exception_style == CAPI ? pyston::getitem_capi : pyston::getitem),
-                                   llvm_args, info.unw_info, target_exception_style);
+                                   llvm_args, info.unw_info, target_exception_style, getNullPtr(g.llvm_value_type_ptr));
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
             emitter.setType(rtn, RefType::OWNED);
         } else {
-            rtn = emitter.createCall2(info.unw_info,
-                                      target_exception_style == CAPI ? g.funcs.getitem_capi : g.funcs.getitem,
-                                      var->getValue(), converted_slice->getValue(), target_exception_style);
+            rtn = emitter.createCall2(
+                info.unw_info, target_exception_style == CAPI ? g.funcs.getitem_capi : g.funcs.getitem, var->getValue(),
+                converted_slice->getValue(), target_exception_style, getNullPtr(g.llvm_value_type_ptr));
             emitter.setType(rtn, RefType::OWNED);
         }
 
-        if (target_exception_style == CAPI) {
+        if (target_exception_style == CAPI)
             emitter.setNullable(rtn, true);
-            emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
-        }
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
@@ -564,18 +561,17 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style);
+        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style,
+                                                 getNullPtr(g.llvm_value_type_ptr));
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style);
+        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style,
+                                      getNullPtr(g.llvm_value_type_ptr));
     }
 
     emitter.setType(rtn_val, RefType::OWNED);
     if (target_exception_style == CAPI)
         emitter.setNullable(rtn_val, true);
-
-    if (target_exception_style == CAPI)
-        emitter.checkAndPropagateCapiException(info.unw_info, rtn_val, getNullPtr(g.llvm_value_type_ptr));
 
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val);
 }
@@ -664,7 +660,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
         ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo());
 
-        llvm::Instruction* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style);
+        llvm::Instruction* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info, target_exception_style,
+                                                       getNullPtr(g.llvm_value_type_ptr));
         inst = uncasted;
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
@@ -679,7 +676,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
-        inst = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style);
+        inst = emitter.createCall(info.unw_info, func, llvm_args, target_exception_style,
+                                  getNullPtr(g.llvm_value_type_ptr));
         rtn = inst;
     }
 
@@ -689,10 +687,6 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
             emitter.setNullable(rtn, true);
     }
     assert(rtn->getType() == rtn_type->llvmType());
-
-    if (target_exception_style == CAPI) {
-        emitter.checkAndPropagateCapiException(info.unw_info, rtn, getNullPtr(g.llvm_value_type_ptr));
-    }
 
     for (auto v : array_passed_args)
         emitter.refUsed(v, inst);
@@ -1778,13 +1772,11 @@ public:
                                                                  : g.funcs.raiseAttributeErrorStrCapi;
                 llvm::CallSite call = emitter.createCall3(
                     info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
-                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style);
-                if (exception_style == CAPI) {
-                    emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                           getNullPtr(g.llvm_value_type_ptr));
-                } else {
+                    embedRelocatablePtr(attr->data(), g.i8_ptr), getConstantInt(attr->size(), g.i64), exception_style,
+                    IREmitter::ALWAYS_THROWS);
+
+                if (exception_style == CXX)
                     call.setDoesNotReturn();
-                }
                 return undefVariable();
             }
 
@@ -1841,13 +1833,10 @@ public:
                 llvm::CallSite call = emitter.createCall3(
                     info.unw_info, raise_func, embedRelocatablePtr(cls->tp_name, g.i8_ptr),
                     emitter.setType(embedRelocatablePtr(attr->data(), g.i8_ptr), RefType::BORROWED),
-                    getConstantInt(attr->size(), g.i64), exception_style);
-                if (exception_style == CAPI) {
-                    emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                           getNullPtr(g.llvm_value_type_ptr));
-                } else {
+                    getConstantInt(attr->size(), g.i64), exception_style, IREmitter::ALWAYS_THROWS);
+
+                if (exception_style == CXX)
                     call.setDoesNotReturn();
-                }
             }
             return undefVariable();
         }
@@ -2087,9 +2076,9 @@ public:
                         g.llvm_value_type_ptr, { g.llvm_value_type_ptr, g.i64, g.i64 }, false);
                     llvm::Value* r = emitter.createCall3(
                         info.unw_info, embedConstantPtr((void*)PySequence_GetSlice, ft->getPointerTo()),
-                        var->getValue(), start, stop);
+                        var->getValue(), start, stop, CAPI, getNullPtr(g.llvm_value_type_ptr));
                     emitter.setType(r, RefType::OWNED);
-                    emitter.checkAndPropagateCapiException(info.unw_info, r, getNullPtr(g.llvm_value_type_ptr));
+                    emitter.setNullable(r, true);
 
                     return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
                 }
@@ -2561,10 +2550,9 @@ public:
                     ExceptionStyle target_exception_style = info.preferredExceptionStyle();
 
                     if (target_exception_style == CAPI) {
-                        llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,
-                                                                 embedConstantPtr("tuple", g.i8_ptr), CAPI);
-                        emitter.checkAndPropagateCapiException(info.unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                               getNullPtr(g.llvm_value_type_ptr));
+                        llvm::CallSite call
+                            = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStrCapi,
+                                                 embedConstantPtr("tuple", g.i8_ptr), CAPI, IREmitter::ALWAYS_THROWS);
                     } else {
                         llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
                                                                  embedConstantPtr("tuple", g.i8_ptr), CXX);
