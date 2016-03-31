@@ -747,8 +747,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     std::map<InternedString, Box*> sorted_symbol_table;
 
-    // TODO: maybe use a different placeholder?
-    static Box* const VAL_UNDEFINED = (Box*)-1;
+    // TODO: maybe use a different placeholder (=NULL)?
+    // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
+    static Box* const VAL_UNDEFINED = (Box*)None;
 
     for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
         assert(getSymVRegMap().count(name));
@@ -758,10 +759,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
         if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
             bool is_defined = val != NULL;
-            assert(is_defined && "check refcounting");
             // TODO only mangle once
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            sorted_symbol_table[name] = is_defined ? incref(val) : VAL_UNDEFINED;
+            sorted_symbol_table[name] = is_defined ? incref(val) : incref(VAL_UNDEFINED);
         } else {
             ASSERT(val != NULL, "%s", name.c_str());
             sorted_symbol_table[name] = incref(val);
