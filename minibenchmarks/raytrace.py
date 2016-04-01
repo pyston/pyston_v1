@@ -65,9 +65,9 @@ VUP = Vector(0,1,0)
 VOUT = Vector(0,0,1)
 
 if not (VRIGHT.reflectThrough(VUP) == VRIGHT):
-    print 1/0
+    print(1/0)
 if not (Vector(-1,-1,0).reflectThrough(VUP) == Vector(-1,1,0)):
-    print 1/0
+    print(1/0)
 
 class Point(object):
     def __init__(self, initx, inity, initz):
@@ -216,7 +216,7 @@ class Scene(object):
         for y in range(canvas.height):
             currentfraction = 1.0 * y / canvas.height
             if currentfraction - previousfraction > 0.05:
-                print '%d%% complete' % int(currentfraction * 100)
+                print('%d%% complete' % int(currentfraction * 100))
                 previousfraction = currentfraction
             for x in range(canvas.width):
                 xcomp = vpRight.scale(x * pixelWidth - halfWidth)
@@ -225,7 +225,7 @@ class Scene(object):
                 colour = self.rayColour(ray)
                 canvas.plot(x,y,colour[0], colour[1], colour[2])
 
-        print 'Complete.'
+        print('Complete.')
         # canvas.save()
 
     def rayColour(self, ray):

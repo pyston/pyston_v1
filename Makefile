@@ -922,7 +922,7 @@ watch_%:
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find src test \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
+		Makefile $$(find src test plugins \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
 			$(MAKE) $$TARGET $(WATCH_ARGS); \
 		done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
@@ -1089,7 +1089,7 @@ refcheck_%: %.cpp refcount_checker
 	cd $(CMAKE_DIR_DBG); $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
 .PHONY: dbg_refcheck_%
 dbg_refcheck_%: %.cpp refcount_checker
-	cd $(CMAKE_DIR_DBG); $(GDB) --args $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
+	cd $(CMAKE_DIR_DBG); $(GDB) --ex run --ex "bt 20" --args $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
 
 
 .PHONY: clang_lint
