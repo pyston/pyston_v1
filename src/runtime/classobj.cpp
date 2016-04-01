@@ -748,12 +748,11 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (getslice_func == NULL) {
-        AUTO_DECREF(getslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
         AUTO_DECREF(slice);
         return instanceGetitem(inst, slice);
     }
-
+    AUTO_DECREF(getslice_func);
     return runtimeCall(getslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
 }
 
@@ -772,12 +771,12 @@ Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
     }
 
     if (setslice_func == NULL) {
-        AUTO_DECREF(setslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
         AUTO_DECREF(slice);
         return instanceSetitem(inst, slice, *sequence);
     }
 
+    AUTO_DECREF(setslice_func);
     return runtimeCall(setslice_func, ArgPassSpec(3), i, j, *sequence, NULL, NULL);
 }
 
@@ -796,12 +795,12 @@ Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (delslice_func == NULL) {
-        AUTO_DECREF(delslice_func);
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
         AUTO_DECREF(slice);
         return instanceDelitem(inst, slice);
     }
     try {
+        AUTO_DECREF(delslice_func);
         return runtimeCall(delslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
