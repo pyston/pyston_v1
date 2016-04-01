@@ -493,6 +493,7 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
 
 static void _setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
     for (auto container : args->pyElements()) {
+        AUTO_DECREF(container);
         if (PyAnySet_Check(container)) {
             for (auto&& elt : ((BoxedSet*)container)->s) {
                 _setRemove(self, elt);

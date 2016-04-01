@@ -382,10 +382,19 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         }
 
         std::vector<Box*> elts;
-        for (auto e : elements->pyElements())
-            elts.push_back(e);
+        try {
+            for (auto e : elements->pyElements())
+                elts.push_back(e);
+        } catch (ExcInfo e) {
+            for (auto e : elts)
+                Py_DECREF(e);
+            throw e;
+        }
 
-        return BoxedTuple::create(elts.size(), &elts[0], cls);
+        auto rtn = BoxedTuple::create(elts.size(), cls);
+        memcpy(&rtn->elts[0], &elts[0], elts.size() * sizeof(Box*));
+
+        return rtn;
     } else {
         if (cls == tuple_cls)
             return incref(EmptyTuple);

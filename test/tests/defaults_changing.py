@@ -1,5 +1,3 @@
-# expected: reffail
-
 def func(a, b=1):
     print a, b
 func(0)
