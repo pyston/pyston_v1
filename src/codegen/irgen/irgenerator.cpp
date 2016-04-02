@@ -364,6 +364,7 @@ private:
     IRGenerator* irgenerator;
 
     void emitPendingCallsCheck(llvm::BasicBlock* exc_dest) {
+#if ENABLE_SIGNAL_CHECKING
         auto&& builder = *getBuilder();
 
         llvm::GlobalVariable* pendingcalls_to_do_gv = g.cur_module->getGlobalVariable("_pendingcalls_to_do");
@@ -405,6 +406,7 @@ private:
 
         cur_block = join_block;
         setCurrentBasicBlock(join_block);
+#endif
     }
 
     void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,

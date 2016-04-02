@@ -506,7 +506,9 @@ void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
 }
 
 void JitFragmentWriter::emitPendingCallsCheck() {
+#if ENABLE_SIGNAL_CHECKING
     call(false, (void*)ASTInterpreterJitInterface::pendingCallsCheckHelper);
+#endif
 }
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {

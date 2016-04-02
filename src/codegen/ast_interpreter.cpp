@@ -1793,8 +1793,10 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
 }
 
 void ASTInterpreterJitInterface::pendingCallsCheckHelper() {
+#if ENABLE_SIGNAL_CHECKING
     if (unlikely(_pendingcalls_to_do))
         makePendingCalls();
+#endif
 }
 
 void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {
