@@ -1092,7 +1092,7 @@ Box* intAbs(BoxedInt* v) {
         raiseExcHelper(TypeError, "descriptor '__abs__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->n == PYSTON_INT_MIN) {
-        return longNeg(boxLong(v->n));
+        return longNeg(autoDecref(boxLong(v->n)));
     }
     return boxInt(std::abs(v->n));
 }

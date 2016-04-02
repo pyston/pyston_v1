@@ -1542,7 +1542,7 @@ bool longNonzeroUnboxed(BoxedLong* self) {
 
 Box* longHash(BoxedLong* self) {
     if (!PyLong_Check(self))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
     // If the long fits into an int we have to return the same hash in order that we can find the value in a dict.
@@ -1568,7 +1568,7 @@ Box* longHash(BoxedLong* self) {
 
 long long_hash(PyObject* self) noexcept {
     try {
-        return unboxInt(longHash((BoxedLong*)self));
+        return unboxInt(autoDecref(longHash((BoxedLong*)self)));
     } catch (ExcInfo e) {
         RELEASE_ASSERT(0, "");
     }
