@@ -889,6 +889,7 @@ public:
     PyCmpComparer(Box* cmp) : cmp(cmp) {}
     bool operator()(Box* lhs, Box* rhs) {
         Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+        AUTO_DECREF(r);
         if (!PyInt_Check(r))
             raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
         return static_cast<BoxedInt*>(r)->n < 0;

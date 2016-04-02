@@ -451,13 +451,13 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
-    KEEP_ALIVE(rtn);
+    AUTO_DECREF(rtn);
     for (Box* e : obj->pyElements()) {
         listAppendInternalStolen(rtn, e);
     }
 
     listSort(rtn, cmp, key, reverse);
-    return rtn;
+    return incref(rtn);
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
