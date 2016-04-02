@@ -257,6 +257,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         // frame_info.exc.type = NULL
         llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
         getRefcounts()->setType(null_value, RefType::BORROWED);
+        getRefcounts()->setNullable(null_value, true);
         llvm::Value* exc_info = getExcinfoGep(builder, al);
         builder.CreateStore(null_value,
                             builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));

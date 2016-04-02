@@ -171,6 +171,11 @@ void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
         //raise(SIGTRAP);
     }
 
+    if (isa<ConstantPointerNull>(v)) {
+        assert(nullable);
+        return;
+    }
+
     assert(num_refs > 0);
 
     llvm::BasicBlock* cur_block;
@@ -221,6 +226,11 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
         // Not bad but I don't think this should happen:
         printf("Whoa more than one decref??\n");
         raise(SIGTRAP);
+    }
+
+    if (isa<ConstantPointerNull>(v)) {
+        assert(nullable);
+        return;
     }
 
     assert(num_refs > 0);
