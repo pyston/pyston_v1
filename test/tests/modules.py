@@ -1,4 +1,3 @@
-# expected: reffail
 import empty_module
 import math
 import types
