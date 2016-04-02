@@ -1105,6 +1105,7 @@ Box* listIndex(BoxedList* self, Box* elt, Box* _start, Box** args) {
         if (stop < 0)
             stop = 0;
     }
+    stop = std::min(stop, self->size);
 
     for (int64_t i = start; i < stop; i++) {
         Box* e = self->elts->elts[i];

@@ -585,9 +585,9 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     _str = coerceUnicodeToStr<S>(_str);
     if (S == CAPI && !_str)
         return NULL;
-    AUTO_DECREF(_str);
 
     if (!PyString_Check(_str)) {
+        Py_DECREF(_str);
         if (S == CAPI) {
             PyErr_SetString(TypeError, "getattr(): attribute name must be string");
             return NULL;
@@ -598,6 +598,7 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     BoxedString* str = static_cast<BoxedString*>(_str);
     if (!PyString_CHECK_INTERNED(str))
         internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     Box* rtn;
     RewriterVar* r_rtn;
@@ -717,9 +718,9 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
     _str = coerceUnicodeToStr<S>(_str);
     if (S == CAPI && !_str)
         return NULL;
-    AUTO_DECREF(_str);
 
     if (!PyString_Check(_str)) {
+        Py_DECREF(_str);
         if (S == CAPI) {
             PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
             return NULL;
@@ -729,7 +730,6 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 
     BoxedString* str = static_cast<BoxedString*>(_str);
 
-    Py_INCREF(str);
     if (!PyString_CHECK_INTERNED(str))
         internStringMortalInplace(str);
     AUTO_DECREF(str);

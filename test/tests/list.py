@@ -1,4 +1,3 @@
-# expected: reffail
 l = range(5)
 print l
 print l * 5
@@ -237,4 +236,11 @@ try:
 except TypeError as e:
     print(type(e))
 
-print range(5).index(10, 100L, 200L)
+try:
+    print range(5).index(10, 100L, 200L)
+except Exception as e:
+    print e
+try:
+    print range(5).index(10, 100, 200)
+except Exception as e:
+    print e
